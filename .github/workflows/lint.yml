@@ -15,19 +15,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly-2024-10-01
-          components: clippy, rustfmt
-
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2024-10-01
+          components: clippy, rustfmt
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+        with:
+          just-version: 1.5.0
+
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: just fmt-check
 
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: just clippy

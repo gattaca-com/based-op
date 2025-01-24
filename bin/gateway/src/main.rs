@@ -1,3 +1,8 @@
+use bop_common::utils::init_tracing;
+use tracing::info;
+
 fn main() {
-    println!("Hello, world!");
+    let _guard = init_tracing();
+
+    info!("Hello, world!");
 }

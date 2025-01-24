@@ -1,6 +1,9 @@
 [package]
-name = "pb-common"
+name = "bop-common"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
