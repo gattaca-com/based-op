@@ -1,0 +1,4 @@
+optimism_package:
+  chains:
+    - participants:
+        - count: 2
