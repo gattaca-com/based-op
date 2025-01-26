@@ -1,0 +1,34 @@
+[package]
+name = "reth-engine-primitives"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# reth
+reth-execution-types.workspace = true
+reth-payload-primitives.workspace = true
+reth-payload-builder-primitives.workspace = true
+reth-primitives.workspace = true
+reth-primitives-traits.workspace = true
+reth-trie.workspace = true
+reth-errors.workspace = true
+
+# alloy
+alloy-primitives.workspace = true
+alloy-consensus.workspace = true
+alloy-rpc-types-engine.workspace = true
+
+# async
+tokio = { workspace = true, features = ["sync"] }
+futures.workspace = true
+
+# misc
+serde.workspace = true
+thiserror.workspace = true

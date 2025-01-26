@@ -1,0 +1,41 @@
+[package]
+name = "reth-optimism-consensus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# reth
+reth-chainspec.workspace = true
+reth-consensus-common.workspace = true
+reth-consensus.workspace = true
+reth-primitives.workspace = true
+
+# op-reth
+reth-optimism-forks.workspace = true
+reth-optimism-chainspec.workspace = true
+# TODO: remove this after feature cleanup
+reth-optimism-primitives = { workspace = true, features = ["serde"] }
+
+# ethereum
+alloy-eips.workspace = true
+alloy-primitives.workspace = true
+alloy-consensus.workspace = true
+alloy-trie.workspace = true
+
+tracing.workspace = true
+
+[dev-dependencies]
+alloy-primitives.workspace = true
+op-alloy-consensus.workspace = true
+reth-optimism-chainspec.workspace = true
+
+[features]
+optimism = ["reth-primitives/optimism", "reth-optimism-primitives/optimism"]
