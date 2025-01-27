@@ -2,10 +2,10 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use jsonrpsee_types::{ErrorCode, ErrorObject};
+use jsonrpsee::types::{ErrorCode, ErrorObject};
 use reqwest::StatusCode;
 
-pub type RpcResult<T> = std::result::Result<T, jsonrpsee_types::ErrorObjectOwned>;
+pub type RpcResult<T> = std::result::Result<T, jsonrpsee::types::ErrorObjectOwned>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum MuxError {
@@ -22,7 +22,7 @@ pub enum MuxError {
     TokioJoin(#[from] tokio::task::JoinError),
 
     #[error("jsonrpsee error: {0}")]
-    Jsonrpsee(#[from] jsonrpsee_types::ErrorObject<'static>),
+    Jsonrpsee(#[from] jsonrpsee::types::ErrorObject<'static>),
 }
 
 impl IntoResponse for MuxError {

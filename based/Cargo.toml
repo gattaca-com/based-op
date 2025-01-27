@@ -10,6 +10,7 @@ repository = "https://github.com/gattaca-com/based-op"
 
 [workspace.dependencies]
 bop-common = { path = "crates/common" }
+bop-rpc = { path = "crates/rpc" }
 
 alloy-consensus = "0.9.2"
 alloy-eips = "0.9.2"
@@ -20,13 +21,13 @@ op-alloy-rpc-types-engine = "0.9.6"
 axum = { version = "0.8.1", features = ["macros"] }
 tokio = { version = "1.43.0", features = ["full"] }
 reqwest = { version = "0.12.12", features = ["json"] }
-jsonrpsee-types = "0.24.8"
+jsonrpsee = { version = "0.24", features = ["http-client", "server", "macros"] }
 
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
-serde = "1.0.217"
+serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.137"
 toml = "0.8.19"
 
@@ -47,4 +48,4 @@ shared_memory = "^0.12"
 
 # threading
 core_affinity = "0.8.1"
-crossbeam-channel = "0.5.13"
+crossbeam-channel = "0.5.14"
