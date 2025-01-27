@@ -36,8 +36,7 @@ async fn main() {
 
 async fn run(config: MuxConfig) -> eyre::Result<()> {
     let mut headers = HeaderMap::new();
-    let mut auth_value =
-        header::HeaderValue::try_from(format!("Bearer {}", config.gateway_jwt)).unwrap();
+    let mut auth_value = header::HeaderValue::try_from(format!("Bearer {}", config.gateway_jwt)).unwrap();
     auth_value.set_sensitive(true);
     headers.insert(header::AUTHORIZATION, auth_value);
 
@@ -47,10 +46,8 @@ async fn run(config: MuxConfig) -> eyre::Result<()> {
         .build()
         .unwrap();
 
-    let fallback_client = reqwest::ClientBuilder::new()
-        .timeout(Duration::from_millis(config.fallback_timeout_ms))
-        .build()
-        .unwrap();
+    let fallback_client =
+        reqwest::ClientBuilder::new().timeout(Duration::from_millis(config.fallback_timeout_ms)).build().unwrap();
 
     let addr = config.addr;
     let state = MuxState { fallback_client, gateway_client, config: Arc::new(config) };
@@ -75,19 +72,19 @@ fn get_config() -> MuxConfig {
 
 #[derive(Clone)]
 struct MuxConfig {
-    addr: SocketAddr,
-    fallback_url: Url,
+    addr:                SocketAddr,
+    fallback_url:        Url,
     fallback_timeout_ms: u64,
-    gateway_url: Url,
-    gateway_jwt: &'static str,
-    gateway_timeout_ms: u64,
+    gateway_url:         Url,
+    gateway_jwt:         &'static str,
+    gateway_timeout_ms:  u64,
 }
 
 #[derive(Clone)]
 struct MuxState {
     fallback_client: Client,
-    gateway_client: Client,
-    config: Arc<MuxConfig>,
+    gateway_client:  Client,
+    config:          Arc<MuxConfig>,
 }
 
 const FORKCHOICE_METHOD: &str = "engine_forkchoiceUpdatedV3";
@@ -161,12 +158,7 @@ async fn mux_request(
                 let client = state.fallback_client.clone();
                 let url = state.config.fallback_url.clone();
 
-                send_rpc_request::<OpExecutionPayloadEnvelopeV3>(
-                    client,
-                    url,
-                    req,
-                    Some(headers.clone()),
-                )
+                send_rpc_request::<OpExecutionPayloadEnvelopeV3>(client, url, req, Some(headers.clone()))
             });
 
             let gateway_payload = tokio::spawn({
@@ -179,8 +171,7 @@ async fn mux_request(
 
                 async move {
                     let gateway_payload =
-                        send_rpc_request::<OpExecutionPayloadEnvelopeV3>(client, url, req, None)
-                            .await?;
+                        send_rpc_request::<OpExecutionPayloadEnvelopeV3>(client, url, req, None).await?;
 
                     let params = serde_json::value::to_raw_value(&[
                         serde_json::to_value(gateway_payload.execution_payload.clone())?,
@@ -191,22 +182,18 @@ async fn mux_request(
 
                     // validate with fallback
                     let request = Request {
-                        jsonrpc: jsonrpsee_types::TwoPointZero,
-                        id: Id::Number(0),
-                        method: NEW_PAYLOAD_METHOD.into(),
-                        params: Some(params),
+                        jsonrpc:    jsonrpsee_types::TwoPointZero,
+                        id:         Id::Number(0),
+                        method:     NEW_PAYLOAD_METHOD.into(),
+                        params:     Some(params),
                         extensions: Extensions::new(),
                     };
 
                     let request = serde_json::to_value(request)?;
 
-                    let gateway_status = send_rpc_request::<PayloadStatus>(
-                        fallback_client,
-                        fallback_url,
-                        request,
-                        Some(headers),
-                    )
-                    .await?;
+                    let gateway_status =
+                        send_rpc_request::<PayloadStatus>(fallback_client, fallback_url, request, Some(headers))
+                            .await?;
 
                     if gateway_status.is_valid() {
                         debug!(?gateway_payload, ?gateway_status, "gateway get_payload");
@@ -275,9 +262,7 @@ async fn mux_request(
                 let url = state.config.gateway_url.clone();
 
                 async move {
-                    if let Err(err) =
-                        send_rpc_request::<serde_json::Value>(client, url, req, None).await
-                    {
+                    if let Err(err) = send_rpc_request::<serde_json::Value>(client, url, req, None).await {
                         error!(%err, "failed gateway request");
                     }
                 }

@@ -29,10 +29,9 @@ impl IntoResponse for MuxError {
     fn into_response(self) -> Response {
         match self {
             // client errors
-            MuxError::Internal |
-            MuxError::TokioJoin(_) |
-            MuxError::Serde(_) |
-            MuxError::Reqwest(_) => (StatusCode::OK, Json(internal_error())),
+            MuxError::Internal | MuxError::TokioJoin(_) | MuxError::Serde(_) | MuxError::Reqwest(_) => {
+                (StatusCode::OK, Json(internal_error()))
+            }
 
             // JSON RPC error
             MuxError::Jsonrpsee(err) => (StatusCode::OK, Json(err)),
@@ -42,9 +41,5 @@ impl IntoResponse for MuxError {
 }
 
 fn internal_error() -> ErrorObject<'static> {
-    ErrorObject::owned(
-        ErrorCode::InternalError.code(),
-        ErrorCode::InternalError.message(),
-        None::<()>,
-    )
+    ErrorObject::owned(ErrorCode::InternalError.code(), ErrorCode::InternalError.message(), None::<()>)
 }

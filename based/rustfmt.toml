@@ -1,4 +1,4 @@
-unsafe_features = true
+unstable_features = true
 reorder_imports = true
 group_imports = "StdExternalCrate"
 imports_granularity = "Crate"
