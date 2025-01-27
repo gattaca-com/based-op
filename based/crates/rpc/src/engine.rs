@@ -1,9 +1,7 @@
 use std::{net::SocketAddr, time::Duration};
 
 use alloy_primitives::B256;
-use alloy_rpc_types::engine::{
-    ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus,
-};
+use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
     api::EngineApiServer,
     rpc::{EngineApiMessage, RpcResult},
@@ -18,7 +16,7 @@ use tracing::{error, info, trace, Level};
 // TODO: timing
 pub struct EngineRpcServer {
     engine_rpc_tx: Sender<EngineApiMessage>,
-    timeout: Duration,
+    timeout:       Duration,
 }
 
 impl EngineRpcServer {
@@ -30,8 +28,7 @@ impl EngineRpcServer {
     pub async fn run(self, addr: SocketAddr) {
         info!(%addr, "starting RPC server");
 
-        let server =
-            ServerBuilder::default().build(addr).await.expect("failed to create engine RPC server");
+        let server = ServerBuilder::default().build(addr).await.expect("failed to create engine RPC server");
         let execution_module = EngineApiServer::into_rpc(self);
 
         let server_handle = server.start(execution_module);
@@ -88,10 +85,7 @@ impl EngineApiServer for EngineRpcServer {
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn get_payload_v3(
-        &self,
-        payload_id: PayloadId,
-    ) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
+    async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         trace!(%payload_id, "new request");
 
         let (tx, rx) = oneshot::channel();

@@ -8,8 +8,7 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 
 use super::rpc::RpcResult;
 
-pub const CAPABILITIES: &[&str] =
-    &["engine_forkchoiceUpdatedV3", "engine_getPayloadV3", "engine_newPayloadV3"];
+pub const CAPABILITIES: &[&str] = &["engine_forkchoiceUpdatedV3", "engine_getPayloadV3", "engine_newPayloadV3"];
 
 /// The Engine API is used by the consensus layer to interact with the execution layer. Here we
 /// implement a minimal subset of the API for the gateway to return blocks to the op-node
@@ -42,10 +41,7 @@ pub trait EngineApi {
 
     /// Used to fetch an execution payload from a previous `payload_id` set in `forkchoiceUpdatedV3`
     #[method(name = "getPayloadV3")]
-    async fn get_payload_v3(
-        &self,
-        payload_id: PayloadId,
-    ) -> RpcResult<OpExecutionPayloadEnvelopeV3>;
+    async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3>;
 }
 
 /// The Eth API is used to interact with the EL directly.
@@ -68,11 +64,7 @@ pub trait EthApi {
 
     /// Returns a block with a given identifier
     #[method(name = "getBlockByNumber")]
-    async fn block_by_number(
-        &self,
-        number: BlockNumberOrTag,
-        full: bool,
-    ) -> RpcResult<Option<Block>>;
+    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<Block>>;
 
     /// Returns information about a block by hash.
     #[method(name = "getBlockByHash")]
@@ -80,11 +72,7 @@ pub trait EthApi {
 
     /// Returns the nonce of a given address at a given block number.
     #[method(name = "getTransactionCount")]
-    async fn transaction_count(
-        &self,
-        address: Address,
-        block_number: Option<BlockId>,
-    ) -> RpcResult<U256>;
+    async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256>;
 
     /// Returns the balance of the account of given address.
     #[method(name = "getBalance")]

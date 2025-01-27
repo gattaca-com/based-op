@@ -651,10 +651,17 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types",
+ "chrono",
  "crossbeam-channel",
+ "directories",
  "eyre",
  "jsonrpsee",
+ "once_cell",
  "op-alloy-rpc-types-engine",
+ "quanta",
+ "serde",
+ "serde_json",
+ "shared_memory",
  "thiserror 2.0.11",
  "tokio",
  "tracing",
@@ -766,6 +773,20 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "chrono"
+version = "0.4.39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
+dependencies = [
+ "android-tzdata",
+ "iana-time-zone",
+ "js-sys",
+ "num-traits",
+ "wasm-bindgen",
+ "windows-targets 0.52.6",
+]
 
 [[package]]
 name = "combine"
@@ -3883,6 +3904,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d642ff16b7e79272ae451b7322067cdc17cadf68c23264be9d94a32319efe7e"
 dependencies = [
  "rustls-pki-types",
+]
+
+[[package]]
+name = "win-sys"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b7b128a98c1cfa201b09eb49ba285887deb3cbe7466a98850eb1adabb452be5"
+dependencies = [
+ "windows",
 ]
 
 [[package]]

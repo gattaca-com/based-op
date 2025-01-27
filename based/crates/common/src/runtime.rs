@@ -24,10 +24,5 @@ pub fn build_tokio_runtime() -> Handle {
         return handle;
     }
 
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("failed to create runtime")
-        .handle()
-        .clone()
+    tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("failed to create runtime").handle().clone()
 }

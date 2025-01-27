@@ -1,7 +1,5 @@
 use alloy_primitives::B256;
-use alloy_rpc_types::engine::{
-    ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus,
-};
+use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use tokio::sync::oneshot;
@@ -9,19 +7,19 @@ use tokio::sync::oneshot;
 /// Supported Engine API RPC methods
 pub enum EngineApiMessage {
     ForkChoiceUpdatedV3 {
-        fork_choice_state: ForkchoiceState,
+        fork_choice_state:  ForkchoiceState,
         payload_attributes: Option<Box<OpPayloadAttributes>>,
-        res_tx: oneshot::Sender<ForkchoiceUpdated>,
+        res_tx:             oneshot::Sender<ForkchoiceUpdated>,
     },
     NewPayloadV3 {
-        payload: ExecutionPayloadV3,
-        versioned_hashes: Vec<B256>,
+        payload:                  ExecutionPayloadV3,
+        versioned_hashes:         Vec<B256>,
         parent_beacon_block_root: B256,
-        res_tx: oneshot::Sender<PayloadStatus>,
+        res_tx:                   oneshot::Sender<PayloadStatus>,
     },
     GetPayloadV3 {
         payload_id: PayloadId,
-        res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
+        res:        oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
     },
 }
 
@@ -45,9 +43,5 @@ impl From<RpcError> for RpcErrorObject<'static> {
 }
 
 fn internal_error() -> RpcErrorObject<'static> {
-    RpcErrorObject::owned(
-        ErrorCode::InternalError.code(),
-        ErrorCode::InternalError.message(),
-        None::<()>,
-    )
+    RpcErrorObject::owned(ErrorCode::InternalError.code(), ErrorCode::InternalError.message(), None::<()>)
 }

@@ -15,7 +15,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true
 thiserror.workspace = true
 eyre.workspace = true
 once_cell.workspace = true
@@ -26,3 +26,6 @@ shared_memory.workspace = true
 
 
 jsonrpsee.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
