@@ -185,11 +185,11 @@ pub static TIMERS: Lazy<Mutex<HashMap<&'static str, Timer>>> = Lazy::new(|| Mute
 #[macro_export]
 macro_rules! timeit {
     ($name:expr, $block:block) => {{
-        use builder_common::time::timer::TIMERS;
+        use bop_common::time::timer::TIMERS;
         // Initialize or retrieve the timer
         let mut timer = {
             let mut timers = TIMERS.lock().unwrap();
-            timers.entry($name).or_insert_with(|| builder_common::time::Timer::new($name)).clone()
+            timers.entry($name).or_insert_with(|| bop_common::time::Timer::new($name)).clone()
         };
 
         // Start timing
