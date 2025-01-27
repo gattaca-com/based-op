@@ -2,15 +2,16 @@ pub mod repeater;
 pub mod timer;
 pub mod types;
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
+
 pub use repeater::*;
 use serde::{Deserialize, Serialize};
 pub use timer::*;
 pub use types::*;
 pub type Clock = quanta::Clock;
 
-static GLOBAL_NANOS_FOR_100: OnceCell<u64> = OnceCell::new();
-static GLOBAL_CLOCK: OnceCell<Clock> = OnceCell::new();
+static GLOBAL_NANOS_FOR_100: OnceLock<u64> = OnceLock::new();
+static GLOBAL_CLOCK: OnceLock<Clock> = OnceLock::new();
 
 #[inline]
 fn global_clock() -> &'static Clock {

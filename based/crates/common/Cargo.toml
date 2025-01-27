@@ -18,7 +18,6 @@ tracing-appender.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 eyre.workspace = true
-once_cell.workspace = true
 chrono.workspace = true
 quanta.workspace = true
 directories.workspace = true
