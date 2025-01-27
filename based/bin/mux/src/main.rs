@@ -10,7 +10,7 @@ use axum::{
 };
 use bop_common::utils::{init_tracing, wait_for_signal};
 use error::{MuxError, RpcResult};
-use jsonrpsee_types::{Id, Request};
+use jsonrpsee::types::{Id, Request};
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
 use reqwest::{header, Client, StatusCode, Url};
 use serde_json::{self};
@@ -182,7 +182,7 @@ async fn mux_request(
 
                     // validate with fallback
                     let request = Request {
-                        jsonrpc:    jsonrpsee_types::TwoPointZero,
+                        jsonrpc:    jsonrpsee::types::TwoPointZero,
                         id:         Id::Number(0),
                         method:     NEW_PAYLOAD_METHOD.into(),
                         params:     Some(params),
