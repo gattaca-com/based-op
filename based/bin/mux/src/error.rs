@@ -10,32 +10,32 @@ pub type RpcResult<T> = std::result::Result<T, jsonrpsee_types::ErrorObjectOwned
 #[derive(thiserror::Error, Debug)]
 pub enum MuxError {
     #[error("internal error")]
-    InternalError,
+    Internal,
 
     #[error("serde error: {0}")]
-    SerdeError(#[from] serde_json::Error),
+    Serde(#[from] serde_json::Error),
 
     #[error("reqwest error: {0}")]
-    ReqwestError(#[from] reqwest::Error),
+    Reqwest(#[from] reqwest::Error),
 
     #[error("join error: {0}")]
-    JoinError(#[from] tokio::task::JoinError),
+    TokioJoin(#[from] tokio::task::JoinError),
 
     #[error("jsonrpsee error: {0}")]
-    JsonrpseeError(#[from] jsonrpsee_types::ErrorObject<'static>),
+    Jsonrpsee(#[from] jsonrpsee_types::ErrorObject<'static>),
 }
 
 impl IntoResponse for MuxError {
     fn into_response(self) -> Response {
         match self {
             // client errors
-            MuxError::InternalError
-            | MuxError::JoinError(_)
-            | MuxError::SerdeError(_)
-            | MuxError::ReqwestError(_) => (StatusCode::OK, Json(internal_error())),
+            MuxError::Internal |
+            MuxError::TokioJoin(_) |
+            MuxError::Serde(_) |
+            MuxError::Reqwest(_) => (StatusCode::OK, Json(internal_error())),
 
             // JSON RPC error
-            MuxError::JsonrpseeError(err) => (StatusCode::OK, Json(err)),
+            MuxError::Jsonrpsee(err) => (StatusCode::OK, Json(err)),
         }
         .into_response()
     }

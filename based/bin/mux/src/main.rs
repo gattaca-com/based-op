@@ -1,17 +1,18 @@
-use std::borrow::Cow;
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{borrow::Cow, net::SocketAddr, sync::Arc, time::Duration};
 
 use alloy_rpc_types::engine::{ForkchoiceUpdated, PayloadStatus};
-use axum::http::Extensions;
-use axum::routing::post;
-use axum::Router;
-use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
+use axum::{
+    extract::State,
+    http::{Extensions, HeaderMap},
+    response::IntoResponse,
+    routing::post,
+    Json, Router,
+};
 use bop_common::utils::{init_tracing, wait_for_signal};
 use error::{MuxError, RpcResult};
 use jsonrpsee_types::{Id, Request};
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
-use reqwest::header;
-use reqwest::{Client, StatusCode, Url};
+use reqwest::{header, Client, StatusCode, Url};
 use serde_json::{self};
 use tokio::net::TcpListener;
 use tracing::{debug, error, info, trace, Level};
@@ -152,8 +153,8 @@ async fn mux_request(
             // params: PayloadId
             // returns: OpExecutionPayloadEnvelopeV3
 
-            // send to fallback and gateway, if gateway returns, validate with new_paylaod and return
-            // otherwise return what fallback returns
+            // send to fallback and gateway, if gateway returns, validate with new_paylaod and
+            // return otherwise return what fallback returns
 
             let fallback_payload = tokio::spawn({
                 let req = req.clone();
@@ -182,9 +183,9 @@ async fn mux_request(
                             .await?;
 
                     let params = serde_json::value::to_raw_value(&[
-                        serde_json::to_value(&gateway_payload.execution_payload.clone())?,
+                        serde_json::to_value(gateway_payload.execution_payload.clone())?,
                         serde_json::to_value(Vec::<()>::new())?,
-                        serde_json::to_value(&gateway_payload.parent_beacon_block_root)?,
+                        serde_json::to_value(gateway_payload.parent_beacon_block_root)?,
                     ])?;
                     let params = Cow::Owned(params);
 
@@ -212,7 +213,7 @@ async fn mux_request(
                         Ok(gateway_payload)
                     } else {
                         error!(?gateway_payload, ?gateway_status, "gateway get_payload");
-                        Err(MuxError::InternalError)
+                        Err(MuxError::Internal)
                     }
                 }
             });
@@ -223,7 +224,7 @@ async fn mux_request(
             let fallback = fallback?;
             let gateway = gateway?;
 
-            let payload = gateway.or_else(|_| fallback)?;
+            let payload = gateway.or(fallback)?;
 
             Ok((StatusCode::OK, Json(payload)).into_response())
         }
