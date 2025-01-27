@@ -7,7 +7,7 @@ use crate::time::{Duration, IngestionTime, Instant, Nanos};
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
 pub struct InternalMessage<T> {
     ingestion_t: IngestionTime,
-    data:        T,
+    data: T,
 }
 
 impl<T> InternalMessage<T> {

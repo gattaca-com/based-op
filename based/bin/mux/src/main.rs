@@ -72,19 +72,19 @@ fn get_config() -> MuxConfig {
 
 #[derive(Clone)]
 struct MuxConfig {
-    addr:                SocketAddr,
-    fallback_url:        Url,
+    addr: SocketAddr,
+    fallback_url: Url,
     fallback_timeout_ms: u64,
-    gateway_url:         Url,
-    gateway_jwt:         &'static str,
-    gateway_timeout_ms:  u64,
+    gateway_url: Url,
+    gateway_jwt: &'static str,
+    gateway_timeout_ms: u64,
 }
 
 #[derive(Clone)]
 struct MuxState {
     fallback_client: Client,
-    gateway_client:  Client,
-    config:          Arc<MuxConfig>,
+    gateway_client: Client,
+    config: Arc<MuxConfig>,
 }
 
 const FORKCHOICE_METHOD: &str = "engine_forkchoiceUpdatedV3";
@@ -182,10 +182,10 @@ async fn mux_request(
 
                     // validate with fallback
                     let request = Request {
-                        jsonrpc:    jsonrpsee::types::TwoPointZero,
-                        id:         Id::Number(0),
-                        method:     NEW_PAYLOAD_METHOD.into(),
-                        params:     Some(params),
+                        jsonrpc: jsonrpsee::types::TwoPointZero,
+                        id: Id::Number(0),
+                        method: NEW_PAYLOAD_METHOD.into(),
+                        params: Some(params),
                         extensions: Extensions::new(),
                     };
 

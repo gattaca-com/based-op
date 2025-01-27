@@ -7,19 +7,19 @@ use tokio::sync::oneshot;
 /// Supported Engine API RPC methods
 pub enum EngineApiMessage {
     ForkChoiceUpdatedV3 {
-        fork_choice_state:  ForkchoiceState,
+        fork_choice_state: ForkchoiceState,
         payload_attributes: Option<Box<OpPayloadAttributes>>,
-        res_tx:             oneshot::Sender<ForkchoiceUpdated>,
+        res_tx: oneshot::Sender<ForkchoiceUpdated>,
     },
     NewPayloadV3 {
-        payload:                  ExecutionPayloadV3,
-        versioned_hashes:         Vec<B256>,
+        payload: ExecutionPayloadV3,
+        versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
-        res_tx:                   oneshot::Sender<PayloadStatus>,
+        res_tx: oneshot::Sender<PayloadStatus>,
     },
     GetPayloadV3 {
         payload_id: PayloadId,
-        res:        oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
+        res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
     },
 }
 

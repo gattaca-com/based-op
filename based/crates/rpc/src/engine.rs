@@ -16,7 +16,7 @@ use tracing::{error, info, trace, Level};
 // TODO: timing
 pub struct EngineRpcServer {
     engine_rpc_tx: Sender<EngineApiMessage>,
-    timeout:       Duration,
+    timeout: Duration,
 }
 
 impl EngineRpcServer {
