@@ -1,6 +1,8 @@
-use std::{collections::HashMap, fmt::Display, sync::Mutex};
-
-use once_cell::sync::Lazy;
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    sync::{LazyLock, Mutex},
+};
 
 use crate::{
     communication::{
@@ -178,7 +180,7 @@ impl Timer {
 
 // Global map of timers
 #[allow(dead_code)]
-pub static TIMERS: Lazy<Mutex<HashMap<&'static str, Timer>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+pub static TIMERS: LazyLock<Mutex<HashMap<&'static str, Timer>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Macro to be used when quickly benchmarking some piece of code, should not remain in prod as it
 /// is not particularly performant

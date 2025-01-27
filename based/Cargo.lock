@@ -656,7 +656,6 @@ dependencies = [
  "directories",
  "eyre",
  "jsonrpsee",
- "once_cell",
  "op-alloy-rpc-types-engine",
  "quanta",
  "serde",
