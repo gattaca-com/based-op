@@ -4,7 +4,7 @@ use super::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Repeater {
-    interval:   Duration,
+    interval: Duration,
     last_acted: Instant,
 }
 

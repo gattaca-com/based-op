@@ -71,7 +71,7 @@ use crate::communication::internal_message::InternalMessage;
 /// the same performance as SystemTime::now.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Default, Serialize, Deserialize)]
 pub struct IngestionTime {
-    real:     Nanos,
+    real: Nanos,
     internal: Instant,
 }
 

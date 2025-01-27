@@ -10,7 +10,7 @@ use super::ReadError;
 /// A sequential lock
 #[repr(C, align(64))]
 pub struct Seqlock<T> {
-    pub data:    UnsafeCell<T>, // don't change this order or rust does padding till 8bytes
+    pub data: UnsafeCell<T>, // don't change this order or rust does padding till 8bytes
     pub version: AtomicU32,
 }
 unsafe impl<T: Send> Send for Seqlock<T> {}

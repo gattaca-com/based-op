@@ -16,7 +16,7 @@ use crate::{
 #[repr(C)]
 pub struct TimingMessage {
     pub start_t: Instant,
-    pub stop_t:  Instant,
+    pub stop_t: Instant,
 }
 
 impl TimingMessage {
@@ -45,8 +45,8 @@ const QUEUE_SIZE: usize = 2usize.pow(17);
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Timer {
-    pub curmsg:       TimingMessage,
-    timing_producer:  Producer<TimingMessage>,
+    pub curmsg: TimingMessage,
+    timing_producer: Producer<TimingMessage>,
     latency_producer: Producer<TimingMessage>,
 }
 
@@ -65,8 +65,8 @@ impl Timer {
             Queue::create_or_open_shared(file, QUEUE_SIZE, QueueType::MPMC).expect("couldn't open latency queue");
 
         Timer {
-            curmsg:           Default::default(),
-            timing_producer:  Producer::from(timing_queue),
+            curmsg: Default::default(),
+            timing_producer: Producer::from(timing_queue),
             latency_producer: Producer::from(latency_queue),
         }
     }

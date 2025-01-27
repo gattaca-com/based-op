@@ -23,12 +23,12 @@ pub enum QueueType {
 #[derive(Debug)]
 #[repr(C, align(64))]
 struct QueueHeader {
-    queue_type:     QueueType,   // 1
-    is_initialized: u8,          // 2
-    _pad1:          [u8; 6],     // 8
-    elsize:         usize,       // 16
-    mask:           usize,       // 24
-    count:          AtomicUsize, // 32
+    queue_type: QueueType, // 1
+    is_initialized: u8,    // 2
+    _pad1: [u8; 6],        // 8
+    elsize: usize,         // 16
+    mask: usize,           // 24
+    count: AtomicUsize,    // 32
 }
 #[allow(dead_code)]
 impl QueueHeader {
@@ -323,7 +323,7 @@ impl<T> AsRef<InnerQueue<T>> for Queue<T> {
 #[derive(Clone, Copy, Debug)]
 pub struct Producer<T> {
     pub produced_first: u8, // 1
-    pub queue:          Queue<T>,
+    pub queue: Queue<T>,
 }
 
 impl<T: Copy> From<Queue<T>> for Producer<T> {
@@ -356,12 +356,12 @@ impl<T> AsMut<Producer<T>> for Producer<T> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ConsumerBare<T> {
-    pos:              usize,    // 8
-    mask:             usize,    // 16
-    expected_version: u32,      // 20
-    is_running:       u8,       // 21
-    _pad:             [u8; 11], // 32
-    queue:            Queue<T>, // 48 fat ptr: (usize, pointer)
+    pos: usize,            // 8
+    mask: usize,           // 16
+    expected_version: u32, // 20
+    is_running: u8,        // 21
+    _pad: [u8; 11],        // 32
+    queue: Queue<T>,       // 48 fat ptr: (usize, pointer)
 }
 
 impl<T: Copy> ConsumerBare<T> {
@@ -438,8 +438,8 @@ impl<T: Copy> From<Queue<T>> for ConsumerBare<T> {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Consumer<T: 'static + Copy> {
-    consumer:   ConsumerBare<T>,
-    message:    T,
+    consumer: ConsumerBare<T>,
+    message: T,
     should_log: bool,
 }
 
