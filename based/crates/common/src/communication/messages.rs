@@ -2,7 +2,9 @@ use std::ops::{Deref, DerefMut};
 
 use serde::{Deserialize, Serialize};
 
-use crate::time::{Duration, IngestionTime, Instant, Nanos};
+use crate::time::{Duration, IngestionTime, Instant, Nanos, Timer};
+
+use super::{Receiver, Sender};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
 pub struct InternalMessage<T> {
@@ -135,3 +137,38 @@ impl<T> From<InternalMessage<T>> for Nanos {
         value.ingestion_t.into()
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SequencerToSimulator {
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SimulatorToSequencer {
+}
+
+/// External is everything AsyncIO/RPC/Node
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ExternalToSequencer {
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SequencerToExternal {
+}
+
+#[derive(Clone, Debug)]
+pub struct SequencerReceivers {
+    from_simulator: Receiver<SimulatorToSequencer>,
+    from_external: Receiver<ExternalToSequencer>,
+    timer: Timer
+}
+
+#[derive(Clone, Debug)]
+pub struct SquencerSenders {
+    to_simulator: Sender<SequencerToSimulator>,
+    to_external: Sender<SequencerToExternal>,
+}
+
+pub struct SequencerConnections {
+
+}
+
