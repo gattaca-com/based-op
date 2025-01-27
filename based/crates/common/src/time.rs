@@ -57,7 +57,7 @@ pub mod utils;
 pub use types::{duration::Duration, instant::Instant, nanos::Nanos};
 pub use utils::{vsync, vsync_with_cancel};
 
-use crate::communication::internal_message::InternalMessage;
+use crate::communication::messages::InternalMessage;
 
 /// A Timestamp that should be used for internal latency/performance tracking.
 ///

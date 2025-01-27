@@ -7,9 +7,9 @@ pub mod queue;
 pub mod seqlock;
 pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
-pub mod internal_message;
+pub mod messages;
 
-pub use internal_message::InternalMessage;
+pub use messages::InternalMessage;
 
 pub type Sender<T> = crossbeam_channel::Sender<InternalMessage<T>>;
 pub type Receiver<T> = crossbeam_channel::Sender<InternalMessage<T>>;
