@@ -19,7 +19,7 @@ impl TxList {
     pub fn put(&mut self, new_tx: Arc<Transaction>) {
         let new_nonce = new_tx.nonce();
 
-        if self.txs.is_empty() || self.txs[self.txs.len() - 1].nonce() < new_nonce {
+        if self.txs.is_empty() || unsafe { self.txs.get_unchecked(self.txs.len() - 1) }.nonce() < new_nonce {
             self.txs.push(new_tx);
             return;
         }
