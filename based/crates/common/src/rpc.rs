@@ -27,17 +27,38 @@ pub type RpcResult<T> = Result<T, RpcError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RpcError {
+    #[error("internal error")]
+    Internal,
+
     #[error("timeout")]
     Timeout(#[from] tokio::time::error::Elapsed),
 
     #[error("response channel closed {0}")]
     ChannelClosed(#[from] oneshot::error::RecvError),
+
+    #[error("invalid transaction bytes")]
+    InvalidTransaction(#[from] alloy_rlp::Error),
+
+    #[error("jsonrpsee error {0}")]
+    Jsonrpsee(#[from] jsonrpsee::core::ClientError),
+
+    #[error("join error: {0}")]
+    TokioJoin(#[from] tokio::task::JoinError),
 }
 
 impl From<RpcError> for RpcErrorObject<'static> {
     fn from(value: RpcError) -> Self {
         match value {
-            RpcError::Timeout(_) | RpcError::ChannelClosed(_) => internal_error(),
+            RpcError::Internal |
+            RpcError::Timeout(_) |
+            RpcError::ChannelClosed(_) |
+            RpcError::Jsonrpsee(_) |
+            RpcError::TokioJoin(_) => internal_error(),
+            RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
+                ErrorCode::InvalidParams.code(),
+                ErrorCode::InvalidParams.message(),
+                Some(error.to_string()),
+            ),
         }
     }
 }

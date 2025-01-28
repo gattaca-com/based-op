@@ -8,9 +8,9 @@ rust-version.workspace = true
 bop-common.workspace = true
 alloy-primitives.workspace = true
 op-alloy-rpc-types-engine.workspace = true
+alloy-rlp.workspace = true
 alloy-rpc-types.workspace = true
 
-crossbeam-channel.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
