@@ -183,3 +183,16 @@ impl From<RpcError> for RpcErrorObject<'static> {
 fn internal_error() -> RpcErrorObject<'static> {
     RpcErrorObject::owned(ErrorCode::InternalError.code(), ErrorCode::InternalError.message(), None::<()>)
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SequencerToSimulator {
+    Ping,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SimulatorToSequencer {
+    Pong(usize),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SequencerToRpc {}

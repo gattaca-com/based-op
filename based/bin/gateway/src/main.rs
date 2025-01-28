@@ -1,12 +1,18 @@
 use bop_common::{
     actor::Actor,
     communication::{
-        Connections, ReceiversSequencer, ReceiversSimulator, SendersSequencer, SendersSimulator, SequencerToSimulator,
-        SimulatorToSequencer, Spine, TrackedSenders,
+        messages::{SequencerToSimulator, SimulatorToSequencer},
+        sequencer::{ReceiversSequencer, SendersSequencer},
+        simulator::{ReceiversSimulator, SendersSimulator},
+        Connections, Spine, TrackedSenders,
     },
+    config::Config,
+    runtime::spawn,
     time::{Duration, Repeater},
     utils::{init_tracing, last_part_of_typename},
 };
+use bop_pool::transaction::pool::TxPool;
+use revm_primitives::db::DatabaseRef;
 use tracing::{error, info};
 
 pub struct Simulator(usize);
@@ -49,17 +55,20 @@ impl Actor for Simulator {
     }
 }
 
-pub struct Sequencer {
+#[allow(dead_code)]
+pub struct Sequencer<Db: DatabaseRef> {
+    tx_pool: TxPool,
+    db: Db,
     every_s: Repeater,
 }
 
-impl Default for Sequencer {
-    fn default() -> Self {
-        Self { every_s: Repeater::every(Duration::from_secs(1)) }
+impl<Db: DatabaseRef> Sequencer<Db> {
+    fn new(db: Db) -> Self {
+        Self { db, every_s: Repeater::every(Duration::from_secs(1)), tx_pool: TxPool::default() }
     }
 }
 
-impl Actor for Sequencer {
+impl<Db: DatabaseRef + Send> Actor for Sequencer<Db> {
     type Receivers = ReceiversSequencer;
     type Senders = SendersSequencer;
 
@@ -102,6 +111,13 @@ fn main() {
     let _guards = init_tracing(Some("gateway"), 100, None);
     let spine = Spine::default();
 
+    let rpc_config = Config::default();
+
+    let db = bop_db::DbStub::default();
+
+    let server = bop_rpc::EngineRpcServer::new(&spine, rpc_config.engine_api_timeout);
+
+    spawn(server.run(rpc_config.engine_api_addr));
     std::thread::scope(|s| {
         let sim_0 = Simulator(0);
         sim_0.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
@@ -111,7 +127,7 @@ fn main() {
         // Ok to also run on 1 as it is sleeping for quite some time if there's no work to be done
         sim_2.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
 
-        let sequencer = Sequencer::default();
+        let sequencer = Sequencer::new(db);
         sequencer.run(s, &spine, None, Some(3));
     });
 }

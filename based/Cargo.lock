@@ -676,10 +676,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bop-db"
+version = "0.1.0"
+dependencies = [
+ "revm-primitives",
+]
+
+[[package]]
 name = "bop-gateway"
 version = "0.1.0"
 dependencies = [
  "bop-common",
+ "bop-db",
+ "bop-pool",
+ "bop-rpc",
+ "revm-primitives",
  "tracing",
 ]
 

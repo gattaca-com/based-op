@@ -6,6 +6,7 @@ use revm_primitives::db::DatabaseRef;
 
 use crate::transaction::active::Active;
 
+#[derive(Clone, Debug, Default)]
 pub struct TxPool {
     /// maps an eoa to all pending txs
     pool_data: HashMap<Address, TxList>,
