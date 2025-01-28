@@ -47,3 +47,4 @@ shared_memory = "^0.12"
 # threading
 core_affinity = "0.8.1"
 crossbeam-channel = "0.5.14"
+signal-hook = "0.3.17"

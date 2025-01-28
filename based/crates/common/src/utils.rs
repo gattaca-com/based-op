@@ -1,14 +1,40 @@
 use tokio::signal::unix::{signal, SignalKind};
+use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry};
 
-pub fn init_tracing() -> WorkerGuard {
+pub fn init_tracing(log_file: bool) -> WorkerGuard {
+    let format = tracing_subscriber::fmt::format()
+        .with_level(true)
+        .with_thread_ids(true)
+        .with_target(false)
+        .with_timer(tracing_subscriber::fmt::time())
+        .compact();
+
+    let stdout_log = tracing_subscriber::fmt::layer()
+        .event_format(format.clone())
+        .with_filter(tracing_subscriber::EnvFilter::from_default_env());
+    let subscriber = Registry::default().with(stdout_log);
+
+    let file_log = if log_file {
+        let path = "log.log";
+
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .expect("couldn't create log file");
+        Some(
+            tracing_subscriber::fmt::layer()
+                .event_format(format)
+                .with_writer(file)
+                .with_filter(LevelFilter::DEBUG),
+        )
+    } else {
+        None
+    };
     let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
-    tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env())
-        .with(fmt::layer().with_writer(non_blocking))
-        .init();
-
+    subscriber.with(file_log).with(fmt::layer().with_writer(non_blocking)).init();
     guard
 }
 

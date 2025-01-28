@@ -5,3 +5,4 @@ pub mod rpc;
 pub mod runtime;
 pub mod time;
 pub mod utils;
+pub mod actor;
