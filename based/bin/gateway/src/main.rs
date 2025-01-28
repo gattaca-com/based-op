@@ -7,11 +7,11 @@ use bop_common::{
         Connections, Spine, TrackedSenders,
     },
     config::Config,
-    runtime::spawn,
     time::{Duration, Repeater},
     utils::{init_tracing, last_part_of_typename},
 };
 use bop_pool::transaction::pool::TxPool;
+use bop_rpc::start_engine_rpc;
 use revm_primitives::db::DatabaseRef;
 use tracing::{error, info};
 
@@ -115,9 +115,8 @@ fn main() {
 
     let db = bop_db::DbStub::default();
 
-    let server = bop_rpc::EngineRpcServer::new(&spine, rpc_config.engine_api_timeout);
+    start_engine_rpc(&rpc_config, &spine);
 
-    spawn(server.run(rpc_config.engine_api_addr));
     std::thread::scope(|s| {
         let sim_0 = Simulator(0);
         sim_0.run(s, &spine, Some(Duration::from_micros(100)), Some(1));

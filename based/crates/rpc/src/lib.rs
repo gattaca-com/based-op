@@ -1,12 +1,18 @@
-use bop_common::{communication::Sender, config::Config, db::DB, order::Order, rpc::EngineApiMessage, runtime::spawn};
+use bop_common::{
+    communication::{Sender, Spine},
+    config::Config,
+    db::DB,
+    order::Order,
+    runtime::spawn,
+};
 use engine::EngineRpcServer;
 use eth::EthRpcServer;
 
 mod engine;
 mod eth;
 
-pub fn start_engine_rpc(config: &Config, engine_rpc_tx: Sender<EngineApiMessage>) {
-    let server = EngineRpcServer::new(engine_rpc_tx, config.engine_api_timeout);
+pub fn start_engine_rpc(config: &Config, spine: &Spine) {
+    let server = EngineRpcServer::new(spine, config.engine_api_timeout);
     spawn(server.run(config.engine_api_addr));
 }
 

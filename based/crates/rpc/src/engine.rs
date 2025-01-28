@@ -4,8 +4,6 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
     api::EngineApiServer,
-    communication::Sender,
-    rpc::{EngineApiMessage, RpcResult},
     communication::{
         messages::{EngineApiMessage, RpcResult},
         Sender, Spine,
@@ -62,14 +60,11 @@ impl EngineApiServer for EngineRpcServer {
         trace!(?fork_choice_state, ?payload_attributes, "new request");
 
         let (tx, rx) = oneshot::channel();
-        let _ = self.engine_rpc_tx.send(
-            EngineApiMessage::ForkChoiceUpdatedV3 {
-                fork_choice_state,
-                payload_attributes: payload_attributes.map(Box::new),
-                res_tx: tx,
-            }
-            .into(),
-        );
+        self.send(EngineApiMessage::ForkChoiceUpdatedV3 {
+            fork_choice_state,
+            payload_attributes: payload_attributes.map(Box::new),
+            res_tx: tx,
+        });
 
         // wait with timeout
         let res = tokio::time::timeout(self.timeout.into(), rx).await??;
@@ -87,9 +82,7 @@ impl EngineApiServer for EngineRpcServer {
         trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
 
         let (tx, rx) = oneshot::channel();
-        let _ = self.engine_rpc_tx.send(
-            EngineApiMessage::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, res_tx: tx }.into(),
-        );
+        self.send(EngineApiMessage::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, res_tx: tx });
 
         // wait with timeout
         let res = tokio::time::timeout(self.timeout.into(), rx).await??;
@@ -102,7 +95,7 @@ impl EngineApiServer for EngineRpcServer {
         trace!(%payload_id, "new request");
 
         let (tx, rx) = oneshot::channel();
-        let _ = self.engine_rpc_tx.send(EngineApiMessage::GetPayloadV3 { payload_id, res: tx }.into());
+        self.send(EngineApiMessage::GetPayloadV3 { payload_id, res: tx });
 
         // wait with timeout
         let res = tokio::time::timeout(self.timeout.into(), rx).await??;

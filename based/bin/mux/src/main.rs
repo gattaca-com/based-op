@@ -21,7 +21,7 @@ async fn main() -> eyre::Result<()> {
     } else {
         Level::INFO
     };
-    let _guard = init_tracing(Some(log_level));
+    let _guard = init_tracing(None, 0, Some(vec![&log_level.to_string()]));
 
     let addr = SocketAddr::new(IpAddr::V4(args.mux_host), args.mux_port);
     let server = MuxServer::new(args)?;

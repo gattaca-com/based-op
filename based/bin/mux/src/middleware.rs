@@ -14,8 +14,8 @@ use crate::server::HttpClient;
 
 #[derive(Clone)]
 pub struct ProxyService<S> {
-    mux_methods:     &'static [&'static str],
-    inner:           S,
+    mux_methods: &'static [&'static str],
+    inner: S,
     fallback_client: HttpClient,
 }
 
@@ -40,7 +40,7 @@ where
             if mux_methods.contains(&req.method_name()) {
                 inner.call(req).await
             } else {
-                let params = MyParams(req.params());
+                let params = WrapParams(req.params());
 
                 let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =
                     fallback_client.request(req.method_name(), params).await;
@@ -61,9 +61,9 @@ where
     }
 }
 
-struct MyParams<'a>(Params<'a>);
-
-impl<'a> ToRpcParams for MyParams<'a> {
+// TODO: remove this
+struct WrapParams<'a>(Params<'a>);
+impl ToRpcParams for WrapParams<'_> {
     fn to_rpc_params(self) -> Result<Option<Box<RawValue>>, serde_json::Error> {
         // FIXME: we should not clone here
         self.0.as_str().map(String::from).map(RawValue::from_string).transpose()

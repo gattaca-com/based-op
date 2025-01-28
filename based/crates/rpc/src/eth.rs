@@ -5,17 +5,16 @@ use alloy_rlp::Decodable;
 use alloy_rpc_types::{Block, BlockId, BlockNumberOrTag, TransactionReceipt};
 use bop_common::{
     api::EthApiServer,
-    communication::Sender,
+    communication::{messages::RpcResult, Sender},
     db::DB,
     order::{Order, Transaction},
-    rpc::RpcResult,
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 
 pub struct EthRpcServer {
     new_order_tx: Sender<Order>,
-    db:           DB,
+    db: DB,
 }
 
 impl EthRpcServer {

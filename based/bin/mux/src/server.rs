@@ -4,7 +4,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
     api::{EngineApiClient, EngineApiServer, CAPABILITIES},
-    rpc::{RpcError, RpcResult},
+    communication::messages::{RpcError, RpcResult},
     utils::wait_for_signal,
 };
 use jsonrpsee::{
@@ -22,7 +22,7 @@ pub type HttpClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpB
 
 pub struct MuxServer {
     fallback_client: HttpClient,
-    gateway_client:  HttpClient,
+    gateway_client: HttpClient,
 }
 
 impl MuxServer {
