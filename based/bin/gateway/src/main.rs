@@ -99,7 +99,7 @@ impl Actor for Sequencer {
 }
 
 fn main() {
-    let _guard = init_tracing(true);
+    let _guards = init_tracing(Some("gateway"), 100, None);
     let spine = Spine::default();
 
     std::thread::scope(|s| {

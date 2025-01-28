@@ -23,7 +23,7 @@ mod error;
 async fn main() {
     let config = get_config();
 
-    let _guard = init_tracing(false);
+    let _guard = init_tracing(Some("mux"), 100, None);
 
     match run(config).await {
         Ok(_) => info!("mux exited"),
