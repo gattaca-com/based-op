@@ -1,7 +1,6 @@
 use tokio::signal::unix::{signal, SignalKind};
-use tracing::{error, level_filters::LevelFilter};
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer, Registry};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 pub const DEFAULT_TRACING_ENV_FILTERS: [&str; 6] = [
     "hyper::proto::h1=off",
