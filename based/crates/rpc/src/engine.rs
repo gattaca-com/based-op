@@ -4,7 +4,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
     api::EngineApiServer,
-    rpc::{EngineApiMessage, RpcResult},
+    communication::messages::{EngineApiMessage, RpcResult},
 };
 use crossbeam_channel::Sender;
 use jsonrpsee::{core::async_trait, server::ServerBuilder};

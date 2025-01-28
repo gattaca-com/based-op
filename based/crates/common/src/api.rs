@@ -6,7 +6,7 @@ use alloy_rpc_types::{
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 
-use super::rpc::RpcResult;
+use crate::communication::messages::RpcResult;
 
 pub const CAPABILITIES: &[&str] = &["engine_forkchoiceUpdatedV3", "engine_getPayloadV3", "engine_newPayloadV3"];
 
