@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::net::SocketAddr;
 
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
@@ -6,6 +6,11 @@ use bop_common::{
     api::EngineApiServer,
     communication::Sender,
     rpc::{EngineApiMessage, RpcResult},
+    communication::{
+        messages::{EngineApiMessage, RpcResult},
+        Sender, Spine,
+    },
+    time::Duration,
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
@@ -15,13 +20,13 @@ use tracing::{error, info, trace, Level};
 // TODO: jwt auth
 // TODO: timing
 pub struct EngineRpcServer {
+    timeout: Duration,
     engine_rpc_tx: Sender<EngineApiMessage>,
-    timeout:       Duration,
 }
 
 impl EngineRpcServer {
-    pub fn new(engine_rpc_tx: Sender<EngineApiMessage>, timeout: Duration) -> Self {
-        Self { engine_rpc_tx, timeout }
+    pub fn new(spine: &Spine, timeout: Duration) -> Self {
+        Self { engine_rpc_tx: spine.into(), timeout }
     }
 
     #[tracing::instrument(skip_all, name = "rpc_engine")]
@@ -32,6 +37,10 @@ impl EngineRpcServer {
         let execution_module = EngineApiServer::into_rpc(self);
 
         let server_handle = server.start(execution_module);
+        //TODO: Handle other communcation from sequencer ?
+        //      Idea: we have this part do rpc requests, using the rpc->sequencer channel,
+        //      but we make it part of another sync actor that uses the connections and gathers
+        //      state etc in a spinloop that the rpc runtime can use to serve requests with?
         server_handle.stopped().await;
 
         error!("server stopped");
@@ -53,14 +62,17 @@ impl EngineApiServer for EngineRpcServer {
         trace!(?fork_choice_state, ?payload_attributes, "new request");
 
         let (tx, rx) = oneshot::channel();
-        self.send(EngineApiMessage::ForkChoiceUpdatedV3 {
-            fork_choice_state,
-            payload_attributes: payload_attributes.map(Box::new),
-            res_tx: tx,
-        });
+        let _ = self.engine_rpc_tx.send(
+            EngineApiMessage::ForkChoiceUpdatedV3 {
+                fork_choice_state,
+                payload_attributes: payload_attributes.map(Box::new),
+                res_tx: tx,
+            }
+            .into(),
+        );
 
         // wait with timeout
-        let res = tokio::time::timeout(self.timeout, rx).await??;
+        let res = tokio::time::timeout(self.timeout.into(), rx).await??;
 
         Ok(res)
     }
@@ -75,10 +87,12 @@ impl EngineApiServer for EngineRpcServer {
         trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
 
         let (tx, rx) = oneshot::channel();
-        self.send(EngineApiMessage::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, res_tx: tx });
+        let _ = self.engine_rpc_tx.send(
+            EngineApiMessage::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, res_tx: tx }.into(),
+        );
 
         // wait with timeout
-        let res = tokio::time::timeout(self.timeout, rx).await??;
+        let res = tokio::time::timeout(self.timeout.into(), rx).await??;
 
         Ok(res)
     }
@@ -88,10 +102,10 @@ impl EngineApiServer for EngineRpcServer {
         trace!(%payload_id, "new request");
 
         let (tx, rx) = oneshot::channel();
-        self.send(EngineApiMessage::GetPayloadV3 { payload_id, res: tx });
+        let _ = self.engine_rpc_tx.send(EngineApiMessage::GetPayloadV3 { payload_id, res: tx }.into());
 
         // wait with timeout
-        let res = tokio::time::timeout(self.timeout, rx).await??;
+        let res = tokio::time::timeout(self.timeout.into(), rx).await??;
 
         Ok(res)
     }
