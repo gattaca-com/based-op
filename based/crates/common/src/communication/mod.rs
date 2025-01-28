@@ -1,6 +1,6 @@
 use std::{fs::read_dir, path::Path};
 
-use messages::{SequencerToRpc, SequencerToSimulator, SimulatorToSequencer};
+use messages::{EthApi, SequencerToRpc, SequencerToSimulator, SimulatorToSequencer};
 use shared_memory::ShmemError;
 use thiserror::Error;
 
@@ -17,7 +17,7 @@ pub mod simulator;
 pub use messages::InternalMessage;
 
 use crate::{
-    time::{IngestionTime, Timer},
+    time::{Duration, IngestionTime, Instant, Timer},
     utils::last_part_of_typename,
 };
 
@@ -32,6 +32,52 @@ pub trait TrackedSenders {
     {
         let msg = self.ingestion_t().to_msg(data);
         self.as_ref().send(msg)
+    }
+
+    fn send_log_err<T>(&self, data: T) -> Result<(), crossbeam_channel::SendError<InternalMessage<T>>>
+    where
+        Self: AsRef<Sender<T>>,
+    {
+        self.send(data).inspect_err(|e| tracing::error!("Couldn't send {}: {e}", last_part_of_typename::<T>()))
+    }
+
+    fn send_forever<T>(&self, data: T)
+    where
+        Self: AsRef<Sender<T>>,
+    {
+        if let Err(e) = self.send(data) {
+            tracing::error!("Couldn't send {}: {e}, retrying forever...", last_part_of_typename::<T>());
+            let mut msg = e.into_inner();
+            while let Err(e) = self.as_ref().send(msg) {
+                msg = e.into_inner();
+            }
+        }
+    }
+
+    fn send_timeout<T>(
+        &self,
+        data: T,
+        timeout: Duration,
+    ) -> Result<(), crossbeam_channel::SendError<InternalMessage<T>>>
+    where
+        Self: AsRef<Sender<T>>,
+    {
+        if let Err(e) = self.send(data) {
+            tracing::error!("Couldn't send {}: {e}, retrying for {timeout}...", last_part_of_typename::<T>());
+            let curt = Instant::now();
+            let mut msg = e.into_inner();
+            while let Err(e) = self.as_ref().send(msg) {
+                if timeout < curt.elapsed() {
+                    tracing::error!(
+                        "Couldn't send {}: {e}, retried for {timeout}, breaking off",
+                        last_part_of_typename::<T>()
+                    );
+                    return Err(e);
+                }
+                msg = e.into_inner();
+            }
+        }
+        Ok(())
     }
 }
 
@@ -138,8 +184,12 @@ pub struct Spine {
     sender_sequencer_to_rpc: Sender<SequencerToRpc>,
     receiver_sequencer_to_rpc: crossbeam_channel::Receiver<InternalMessage<SequencerToRpc>>,
 
-    sender_rpc_to_sequencer: Sender<messages::EngineApiMessage>,
-    receiver_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<messages::EngineApiMessage>>,
+    sender_engine_rpc_to_sequencer: Sender<messages::EngineApi>,
+    receiver_engine_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<messages::EngineApi>>,
+
+    //TODO: @ltitanb
+    sender_eth_rpc_to_sequencer: Sender<EthApi>,
+    receiver_eth_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<EthApi>>,
 }
 
 impl Default for Spine {
@@ -147,7 +197,8 @@ impl Default for Spine {
         let (sender_sim_to_sequencer, receiver_sim_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_sequencer_to_sim, receiver_sequencer_to_sim) = crossbeam_channel::bounded(4096);
         let (sender_sequencer_to_rpc, receiver_sequencer_to_rpc) = crossbeam_channel::bounded(4096);
-        let (sender_rpc_to_sequencer, receiver_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
+        let (sender_engine_rpc_to_sequencer, receiver_engine_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
+        let (sender_eth_rpc_to_sequencer, receiver_eth_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
 
         Self {
             sender_sim_to_sequencer,
@@ -156,15 +207,23 @@ impl Default for Spine {
             receiver_sequencer_to_sim,
             sender_sequencer_to_rpc,
             receiver_sequencer_to_rpc,
-            sender_rpc_to_sequencer,
-            receiver_rpc_to_sequencer,
+            sender_engine_rpc_to_sequencer,
+            receiver_engine_rpc_to_sequencer,
+            sender_eth_rpc_to_sequencer,
+            receiver_eth_rpc_to_sequencer,
         }
     }
 }
 
-impl From<&Spine> for Sender<messages::EngineApiMessage> {
+impl From<&Spine> for Sender<messages::EngineApi> {
     fn from(value: &Spine) -> Self {
-        value.sender_rpc_to_sequencer.clone()
+        value.sender_engine_rpc_to_sequencer.clone()
+    }
+}
+
+impl From<&Spine> for Sender<messages::EthApi> {
+    fn from(value: &Spine) -> Self {
+        value.sender_eth_rpc_to_sequencer.clone()
     }
 }
 

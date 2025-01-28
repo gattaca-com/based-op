@@ -1,11 +1,14 @@
 pub mod simulated;
 pub mod tx_list;
 
-use alloy_consensus::Transaction as TransactionTrait;
-use alloy_primitives::{Address, B256};
+use alloy_consensus::{Transaction as TransactionTrait, TxEip1559};
+use alloy_primitives::{Address, B256, U256};
 use op_alloy_consensus::OpTxEnvelope;
+use revm_primitives::TxKind;
 pub use simulated::{SimulatedTx, SimulatedTxList};
 pub use tx_list::TxList;
+
+use crate::signing::ECDSASigner;
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
@@ -53,11 +56,38 @@ impl Transaction {
 
     #[inline]
     pub fn nonce(&self) -> u64 {
-        todo!()
+        0
     }
 
     #[inline]
     pub fn nonce_ref(&self) -> &u64 {
         todo!()
+    }
+
+    #[inline]
+    pub fn random() -> Self {
+        let value = 50;
+        let max_gas_units = 50;
+        let max_fee_per_gas = 50;
+        let nonce = 1;
+        let chain_id = 1000;
+        let max_priority_fee_per_gas = 1000;
+
+        let signing_wallet = ECDSASigner::try_from_secret(B256::random().as_ref()).unwrap();
+        let from = Address::random();
+        let to = Address::random();
+        let value = U256::from_limbs([value, 0, 0, 0]);
+        let tx = TxEip1559 {
+            chain_id,
+            nonce,
+            gas_limit: max_gas_units,
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+            to: TxKind::Call(to),
+            value,
+            ..Default::default()
+        };
+        let signed_tx = signing_wallet.sign_tx(tx).unwrap();
+        Self { sender: from, tx: OpTxEnvelope::Eip1559(signed_tx) }
     }
 }

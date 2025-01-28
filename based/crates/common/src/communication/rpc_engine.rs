@@ -21,18 +21,18 @@ impl AsMut<Receiver<SequencerToRpc>> for ReceiversRpc {
 }
 
 #[derive(Clone, Debug)]
-pub struct SendersRpc {
-    to_sequencer: Sender<messages::EngineApiMessage>,
+pub struct SendersEngineRpc {
+    to_sequencer: Sender<messages::EngineApi>,
     timestamp: IngestionTime,
 }
 
-impl From<&Spine> for SendersRpc {
+impl From<&Spine> for SendersEngineRpc {
     fn from(spine: &Spine) -> Self {
-        Self { to_sequencer: spine.sender_rpc_to_sequencer.clone(), timestamp: Default::default() }
+        Self { to_sequencer: spine.sender_engine_rpc_to_sequencer.clone(), timestamp: Default::default() }
     }
 }
 
-impl TrackedSenders for SendersRpc {
+impl TrackedSenders for SendersEngineRpc {
     fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
         self.timestamp = ingestion_t;
     }
@@ -41,8 +41,8 @@ impl TrackedSenders for SendersRpc {
         self.timestamp
     }
 }
-impl AsRef<Sender<messages::EngineApiMessage>> for SendersRpc {
-    fn as_ref(&self) -> &Sender<messages::EngineApiMessage> {
+impl AsRef<Sender<messages::EngineApi>> for SendersEngineRpc {
+    fn as_ref(&self) -> &Sender<messages::EngineApi> {
         &self.to_sequencer
     }
 }

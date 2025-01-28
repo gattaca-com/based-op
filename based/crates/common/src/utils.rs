@@ -87,16 +87,51 @@ pub async fn wait_for_signal() -> eyre::Result<()> {
     Ok(())
 }
 
-/// foo::bar::Baz<T> -> Baz<T>
-pub fn after_last_colons(name: &str) -> &str {
-    let name = if let Some(colon) = name.rfind("::") { &name[colon + 2..] } else { name };
-    if let Some(end_caret) = name.rfind('>') {
-        &name[..=end_caret]
-    } else {
-        name
+/// Strips all top-level (non-generic) path segments and returns only the last segment,
+/// including any generic parameters.
+///
+/// For example:
+/// - `foo::Bar::Baz<T::b::db>` => `Baz<T::b::db>`
+/// - `my_crate::some_mod::Type<U>` => `Type<U>`
+/// - `JustType` => `JustType`
+///
+/// If there are no top-level "::" separators, the original string is returned.
+pub fn strip_namespace(s: &str) -> &str {
+    let mut depth = 0;
+    let mut start = 0;
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        match bytes[i] {
+            b'<' => {
+                // Entering a generic parameter region, increase depth
+                depth += 1;
+            }
+            b'>' => {
+                // Leaving a generic parameter region, decrease depth
+                if depth > 0 {
+                    depth -= 1;
+                }
+            }
+            b':' => {
+                // Check if we have "::" at top-level (depth == 0)
+                if depth == 0 && i + 1 < len && bytes[i + 1] == b':' {
+                    // Update start to skip past this "::"
+                    start = i + 2;
+                    // Skip the extra ':' in the loop
+                    i += 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
     }
+
+    &s[start..]
 }
 
 pub fn last_part_of_typename<T>() -> &'static str {
-    after_last_colons(std::any::type_name::<T>())
+    strip_namespace(std::any::type_name::<T>())
 }

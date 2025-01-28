@@ -7,26 +7,34 @@ use crate::{actor::Actor, time::IngestionTime};
 #[derive(Debug)]
 pub struct ReceiversSequencer {
     from_simulator: Receiver<SimulatorToSequencer>,
-    from_rpc: Receiver<messages::EngineApiMessage>,
+    from_engine_rpc: Receiver<messages::EngineApi>,
+    from_eth_rpc: Receiver<messages::EthApi>,
 }
 impl ReceiversSequencer {
     pub fn new<A: Actor>(actor: &A, spine: &Spine) -> Self {
         Self {
             from_simulator: Receiver::new(actor.name(), spine.receiver_sim_to_sequencer.clone()),
-            from_rpc: Receiver::new(actor.name(), spine.receiver_rpc_to_sequencer.clone()),
+            from_engine_rpc: Receiver::new(actor.name(), spine.receiver_engine_rpc_to_sequencer.clone()),
+            from_eth_rpc: Receiver::new(actor.name(), spine.receiver_eth_rpc_to_sequencer.clone()),
         }
     }
 }
 
-impl AsMut<Receiver<messages::EngineApiMessage>> for ReceiversSequencer {
-    fn as_mut(&mut self) -> &mut Receiver<messages::EngineApiMessage> {
-        &mut self.from_rpc
+impl AsMut<Receiver<messages::EngineApi>> for ReceiversSequencer {
+    fn as_mut(&mut self) -> &mut Receiver<messages::EngineApi> {
+        &mut self.from_engine_rpc
     }
 }
 
 impl AsMut<Receiver<SimulatorToSequencer>> for ReceiversSequencer {
     fn as_mut(&mut self) -> &mut Receiver<SimulatorToSequencer> {
         &mut self.from_simulator
+    }
+}
+
+impl AsMut<Receiver<messages::EthApi>> for ReceiversSequencer {
+    fn as_mut(&mut self) -> &mut Receiver<messages::EthApi> {
+        &mut self.from_eth_rpc
     }
 }
 

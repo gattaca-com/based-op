@@ -5,7 +5,7 @@ use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpd
 use bop_common::{
     api::EngineApiServer,
     communication::{
-        messages::{EngineApiMessage, RpcResult},
+        messages::{EngineApi, RpcResult},
         Sender, Spine,
     },
     time::Duration,
@@ -19,7 +19,7 @@ use tracing::{error, info, trace, Level};
 // TODO: timing
 pub struct EngineRpcServer {
     timeout: Duration,
-    engine_rpc_tx: Sender<EngineApiMessage>,
+    engine_rpc_tx: Sender<EngineApi>,
 }
 
 impl EngineRpcServer {
@@ -57,7 +57,7 @@ impl EngineApiServer for EngineRpcServer {
 
         let (tx, rx) = oneshot::channel();
         let _ = self.engine_rpc_tx.send(
-            EngineApiMessage::ForkChoiceUpdatedV3 {
+            EngineApi::ForkChoiceUpdatedV3 {
                 fork_choice_state,
                 payload_attributes: payload_attributes.map(Box::new),
                 res_tx: tx,
@@ -81,9 +81,9 @@ impl EngineApiServer for EngineRpcServer {
         trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
 
         let (tx, rx) = oneshot::channel();
-        let _ = self.engine_rpc_tx.send(
-            EngineApiMessage::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, res_tx: tx }.into(),
-        );
+        let _ = self
+            .engine_rpc_tx
+            .send(EngineApi::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, res_tx: tx }.into());
 
         // wait with timeout
         let res = tokio::time::timeout(self.timeout.into(), rx).await??;
@@ -96,7 +96,7 @@ impl EngineApiServer for EngineRpcServer {
         trace!(%payload_id, "new request");
 
         let (tx, rx) = oneshot::channel();
-        let _ = self.engine_rpc_tx.send(EngineApiMessage::GetPayloadV3 { payload_id, res: tx }.into());
+        let _ = self.engine_rpc_tx.send(EngineApi::GetPayloadV3 { payload_id, res: tx }.into());
 
         // wait with timeout
         let res = tokio::time::timeout(self.timeout.into(), rx).await??;
