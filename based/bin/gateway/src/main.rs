@@ -1,4 +1,3 @@
-
 use bop_common::{
     actor::Actor,
     communication::{
