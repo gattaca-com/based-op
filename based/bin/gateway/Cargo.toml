@@ -6,5 +6,10 @@ rust-version.workspace = true
 
 [dependencies]
 bop-common.workspace = true
+bop-rpc.workspace = true
+bop-pool.workspace = true
+bop-db.workspace = true
 
 tracing.workspace = true
+
+revm-primitives.workspace = true
