@@ -23,7 +23,6 @@ pub trait Actor: Send + Sized {
     fn create_senders(&self, spine: &Spine) -> Self::Senders;
     fn create_receivers(&self, spine: &Spine) -> Self::Receivers;
 
-    
     fn loop_body(&mut self, _connections: &mut Connections<Self::Senders, Self::Receivers>) {}
     fn on_init(&mut self, _connections: &mut Connections<Self::Senders, Self::Receivers>) {}
     fn on_exit(self, _connections: &mut Connections<Self::Senders, Self::Receivers>) {}

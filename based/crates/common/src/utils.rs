@@ -19,17 +19,8 @@ pub fn init_tracing(log_file: bool) -> WorkerGuard {
     let file_log = if log_file {
         let path = "log.log";
 
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .expect("couldn't create log file");
-        Some(
-            tracing_subscriber::fmt::layer()
-                .event_format(format)
-                .with_writer(file)
-                .with_filter(LevelFilter::DEBUG),
-        )
+        let file = std::fs::OpenOptions::new().create(true).append(true).open(path).expect("couldn't create log file");
+        Some(tracing_subscriber::fmt::layer().event_format(format).with_writer(file).with_filter(LevelFilter::DEBUG))
     } else {
         None
     };

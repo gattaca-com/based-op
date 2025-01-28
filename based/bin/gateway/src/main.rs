@@ -104,12 +104,12 @@ fn main() {
 
     std::thread::scope(|s| {
         let sim_0 = Simulator(0);
-        sim_0.run(s, &spine,  Some(Duration::from_micros(100)), Some(1));
+        sim_0.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
         let sim_1 = Simulator(1);
-        sim_1.run(s, &spine,  Some(Duration::from_micros(100)), Some(2));
+        sim_1.run(s, &spine, Some(Duration::from_micros(100)), Some(2));
         let sim_2 = Simulator(2);
         // Ok to also run on 1 as it is sleeping for quite some time if there's no work to be done
-        sim_2.run(s, &spine,  Some(Duration::from_micros(100)), Some(1));
+        sim_2.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
 
         let sequencer = Sequencer::default();
         sequencer.run(s, &spine, None, Some(3));
