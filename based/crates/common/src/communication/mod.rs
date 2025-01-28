@@ -1,5 +1,6 @@
 use std::{fs::read_dir, path::Path};
 
+use messages::{SequencerToRpc, SequencerToSimulator, SimulatorToSequencer};
 use shared_memory::ShmemError;
 use thiserror::Error;
 
@@ -8,11 +9,14 @@ pub mod seqlock;
 pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
 pub mod messages;
+pub mod rpc_engine;
+pub mod rpc_eth;
+pub mod sequencer;
+pub mod simulator;
 
 pub use messages::InternalMessage;
 
 use crate::{
-    actor::Actor,
     time::{IngestionTime, Timer},
     utils::last_part_of_typename,
 };
@@ -81,165 +85,6 @@ impl<T> Receiver<T> {
 
 pub type Sender<T> = crossbeam_channel::Sender<InternalMessage<T>>;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum SimulatorToSequencer {
-    Pong(usize),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum SequencerToRpc {}
-
-#[derive(Debug)]
-pub struct ReceiversSequencer {
-    from_simulator: Receiver<SimulatorToSequencer>,
-    from_rpc: Receiver<messages::EngineApiMessage>,
-}
-impl ReceiversSequencer {
-    pub fn new<A: Actor>(actor: &A, spine: &Spine) -> Self {
-        Self {
-            from_simulator: Receiver::new(actor.name(), spine.receiver_sim_to_sequencer.clone()),
-            from_rpc: Receiver::new(actor.name(), spine.receiver_rpc_to_sequencer.clone()),
-        }
-    }
-}
-
-impl AsMut<Receiver<messages::EngineApiMessage>> for ReceiversSequencer {
-    fn as_mut(&mut self) -> &mut Receiver<messages::EngineApiMessage> {
-        &mut self.from_rpc
-    }
-}
-
-impl AsMut<Receiver<SimulatorToSequencer>> for ReceiversSequencer {
-    fn as_mut(&mut self) -> &mut Receiver<SimulatorToSequencer> {
-        &mut self.from_simulator
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct SendersSequencer {
-    to_simulator: Sender<SequencerToSimulator>,
-    to_rpc: Sender<SequencerToRpc>,
-    timestamp: IngestionTime,
-}
-
-impl From<&Spine> for SendersSequencer {
-    fn from(spine: &Spine) -> Self {
-        Self {
-            to_simulator: spine.sender_sequencer_to_sim.clone(),
-            to_rpc: spine.sender_sequencer_to_rpc.clone(),
-            timestamp: Default::default(),
-        }
-    }
-}
-
-impl AsRef<Sender<SequencerToSimulator>> for SendersSequencer {
-    fn as_ref(&self) -> &Sender<SequencerToSimulator> {
-        &self.to_simulator
-    }
-}
-
-impl AsRef<Sender<SequencerToRpc>> for SendersSequencer {
-    fn as_ref(&self) -> &Sender<SequencerToRpc> {
-        &self.to_rpc
-    }
-}
-
-impl TrackedSenders for SendersSequencer {
-    fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
-        self.timestamp = ingestion_t;
-    }
-
-    fn ingestion_t(&self) -> IngestionTime {
-        self.timestamp
-    }
-}
-
-#[derive(Debug)]
-pub struct ReceiversSimulator {
-    from_sequencer: Receiver<SequencerToSimulator>,
-}
-impl ReceiversSimulator {
-    pub fn new<A: Actor>(actor: &A, spine: &Spine) -> Self {
-        Self { from_sequencer: Receiver::new(actor.name(), spine.receiver_sequencer_to_sim.clone()) }
-    }
-}
-
-impl AsMut<Receiver<SequencerToSimulator>> for ReceiversSimulator {
-    fn as_mut(&mut self) -> &mut Receiver<SequencerToSimulator> {
-        &mut self.from_sequencer
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct SendersSimulator {
-    to_sequencer: Sender<SimulatorToSequencer>,
-    timestamp: IngestionTime,
-}
-
-impl From<&Spine> for SendersSimulator {
-    fn from(spine: &Spine) -> Self {
-        Self { to_sequencer: spine.sender_sim_to_sequencer.clone(), timestamp: Default::default() }
-    }
-}
-
-impl TrackedSenders for SendersSimulator {
-    fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
-        self.timestamp = ingestion_t;
-    }
-
-    fn ingestion_t(&self) -> IngestionTime {
-        self.timestamp
-    }
-}
-impl AsRef<Sender<SimulatorToSequencer>> for SendersSimulator {
-    fn as_ref(&self) -> &Sender<SimulatorToSequencer> {
-        &self.to_sequencer
-    }
-}
-
-#[derive(Debug)]
-pub struct ReceiversRpc {
-    from_sequencer: Receiver<SequencerToRpc>,
-}
-impl ReceiversRpc {
-    pub fn new<S: AsRef<str>>(actor: S, spine: &Spine) -> Self {
-        Self { from_sequencer: Receiver::new(actor, spine.receiver_sequencer_to_rpc.clone()) }
-    }
-}
-
-impl AsMut<Receiver<SequencerToRpc>> for ReceiversRpc {
-    fn as_mut(&mut self) -> &mut Receiver<SequencerToRpc> {
-        &mut self.from_sequencer
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct SendersRpc {
-    to_sequencer: Sender<messages::EngineApiMessage>,
-    timestamp: IngestionTime,
-}
-
-impl From<&Spine> for SendersRpc {
-    fn from(spine: &Spine) -> Self {
-        Self { to_sequencer: spine.sender_rpc_to_sequencer.clone(), timestamp: Default::default() }
-    }
-}
-
-impl TrackedSenders for SendersRpc {
-    fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
-        self.timestamp = ingestion_t;
-    }
-
-    fn ingestion_t(&self) -> IngestionTime {
-        self.timestamp
-    }
-}
-impl AsRef<Sender<messages::EngineApiMessage>> for SendersRpc {
-    fn as_ref(&self) -> &Sender<messages::EngineApiMessage> {
-        &self.to_sequencer
-    }
-}
-
 pub struct Connections<S, R> {
     senders: S,
     receivers: R,
@@ -280,9 +125,6 @@ impl<S: TrackedSenders, R> Connections<S, R> {
         self.senders.send(data)
     }
 }
-
-pub type ConnectionsSequencer = Connections<SendersSequencer, ReceiversSequencer>;
-pub type ConnectionsSimulator = Connections<SendersSimulator, ReceiversSimulator>;
 
 // TODO remove
 #[allow(dead_code)]

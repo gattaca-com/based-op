@@ -1,10 +1,11 @@
-use std::borrow::Borrow;
 
 use bop_common::{
     actor::Actor,
     communication::{
-        Connections, ReceiversRpc, ReceiversSequencer, ReceiversSimulator, SendersSequencer, SendersSimulator,
-        SequencerToSimulator, SimulatorToSequencer, Spine, TrackedSenders,
+        messages::{SequencerToSimulator, SimulatorToSequencer},
+        sequencer::{ReceiversSequencer, SendersSequencer},
+        simulator::{ReceiversSimulator, SendersSimulator},
+        Connections, Spine, TrackedSenders,
     },
     config::Config,
     runtime::spawn,
@@ -116,9 +117,8 @@ fn main() {
     let db = bop_db::DbStub::default();
 
     let server = bop_rpc::EngineRpcServer::new(&spine, rpc_config.engine_api_timeout);
-    let rpc_connections = Connections::new(spine.borrow().into(), ReceiversRpc::new("rpc", &spine));
 
-    spawn(server.run(rpc_connections, rpc_config.engine_api_addr));
+    spawn(server.run(rpc_config.engine_api_addr));
     std::thread::scope(|s| {
         let sim_0 = Simulator(0);
         sim_0.run(s, &spine, Some(Duration::from_micros(100)), Some(1));

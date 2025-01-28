@@ -6,7 +6,7 @@ use bop_common::{
     api::EngineApiServer,
     communication::{
         messages::{EngineApiMessage, RpcResult},
-        Connections, ReceiversRpc, Sender, SendersRpc, Spine,
+        Sender, Spine,
     },
     time::Duration,
 };
@@ -28,7 +28,7 @@ impl EngineRpcServer {
     }
 
     #[tracing::instrument(skip_all, name = "rpc:engine")]
-    pub async fn run(self, _connections: Connections<SendersRpc, ReceiversRpc>, addr: SocketAddr) {
+    pub async fn run(self, addr: SocketAddr) {
         info!(%addr, "starting RPC server");
 
         let server = ServerBuilder::default().build(addr).await.expect("failed to create engine RPC server");

@@ -188,3 +188,11 @@ fn internal_error() -> RpcErrorObject<'static> {
 pub enum SequencerToSimulator {
     Ping,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SimulatorToSequencer {
+    Pong(usize),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SequencerToRpc {}
