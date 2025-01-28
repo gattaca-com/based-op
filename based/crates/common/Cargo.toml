@@ -5,9 +5,17 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# alloy
 alloy-primitives.workspace = true
-op-alloy-rpc-types-engine.workspace = true
 alloy-rpc-types.workspace = true
+alloy-consensus.workspace = true
+
+# op alloy
+op-alloy-rpc-types-engine.workspace = true
+op-alloy-consensus.workspace = true
+
+#revm
+revm-primitives.workspace = true
 
 crossbeam-channel.workspace = true
 tokio.workspace = true
@@ -15,6 +23,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 
+# serde
 serde.workspace = true
 thiserror.workspace = true
 eyre.workspace = true

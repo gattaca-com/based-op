@@ -8,21 +8,48 @@ rust-version = "1.83.0"
 edition = "2021"
 repository = "https://github.com/gattaca-com/based-op"
 
+# Used to build the production release profile.
+# Optimised exclusively for speed, build time will be longer so use only for prod releases.
+[profile.release-prod]
+inherits = "release"
+lto = true
+opt-level = 3
+codegen-units = 1
+debug = false
+split-debuginfo = "off"
+
+# Relase profile used when running locally.
+# Build optimised, but with all debug checks enabled.
+[profile.release-with-debug]
+inherits = "dev"
+opt-level = 3
+
 [workspace.dependencies]
 bop-common = { path = "crates/common" }
 bop-rpc = { path = "crates/rpc" }
+bop-pool = { path = "crates/pool" }
 
+# alloy
 alloy-consensus = "0.9.2"
 alloy-eips = "0.9.2"
 alloy-primitives = "0.8.19"
 alloy-rpc-types = { version = "0.9.2", features = ["engine"] }
 op-alloy-rpc-types-engine = "0.9.6"
+op-alloy-consensus = { version = "0.9.2", features = ["k256"] }
 
+# revm
+revm-primitives = "15.1.0"
+
+# web
 axum = { version = "0.8.1", features = ["macros"] }
 tokio = { version = "1.43.0", features = ["full"] }
 reqwest = { version = "0.12.12", features = ["json"] }
 jsonrpsee = { version = "0.24", features = ["http-client", "server", "macros"] }
 
+# data structures
+rustc-hash = "2.0.0"
+
+# logging
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
