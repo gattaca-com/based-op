@@ -39,12 +39,12 @@ impl TxList {
             return true;
         }
 
-        if unsafe { self.txs.get_unchecked(0).nonce() } >= *nonce {
+        if self.txs[0].nonce() >= *nonce {
             return false;
         }
 
         // if last tx nonce is < target, clear all
-        if unsafe { self.txs.get_unchecked(len - 1).nonce() } < *nonce {
+        if self.txs[len - 1].nonce() < *nonce {
             self.txs.drain(..);
             return true;
         }
