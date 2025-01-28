@@ -12,7 +12,7 @@ use crate::time::{Duration, IngestionTime, Instant, Nanos};
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
 pub struct InternalMessage<T> {
     ingestion_t: IngestionTime,
-    data:        T,
+    data: T,
 }
 
 impl<T> InternalMessage<T> {
@@ -145,19 +145,19 @@ impl<T> From<InternalMessage<T>> for Nanos {
 #[derive(Debug)]
 pub enum EngineApiMessage {
     ForkChoiceUpdatedV3 {
-        fork_choice_state:  ForkchoiceState,
+        fork_choice_state: ForkchoiceState,
         payload_attributes: Option<Box<OpPayloadAttributes>>,
-        res_tx:             oneshot::Sender<ForkchoiceUpdated>,
+        res_tx: oneshot::Sender<ForkchoiceUpdated>,
     },
     NewPayloadV3 {
-        payload:                  ExecutionPayloadV3,
-        versioned_hashes:         Vec<B256>,
+        payload: ExecutionPayloadV3,
+        versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
-        res_tx:                   oneshot::Sender<PayloadStatus>,
+        res_tx: oneshot::Sender<PayloadStatus>,
     },
     GetPayloadV3 {
         payload_id: PayloadId,
-        res:        oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
+        res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
     },
 }
 

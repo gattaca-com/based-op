@@ -34,7 +34,7 @@ pub trait TrackedSenders {
 #[derive(Clone, Debug)]
 pub struct Receiver<T> {
     receiver: crossbeam_channel::Receiver<InternalMessage<T>>,
-    timer:    Timer,
+    timer: Timer,
 }
 
 impl<T> Receiver<T> {
@@ -97,13 +97,13 @@ pub enum SequencerToRpc {}
 #[derive(Debug)]
 pub struct ReceiversSequencer {
     from_simulator: Receiver<SimulatorToSequencer>,
-    from_rpc:       Receiver<messages::EngineApiMessage>,
+    from_rpc: Receiver<messages::EngineApiMessage>,
 }
 impl ReceiversSequencer {
     pub fn new<A: Actor>(actor: &A, spine: &Spine) -> Self {
         Self {
             from_simulator: Receiver::new(actor.name(), spine.receiver_sim_to_sequencer.clone()),
-            from_rpc:       Receiver::new(actor.name(), spine.receiver_rpc_to_sequencer.clone()),
+            from_rpc: Receiver::new(actor.name(), spine.receiver_rpc_to_sequencer.clone()),
         }
     }
 }
@@ -123,16 +123,16 @@ impl AsMut<Receiver<SimulatorToSequencer>> for ReceiversSequencer {
 #[derive(Clone, Debug)]
 pub struct SendersSequencer {
     to_simulator: Sender<SequencerToSimulator>,
-    to_rpc:       Sender<SequencerToRpc>,
-    timestamp:    IngestionTime,
+    to_rpc: Sender<SequencerToRpc>,
+    timestamp: IngestionTime,
 }
 
 impl From<&Spine> for SendersSequencer {
     fn from(spine: &Spine) -> Self {
         Self {
             to_simulator: spine.sender_sequencer_to_sim.clone(),
-            to_rpc:       spine.sender_sequencer_to_rpc.clone(),
-            timestamp:    Default::default(),
+            to_rpc: spine.sender_sequencer_to_rpc.clone(),
+            timestamp: Default::default(),
         }
     }
 }
@@ -178,7 +178,7 @@ impl AsMut<Receiver<SequencerToSimulator>> for ReceiversSimulator {
 #[derive(Clone, Debug)]
 pub struct SendersSimulator {
     to_sequencer: Sender<SimulatorToSequencer>,
-    timestamp:    IngestionTime,
+    timestamp: IngestionTime,
 }
 
 impl From<&Spine> for SendersSimulator {
@@ -203,7 +203,7 @@ impl AsRef<Sender<SimulatorToSequencer>> for SendersSimulator {
 }
 
 pub struct Connections<S, R> {
-    senders:   S,
+    senders: S,
     receivers: R,
 }
 impl<S, R> Connections<S, R> {
@@ -249,16 +249,16 @@ pub type ConnectionsSimulator = Connections<SendersSimulator, ReceiversSimulator
 // TODO remove
 #[allow(dead_code)]
 pub struct Spine {
-    sender_sim_to_sequencer:   Sender<SimulatorToSequencer>,
+    sender_sim_to_sequencer: Sender<SimulatorToSequencer>,
     receiver_sim_to_sequencer: crossbeam_channel::Receiver<InternalMessage<SimulatorToSequencer>>,
 
-    sender_sequencer_to_sim:   Sender<SequencerToSimulator>,
+    sender_sequencer_to_sim: Sender<SequencerToSimulator>,
     receiver_sequencer_to_sim: crossbeam_channel::Receiver<InternalMessage<SequencerToSimulator>>,
 
-    sender_sequencer_to_rpc:   Sender<SequencerToRpc>,
+    sender_sequencer_to_rpc: Sender<SequencerToRpc>,
     receiver_sequencer_to_rpc: crossbeam_channel::Receiver<InternalMessage<SequencerToRpc>>,
 
-    sender_rpc_to_sequencer:   Sender<messages::EngineApiMessage>,
+    sender_rpc_to_sequencer: Sender<messages::EngineApiMessage>,
     receiver_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<messages::EngineApiMessage>>,
 }
 
