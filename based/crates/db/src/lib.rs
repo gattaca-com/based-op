@@ -78,8 +78,6 @@ impl DatabaseRef for DB {
 
 impl DatabaseCommit for DB {
     fn commit(&mut self, _changes: HashMap<Address, Account>) {
-        let mut provider_rw = self.provider.provider_rw().unwrap();
-
         todo!()
     }
 }
