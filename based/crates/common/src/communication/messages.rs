@@ -8,6 +8,7 @@ use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpd
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use serde::{Deserialize, Serialize};
+use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
 
 use crate::{
@@ -148,7 +149,7 @@ impl<T> From<InternalMessage<T>> for Nanos {
 }
 
 /// Supported Engine API RPC methods
-#[derive(Debug)]
+#[derive(Debug, AsRefStr)]
 pub enum EngineApi {
     ForkChoiceUpdatedV3 {
         fork_choice_state: ForkchoiceState,
@@ -211,19 +212,21 @@ fn internal_error() -> RpcErrorObject<'static> {
     RpcErrorObject::owned(ErrorCode::InternalError.code(), ErrorCode::InternalError.message(), None::<()>)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AsRefStr)]
 pub enum SequencerToSimulator {
+    /// A signal for the simulators to reinitialize their
+    /// cached block dependent state
+    //TODO: Add if anything should be communicated here
+    NewBlock,
     //TODO: add cachedb
-    SenderTxs(Vec<Arc<Transaction>>),
-    Ping,
+    SimulateTxList(Vec<Arc<Transaction>>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AsRefStr)]
 pub enum SimulatorToSequencer {
     //TODO: changes this to have the SimulatedTxList or so
-    SenderTxsSimulated(Vec<Arc<Transaction>>),
-    Pong(usize),
+    SimulatedTxList(Vec<Arc<Transaction>>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, AsRefStr)]
 pub enum SequencerToRpc {}

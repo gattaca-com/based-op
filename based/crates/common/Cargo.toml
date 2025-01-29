@@ -44,6 +44,7 @@ core_affinity.workspace = true
 signal-hook.workspace = true
 
 rand.workspace = true
+strum_macros.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

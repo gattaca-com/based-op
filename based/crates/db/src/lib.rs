@@ -17,14 +17,13 @@ pub use error::Error;
 pub use init::init_database;
 
 /// Database trait for all DB operations.
-pub trait BopDB: DatabaseRef + DatabaseCommit + Send + Sync + 'static {}
+pub trait BopDB: DatabaseRef + DatabaseCommit + Send + Sync + 'static + Clone {}
+impl<T> BopDB for T where T: DatabaseRef + DatabaseCommit + Send + Sync + 'static + Clone {}
 
 #[derive(Clone)]
 pub struct DB {
     provider: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
 }
-
-impl BopDB for DB {}
 
 impl DatabaseRef for DB {
     type Error = error::Error;
