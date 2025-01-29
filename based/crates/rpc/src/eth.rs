@@ -7,17 +7,17 @@ use bop_common::{
     communication::{messages::RpcResult, Sender, Spine},
     transaction::Transaction,
 };
-use bop_db::DB;
+use bop_db::BopDB;
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 
-pub struct EthRpcServer {
+pub struct EthRpcServer<D: BopDB> {
     new_order_tx: Sender<Arc<Transaction>>,
-    db: DB,
+    db: D,
 }
 
-impl EthRpcServer {
-    pub fn new(spine: &Spine, db: DB) -> Self {
+impl<D: BopDB> EthRpcServer<D> {
+    pub fn new(spine: &Spine, db: D) -> Self {
         Self { new_order_tx: spine.into(), db }
     }
 
@@ -35,7 +35,7 @@ impl EthRpcServer {
 }
 
 #[async_trait]
-impl EthApiServer for EthRpcServer {
+impl<D: BopDB> EthApiServer for EthRpcServer<D> {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         trace!(?bytes, "new request");
