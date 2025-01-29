@@ -149,11 +149,12 @@ fn main() {
                 .build()
                 .expect("failed to create runtime");
 
-            start_engine_rpc(&rpc_config, &spine);
-            start_eth_rpc(&rpc_config, &spine, db_c);
+            start_engine_rpc(&rpc_config, &spine, &rt);
+            start_eth_rpc(&rpc_config, &spine, db_c, &rt);
 
             rt.block_on(wait_for_signal())
         });
+
         let sim_0 = Simulator(0);
         sim_0.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
         let sim_1 = Simulator(1);
