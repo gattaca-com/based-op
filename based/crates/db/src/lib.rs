@@ -20,14 +20,12 @@ pub use error::Error;
 pub use init::init_database;
 
 /// Database trait for all DB operations.
-pub trait BopDB: DatabaseCommit + BopDbRead + Send + Sync + 'static + Clone + Debug {}
-impl<T> BopDB for T where T: BopDbRead + DatabaseCommit + Send + Sync + 'static + Clone + Debug {}
+pub trait BopDB: DatabaseRef<Error: Debug> + DatabaseCommit + BopDbRead + Send + Sync + 'static + Clone + Debug {}
+impl<T> BopDB for T where T: BopDbRead + DatabaseRef<Error: Debug> + DatabaseCommit + Send + Sync + 'static + Clone + Debug {}
 
-/// Databse read functions
-pub trait BopDbRead: DatabaseRef<Error: Debug> {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.basic_ref(address).ok().flatten().map(|acc| acc.nonce).unwrap_or_default()
-    }
+/// Database read functions
+pub trait BopDbRead {
+    fn get_nonce(&self, address: Address) -> u64;
 }
 
 #[derive(Clone)]
@@ -77,4 +75,8 @@ impl DatabaseCommit for DB {
     }
 }
 
-impl BopDbRead for DB {}
+impl BopDbRead for DB {
+    fn get_nonce(&self, address: Address) -> u64 {
+        self.basic_ref(address).ok().flatten().map(|acc| acc.nonce).unwrap_or_default()
+    }
+}
