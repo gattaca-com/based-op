@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
@@ -7,7 +10,10 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-use crate::time::{Duration, IngestionTime, Instant, Nanos};
+use crate::{
+    time::{Duration, IngestionTime, Instant, Nanos},
+    transaction::Transaction,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
 pub struct InternalMessage<T> {
@@ -143,7 +149,7 @@ impl<T> From<InternalMessage<T>> for Nanos {
 
 /// Supported Engine API RPC methods
 #[derive(Debug)]
-pub enum EngineApiMessage {
+pub enum EngineApi {
     ForkChoiceUpdatedV3 {
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<Box<OpPayloadAttributes>>,
@@ -165,17 +171,38 @@ pub type RpcResult<T> = Result<T, RpcError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RpcError {
+    #[error("internal error")]
+    Internal,
+
     #[error("timeout")]
     Timeout(#[from] tokio::time::error::Elapsed),
 
     #[error("response channel closed {0}")]
     ChannelClosed(#[from] oneshot::error::RecvError),
+
+    #[error("invalid transaction bytes")]
+    InvalidTransaction(#[from] alloy_rlp::Error),
+
+    #[error("jsonrpsee error {0}")]
+    Jsonrpsee(#[from] jsonrpsee::core::ClientError),
+
+    #[error("join error: {0}")]
+    TokioJoin(#[from] tokio::task::JoinError),
 }
 
 impl From<RpcError> for RpcErrorObject<'static> {
     fn from(value: RpcError) -> Self {
         match value {
-            RpcError::Timeout(_) | RpcError::ChannelClosed(_) => internal_error(),
+            RpcError::Internal |
+            RpcError::Timeout(_) |
+            RpcError::ChannelClosed(_) |
+            RpcError::Jsonrpsee(_) |
+            RpcError::TokioJoin(_) => internal_error(),
+            RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
+                ErrorCode::InvalidParams.code(),
+                ErrorCode::InvalidParams.message(),
+                Some(error.to_string()),
+            ),
         }
     }
 }
@@ -184,13 +211,17 @@ fn internal_error() -> RpcErrorObject<'static> {
     RpcErrorObject::owned(ErrorCode::InternalError.code(), ErrorCode::InternalError.message(), None::<()>)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum SequencerToSimulator {
+    //TODO: add cachedb
+    SenderTxs(Vec<Arc<Transaction>>),
     Ping,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum SimulatorToSequencer {
+    //TODO: changes this to have the SimulatedTxList or so
+    SenderTxsSimulated(Vec<Arc<Transaction>>),
     Pong(usize),
 }
 

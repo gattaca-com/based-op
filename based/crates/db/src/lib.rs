@@ -66,3 +66,13 @@ impl DatabaseCommit for DB {
         todo!()
     }
 }
+
+impl DbStub {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn get_nonce(&self, _address: Address) -> u64 {
+        0
+    }
+}

@@ -1,0 +1,1 @@
+kurtosis run optimism-package --args-file scripts/config.yml --enclave based-op

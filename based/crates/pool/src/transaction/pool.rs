@@ -1,7 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use alloy_primitives::Address;
-use bop_common::transaction::{SimulatedTxList, Transaction, TxList};
+use bop_common::{
+    communication::{messages::SequencerToSimulator, sequencer::SendersSequencer, TrackedSenders},
+    time::Duration,
+    transaction::{SimulatedTxList, Transaction, TxList},
+};
 use revm_primitives::db::DatabaseRef;
 
 use crate::transaction::active::Active;
@@ -19,12 +23,20 @@ impl TxPool {
         Self { pool_data: HashMap::with_capacity(capacity), active_txs: Active::with_capacity(capacity) }
     }
 
-    pub fn handle_new_tx<Db>(&mut self, new_tx: Arc<Transaction>, db: &Db, base_fee: u64)
+    pub fn handle_new_tx<Db>(&mut self, new_tx: Arc<Transaction>, db: &Db, base_fee: u64, sim_sender: &SendersSequencer)
     where
         Db: DatabaseRef,
         <Db as DatabaseRef>::Error: std::fmt::Debug,
     {
         let mut state_nonce = get_nonce(db, new_tx.sender());
+
+        //TODO: remove
+        debug_assert!(
+            sim_sender
+                .send_timeout(SequencerToSimulator::SenderTxs(vec![new_tx.clone()]), Duration::from_millis(10))
+                .is_ok(),
+            "Couldn't send simulator reply"
+        );
 
         // check nonce is valid
         if new_tx.nonce() < state_nonce {
@@ -45,7 +57,12 @@ impl TxPool {
 
                 tx_list.put(new_tx);
                 if let Some(mineable_txs) = tx_list.ready(&mut state_nonce, base_fee) {
-                    self.send_sim_requests_for_txs(mineable_txs);
+                    debug_assert!(
+                        sim_sender
+                            .send_timeout(SequencerToSimulator::SenderTxs(mineable_txs), Duration::from_millis(10))
+                            .is_ok(),
+                        "Couldn't send simulator reply"
+                    );
                 }
             }
             None => {
