@@ -4,6 +4,7 @@ pub mod communication;
 pub mod config;
 pub mod rpc;
 pub mod runtime;
+pub mod signing;
 pub mod time;
 pub mod transaction;
 pub mod utils;

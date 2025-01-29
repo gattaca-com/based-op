@@ -1,15 +1,14 @@
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{SequencerToSimulator, SimulatorToSequencer},
+        messages::{self, SequencerToSimulator, SimulatorToSequencer},
         sequencer::{ReceiversSequencer, SendersSequencer},
         simulator::{ReceiversSimulator, SendersSimulator},
         Connections, Spine, TrackedSenders,
     },
     config::Config,
-    runtime::spawn,
     time::{Duration, Repeater},
-    utils::{init_tracing, last_part_of_typename},
+    utils::{init_tracing, last_part_of_typename, wait_for_signal},
 };
 use bop_pool::transaction::pool::TxPool;
 use revm_primitives::db::DatabaseRef;
@@ -32,10 +31,16 @@ impl Actor for Simulator {
     }
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSimulator, ReceiversSimulator>) {
-        connections.receive(|msg, producers| match msg {
+        connections.receive(|msg, senders| match msg {
+            SequencerToSimulator::SenderTxs(txs) => {
+                info!("got simulate request: SenderTxs");
+                if let Err(e) = senders.send(SimulatorToSequencer::SenderTxsSimulated(txs)) {
+                    tracing::error!("Couldn't send reply:{e} ")
+                };
+            }
             SequencerToSimulator::Ping => {
                 info!("Received Ping from simulator, sending pong");
-                if let Err(e) = producers.send(SimulatorToSequencer::Pong(self.0)) {
+                if let Err(e) = senders.send(SimulatorToSequencer::Pong(self.0)) {
                     error!("Issue sending pong from sim to sequencer: {e}");
                 }
             }
@@ -68,7 +73,13 @@ impl<Db: DatabaseRef> Sequencer<Db> {
     }
 }
 
-impl<Db: DatabaseRef + Send> Actor for Sequencer<Db> {
+const DEFAULT_BASE_FEE: u64 = 10;
+
+impl<Db> Actor for Sequencer<Db>
+where
+    Db: DatabaseRef + Send,
+    <Db as DatabaseRef>::Error: std::fmt::Debug,
+{
     type Receivers = ReceiversSequencer;
     type Senders = SendersSequencer;
 
@@ -81,9 +92,18 @@ impl<Db: DatabaseRef + Send> Actor for Sequencer<Db> {
     fn loop_body(&mut self, connections: &mut Connections<SendersSequencer, ReceiversSequencer>) {
         connections.receive(|msg: SimulatorToSequencer, _| {
             match msg {
+                SimulatorToSequencer::SenderTxsSimulated(_) => {
+                    info!("Received simulated txs from the simulator")
+                }
                 SimulatorToSequencer::Pong(i) => info!("Received pong from simulator {i}"),
             };
         });
+
+        connections.receive(|msg: messages::EthApi, senders| {
+            info!("received msg from ethapi");
+            self.tx_pool.handle_new_tx(msg.order, &self.db, DEFAULT_BASE_FEE, senders);
+        });
+
         if self.every_s.fired() {
             info!("sending 4 pings");
             for _ in 0..4 {
@@ -109,16 +129,26 @@ impl<Db: DatabaseRef + Send> Actor for Sequencer<Db> {
 
 fn main() {
     let _guards = init_tracing(Some("gateway"), 100, None);
+
     let spine = Spine::default();
 
     let rpc_config = Config::default();
 
     let db = bop_db::DbStub::default();
 
-    let server = bop_rpc::EngineRpcServer::new(&spine, rpc_config.engine_api_timeout);
-
-    spawn(server.run(rpc_config.engine_api_addr));
     std::thread::scope(|s| {
+        s.spawn(|| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .worker_threads(10)
+                .enable_all()
+                .build()
+                .expect("failed to create runtime");
+            let engine_server = bop_rpc::EngineRpcServer::new(&spine, rpc_config.api_timeout);
+            rt.spawn(engine_server.run(rpc_config.engine_api_addr));
+            let eth_server = bop_rpc::EthRpcServer::new(&spine, rpc_config.api_timeout);
+            rt.spawn(eth_server.run(rpc_config.eth_api_addr));
+            rt.block_on(wait_for_signal())
+        });
         let sim_0 = Simulator(0);
         sim_0.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
         let sim_1 = Simulator(1);
