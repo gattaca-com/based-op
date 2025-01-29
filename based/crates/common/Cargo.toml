@@ -12,6 +12,9 @@ alloy-eips.workspace = true
 alloy-rpc-types.workspace = true
 alloy-rlp.workspace = true
 
+alloy-signer.workspace = true
+alloy-signer-local.workspace = true
+alloy-network.workspace = true
 
 # op alloy
 op-alloy-rpc-types-engine.workspace = true
@@ -39,6 +42,8 @@ shared_memory.workspace = true
 jsonrpsee.workspace = true
 core_affinity.workspace = true
 signal-hook.workspace = true
+
+rand.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

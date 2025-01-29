@@ -1,25 +1,24 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use alloy_primitives::{Address, Bytes, B256, U256};
-use alloy_rlp::Decodable;
 use alloy_rpc_types::{Block, BlockId, BlockNumberOrTag, TransactionReceipt};
 use bop_common::{
     api::EthApiServer,
-    communication::{messages::RpcResult, Sender},
-    db::DB,
-    order::{Order, Transaction},
+    communication::{messages::RpcResult, Sender, Spine},
+    transaction::Transaction,
 };
+use bop_db::DbStub;
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 
 pub struct EthRpcServer {
-    new_order_tx: Sender<Order>,
-    db: DB,
+    new_order_tx: Sender<Arc<Transaction>>,
+    db: DbStub,
 }
 
 impl EthRpcServer {
-    pub fn new(new_order_tx: Sender<Order>, db: DB) -> Self {
-        Self { new_order_tx, db }
+    pub fn new(spine: &Spine, db: DbStub) -> Self {
+        Self { new_order_tx: spine.into(), db }
     }
 
     #[tracing::instrument(skip_all, name = "rpc_eth")]
@@ -41,10 +40,9 @@ impl EthApiServer for EthRpcServer {
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         trace!(?bytes, "new request");
 
-        let tx = Transaction::decode(&mut bytes.as_ref())?;
-        let order = Order::Tx(tx);
-        let hash = order.hash();
-        let _ = self.new_order_tx.send(order.into());
+        let tx = Arc::new(Transaction::decode(bytes)?);
+        let hash = tx.hash();
+        let _ = self.new_order_tx.send(tx.into());
 
         Ok(hash)
     }

@@ -1,32 +1,42 @@
+use std::sync::Arc;
+
 use super::{
     messages::{self, SequencerToRpc, SequencerToSimulator, SimulatorToSequencer},
     Receiver, Sender, Spine, TrackedSenders,
 };
-use crate::{actor::Actor, time::IngestionTime};
+use crate::{actor::Actor, time::IngestionTime, transaction::Transaction};
 
 #[derive(Debug)]
 pub struct ReceiversSequencer {
     from_simulator: Receiver<SimulatorToSequencer>,
-    from_rpc: Receiver<messages::EngineApiMessage>,
+    from_engine_rpc: Receiver<messages::EngineApi>,
+    from_eth_rpc: Receiver<Arc<Transaction>>,
 }
 impl ReceiversSequencer {
     pub fn new<A: Actor>(actor: &A, spine: &Spine) -> Self {
         Self {
             from_simulator: Receiver::new(actor.name(), spine.receiver_sim_to_sequencer.clone()),
-            from_rpc: Receiver::new(actor.name(), spine.receiver_rpc_to_sequencer.clone()),
+            from_engine_rpc: Receiver::new(actor.name(), spine.receiver_engine_rpc_to_sequencer.clone()),
+            from_eth_rpc: Receiver::new(actor.name(), spine.receiver_eth_rpc_to_sequencer.clone()),
         }
     }
 }
 
-impl AsMut<Receiver<messages::EngineApiMessage>> for ReceiversSequencer {
-    fn as_mut(&mut self) -> &mut Receiver<messages::EngineApiMessage> {
-        &mut self.from_rpc
+impl AsMut<Receiver<messages::EngineApi>> for ReceiversSequencer {
+    fn as_mut(&mut self) -> &mut Receiver<messages::EngineApi> {
+        &mut self.from_engine_rpc
     }
 }
 
 impl AsMut<Receiver<SimulatorToSequencer>> for ReceiversSequencer {
     fn as_mut(&mut self) -> &mut Receiver<SimulatorToSequencer> {
         &mut self.from_simulator
+    }
+}
+
+impl AsMut<Receiver<Arc<Transaction>>> for ReceiversSequencer {
+    fn as_mut(&mut self) -> &mut Receiver<Arc<Transaction>> {
+        &mut self.from_eth_rpc
     }
 }
 

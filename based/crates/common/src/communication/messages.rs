@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
@@ -7,7 +10,10 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-use crate::time::{Duration, IngestionTime, Instant, Nanos};
+use crate::{
+    time::{Duration, IngestionTime, Instant, Nanos},
+    transaction::Transaction,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
 pub struct InternalMessage<T> {
@@ -143,7 +149,7 @@ impl<T> From<InternalMessage<T>> for Nanos {
 
 /// Supported Engine API RPC methods
 #[derive(Debug)]
-pub enum EngineApiMessage {
+pub enum EngineApi {
     ForkChoiceUpdatedV3 {
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<Box<OpPayloadAttributes>>,
@@ -205,13 +211,17 @@ fn internal_error() -> RpcErrorObject<'static> {
     RpcErrorObject::owned(ErrorCode::InternalError.code(), ErrorCode::InternalError.message(), None::<()>)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum SequencerToSimulator {
+    //TODO: add cachedb
+    SenderTxs(Vec<Arc<Transaction>>),
     Ping,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum SimulatorToSequencer {
+    //TODO: changes this to have the SimulatedTxList or so
+    SenderTxsSimulated(Vec<Arc<Transaction>>),
     Pong(usize),
 }
 
