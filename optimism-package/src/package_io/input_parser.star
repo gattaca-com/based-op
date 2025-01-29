@@ -34,7 +34,7 @@ DEFAULT_PROPOSER_IMAGES = {
 }
 
 DEFAULT_SIDECAR_IMAGES = {
-    "rollup-boost": "flashbots/rollup-boost:latest",
+    "rollup-boost": "bop-mux",
 }
 
 DEFAULT_ADDITIONAL_SERVICES = []

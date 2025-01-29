@@ -14,7 +14,7 @@ use jsonrpsee::{
 };
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_rpc_layer::{AuthClientLayer, AuthClientService};
-use tracing::{debug, error, info, trace, Level};
+use tracing::{debug, error, info, trace, Instrument, Level};
 
 use crate::{cli::MuxArgs, middleware::ProxyService};
 
@@ -88,25 +88,28 @@ impl EngineApiServer for MuxServer {
         // send in background to gateway
         // return what fallback returns
 
-        tokio::spawn({
-            let client = self.gateway_client.clone();
-            let payload_attributes = payload_attributes.clone();
+        tokio::spawn(
+            {
+                let client = self.gateway_client.clone();
+                let payload_attributes = payload_attributes.clone();
 
-            async move {
-                match client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await {
-                    Ok(res) => {
-                        if res.is_valid() {
-                            debug!(?res, "gateway response");
-                        } else {
-                            error!(?res, "gateway response");
+                async move {
+                    match client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await {
+                        Ok(res) => {
+                            if res.is_valid() {
+                                debug!(?res, "gateway response");
+                            } else {
+                                error!(?res, "gateway response");
+                            }
                         }
-                    }
-                    Err(err) => {
-                        error!(%err, "failed gateway");
+                        Err(err) => {
+                            error!(%err, "failed gateway");
+                        }
                     }
                 }
             }
-        });
+            .in_current_span(),
+        );
 
         let response = self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await?;
 
@@ -125,26 +128,29 @@ impl EngineApiServer for MuxServer {
         // send in background to gateway
         // return what fallback returns
 
-        tokio::spawn({
-            let client = self.gateway_client.clone();
-            let payload = payload.clone();
-            let versioned_hashes = versioned_hashes.clone();
+        tokio::spawn(
+            {
+                let client = self.gateway_client.clone();
+                let payload = payload.clone();
+                let versioned_hashes = versioned_hashes.clone();
 
-            async move {
-                match client.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await {
-                    Ok(res) => {
-                        if res.is_valid() {
-                            debug!(?res, "gateway response");
-                        } else {
-                            error!(?res, "gateway response");
+                async move {
+                    match client.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await {
+                        Ok(res) => {
+                            if res.is_valid() {
+                                debug!(?res, "gateway response");
+                            } else {
+                                error!(?res, "gateway response");
+                            }
                         }
-                    }
-                    Err(err) => {
-                        error!(%err, "failed gateway");
+                        Err(err) => {
+                            error!(%err, "failed gateway");
+                        }
                     }
                 }
             }
-        });
+            .in_current_span(),
+        );
 
         let response = self.fallback_client.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await?;
 
@@ -161,29 +167,32 @@ impl EngineApiServer for MuxServer {
             async move { client.get_payload_v3(payload_id).await }
         });
 
-        let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV3, _>> = tokio::spawn({
-            let gateway_client = self.gateway_client.clone();
-            let fallback_client = self.fallback_client.clone();
+        let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV3, _>> = tokio::spawn(
+            {
+                let gateway_client = self.gateway_client.clone();
+                let fallback_client = self.fallback_client.clone();
 
-            async move {
-                let gateway_payload = gateway_client.get_payload_v3(payload_id).await?;
-                let payload_status = fallback_client
-                    .new_payload_v3(
-                        gateway_payload.execution_payload.clone(),
-                        vec![],
-                        gateway_payload.parent_beacon_block_root,
-                    )
-                    .await?;
+                async move {
+                    let gateway_payload = gateway_client.get_payload_v3(payload_id).await?;
+                    let payload_status = fallback_client
+                        .new_payload_v3(
+                            gateway_payload.execution_payload.clone(),
+                            vec![],
+                            gateway_payload.parent_beacon_block_root,
+                        )
+                        .await?;
 
-                if payload_status.is_valid() {
-                    debug!(?gateway_payload, ?payload_status, "gateway response");
-                    Ok(gateway_payload)
-                } else {
-                    error!(?gateway_payload, ?payload_status, "gateway response");
-                    Err(RpcError::Internal)
+                    if payload_status.is_valid() {
+                        debug!(?gateway_payload, ?payload_status, "gateway response");
+                        Ok(gateway_payload)
+                    } else {
+                        error!(?gateway_payload, ?payload_status, "gateway response");
+                        Err(RpcError::Internal)
+                    }
                 }
             }
-        });
+            .in_current_span(),
+        );
 
         let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
 
