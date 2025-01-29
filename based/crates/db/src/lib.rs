@@ -8,7 +8,6 @@ use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx, Database};
 use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::ProviderFactory;
-use reth_storage_api::DBProvider;
 use revm_primitives::{
     db::{DatabaseCommit, DatabaseRef},
     Account, AccountInfo, Address, Bytecode, HashMap, B256, U256,
