@@ -13,6 +13,8 @@ use bop_pool::transaction::pool::TxPool;
 use revm_primitives::db::DatabaseRef;
 use tracing::info;
 
+pub(crate) mod block_sync;
+
 #[allow(dead_code)]
 pub struct Sequencer<Db: DatabaseRef> {
     tx_pool: TxPool,
