@@ -13,6 +13,7 @@ use bop_common::{
     transaction::Transaction,
     utils::{init_tracing, last_part_of_typename, wait_for_signal},
 };
+use bop_db::DB;
 use bop_pool::transaction::pool::TxPool;
 use bop_rpc::{start_engine_rpc, start_eth_rpc};
 use revm_primitives::db::DatabaseRef;
@@ -138,7 +139,7 @@ fn main() {
 
     let rpc_config = Config::default();
 
-    let db = bop_db::DbStub::default();
+    let db = init_db();
 
     std::thread::scope(|s| {
         let db_c = db.clone();
@@ -166,4 +167,8 @@ fn main() {
         let sequencer = Sequencer::new(db);
         sequencer.run(s, &spine, None, Some(3));
     });
+}
+
+fn init_db() -> DB {
+    todo!()
 }
