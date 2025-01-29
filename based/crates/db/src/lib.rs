@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    fmt::{Debug, Formatter},
+    sync::Arc,
+};
 
 use reth_db::{Bytecodes, CanonicalHeaders, DatabaseEnv, PlainAccountState, PlainStorageState};
 use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx, Database};
@@ -17,12 +20,29 @@ pub use error::Error;
 pub use init::init_database;
 
 /// Database trait for all DB operations.
-pub trait BopDB: DatabaseRef + DatabaseCommit + Send + Sync + 'static + Clone {}
-impl<T> BopDB for T where T: DatabaseRef + DatabaseCommit + Send + Sync + 'static + Clone {}
+pub trait BopDB:
+    DatabaseRef<Error: Debug> + DatabaseCommit + BopDbRead + Send + Sync + 'static + Clone + Debug
+{
+}
+impl<T> BopDB for T where
+    T: BopDbRead + DatabaseRef<Error: Debug> + DatabaseCommit + Send + Sync + 'static + Clone + Debug
+{
+}
+
+/// Database read functions
+pub trait BopDbRead {
+    fn get_nonce(&self, address: Address) -> u64;
+}
 
 #[derive(Clone)]
 pub struct DB {
     provider: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+}
+
+impl Debug for DB {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("DB")
+    }
 }
 
 impl DatabaseRef for DB {
@@ -61,8 +81,8 @@ impl DatabaseCommit for DB {
     }
 }
 
-impl DB {
-    pub fn get_nonce(&self, _address: Address) -> u64 {
-        todo!()
+impl BopDbRead for DB {
+    fn get_nonce(&self, address: Address) -> u64 {
+        self.basic_ref(address).ok().flatten().map(|acc| acc.nonce).unwrap_or_default()
     }
 }

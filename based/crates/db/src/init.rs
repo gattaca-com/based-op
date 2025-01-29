@@ -5,7 +5,7 @@ use reth_db::{init_db, ClientVersion};
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
 
-use super::{Error, DB};
+use super::{BopDB, Error, DB};
 
 /// Initialise the database.
 /// # Params
@@ -13,8 +13,7 @@ use super::{Error, DB};
 ///   containing `db` and `static_files` subdirectories. The directories will be created if they do not exist.
 ///
 /// Returns the initialised [`BopDB`] implementation, or [`Error`] if there is a problem.
-//TODO: @Vlad can this be a function that is part of the DB struct ?
-pub fn init_database<P: AsRef<Path>>(db_location: P) -> Result<DB, Error> {
+pub fn init_database<P: AsRef<Path>>(db_location: P) -> Result<impl BopDB, Error> {
     // Check the specified path is accessible, creating directories if necessary.
     let db_dir = db_location.as_ref().join("db");
     let static_files_dir = db_location.as_ref().join("static_files");
