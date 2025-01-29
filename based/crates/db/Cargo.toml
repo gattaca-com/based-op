@@ -17,7 +17,7 @@ alloy-primitives.workspace = true
 revm.workspace = true
 
 # Reth DB dpeendencies
-reth-db = { path = "../../../reth/crates/storage/db" }
+reth-db = { path = "../../../reth/crates/storage/db", features = ["optimism"] }
 reth-storage-api = { path = "../../../reth/crates/storage/storage-api" }
 reth-storage-errors = { path = "../../../reth/crates/storage/errors" }
 reth-db-common = { path = "../../../reth/crates/storage/db-common" }
@@ -38,12 +38,13 @@ reth-trie-common = { path = "../../../reth/crates/trie/common", features = [
 ] }
 reth-codecs = { path = "../../../reth/crates/storage/codecs" }
 reth-provider = { path = "../../../reth/crates/storage/provider", features = [
-    "test-utils",
+    "test-utils", 
+    "optimism",
 ] }
 reth-chainspec = { path = "../../../reth/crates/chainspec" }
 reth-fs-util = { path = "../../../reth/crates/fs-util" }
 #reth-execution-errors = { path = "../../../reth/crates/" }
-reth-db-api = { path = "../../../reth/crates/storage/db-api" }
+reth-db-api = { path = "../../../reth/crates/storage/db-api", features = [ "optimism" ]}
 reth-primitives-traits = { path = "../../../reth/crates/primitives-traits", features = [
     "test-utils",
 ] }

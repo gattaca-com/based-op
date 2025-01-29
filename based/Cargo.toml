@@ -42,7 +42,8 @@ alloy-rlp = "0.3.11"
 
 # TODO: use current crate
 reth-rpc-layer = { git = "https://github.com/paradigmxyz/reth", tag = "v1.1.5" }
-reth-optimism-evm = { path = "../reth/crates/optimism/evm"}
+reth-primitives = { path = "../reth/crates/primitives", features = ["optimism"] }
+reth-optimism-evm = { path = "../reth/crates/optimism/evm", features = ["optimism"] }
 
 futures = "0.3.31"
 op-alloy-consensus = { version = "0.9.2", features = ["k256"] }
@@ -50,8 +51,8 @@ alloy-signer = "0.9.2"
 alloy-signer-local = "0.9.2"
 alloy-network = "0.9.2"
 # revm
-revm-primitives = "15.1.0"
 revm = "19.4.0"
+revm-primitives = { version = "15.1.0", features = ["optimism"] }
 
 # web
 axum = { version = "0.8.1", features = ["macros"] }
