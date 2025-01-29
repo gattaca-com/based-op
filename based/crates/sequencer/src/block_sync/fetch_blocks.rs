@@ -45,7 +45,7 @@ async fn async_fetch_blocks_and_send_sequentially(
         // If any fail, send them first so block sync can handle errors.
         blocks.sort_unstable_by_key(|res| res.as_ref().map_or(0, |block| block.header.number));
         for block in blocks {
-            let _ = block_sender.send(block.into());
+            let _ = block_sender.send(block);
         }
 
         curr_block = batch_end + 1;

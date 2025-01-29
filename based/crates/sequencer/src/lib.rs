@@ -136,7 +136,8 @@ impl<Db: DatabaseRef> Sequencer<Db> {
 
                 // TODO: apply new payload
             }
-            _ => {} // TODO: handle other messages
+            messages::EngineApi::ForkChoiceUpdatedV3 { fork_choice_state: _, payload_attributes: _, res_tx: _ } => {}
+            messages::EngineApi::GetPayloadV3 { payload_id: _, res: _ } => {}
         }
     }
 }
