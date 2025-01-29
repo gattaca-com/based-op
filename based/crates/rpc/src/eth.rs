@@ -7,17 +7,17 @@ use bop_common::{
     communication::{messages::RpcResult, Sender, Spine},
     transaction::Transaction,
 };
-use bop_db::DbStub;
+use bop_db::DB;
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 
 pub struct EthRpcServer {
     new_order_tx: Sender<Arc<Transaction>>,
-    db: DbStub,
+    db: DB,
 }
 
 impl EthRpcServer {
-    pub fn new(spine: &Spine, db: DbStub) -> Self {
+    pub fn new(spine: &Spine, db: DB) -> Self {
         Self { new_order_tx: spine.into(), db }
     }
 

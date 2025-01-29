@@ -27,36 +27,31 @@ pub struct DB {
 impl BopDB for DB {}
 
 impl DatabaseRef for DB {
-    #[doc = "The database error type."]
     type Error = error::Error;
 
-    #[doc = " Get basic account information."]
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        let tx = self.provider.db_ref().tx().map_err(|e| Error::ReadTransactionError(e))?;
+        let tx = self.provider.db_ref().tx().map_err(Error::ReadTransactionError)?;
         tx.get::<PlainAccountState>(address)
             .map(|opt| opt.map(|account| account.into()))
-            .map_err(|e| Error::ReadTransactionError(e))
+            .map_err(Error::ReadTransactionError)
     }
 
-    #[doc = " Get account code by its hash."]
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        let tx = self.provider.db_ref().tx().map_err(|e| Error::ReadTransactionError(e))?;
-        let code = tx.get::<Bytecodes>(code_hash).map_err(|e| Error::ReadTransactionError(e))?;
-        Ok(code.unwrap_or_default().0.into())
+        let tx = self.provider.db_ref().tx().map_err(Error::ReadTransactionError)?;
+        let code = tx.get::<Bytecodes>(code_hash).map_err(Error::ReadTransactionError)?;
+        Ok(code.unwrap_or_default().0)
     }
 
-    #[doc = " Get storage value of address at index."]
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        let tx = self.provider.db_ref().tx().map_err(|e| Error::ReadTransactionError(e))?;
-        let mut cursor = tx.cursor_dup_read::<PlainStorageState>().map_err(|e| Error::ReadTransactionError(e))?;
-        let entry = cursor.seek_by_key_subkey(address, index.into()).map_err(|e| Error::ReadTransactionError(e))?;
+        let tx = self.provider.db_ref().tx().map_err(Error::ReadTransactionError)?;
+        let mut cursor = tx.cursor_dup_read::<PlainStorageState>().map_err(Error::ReadTransactionError)?;
+        let entry = cursor.seek_by_key_subkey(address, index.into()).map_err(Error::ReadTransactionError)?;
         Ok(entry.map(|e| e.value).unwrap_or_default())
     }
 
-    #[doc = " Get block hash by block number."]
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
-        let tx = self.provider.db_ref().tx().map_err(|e| Error::ReadTransactionError(e))?;
-        let hash = tx.get::<CanonicalHeaders>(number).map_err(|e| Error::ReadTransactionError(e))?;
+        let tx = self.provider.db_ref().tx().map_err(Error::ReadTransactionError)?;
+        let hash = tx.get::<CanonicalHeaders>(number).map_err(Error::ReadTransactionError)?;
         Ok(hash.unwrap_or_default())
     }
 }
@@ -67,12 +62,8 @@ impl DatabaseCommit for DB {
     }
 }
 
-impl DbStub {
-    pub fn new() -> Self {
-        Self {}
-    }
-
+impl DB {
     pub fn get_nonce(&self, _address: Address) -> u64 {
-        0
+        todo!()
     }
 }
