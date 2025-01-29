@@ -113,7 +113,7 @@ fn main() {
 
     let rpc_config = Config::default();
 
-    let db = bop_db::DbStub::default();
+    let db = bop_db::DB::default();
 
     let server = bop_rpc::EngineRpcServer::new(&spine, rpc_config.engine_api_timeout);
 
