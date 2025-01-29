@@ -1,0 +1,13 @@
+[package]
+name = "bop-sequencer"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+bop-common.workspace = true
+bop-pool.workspace = true
+
+revm-primitives.workspace = true
+tracing.workspace = true
