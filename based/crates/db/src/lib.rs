@@ -8,6 +8,7 @@ use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx, Database};
 use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::ProviderFactory;
+use reth_storage_api::DBProvider;
 use revm_primitives::{
     db::{DatabaseCommit, DatabaseRef},
     Account, AccountInfo, Address, Bytecode, HashMap, B256, U256,
@@ -20,8 +21,14 @@ pub use error::Error;
 pub use init::init_database;
 
 /// Database trait for all DB operations.
-pub trait BopDB: DatabaseRef<Error: Debug> + DatabaseCommit + BopDbRead + Send + Sync + 'static + Clone + Debug {}
-impl<T> BopDB for T where T: BopDbRead + DatabaseRef<Error: Debug> + DatabaseCommit + Send + Sync + 'static + Clone + Debug {}
+pub trait BopDB:
+    DatabaseRef<Error: Debug> + DatabaseCommit + BopDbRead + Send + Sync + 'static + Clone + Debug
+{
+}
+impl<T> BopDB for T where
+    T: BopDbRead + DatabaseRef<Error: Debug> + DatabaseCommit + Send + Sync + 'static + Clone + Debug
+{
+}
 
 /// Database read functions
 pub trait BopDbRead {
@@ -71,6 +78,8 @@ impl DatabaseRef for DB {
 
 impl DatabaseCommit for DB {
     fn commit(&mut self, _changes: HashMap<Address, Account>) {
+        let mut provider_rw = self.provider.provider_rw().unwrap();
+
         todo!()
     }
 }
