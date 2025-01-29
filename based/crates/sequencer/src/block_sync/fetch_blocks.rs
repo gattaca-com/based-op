@@ -1,10 +1,8 @@
 use std::time::Duration;
 
 use alloy_rpc_types::Block;
-use bop_common::{
-    communication::Sender,
-    rpc::{RpcParam, RpcRequest, RpcResponse},
-};
+use bop_common::rpc::{RpcParam, RpcRequest, RpcResponse};
+use crossbeam_channel::Sender;
 use futures::future::join_all;
 use reqwest::Client;
 use tokio::{runtime::Runtime, task::JoinHandle};
@@ -87,4 +85,61 @@ async fn fetch_block(block_number: u64, client: &Client, url: &str) -> Result<Bl
     }
 
     Err(last_err.unwrap())
+}
+
+#[cfg(test)]
+mod tests {
+    use crossbeam_channel::bounded;
+
+    use super::*;
+
+    const TEST_RPC_URL: &str = "https://ethereum-rpc.publicnode.com";
+
+    #[tokio::test]
+    async fn test_single_block_fetch() {
+        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
+
+        let block = fetch_block(21732902, &client, TEST_RPC_URL).await.unwrap();
+
+        assert_eq!(block.header.number, 21732902);
+        assert_eq!(block.header.hash.to_string(), "0xd1ffce2d95bb99bd57ce36dd88757136583b0572acbc04ec8704e6a769b926e6");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_batch_fetch_ordering() {
+        let (sender, receiver) = bounded(100);
+
+        let start_block = 21732880;
+        let end_block = 21732900;
+
+        tokio::spawn(async_fetch_blocks_and_send_sequentially(
+            start_block,
+            end_block,
+            TEST_RPC_URL.to_string(),
+            sender,
+        ));
+
+        let mut prev_block_num = start_block - 1;
+        let mut blocks_received = 0;
+
+        while let Ok(block_result) = receiver.recv() {
+            let block = block_result.unwrap();
+            blocks_received += 1;
+
+            assert!(block.header.number > prev_block_num, "Blocks must be in ascending order");
+            prev_block_num = block.header.number;
+
+            if blocks_received == (end_block - start_block + 1) as usize {
+                break;
+            }
+        }
+
+        assert_eq!(
+            blocks_received,
+            (end_block - start_block + 1) as usize,
+            "Should receive exactly {} blocks",
+            end_block - start_block + 1
+        );
+        assert_eq!(prev_block_num, end_block, "Last block should be end_block");
+    }
 }
