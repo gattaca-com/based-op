@@ -173,6 +173,7 @@ impl<S: TrackedSenders, R> Connections<S, R> {
 
 // TODO remove
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct Spine {
     sender_sim_to_sequencer: Sender<SimulatorToSequencer>,
     receiver_sim_to_sequencer: crossbeam_channel::Receiver<InternalMessage<SimulatorToSequencer>>,
@@ -197,7 +198,6 @@ impl Default for Spine {
         let (sender_sequencer_to_rpc, receiver_sequencer_to_rpc) = crossbeam_channel::bounded(4096);
         let (sender_engine_rpc_to_sequencer, receiver_engine_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_eth_rpc_to_sequencer, receiver_eth_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
-
         Self {
             sender_sim_to_sequencer,
             receiver_sim_to_sequencer,

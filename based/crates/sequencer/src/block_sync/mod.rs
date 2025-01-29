@@ -1,1 +1,1 @@
-mod fetch_blocks;
+pub(crate) mod fetch_blocks;
