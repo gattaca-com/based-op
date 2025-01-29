@@ -15,7 +15,7 @@ RPC_PORT_NUM = 8541
 WS_PORT_NUM = 8546
 DISCOVERY_PORT_NUM = 30303
 RPC_PORT_ID = "rpc"
-DEFAULT_IMAGE = "flashbots/rollup-boost:latest"
+DEFAULT_IMAGE = "bop-mux"
 
 
 def get_used_ports(discovery_port=DISCOVERY_PORT_NUM):
@@ -96,12 +96,12 @@ def get_config(
 
     public_ports = {}
     cmd = [
-        "--jwt-path=" + constants.JWT_MOUNT_PATH_ON_CONTAINER,
-        "--l2-url={0}".format(L2_EXECUTION_ENGINE_ENDPOINT),
-        "--builder-url={0}".format(BUILDER_EXECUTION_ENGINE_ENDPOINT),
-        "--rpc-port={0}".format(RPC_PORT_NUM),
-        "--boost-sync",
-        "--log-level=debug",
+        "--mux.port={0}".format(RPC_PORT_NUM),
+        "--fallback.url={0}".format(L2_EXECUTION_ENGINE_ENDPOINT),
+        "--fallback.jwt_path=" + constants.JWT_MOUNT_PATH_ON_CONTAINER,
+        "--gateway.url={0}".format(BUILDER_EXECUTION_ENGINE_ENDPOINT),
+        "--gateway.jwt_path=" + constants.JWT_MOUNT_PATH_ON_CONTAINER,
+        "--trace",
     ]
 
     files = {

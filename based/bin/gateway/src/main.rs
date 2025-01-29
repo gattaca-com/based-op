@@ -1,16 +1,20 @@
+use std::sync::Arc;
+
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, SequencerToSimulator, SimulatorToSequencer},
+        messages::{SequencerToSimulator, SimulatorToSequencer},
         sequencer::{ReceiversSequencer, SendersSequencer},
         simulator::{ReceiversSimulator, SendersSimulator},
         Connections, Spine, TrackedSenders,
     },
     config::Config,
     time::{Duration, Repeater},
+    transaction::Transaction,
     utils::{init_tracing, last_part_of_typename, wait_for_signal},
 };
 use bop_pool::transaction::pool::TxPool;
+use bop_rpc::{start_engine_rpc, start_eth_rpc};
 use revm_primitives::db::DatabaseRef;
 use tracing::{error, info};
 
@@ -99,9 +103,9 @@ where
             };
         });
 
-        connections.receive(|msg: messages::EthApi, senders| {
+        connections.receive(|msg: Arc<Transaction>, senders| {
             info!("received msg from ethapi");
-            self.tx_pool.handle_new_tx(msg.order, &self.db, DEFAULT_BASE_FEE, senders);
+            self.tx_pool.handle_new_tx(msg, &self.db, DEFAULT_BASE_FEE, senders);
         });
 
         if self.every_s.fired() {
@@ -137,16 +141,17 @@ fn main() {
     let db = bop_db::DbStub::default();
 
     std::thread::scope(|s| {
+        let db_c = db.clone();
         s.spawn(|| {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .worker_threads(10)
                 .enable_all()
                 .build()
                 .expect("failed to create runtime");
-            let engine_server = bop_rpc::EngineRpcServer::new(&spine, rpc_config.api_timeout);
-            rt.spawn(engine_server.run(rpc_config.engine_api_addr));
-            let eth_server = bop_rpc::EthRpcServer::new(&spine, rpc_config.api_timeout);
-            rt.spawn(eth_server.run(rpc_config.eth_api_addr));
+
+            start_engine_rpc(&rpc_config, &spine);
+            start_eth_rpc(&rpc_config, &spine, db_c);
+
             rt.block_on(wait_for_signal())
         });
         let sim_0 = Simulator(0);

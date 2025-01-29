@@ -1,14 +1,16 @@
+use std::sync::Arc;
+
 use super::{
     messages::{self, SequencerToRpc, SequencerToSimulator, SimulatorToSequencer},
     Receiver, Sender, Spine, TrackedSenders,
 };
-use crate::{actor::Actor, time::IngestionTime};
+use crate::{actor::Actor, time::IngestionTime, transaction::Transaction};
 
 #[derive(Debug)]
 pub struct ReceiversSequencer {
     from_simulator: Receiver<SimulatorToSequencer>,
     from_engine_rpc: Receiver<messages::EngineApi>,
-    from_eth_rpc: Receiver<messages::EthApi>,
+    from_eth_rpc: Receiver<Arc<Transaction>>,
 }
 impl ReceiversSequencer {
     pub fn new<A: Actor>(actor: &A, spine: &Spine) -> Self {
@@ -32,8 +34,8 @@ impl AsMut<Receiver<SimulatorToSequencer>> for ReceiversSequencer {
     }
 }
 
-impl AsMut<Receiver<messages::EthApi>> for ReceiversSequencer {
-    fn as_mut(&mut self) -> &mut Receiver<messages::EthApi> {
+impl AsMut<Receiver<Arc<Transaction>>> for ReceiversSequencer {
+    fn as_mut(&mut self) -> &mut Receiver<Arc<Transaction>> {
         &mut self.from_eth_rpc
     }
 }

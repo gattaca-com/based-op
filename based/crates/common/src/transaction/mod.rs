@@ -2,7 +2,7 @@ pub mod simulated;
 pub mod tx_list;
 
 use alloy_consensus::{Transaction as TransactionTrait, TxEip1559};
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use op_alloy_consensus::OpTxEnvelope;
 use revm_primitives::TxKind;
 pub use simulated::{SimulatedTx, SimulatedTxList};
@@ -89,5 +89,9 @@ impl Transaction {
         };
         let signed_tx = signing_wallet.sign_tx(tx).unwrap();
         Self { sender: from, tx: OpTxEnvelope::Eip1559(signed_tx) }
+    }
+
+    pub fn decode(_bytes: Bytes) -> Result<Self, alloy_rlp::Error> {
+        todo!()
     }
 }

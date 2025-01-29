@@ -54,13 +54,11 @@ pub trait EthApi {
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
 
+    // STORE
+
     /// Returns the receipt of a transaction by transaction hash
     #[method(name = "getTransactionReceipt")]
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<TransactionReceipt>>;
-
-    /// Returns the number of most recent block
-    #[method(name = "blockNumber")]
-    async fn block_number(&self) -> RpcResult<U256>;
 
     /// Returns a block with a given identifier
     #[method(name = "getBlockByNumber")]
@@ -69,6 +67,12 @@ pub trait EthApi {
     /// Returns information about a block by hash.
     #[method(name = "getBlockByHash")]
     async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<Block>>;
+
+    // DB
+
+    /// Returns the number of most recent block
+    #[method(name = "blockNumber")]
+    async fn block_number(&self) -> RpcResult<U256>;
 
     /// Returns the nonce of a given address at a given block number.
     #[method(name = "getTransactionCount")]

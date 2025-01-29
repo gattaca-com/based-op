@@ -7,8 +7,8 @@ rust-version.workspace = true
 [dependencies]
 bop-common.workspace = true
 
+alloy-primitives.workspace = true
 tokio.workspace = true
-axum.workspace = true
 tracing.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -19,3 +19,8 @@ uuid.workspace = true
 jsonrpsee.workspace = true
 thiserror.workspace = true
 eyre.workspace = true
+clap.workspace = true
+reth-rpc-layer.workspace = true
+tower.workspace = true
+hyper.workspace = true
+futures.workspace = true

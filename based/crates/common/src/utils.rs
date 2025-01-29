@@ -75,6 +75,10 @@ pub fn init_tracing(
     (worker_guard, stdout_guard)
 }
 
+pub fn initialize_test_tracing() {
+    tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
+}
+
 pub async fn wait_for_signal() -> eyre::Result<()> {
     let mut sigint = signal(SignalKind::interrupt())?;
     let mut sigterm = signal(SignalKind::terminate())?;

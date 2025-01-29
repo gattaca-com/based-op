@@ -2,7 +2,6 @@ pub mod actor;
 pub mod api;
 pub mod communication;
 pub mod config;
-pub mod rpc;
 pub mod runtime;
 pub mod signing;
 pub mod time;

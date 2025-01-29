@@ -1,6 +1,6 @@
-use std::{fs::read_dir, path::Path};
+use std::{fs::read_dir, path::Path, sync::Arc};
 
-use messages::{EthApi, SequencerToRpc, SequencerToSimulator, SimulatorToSequencer};
+use messages::{SequencerToRpc, SequencerToSimulator, SimulatorToSequencer};
 use shared_memory::ShmemError;
 use thiserror::Error;
 
@@ -9,8 +9,6 @@ pub mod seqlock;
 pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
 pub mod messages;
-pub mod rpc_engine;
-pub mod rpc_eth;
 pub mod sequencer;
 pub mod simulator;
 
@@ -18,6 +16,7 @@ pub use messages::InternalMessage;
 
 use crate::{
     time::{Duration, IngestionTime, Instant, Timer},
+    transaction::Transaction,
     utils::last_part_of_typename,
 };
 
@@ -187,9 +186,8 @@ pub struct Spine {
     sender_engine_rpc_to_sequencer: Sender<messages::EngineApi>,
     receiver_engine_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<messages::EngineApi>>,
 
-    //TODO: @ltitanb
-    sender_eth_rpc_to_sequencer: Sender<EthApi>,
-    receiver_eth_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<EthApi>>,
+    sender_eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
+    receiver_eth_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<Arc<Transaction>>>,
 }
 
 impl Default for Spine {
@@ -221,7 +219,7 @@ impl From<&Spine> for Sender<messages::EngineApi> {
     }
 }
 
-impl From<&Spine> for Sender<messages::EthApi> {
+impl From<&Spine> for Sender<Arc<Transaction>> {
     fn from(value: &Spine) -> Self {
         value.sender_eth_rpc_to_sequencer.clone()
     }
