@@ -23,8 +23,13 @@ impl TxPool {
         Self { pool_data: HashMap::with_capacity(capacity), active_txs: Active::with_capacity(capacity) }
     }
 
-    pub fn handle_new_tx<Db>(&mut self, new_tx: Arc<Transaction>, db: &Db, base_fee: u64, sim_sender: &SendersSequencer)
-    where
+    pub fn handle_new_tx<Db>(
+        &mut self,
+        new_tx: Arc<Transaction>,
+        db: &Db,
+        base_fee: u64,
+        sim_sender: &SendersSequencer<Db>,
+    ) where
         Db: DatabaseRef,
         <Db as DatabaseRef>::Error: std::fmt::Debug,
     {
@@ -33,7 +38,10 @@ impl TxPool {
         //TODO: remove
         debug_assert!(
             sim_sender
-                .send_timeout(SequencerToSimulator::SimulateTxList(vec![new_tx.clone()]), Duration::from_millis(10))
+                .send_timeout(
+                    SequencerToSimulator::SimulateTxList(None, vec![new_tx.clone()]),
+                    Duration::from_millis(10)
+                )
                 .is_ok(),
             "Couldn't send simulator reply"
         );
@@ -59,7 +67,10 @@ impl TxPool {
                 if let Some(mineable_txs) = tx_list.ready(&mut state_nonce, base_fee) {
                     debug_assert!(
                         sim_sender
-                            .send_timeout(SequencerToSimulator::SimulateTxList(mineable_txs), Duration::from_millis(10))
+                            .send_timeout(
+                                SequencerToSimulator::SimulateTxList(None, mineable_txs),
+                                Duration::from_millis(10)
+                            )
                             .is_ok(),
                         "Couldn't send simulator reply"
                     );

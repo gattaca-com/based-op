@@ -20,8 +20,8 @@ pub trait Actor: Send + Sized {
     type Senders: Send;
     type Receivers: Send;
 
-    fn create_senders(&self, spine: &Spine) -> Self::Senders;
-    fn create_receivers(&self, spine: &Spine) -> Self::Receivers;
+    fn create_senders<Db>(&self, spine: &Spine<Db>) -> Self::Senders;
+    fn create_receivers<Db>(&self, spine: &Spine<Db>) -> Self::Receivers;
 
     fn loop_body(&mut self, _connections: &mut Connections<Self::Senders, Self::Receivers>) {}
     fn on_init(&mut self, _connections: &mut Connections<Self::Senders, Self::Receivers>) {}
@@ -35,10 +35,10 @@ pub trait Actor: Send + Sized {
         last_part_of_typename::<Self>().to_string()
     }
 
-    fn run<'a>(
+    fn run<'a, Db>(
         mut self,
         scope: &'a Scope<'a, '_>,
-        spine: &Spine,
+        spine: &Spine<Db>,
         min_loop_duration: Option<Duration>,
         affinity_override: Option<usize>,
     ) where

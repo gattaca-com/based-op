@@ -10,6 +10,7 @@ use bop_common::{
     },
     transaction::Transaction,
 };
+use bop_db::BopDB;
 use bop_pool::transaction::pool::TxPool;
 use revm_primitives::db::DatabaseRef;
 use tokio::runtime::Runtime;
@@ -20,7 +21,7 @@ use crate::block_sync::fetch_blocks::fetch_blocks_and_send_sequentially;
 pub(crate) mod block_sync;
 
 #[allow(dead_code)]
-pub struct Sequencer<Db: DatabaseRef> {
+pub struct Sequencer<Db> {
     tx_pool: TxPool,
     db: Db,
     runtime: Arc<Runtime>,
@@ -48,15 +49,15 @@ const DEFAULT_BASE_FEE: u64 = 10;
 
 impl<Db> Actor for Sequencer<Db>
 where
-    Db: DatabaseRef + Send,
+    Db: BopDB + Send,
     <Db as DatabaseRef>::Error: std::fmt::Debug,
 {
     type Receivers = ReceiversSequencer;
-    type Senders = SendersSequencer;
+    type Senders = SendersSequencer<Db>;
 
     const CORE_AFFINITY: Option<usize> = Some(0);
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSequencer, ReceiversSequencer>) {
+    fn loop_body(&mut self, connections: &mut Connections<SendersSequencer<Db>, ReceiversSequencer>) {
         connections.receive(|msg: SimulatorToSequencer, _| {
             info!("received {}", msg.as_ref());
             match msg {
@@ -75,11 +76,11 @@ where
         });
     }
 
-    fn create_senders(&self, spine: &Spine) -> Self::Senders {
+    fn create_senders(&self, spine: &Spine<Db>) -> Self::Senders {
         spine.into()
     }
 
-    fn create_receivers(&self, spine: &Spine) -> Self::Receivers {
+    fn create_receivers(&self, spine: &Spine<Db>) -> Self::Receivers {
         Self::Receivers::new(self, spine)
     }
 }

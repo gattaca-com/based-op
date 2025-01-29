@@ -13,7 +13,7 @@ pub struct ReceiversSequencer {
     from_eth_rpc: Receiver<Arc<Transaction>>,
 }
 impl ReceiversSequencer {
-    pub fn new<A: Actor>(actor: &A, spine: &Spine) -> Self {
+    pub fn new<A: Actor, Db>(actor: &A, spine: &Spine<Db>) -> Self {
         Self {
             from_simulator: Receiver::new(actor.name(), spine.receiver_sim_to_sequencer.clone()),
             from_engine_rpc: Receiver::new(actor.name(), spine.receiver_engine_rpc_to_sequencer.clone()),
@@ -41,14 +41,14 @@ impl AsMut<Receiver<Arc<Transaction>>> for ReceiversSequencer {
 }
 
 #[derive(Clone, Debug)]
-pub struct SendersSequencer {
-    to_simulator: Sender<SequencerToSimulator>,
+pub struct SendersSequencer<Db> {
+    to_simulator: Sender<SequencerToSimulator<Db>>,
     to_rpc: Sender<SequencerToRpc>,
     timestamp: IngestionTime,
 }
 
-impl From<&Spine> for SendersSequencer {
-    fn from(spine: &Spine) -> Self {
+impl<Db> From<&Spine<Db>> for SendersSequencer<Db> {
+    fn from(spine: &Spine<Db>) -> Self {
         Self {
             to_simulator: spine.sender_sequencer_to_sim.clone(),
             to_rpc: spine.sender_sequencer_to_rpc.clone(),
@@ -57,19 +57,19 @@ impl From<&Spine> for SendersSequencer {
     }
 }
 
-impl AsRef<Sender<SequencerToSimulator>> for SendersSequencer {
-    fn as_ref(&self) -> &Sender<SequencerToSimulator> {
+impl<Db> AsRef<Sender<SequencerToSimulator<Db>>> for SendersSequencer<Db> {
+    fn as_ref(&self) -> &Sender<SequencerToSimulator<Db>> {
         &self.to_simulator
     }
 }
 
-impl AsRef<Sender<SequencerToRpc>> for SendersSequencer {
+impl<Db> AsRef<Sender<SequencerToRpc>> for SendersSequencer<Db> {
     fn as_ref(&self) -> &Sender<SequencerToRpc> {
         &self.to_rpc
     }
 }
 
-impl TrackedSenders for SendersSequencer {
+impl<Db> TrackedSenders for SendersSequencer<Db> {
     fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
         self.timestamp = ingestion_t;
     }

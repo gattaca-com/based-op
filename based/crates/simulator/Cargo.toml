@@ -9,7 +9,11 @@ repository.workspace = true
 bop-common.workspace = true
 bop-db.workspace = true
 revm-primitives.workspace = true
+revm.workspace = true
+
 tracing.workspace = true
 
 thiserror.workspace = true
+reth-optimism-evm.workspace = true
+
 

@@ -174,12 +174,12 @@ impl<S: TrackedSenders, R> Connections<S, R> {
 // TODO remove
 #[allow(dead_code)]
 #[derive(Clone)]
-pub struct Spine {
+pub struct Spine<Db> {
     sender_sim_to_sequencer: Sender<SimulatorToSequencer>,
     receiver_sim_to_sequencer: crossbeam_channel::Receiver<InternalMessage<SimulatorToSequencer>>,
 
-    sender_sequencer_to_sim: Sender<SequencerToSimulator>,
-    receiver_sequencer_to_sim: crossbeam_channel::Receiver<InternalMessage<SequencerToSimulator>>,
+    sender_sequencer_to_sim: Sender<SequencerToSimulator<Db>>,
+    receiver_sequencer_to_sim: crossbeam_channel::Receiver<InternalMessage<SequencerToSimulator<Db>>>,
 
     sender_sequencer_to_rpc: Sender<SequencerToRpc>,
     receiver_sequencer_to_rpc: crossbeam_channel::Receiver<InternalMessage<SequencerToRpc>>,
@@ -191,7 +191,7 @@ pub struct Spine {
     receiver_eth_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<Arc<Transaction>>>,
 }
 
-impl Default for Spine {
+impl<Db> Default for Spine<Db> {
     fn default() -> Self {
         let (sender_sim_to_sequencer, receiver_sim_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_sequencer_to_sim, receiver_sequencer_to_sim) = crossbeam_channel::bounded(4096);
@@ -213,14 +213,14 @@ impl Default for Spine {
     }
 }
 
-impl From<&Spine> for Sender<messages::EngineApi> {
-    fn from(value: &Spine) -> Self {
+impl<Db> From<&Spine<Db>> for Sender<messages::EngineApi> {
+    fn from(value: &Spine<Db>) -> Self {
         value.sender_engine_rpc_to_sequencer.clone()
     }
 }
 
-impl From<&Spine> for Sender<Arc<Transaction>> {
-    fn from(value: &Spine) -> Self {
+impl<Db> From<&Spine<Db>> for Sender<Arc<Transaction>> {
+    fn from(value: &Spine<Db>) -> Self {
         value.sender_eth_rpc_to_sequencer.clone()
     }
 }

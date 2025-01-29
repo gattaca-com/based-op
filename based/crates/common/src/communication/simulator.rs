@@ -5,17 +5,17 @@ use super::{
 use crate::{actor::Actor, time::IngestionTime};
 
 #[derive(Debug)]
-pub struct ReceiversSimulator {
-    from_sequencer: Receiver<SequencerToSimulator>,
+pub struct ReceiversSimulator<Db> {
+    from_sequencer: Receiver<SequencerToSimulator<Db>>,
 }
-impl ReceiversSimulator {
-    pub fn new<A: Actor>(actor: &A, spine: &Spine) -> Self {
+impl<Db> ReceiversSimulator<Db> {
+    pub fn new<A: Actor>(actor: &A, spine: &Spine<Db>) -> Self {
         Self { from_sequencer: Receiver::new(actor.name(), spine.receiver_sequencer_to_sim.clone()) }
     }
 }
 
-impl AsMut<Receiver<SequencerToSimulator>> for ReceiversSimulator {
-    fn as_mut(&mut self) -> &mut Receiver<SequencerToSimulator> {
+impl<Db> AsMut<Receiver<SequencerToSimulator<Db>>> for ReceiversSimulator<Db> {
+    fn as_mut(&mut self) -> &mut Receiver<SequencerToSimulator<Db>> {
         &mut self.from_sequencer
     }
 }
@@ -26,8 +26,8 @@ pub struct SendersSimulator {
     timestamp: IngestionTime,
 }
 
-impl From<&Spine> for SendersSimulator {
-    fn from(spine: &Spine) -> Self {
+impl<Db> From<&Spine<Db>> for SendersSimulator {
+    fn from(spine: &Spine<Db>) -> Self {
         Self { to_sequencer: spine.sender_sim_to_sequencer.clone(), timestamp: Default::default() }
     }
 }
