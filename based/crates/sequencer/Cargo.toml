@@ -9,5 +9,16 @@ repository.workspace = true
 bop-common.workspace = true
 bop-pool.workspace = true
 
+# alloy
+alloy-rpc-types.workspace = true
+
+# async
+tokio.workspace = true
+futures.workspace = true
+
 revm-primitives.workspace = true
 tracing.workspace = true
+
+# networking
+reqwest.workspace = true
+crossbeam-channel.workspace = true
