@@ -10,22 +10,17 @@ use core_affinity::CoreId;
 use tracing::{info, span, warn, Level};
 
 use crate::{
-    communication::{Connections, Spine},
+    communication::{Connections, ReceiversSpine, SendersSpine, Spine},
     time::{vsync, Duration, Timer},
     utils::last_part_of_typename,
 };
 
-pub trait Actor: Send + Sized {
+pub trait Actor<Db: Send>: Send + Sized {
     const CORE_AFFINITY: Option<usize> = None;
-    type Senders: Send;
-    type Receivers: Send;
 
-    fn create_senders(&self, spine: &Spine) -> Self::Senders;
-    fn create_receivers(&self, spine: &Spine) -> Self::Receivers;
-
-    fn loop_body(&mut self, _connections: &mut Connections<Self::Senders, Self::Receivers>) {}
-    fn on_init(&mut self, _connections: &mut Connections<Self::Senders, Self::Receivers>) {}
-    fn on_exit(self, _connections: &mut Connections<Self::Senders, Self::Receivers>) {}
+    fn loop_body(&mut self, _connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {}
+    fn on_init(&mut self, _connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {}
+    fn on_exit(self, _connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {}
 
     fn time_loop(&self) -> bool {
         true
@@ -38,7 +33,7 @@ pub trait Actor: Send + Sized {
     fn run<'a>(
         mut self,
         scope: &'a Scope<'a, '_>,
-        spine: &Spine,
+        spine: &'a Spine<Db>,
         min_loop_duration: Option<Duration>,
         affinity_override: Option<usize>,
     ) where
@@ -46,7 +41,7 @@ pub trait Actor: Send + Sized {
     {
         let mut loop_timer = if self.time_loop() { Some(Timer::new(format!("{}-loop", self.name()))) } else { None };
 
-        let mut connections = Connections::new(self.create_senders(spine), self.create_receivers(spine));
+        let mut connections = Connections::new(SendersSpine::from(spine), ReceiversSpine::attach(&self, spine));
         scope.spawn(move || {
             let _s = span!(Level::INFO, "", system = last_part_of_typename::<Self>()).entered();
             //TODO: Verify that this doesn't add too much time to the loop

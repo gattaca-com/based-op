@@ -213,13 +213,13 @@ fn internal_error() -> RpcErrorObject<'static> {
 }
 
 #[derive(Clone, Debug, AsRefStr)]
-pub enum SequencerToSimulator {
+pub enum SequencerToSimulator<Db> {
     /// A signal for the simulators to reinitialize their
     /// cached block dependent state
     //TODO: Add if anything should be communicated here
     NewBlock,
     //TODO: add cachedb
-    SimulateTxList(Vec<Arc<Transaction>>),
+    SimulateTxList(Option<Db> /* Arc<CacheDB<Db>> */, Vec<Arc<Transaction>>),
 }
 
 #[derive(Clone, Debug, AsRefStr)]

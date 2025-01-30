@@ -7,12 +7,12 @@ use tokio::runtime::Runtime;
 mod engine;
 mod eth;
 
-pub fn start_engine_rpc(config: &Config, spine: &Spine, rt: &Runtime) {
+pub fn start_engine_rpc<Db: BopDB>(config: &Config, spine: &Spine<Db>, rt: &Runtime) {
     let server = EngineRpcServer::new(spine, config.engine_api_timeout);
     rt.spawn(server.run(config.engine_api_addr));
 }
 
-pub fn start_eth_rpc<D: BopDB>(config: &Config, spine: &Spine, db: D, rt: &Runtime) {
+pub fn start_eth_rpc<Db: BopDB>(config: &Config, spine: &Spine<Db>, db: Db, rt: &Runtime) {
     let server = EthRpcServer::new(spine, db);
     rt.spawn(server.run(config.eth_api_addr));
 }

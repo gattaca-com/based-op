@@ -10,6 +10,12 @@ revm-primitives.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
+# alloy
+alloy-primitives.workspace = true
+
+# revm
+revm.workspace = true
+
 # Reth DB dpeendencies
 reth-db = { path = "../../../reth/crates/storage/db" }
 reth-storage-api = { path = "../../../reth/crates/storage/storage-api" }

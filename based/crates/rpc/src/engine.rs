@@ -23,7 +23,7 @@ pub struct EngineRpcServer {
 }
 
 impl EngineRpcServer {
-    pub fn new(spine: &Spine, timeout: Duration) -> Self {
+    pub fn new<Db>(spine: &Spine<Db>, timeout: Duration) -> Self {
         Self { engine_rpc_tx: spine.into(), timeout }
     }
 
