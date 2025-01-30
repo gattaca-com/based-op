@@ -2,6 +2,7 @@ use std::{
     fmt::{Debug, Formatter},
     sync::Arc,
 };
+
 use alloy_primitives::B256;
 use parking_lot::RwLock;
 use reth_db::DatabaseEnv;
@@ -74,7 +75,8 @@ impl DatabaseCommit for DB {
     // TODO not the place to commit to DB - cannot return anything or errors here.
     fn commit(&mut self, changes: HashMap<Address, Account>) {
         let ro_db = self.readonly().expect("failed to create ro db");
-        let bundle_state = util::state_changes_to_bundle_state(&ro_db, changes).expect("failed to convert to bundle state");
+        let bundle_state =
+            util::state_changes_to_bundle_state(&ro_db, changes).expect("failed to convert to bundle state");
         let (_root, _trie_updates) = ro_db.calculate_state_root(&bundle_state).expect("failed to calc state root");
 
         // TODO write updates

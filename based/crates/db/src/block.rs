@@ -1,5 +1,7 @@
-use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
+use std::{
+    fmt::{Debug, Formatter},
+    sync::Arc,
+};
 
 use reth_db::{Bytecodes, CanonicalHeaders, DatabaseEnv};
 use reth_db_api::transaction::DbTx;

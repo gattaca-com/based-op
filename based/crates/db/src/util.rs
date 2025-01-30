@@ -1,5 +1,4 @@
-use alloy_primitives::Address;
-use alloy_primitives::map::HashMap;
+use alloy_primitives::{map::HashMap, Address};
 use revm::db::BundleState;
 use revm_primitives::{db::DatabaseRef, keccak256, Account, B256, U256};
 
