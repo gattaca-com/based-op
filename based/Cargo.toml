@@ -40,15 +40,22 @@ alloy-rpc-types = { version = "0.9.0", features = ["engine"] }
 op-alloy-rpc-types-engine = "0.9.0"
 alloy-rlp = "0.3.10"
 
+op-alloy-rpc-types = { version = "0.9.0" }
+op-alloy-rpc-jsonrpsee = { version =  "0.9.0" }
+op-alloy-network = { version =  "0.9.0" }
+op-alloy-consensus = { version =  "0.9.0" }
+
 # TODO: use current crate
 reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
-reth-primitives = { path = "../reth/crates/primitives", features = ["optimism"] }
+reth-primitives = { path = "../reth/crates/primitives", features = ["optimism", "reth-codec"] }
 reth-optimism-evm = { path = "../reth/crates/optimism/evm", features = ["optimism"] }
-reth-primitives-traits = { path = "../reth/crates/primitives/primitives-traits", features = ["optimism"] }
-reth-optimism-primitives = { path = "../reth/crates/optimism/primitives", features = ["optimism"] }
+reth-primitives-traits = { path = "../reth/crates/primitives/primitives-traits", features = ["optimism", "reth-codec", "serde"] }
+reth-optimism-primitives = { path = "../reth/crates/optimism/primitives", features = ["optimism", "reth-codec", "serde"] }
+
+reth-codecs = { path = "../reth/crates/codecs", features = ["optimism"] }
 
 futures = "0.3.31"
-op-alloy-consensus = { version = "=0.9.0", features = ["k256"] }
+#op-alloy-consensus = { version = "=0.9.0", features = ["k256"] }
 alloy-signer = "0.9.0"
 alloy-signer-local = "0.9.0"
 alloy-network = "0.9.0"
