@@ -7,7 +7,7 @@ use bop_common::{
     transaction::Transaction,
     utils::last_part_of_typename,
 };
-use bop_db::BopDB;
+use bop_db::BopDbRead;
 //use revm::db::CacheDB;
 use revm_primitives::BlockEnv;
 use tracing::info;
@@ -24,7 +24,7 @@ pub struct Simulator<Db> {
                      * evm_partially_built: Evm<'static, AddressScreener, >, */
 }
 
-impl<Db: BopDB> Simulator<Db> {
+impl<Db: BopDbRead> Simulator<Db> {
     pub fn new(id: usize) -> Self {
         // let evm_tob = Evm::builder().with_db(CacheDB::new(db)).with_env(env).with_spec_id(spec_id).build();
 
@@ -42,7 +42,7 @@ impl<Db: BopDB> Simulator<Db> {
     // }
 }
 
-impl<Db: BopDB> Actor<Db> for Simulator<Db> {
+impl<Db: BopDbRead> Actor<Db> for Simulator<Db> {
     const CORE_AFFINITY: Option<usize> = None;
 
     fn name(&self) -> String {

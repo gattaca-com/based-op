@@ -9,7 +9,7 @@ use bop_common::{
     },
     transaction::Transaction,
 };
-use bop_db::BopDB;
+use bop_db::BopDbRead;
 use bop_pool::transaction::pool::TxPool;
 use revm_primitives::db::DatabaseRef;
 use tokio::runtime::Runtime;
@@ -48,7 +48,7 @@ const DEFAULT_BASE_FEE: u64 = 10;
 
 impl<Db> Actor<Db> for Sequencer<Db>
 where
-    Db: BopDB + Send,
+    Db: BopDbRead + Send,
     <Db as DatabaseRef>::Error: std::fmt::Debug,
 {
     const CORE_AFFINITY: Option<usize> = Some(0);

@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
 use alloy_primitives::Address;
+use alloy_primitives::map::HashMap;
 use revm::db::BundleState;
 use revm_primitives::{db::DatabaseRef, keccak256, Account, B256, U256};
 
@@ -13,7 +12,7 @@ pub fn index_to_storage_key(index: &U256) -> B256 {
 
 /// Converts cached state in a `CachedDB` into `BundleState`
 pub fn state_changes_to_bundle_state<D: DatabaseRef>(
-    db: D,
+    db: &D,
     changes: HashMap<Address, Account>,
 ) -> Result<BundleState, D::Error> {
     let mut bundle_state = BundleState::builder(0..=2);

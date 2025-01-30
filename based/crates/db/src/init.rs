@@ -3,7 +3,7 @@ use std::{fs, io, path::Path, sync::Arc};
 use parking_lot::RwLock;
 use reth_chainspec::ChainSpecBuilder;
 use reth_db::{init_db, ClientVersion};
-use reth_optimism_chainspec::BASE_MAINNET;
+// TODO use reth_optimism_chainspec::BASE_MAINNET;
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
 

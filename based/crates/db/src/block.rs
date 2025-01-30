@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
 use reth_db::{Bytecodes, CanonicalHeaders, DatabaseEnv};
@@ -13,9 +14,16 @@ use revm_primitives::{db::DatabaseRef, AccountInfo, Address, Bytecode, B256, U25
 use crate::{cache::ReadCaches, error::Error, BopDbRead};
 
 /// Database access per-block. This is only valid between database commits. Uses read caching.
+#[derive(Clone)]
 pub struct BlockDB {
-    provider: DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+    provider: Arc<DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>>,
     caches: ReadCaches,
+}
+
+impl Debug for BlockDB {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BlockDB")
+    }
 }
 
 impl BlockDB {
@@ -23,7 +31,7 @@ impl BlockDB {
         caches: ReadCaches,
         provider: DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
     ) -> Self {
-        Self { provider, caches }
+        Self { provider: Arc::new(provider), caches }
     }
 }
 
@@ -55,7 +63,7 @@ impl BopDbRead for BlockDB {
     }
 
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
-        let latest_state = LatestStateProviderRef::new(&self.provider);
+        let latest_state = LatestStateProviderRef::new(self.provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(&bundle_state);
         latest_state.state_root_with_updates(hashed_state).map_err(Error::ProviderError)
     }
