@@ -13,19 +13,24 @@ bop-db.workspace = true
 # alloy
 alloy-rpc-types.workspace = true
 
+# reth op
+reth-optimism-evm.workspace = true
+reth-optimism-chainspec.workspace = true
+
+# revm
+revm-primitives.workspace = true
+revm.workspace = true
+
 # async
 tokio.workspace = true
 futures.workspace = true
 
-revm-primitives.workspace = true
 tracing.workspace = true
 
 # networking
 reqwest.workspace = true
 crossbeam-channel.workspace = true
 
-reth-optimism-evm.workspace = true
-
-# tmp
+# tmp here so that the the compiler picks up the reth op crates
 reth-optimism-node.workspace = true
 reth-optimism-cli.workspace = true

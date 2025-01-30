@@ -18,6 +18,7 @@ use revm_primitives::{
 
 mod block;
 mod cache;
+pub mod alloy_db;
 mod error;
 mod init;
 mod util;
