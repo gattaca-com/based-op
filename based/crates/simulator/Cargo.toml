@@ -11,3 +11,10 @@ bop-db.workspace = true
 revm-primitives.workspace = true
 
 tracing.workspace = true
+
+thiserror.workspace = true
+reth-optimism-evm.workspace = true
+reth-optimism-chainspec.workspace = true
+reth-evm.workspace = true
+
+

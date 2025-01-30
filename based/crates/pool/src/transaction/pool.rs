@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use alloy_consensus::Transaction as TransactionTrait;
 use alloy_primitives::Address;
 use bop_common::{
     communication::{messages::SequencerToSimulator, SendersSpine, TrackedSenders},
@@ -23,26 +24,22 @@ impl TxPool {
         Self { pool_data: HashMap::with_capacity(capacity), active_txs: Active::with_capacity(capacity) }
     }
 
-    pub fn handle_new_tx<Db>(&mut self, new_tx: Arc<Transaction>, db: &Db, base_fee: u64, sim_sender: &SendersSpine<Db>)
-    where
+    /// Handles an incoming transaction. If the sim_sender is None, the assumption is that we are not yet
+    /// ready to send simulation for top of block simulation
+    pub fn handle_new_tx<Db>(
+        &mut self,
+        new_tx: Arc<Transaction>,
+        db: &Db,
+        base_fee: u64,
+        sim_sender: Option<&SendersSpine<Db>>,
+    ) where
         Db: DatabaseRef,
         <Db as DatabaseRef>::Error: std::fmt::Debug,
     {
         let mut state_nonce = get_nonce(db, new_tx.sender());
-
-        //TODO: remove
-        debug_assert!(
-            sim_sender
-                .send_timeout(
-                    SequencerToSimulator::SimulateTxList(None, vec![new_tx.clone()]),
-                    Duration::from_millis(10)
-                )
-                .is_ok(),
-            "Couldn't send simulator reply"
-        );
-
+        let nonce = new_tx.nonce();
         // check nonce is valid
-        if new_tx.nonce() < state_nonce {
+        if nonce < state_nonce {
             return;
         }
 
@@ -52,23 +49,23 @@ impl TxPool {
                 // If it conflicts with a current tx compare effective gas prices, this also
                 // overwrites if gas price is equal, taking into account conditions
                 // above where we didn't return
-                if tx_list.get_effective_price_for_nonce(new_tx.nonce_ref(), base_fee) >
-                    new_tx.effective_gas_price(base_fee)
+                if tx_list.get_effective_price_for_nonce(&nonce, base_fee) > new_tx.effective_gas_price(Some(base_fee))
                 {
                     return;
                 }
 
                 tx_list.put(new_tx);
                 if let Some(mineable_txs) = tx_list.ready(&mut state_nonce, base_fee) {
-                    debug_assert!(
-                        sim_sender
-                            .send_timeout(
-                                SequencerToSimulator::SimulateTxList(None, mineable_txs),
-                                Duration::from_millis(10)
-                            )
-                            .is_ok(),
-                        "Couldn't send simulator reply"
-                    );
+                    todo!()
+                    // debug_assert!(
+                    //     sim_sender
+                    //         .send_timeout(
+                    //             SequencerToSimulator::SimulateTxList(None, mineable_txs),
+                    //             Duration::from_millis(10)
+                    //         )
+                    //         .is_ok(),
+                    //     "Couldn't send simulator reply"
+                    // );
                 }
             }
             None => {

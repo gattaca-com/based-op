@@ -10,7 +10,7 @@ use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::ProviderFactory;
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::BundleState;
+use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
     db::{DatabaseCommit, DatabaseRef},
     Account, Address, HashMap,
@@ -28,6 +28,10 @@ pub use init::init_database;
 pub use util::state_changes_to_bundle_state;
 
 use crate::{block::BlockDB, cache::ReadCaches};
+/// DB That adds chunks on top of last on chain block
+pub type DBFrag<Db> = CacheDB<Arc<CacheDB<Db>>>;
+/// DB to be used while sorting, adds on top of the last chunk
+pub type DBSorting<Db> = CacheDB<Arc<DBFrag<Db>>>;
 
 /// Database trait for all DB operations.
 pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {

@@ -20,7 +20,7 @@ impl Active {
 
     #[inline]
     pub fn push(&mut self, tx: SimulatedTxList) {
-        let sender = tx.sender;
+        let sender = tx.sender();
 
         if let Some(&index) = self.senders.get(&sender) {
             self.txs[index] = tx;

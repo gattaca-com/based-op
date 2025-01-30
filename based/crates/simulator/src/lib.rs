@@ -1,70 +1,73 @@
-use std::sync::Arc;
+use std::{mem::MaybeUninit, sync::Arc};
 
 use bop_common::{
-    actor::Actor,
-    communication::{messages::SequencerToSimulator, Connections, ReceiversSpine, SendersSpine, TrackedSenders},
+    actor::{Actor, ActorConfig},
+    communication::{
+        messages::{SequencerToSimulator, SimulationError},
+        Connections, ReceiversSpine, SendersSpine, Spine, SpineConnections, TrackedSenders,
+    },
     time::Duration,
-    transaction::Transaction,
+    transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use bop_db::BopDbRead;
-//use revm::db::CacheDB;
-use revm_primitives::BlockEnv;
+use bop_db::{BopDB, BopDbRead, DBSorting};
+use reth_evm::ConfigureEvm;
+use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
+use reth_optimism_evm::OpEvmConfig;
+use revm::{db::CacheDB, DatabaseRef, Evm};
+use revm_primitives::{BlockEnv, SpecId};
 use tracing::info;
 
-//type CacheDBPartiallyBuilt<Db> = CacheDB<Arc<CacheDB<Db>>>;
-
-#[derive(Clone, Default)]
-pub struct Simulator<Db> {
+pub struct Simulator<'a, Db: DatabaseRef> {
     id: usize,
-    // evm: Option<Evm<'static, AddressScreener, CacheDBPartiallyBuilt<Db>>>,
-    _block_env: BlockEnv,
-    _o: Option<Db>, /* spec_id: OpChainSpec,
-                     * For use in sort requests
-                     * evm_partially_built: Evm<'static, AddressScreener, >, */
+    evm: Evm<'a, (), DBSorting<Db>>,
 }
 
-impl<Db: BopDbRead> Simulator<Db> {
-    pub fn new(id: usize) -> Self {
-        // let evm_tob = Evm::builder().with_db(CacheDB::new(db)).with_env(env).with_spec_id(spec_id).build();
-
-        // let evm_tob =
-        // Self { id, evm: None, block_env: BlockEnv::default(), spec_id: OpChainSpec::default_mainnet() }
-        Self { id, _block_env: BlockEnv::default(), _o: None }
+impl<'a, Db: BopDbRead> Simulator<'a, Db> {
+    pub fn create_and_run(connections: SpineConnections<Db>, db: Db, id: usize, actor_config: ActorConfig) {
+        let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
+        let evmconfig = OpEvmConfig::new(chainspec);
+        let cache = CacheDB::new(Arc::new(CacheDB::new(Arc::new(CacheDB::new(db)))));
+        let evm: Evm<'_, (), _> = evmconfig.evm(cache);
+        Simulator::new(id, evm).run(connections, actor_config);
     }
 
-    fn simulate_tx_list(&self, tx_list: Vec<Arc<Transaction>>) -> Vec<Arc<Transaction>> {
-        tx_list
+    pub fn new(id: usize, evm: Evm<'a, (), DBSorting<Db>>) -> Self {
+        Self { id, evm }
     }
 
-    // fn evm(&mut self, db: CacheDB<Arc<CacheDB<Db>>>) -> &mut Evm<'static, AddressScreener, CacheDBPartiallyBuilt<Db>>
-    // {     self.evm.get_or_insert_with(|| {})
-    // }
+    fn simulate_tx(&mut self, tx: Arc<Transaction>) -> Result<SimulatedTx, SimulationError> {
+        todo!()
+        // tx.fill_tx_env(self.evm.tx_mut());
+        // let res = self.evm.transact()
+        // SimulatedTx {
+        //     tx,
+
+        // }
+    }
+
+    fn set_blockenv(&mut self, env: BlockEnv) {
+        *self.evm.block_mut() = env;
+    }
+
+    fn set_db(&mut self, db: DBSorting<Db>) {
+        *self.evm.db_mut() = db;
+    }
+
+    fn set_spec_id(&mut self, spec_id: SpecId) {
+        self.evm.modify_spec_id(spec_id);
+    }
 }
 
-impl<Db: BopDbRead> Actor<Db> for Simulator<Db> {
+impl<Db: BopDbRead> Actor<Db> for Simulator<'_, Db> {
     const CORE_AFFINITY: Option<usize> = None;
-
-    fn name(&self) -> String {
-        format!("{}-{}", last_part_of_typename::<Self>(), self.id)
-    }
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
             info!("received {}", msg.as_ref());
             match msg {
-                SequencerToSimulator::SimulateTxList(_db, txs) => {
-                    debug_assert!(
-                        senders
-                            .send_timeout(
-                                bop_common::communication::messages::SimulatorToSequencer::SimulatedTxList(
-                                    self.simulate_tx_list(txs)
-                                ),
-                                Duration::from_millis(10)
-                            )
-                            .is_ok(),
-                        "timed out trying to send request"
-                    );
+                SequencerToSimulator::SimulateTx(_db, tx) => {
+                    todo!()
                 }
                 SequencerToSimulator::NewBlock => {
                     todo!()

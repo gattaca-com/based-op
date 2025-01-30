@@ -7,13 +7,15 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use revm::db::CacheDB;
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
+use thiserror::Error;
 use tokio::sync::oneshot;
 
 use crate::{
     time::{Duration, IngestionTime, Instant, Nanos},
-    transaction::Transaction,
+    transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
@@ -213,20 +215,36 @@ fn internal_error() -> RpcErrorObject<'static> {
 }
 
 #[derive(Clone, Debug, AsRefStr)]
+#[repr(u8)]
 pub enum SequencerToSimulator<Db> {
     /// A signal for the simulators to reinitialize their
     /// cached block dependent state
     //TODO: Add if anything should be communicated here
     NewBlock,
     //TODO: add cachedb
-    SimulateTxList(Option<Db> /* Arc<CacheDB<Db>> */, Vec<Arc<Transaction>>),
+    SimulateTx(Arc<CacheDB<Db>>, Arc<Transaction>),
+}
+
+#[derive(Clone, Debug)]
+pub struct SimulatorToSequencer {
+    order_hash: B256,
+    id: usize,
+    msg: Result<SimulatorToSequencerMsg, SimulationError>,
 }
 
 #[derive(Clone, Debug, AsRefStr)]
-pub enum SimulatorToSequencer {
+#[repr(u8)]
+pub enum SimulatorToSequencerMsg {
     //TODO: changes this to have the SimulatedTxList or so
-    SimulatedTxList(Vec<Arc<Transaction>>),
+    Tx(SimulatedTx),
+}
+
+#[derive(Clone, Debug, Error, AsRefStr)]
+#[repr(u8)]
+pub enum SimulationError {
+    #[error("Order pays nothing")]
+    ZeroPayment,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, AsRefStr)]
-pub enum SequencerToRpc {}
+pub enum SequencerToExternal {}

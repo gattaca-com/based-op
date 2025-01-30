@@ -1,11 +1,13 @@
 pub mod simulated;
 pub mod tx_list;
 
+use std::ops::Deref;
+
 use alloy_consensus::{Transaction as TransactionTrait, TxEip1559};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, Bytes, B256, U256};
-use op_alloy_consensus::OpTxEnvelope;
-use revm_primitives::TxKind;
+use op_alloy_consensus::{DepositTransaction, OpTxEnvelope};
+use revm_primitives::{OptimismFields, TxEnv, TxKind};
 pub use simulated::{SimulatedTx, SimulatedTxList};
 pub use tx_list::TxList;
 
@@ -31,8 +33,15 @@ impl Transaction {
     }
 
     #[inline]
-    pub fn hash(&self) -> B256 {
-        self.tx.tx_hash()
+    pub fn nonce_ref(&self) -> &u64 {
+        match &self.tx {
+            OpTxEnvelope::Legacy(tx) => &tx.tx().nonce,
+            OpTxEnvelope::Eip2930(tx) => &tx.tx().nonce,
+            OpTxEnvelope::Eip1559(tx) => &tx.tx().nonce,
+            OpTxEnvelope::Eip7702(tx) => &tx.tx().nonce,
+            OpTxEnvelope::Deposit(_) => &0,
+            _ => todo!(),
+        }
     }
 
     /// Returns the gas price for type 0 and 1 transactions.
@@ -51,18 +60,20 @@ impl Transaction {
     }
 
     #[inline]
-    pub fn effective_gas_price(&self, base_fee: u64) -> u128 {
-        self.tx.effective_gas_price(Some(base_fee))
-    }
-
-    #[inline]
-    pub fn nonce(&self) -> u64 {
-        0
-    }
-
-    #[inline]
-    pub fn nonce_ref(&self) -> &u64 {
-        todo!()
+    pub fn fill_tx_env(&self, env: &mut TxEnv) {
+        env.caller = self.sender;
+        env.gas_limit = self.gas_limit();
+        env.gas_price = U256::from(self.max_fee_per_gas());
+        env.gas_priority_fee = self.max_priority_fee_per_gas().map(U256::from);
+        env.transact_to = self.to().into();
+        env.value = self.value();
+        env.data = revm::primitives::Bytes::from_iter(self.input().iter());
+        env.chain_id = self.chain_id();
+        env.nonce = Some(self.nonce());
+        env.access_list = self.access_list().cloned().unwrap_or_default().0;
+        env.blob_hashes = self.blob_versioned_hashes().map(|t| Vec::from_iter(t.iter().cloned())).unwrap_or_default();
+        env.max_fee_per_blob_gas = self.max_fee_per_blob_gas().map(U256::from);
+        env.optimism = self.into()
     }
 
     #[inline]
@@ -105,5 +116,28 @@ impl Transaction {
         };
 
         Ok(Self { sender, tx })
+    }
+}
+
+impl Deref for Transaction {
+    type Target = OpTxEnvelope;
+
+    fn deref(&self) -> &Self::Target {
+        &self.tx
+    }
+}
+
+impl From<&Transaction> for OptimismFields {
+    fn from(value: &Transaction) -> Self {
+        if let OpTxEnvelope::Deposit(tx) = &value.tx {
+            Self {
+                source_hash: tx.source_hash(),
+                mint: tx.mint(),
+                is_system_transaction: Some(tx.is_system_transaction()),
+                enveloped_tx: None,
+            }
+        } else {
+            Self::default()
+        }
     }
 }

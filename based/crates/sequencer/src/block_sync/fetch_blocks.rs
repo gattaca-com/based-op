@@ -2,8 +2,10 @@ use std::time::Duration;
 
 use alloy_consensus::Block;
 use alloy_rpc_types::Block as RpcBlock;
-use bop_common::rpc::{RpcParam, RpcRequest, RpcResponse};
-use crossbeam_channel::Sender;
+use bop_common::{
+    communication::Sender,
+    rpc::{RpcParam, RpcRequest, RpcResponse},
+};
 use futures::future::join_all;
 use op_alloy_consensus::OpTxEnvelope;
 use reqwest::Client;
@@ -54,7 +56,7 @@ pub(crate) async fn async_fetch_blocks_and_send_sequentially(
         // If any fail, send them first so block sync can handle errors.
         blocks.sort_unstable_by_key(|res| res.as_ref().map_or(0, |block| block.header.number));
         for block in blocks {
-            let _ = block_sender.send(block);
+            let _ = block_sender.send(block.into());
         }
 
         curr_block = batch_end + 1;

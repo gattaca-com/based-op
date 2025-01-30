@@ -7,7 +7,7 @@ use bop_common::{
     communication::{messages::RpcResult, Sender, Spine},
     transaction::Transaction,
 };
-use bop_db::BopDbRead;
+use bop_db::{BopDB, BopDbRead};
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 
@@ -40,7 +40,7 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
         trace!(?bytes, "new request");
 
         let tx = Arc::new(Transaction::decode(bytes)?);
-        let hash = tx.hash();
+        let hash = tx.tx_hash();
         let _ = self.new_order_tx.send(tx.into());
 
         Ok(hash)

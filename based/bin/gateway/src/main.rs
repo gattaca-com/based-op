@@ -1,8 +1,7 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
-use alloy_provider::Provider;
 use bop_common::{
-    actor::Actor,
+    actor::{Actor, ActorConfig},
     communication::Spine,
     config::Config,
     time::Duration,
@@ -10,7 +9,7 @@ use bop_common::{
 };
 use bop_db::{init_database, BopDB};
 use bop_rpc::{start_engine_rpc, start_eth_rpc};
-use bop_sequencer::Sequencer;
+use bop_sequencer::{Sequencer, SequencerConfig};
 use bop_simulator::Simulator;
 use tokio::runtime::Runtime;
 
@@ -43,40 +42,19 @@ fn main() {
             start_engine_rpc(&rpc_config, &spine_c, &rt);
             start_eth_rpc(&rpc_config, &spine_c, db_c, &rt);
 
-            rt.spawn(spam_rpc_txs(rpc_config.eth_api_addr));
-
             rt.block_on(wait_for_signal())
         });
-        let sim_0 = Simulator::new(0);
-        sim_0.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
-        let sim_1 = Simulator::new(1);
-        sim_1.run(s, &spine, Some(Duration::from_micros(100)), Some(2));
-        let sim_2 = Simulator::new(2);
-        // Ok to also run on 1 as it is sleeping for quite some time if there's no work to be done
-        sim_2.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
-
-        let sequencer = Sequencer::new(db, rt_c);
-        sequencer.run(s, &spine, None, Some(3));
+        let db_s = db.clone();
+        s.spawn(|| {
+            let sequencer = Sequencer::new(db_s, rt_c, SequencerConfig::default());
+            sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
+        });
+        for (i, core) in (1..4).enumerate() {
+            let db_sim = db.clone();
+            let connections = spine.to_connections(format!("Simulator-{core}"));
+            s.spawn(move || {
+                Simulator::create_and_run(connections, db_sim, i, ActorConfig::default());
+            });
+        }
     });
-}
-
-async fn spam_rpc_txs(addr: SocketAddr) {
-    use std::time::Duration;
-
-    use alloy_eips::eip2718::Encodable2718;
-    use alloy_provider::ProviderBuilder;
-    use bop_common::transaction::Transaction;
-
-    let url = format!("http://{}", addr).parse().unwrap();
-
-    let provider = ProviderBuilder::new().on_http(url);
-
-    loop {
-        let tx = Transaction::random().tx.encoded_2718();
-        let pending = provider.send_raw_transaction(&tx).await.expect("failed to send tx");
-        let hash = pending.tx_hash();
-        tracing::debug!(%hash, "sent tx");
-
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
 }

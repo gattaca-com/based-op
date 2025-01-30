@@ -1,87 +1,171 @@
 use std::sync::Arc;
 
 use alloy_consensus::Block;
+use alloy_rpc_types::{engine::ForkchoiceState};
 use bop_common::{
     actor::Actor,
     communication::{
         messages::{self, SimulatorToSequencer},
         Connections, ReceiversSpine, SendersSpine,
     },
+    time::{Duration, Instant},
     transaction::Transaction,
 };
-use bop_db::BopDbRead;
+use bop_db::{BopDB, BopDbRead, DBFrag, DBSorting};
 use bop_pool::transaction::pool::TxPool;
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
+use built_block::BuiltBlock;
+use op_alloy_rpc_types_engine::OpPayloadAttributes;
+use reth_optimism_node::OpPayloadBuilderAttributes;
 use revm_primitives::db::DatabaseRef;
+use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::info;
 
 use crate::block_sync::fetch_blocks::fetch_blocks_and_send_sequentially;
 
 pub(crate) mod block_sync;
+pub(crate) mod built_block;
 
-#[allow(dead_code)]
-pub struct Sequencer<Db> {
+#[derive(Clone, Debug, Default, AsRefStr)]
+pub enum SequencerState<Db> {
+    #[default]
+    WaitingForSync,
+    WaitingForPayloadAttributes,
+    Sorting {
+        /// This is the db that is built on top of the last block chunk to be used to
+        /// build a new cachedb on top of for sorting
+        /// starting a new sort
+        db: DBFrag<Db>,
+        blocks: Vec<BuiltBlock<Db>>,
+        best_block: BuiltBlock<Db>,
+        until: Instant,
+    },
+    Syncing {
+        /// When the stage reaches this syncing is done
+        last_block_number: u64,
+    },
+}
+
+impl<Db> SequencerState<Db> {
+    pub fn update(
+        mut self,
+        event: SequencerEvent,
+        shared_data: &mut SharedData<Db>,
+        senders: &SendersSpine<Db>,
+    ) -> Self {
+        use SequencerEvent::*;
+        use SequencerState::*;
+        match (event, self) {
+            (BlockSync(block), WaitingForSync) => todo!(),
+            (BlockSync(block), WaitingForPayloadAttributes) => todo!(),
+            (BlockSync(block), Sorting { db, blocks, best_block, until }) => todo!(),
+            (BlockSync(block), Syncing { last_block_number }) => todo!(),
+            (ReceivedPayloadAttribues(op_payload_builder_attributes), WaitingForSync) => todo!(),
+            (ReceivedPayloadAttribues(op_payload_builder_attributes), WaitingForPayloadAttributes) => todo!(),
+            (ReceivedPayloadAttribues(op_payload_builder_attributes), Sorting { db, blocks, best_block, until }) => {
+                todo!()
+            }
+            (ReceivedPayloadAttribues(op_payload_builder_attributes), Syncing { last_block_number }) => todo!(),
+            (NewTx(arc), WaitingForSync) => todo!(),
+            (NewTx(arc), WaitingForPayloadAttributes) => todo!(),
+            (NewTx(arc), Sorting { db, blocks, best_block, until }) => todo!(),
+            (NewTx(arc), Syncing { last_block_number }) => todo!(),
+        }
+    }
+}
+
+#[derive(Debug, AsRefStr)]
+#[repr(u8)]
+pub enum SequencerEvent {
+    BlockSync(Result<Block, reqwest::Error>),
+    ReceivedPayloadAttribues(Option<Box<OpPayloadBuilderAttributes>>),
+    NewTx(Arc<Transaction>),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SequencerConfig {
+    frag_duration: Duration,
+}
+impl Default for SequencerConfig {
+    fn default() -> Self {
+        Self { frag_duration: Duration::from_millis(200) }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SharedData<Db> {
     tx_pool: TxPool,
     db: Db,
     runtime: Arc<Runtime>,
+    config: SequencerConfig,
+    fork_choice_state: ForkchoiceState,
+    payload_attributes: Box<OpPayloadAttributes>,
+}
 
-    /// Used for fetching blocks from the RPC when our db is behind the chain head.
-    /// Blocks are fetched async and returned to the sequencer through this channel.
-    sender_fetch_blocks_to_sequencer:
-        crossbeam_channel::Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
-    receiver_fetch_blocks_to_sequencer:
-        crossbeam_channel::Receiver<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+#[derive(Clone, Debug)]
+pub struct Sequencer<Db> {
+    state: SequencerState<Db>,
+    data: SharedData<Db>,
 }
 
 impl<Db: DatabaseRef> Sequencer<Db> {
-    pub fn new(db: Db, runtime: Arc<Runtime>) -> Self {
-        let (sender_fetch_blocks_to_sequencer, receiver_fetch_blocks_to_sequencer) = crossbeam_channel::bounded(200);
+    pub fn new(db: Db, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         Self {
-            db,
-            tx_pool: TxPool::default(),
-            runtime,
-            sender_fetch_blocks_to_sequencer,
-            receiver_fetch_blocks_to_sequencer,
+            data: SharedData {
+                db,
+                runtime,
+                config,
+                tx_pool: Default::default(),
+                fork_choice_state: Default::default(),
+                payload_attributes: Default::default(),
+            },
+            state: Default::default(),
         }
     }
 }
 
 const DEFAULT_BASE_FEE: u64 = 10;
 
-impl<Db> Actor<Db> for Sequencer<Db>
-where
-    Db: BopDbRead + Send,
-    <Db as DatabaseRef>::Error: std::fmt::Debug,
-{
+impl<DbRead: BopDbRead, Db: BopDbRead + BopDB> Actor<DbRead> for Sequencer<Db> {
     const CORE_AFFINITY: Option<usize> = Some(0);
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
+    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<DbRead>, ReceiversSpine<DbRead>>) {
         connections.receive(|msg: SimulatorToSequencer, _| {
-            info!("received {}", msg.as_ref());
-            match msg {
-                SimulatorToSequencer::SimulatedTxList(_) => {}
-            };
+            todo!();
         });
 
-        connections.receive(|msg: messages::EngineApi, _| {
-            info!("received msg from engine api");
-            self.handle_engine_api_message(msg);
+        connections.receive(|msg, senders| {
+            self.handle_engine_api_message(msg, senders);
         });
 
         connections.receive(|msg: Arc<Transaction>, senders| {
             info!("received msg from ethapi");
-            self.tx_pool.handle_new_tx(msg, &self.db, DEFAULT_BASE_FEE, senders);
+            todo!();
+            // self.tx_pool.handle_new_tx(msg, &self.db, DEFAULT_BASE_FEE, Some(senders));
+        });
+
+        connections.receive(|msg, _| {
+            // Process blocks as they arrive
+            self.handle_block(msg);
         });
     }
 }
 
-impl<Db: DatabaseRef> Sequencer<Db> {
+impl<Db: BopDB + BopDbRead> Sequencer<Db> {
+    fn handle_block(&mut self, block_result: Result<Block, reqwest::Error>) {
+        let block = block_result.expect("failed to fetch block");
+        todo!()
+        // if block.header.number == payload_block_number - 1 {
+        //     //TODO: switch in or out of block sync state
+        // }
+    }
+
     /// Handles messages from the engine API.
     ///
     /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
-    fn handle_engine_api_message(&self, msg: messages::EngineApi) {
+    fn handle_engine_api_message<DbRead>(&self, msg: messages::EngineApi, senders: &SendersSpine<DbRead>) {
         match msg {
             messages::EngineApi::NewPayloadV3 {
                 payload,
@@ -112,19 +196,9 @@ impl<Db: DatabaseRef> Sequencer<Db> {
                         seq_block_number + 1,
                         payload_block_number - 1,
                         "TODO".to_string(),
-                        self.sender_fetch_blocks_to_sequencer.clone(),
-                        &self.runtime,
+                        senders.into(),
+                        &self.data.runtime,
                     );
-
-                    // Process blocks as they arrive
-                    while let Ok(block_result) = self.receiver_fetch_blocks_to_sequencer.try_recv() {
-                        let block = block_result.expect("failed to fetch block");
-                        // TODO: apply block
-
-                        if block.header.number == payload_block_number - 1 {
-                            break;
-                        }
-                    }
                 }
 
                 // TODO: apply new payload

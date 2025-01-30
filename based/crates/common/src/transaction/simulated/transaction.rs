@@ -1,7 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{ops::Deref, sync::Arc};
 
-use alloy_primitives::{Address, B256, U256};
-use revm_primitives::{Account, ExecutionResult};
+use alloy_primitives::{B256, U256};
+use revm_primitives::ResultAndState;
 
 use crate::transaction::Transaction;
 
@@ -10,25 +10,17 @@ pub struct SimulatedTx {
     /// original tx
     pub tx: Arc<Transaction>,
     /// revm execution result. Contains gas_used, logs, output, etc.
-    pub result: ExecutionResult,
-    /// revm state changes from the tx.
-    pub state_changes: HashMap<Address, Account>,
+    pub result_and_state: Arc<ResultAndState>,
     /// Coinbase balance diff, after_sim - before_sim
     pub net_payment: U256,
     /// Parent hash the tx was simulated at
     pub simulated_at_parent_hash: B256,
 }
 
-impl SimulatedTx {
-    pub fn sender(&self) -> Address {
-        self.tx.sender()
-    }
+impl Deref for SimulatedTx {
+    type Target = Arc<Transaction>;
 
-    pub fn sender_ref(&self) -> &Address {
-        self.tx.sender_ref()
-    }
-
-    pub fn hash(&self) -> B256 {
-        self.tx.hash()
+    fn deref(&self) -> &Self::Target {
+        &self.tx
     }
 }

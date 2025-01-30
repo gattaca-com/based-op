@@ -1,7 +1,6 @@
-use std::{slice::Iter, sync::Arc};
+use std::{ops::Deref, slice::Iter, sync::Arc};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
-use alloy_primitives::Address;
 
 use crate::transaction::Transaction;
 
@@ -9,7 +8,6 @@ use crate::transaction::Transaction;
 #[derive(Clone, Debug, Default)]
 pub struct TxList {
     txs: Vec<Arc<Transaction>>,
-    sender: Address,
 }
 
 impl TxList {
@@ -93,7 +91,7 @@ impl TxList {
     /// Returns effective gas price at base_fee for tx with given nonce, or 0 if not found
     #[inline]
     pub fn get_effective_price_for_nonce(&self, nonce: &u64, base_fee: u64) -> u128 {
-        self.get(nonce).map_or(0, |tx| tx.effective_gas_price(base_fee))
+        self.get(nonce).map_or(0, |tx| tx.effective_gas_price(Some(base_fee)))
     }
 
     /// Retrieves a transaction with the given nonce from the transaction list.
@@ -101,16 +99,6 @@ impl TxList {
     #[inline]
     pub fn get(&self, nonce: &u64) -> Option<&Arc<Transaction>> {
         self.txs.binary_search_by_key(nonce, |tx| tx.nonce()).ok().map(|index| &self.txs[index])
-    }
-
-    /// Returns the sender of the transactions in the list.
-    pub fn sender(&self) -> Address {
-        self.sender
-    }
-
-    /// Returns a reference to the sender of the transactions in the list.
-    pub fn sender_ref(&self) -> &Address {
-        &self.sender
     }
 
     pub fn len(&self) -> usize {
@@ -142,6 +130,20 @@ impl TxList {
 
 impl From<Arc<Transaction>> for TxList {
     fn from(tx: Arc<Transaction>) -> Self {
-        Self { sender: tx.sender(), txs: vec![tx] }
+        Self { txs: vec![tx] }
+    }
+}
+
+impl From<Vec<Arc<Transaction>>> for TxList {
+    fn from(txs: Vec<Arc<Transaction>>) -> Self {
+        Self { txs }
+    }
+}
+
+impl Deref for TxList {
+    type Target = Arc<Transaction>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.txs[0]
     }
 }

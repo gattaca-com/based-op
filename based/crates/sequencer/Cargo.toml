@@ -32,6 +32,7 @@ reth-optimism-consensus.workspace = true
 # revm
 revm-primitives.workspace = true
 revm.workspace = true
+op-alloy-rpc-types-engine.workspace = true
 
 # async
 tokio.workspace = true
@@ -44,5 +45,10 @@ reqwest.workspace = true
 crossbeam-channel.workspace = true
 
 # tmp here so that the the compiler picks up the reth op crates
+reth-optimism-evm.workspace = true
+# misc
+strum_macros.workspace = true
+# tmp
 reth-optimism-node.workspace = true
 reth-optimism-cli.workspace = true
+

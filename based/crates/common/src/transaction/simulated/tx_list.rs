@@ -1,28 +1,30 @@
-use std::sync::Arc;
+use std::ops::Deref;
 
-use alloy_primitives::Address;
-
-use crate::transaction::simulated::transaction::SimulatedTx;
+use crate::transaction::{simulated::transaction::SimulatedTx, TxList};
 
 /// A list of simulated transactions from a single sender.
-/// nonce-sorted and all can be applied from the top-of-block state
-/// i.e., txs[0].nonce = state[address].nonce + 1.
-#[derive(Clone, Debug, Default)]
+/// nonce-sorted, i.e. txs[0].nonce = state[address].nonce + 1.
+/// First is Simulated Top Of Block
+#[derive(Clone, Debug)]
 pub struct SimulatedTxList {
-    pub txs: Vec<Arc<SimulatedTx>>,
-    pub sender: Address,
+    pub first: SimulatedTx,
+    pub txs: TxList,
 }
 
 impl SimulatedTxList {
-    pub fn new(txs: Vec<Arc<SimulatedTx>>) -> SimulatedTxList {
-        SimulatedTxList { sender: txs[0].sender(), txs }
+    pub fn new(first: SimulatedTx, txs: TxList) -> SimulatedTxList {
+        SimulatedTxList { first, txs }
     }
 
     pub fn len(&self) -> usize {
-        self.txs.len()
+        self.txs.len() + 1
     }
+}
 
-    pub fn is_empty(&self) -> bool {
-        self.txs.is_empty()
+impl Deref for SimulatedTxList {
+    type Target = SimulatedTx;
+
+    fn deref(&self) -> &Self::Target {
+        &self.first
     }
 }
