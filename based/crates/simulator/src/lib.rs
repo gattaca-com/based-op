@@ -2,33 +2,26 @@ use std::sync::Arc;
 
 use bop_common::{
     actor::Actor,
-    communication::{
-        messages::SequencerToSimulator,
-        simulator::{ReceiversSimulator, SendersSimulator},
-        Connections, Spine, TrackedSenders,
-    },
+    communication::{messages::SequencerToSimulator, Connections, ReceiversSpine, SendersSpine, TrackedSenders},
     time::Duration,
     transaction::Transaction,
     utils::last_part_of_typename,
 };
 use bop_db::BopDB;
-use revm::db::CacheDB;
+//use revm::db::CacheDB;
 use revm_primitives::BlockEnv;
-// use evms::Evms;
 use tracing::info;
 
-mod evms;
-
-type CacheDBPartiallyBuilt<Db> = CacheDB<Arc<CacheDB<Db>>>;
+//type CacheDBPartiallyBuilt<Db> = CacheDB<Arc<CacheDB<Db>>>;
 
 #[derive(Clone, Default)]
 pub struct Simulator<Db> {
     id: usize,
     // evm: Option<Evm<'static, AddressScreener, CacheDBPartiallyBuilt<Db>>>,
-    block_env: BlockEnv,
-    o: Option<Db>, /* spec_id: OpChainSpec,
-                    * For use in sort requests
-                    * evm_partially_built: Evm<'static, AddressScreener, >, */
+    _block_env: BlockEnv,
+    _o: Option<Db>, /* spec_id: OpChainSpec,
+                     * For use in sort requests
+                     * evm_partially_built: Evm<'static, AddressScreener, >, */
 }
 
 impl<Db: BopDB> Simulator<Db> {
@@ -37,7 +30,7 @@ impl<Db: BopDB> Simulator<Db> {
 
         // let evm_tob =
         // Self { id, evm: None, block_env: BlockEnv::default(), spec_id: OpChainSpec::default_mainnet() }
-        Self { id, block_env: BlockEnv::default(), o: None }
+        Self { id, _block_env: BlockEnv::default(), _o: None }
     }
 
     fn simulate_tx_list(&self, tx_list: Vec<Arc<Transaction>>) -> Vec<Arc<Transaction>> {
@@ -49,21 +42,18 @@ impl<Db: BopDB> Simulator<Db> {
     // }
 }
 
-impl<Db: BopDB> Actor for Simulator<Db> {
-    type Receivers = ReceiversSimulator<Db>;
-    type Senders = SendersSimulator;
-
+impl<Db: BopDB> Actor<Db> for Simulator<Db> {
     const CORE_AFFINITY: Option<usize> = None;
 
     fn name(&self) -> String {
         format!("{}-{}", last_part_of_typename::<Self>(), self.id)
     }
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSimulator, ReceiversSimulator<Db>>) {
-        connections.receive(|msg, senders| {
+    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
+        connections.receive(|msg: SequencerToSimulator<Db>, senders| {
             info!("received {}", msg.as_ref());
             match msg {
-                SequencerToSimulator::SimulateTxList(db, txs) => {
+                SequencerToSimulator::SimulateTxList(_db, txs) => {
                     debug_assert!(
                         senders
                             .send_timeout(
@@ -81,13 +71,5 @@ impl<Db: BopDB> Actor for Simulator<Db> {
                 }
             }
         });
-    }
-
-    fn create_senders<D>(&self, spine: &Spine<D>) -> Self::Senders {
-        spine.into()
-    }
-
-    fn create_receivers<D>(&self, spine: &Spine<D>) -> Self::Receivers {
-        Self::Receivers::new(self, spine)
     }
 }

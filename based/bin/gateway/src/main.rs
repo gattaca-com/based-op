@@ -39,11 +39,11 @@ fn main() {
 
             rt.block_on(wait_for_signal())
         });
-        let sim_0 = Simulator::new(db.clone(), 0);
+        let sim_0 = Simulator::new(0);
         sim_0.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
-        let sim_1 = Simulator::new(db.clone(), 1);
+        let sim_1 = Simulator::new(1);
         sim_1.run(s, &spine, Some(Duration::from_micros(100)), Some(2));
-        let sim_2 = Simulator::new(db.clone(), 2);
+        let sim_2 = Simulator::new(2);
         // Ok to also run on 1 as it is sleeping for quite some time if there's no work to be done
         sim_2.run(s, &spine, Some(Duration::from_micros(100)), Some(1));
 

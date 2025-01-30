@@ -11,13 +11,13 @@ use bop_db::BopDB;
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 
-pub struct EthRpcServer<D: BopDB> {
+pub struct EthRpcServer<D> {
     new_order_tx: Sender<Arc<Transaction>>,
     db: D,
 }
 
 impl<D: BopDB> EthRpcServer<D> {
-    pub fn new(spine: &Spine, db: D) -> Self {
+    pub fn new(spine: &Spine<D>, db: D) -> Self {
         Self { new_order_tx: spine.into(), db }
     }
 
@@ -28,7 +28,6 @@ impl<D: BopDB> EthRpcServer<D> {
         let server = ServerBuilder::default().build(addr).await.expect("failed to create eth RPC server");
         let module = EthApiServer::into_rpc(self);
         let server_handle = server.start(module);
-
         server_handle.stopped().await;
         error!("server stopped");
     }

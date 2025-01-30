@@ -48,6 +48,7 @@ signal-hook.workspace = true
 
 rand.workspace = true
 strum_macros.workspace = true
+paste.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

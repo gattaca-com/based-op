@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use alloy_primitives::Address;
 use bop_common::{
-    communication::{messages::SequencerToSimulator, sequencer::SendersSequencer, TrackedSenders},
+    communication::{messages::SequencerToSimulator, SendersSpine, TrackedSenders},
     time::Duration,
     transaction::{SimulatedTxList, Transaction, TxList},
 };
@@ -23,13 +23,8 @@ impl TxPool {
         Self { pool_data: HashMap::with_capacity(capacity), active_txs: Active::with_capacity(capacity) }
     }
 
-    pub fn handle_new_tx<Db>(
-        &mut self,
-        new_tx: Arc<Transaction>,
-        db: &Db,
-        base_fee: u64,
-        sim_sender: &SendersSequencer<Db>,
-    ) where
+    pub fn handle_new_tx<Db>(&mut self, new_tx: Arc<Transaction>, db: &Db, base_fee: u64, sim_sender: &SendersSpine<Db>)
+    where
         Db: DatabaseRef,
         <Db as DatabaseRef>::Error: std::fmt::Debug,
     {

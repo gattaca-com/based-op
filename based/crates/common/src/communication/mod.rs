@@ -1,5 +1,6 @@
 use std::{fs::read_dir, path::Path, sync::Arc};
 
+use alloy_rpc_types::Block;
 use messages::{SequencerToRpc, SequencerToSimulator, SimulatorToSequencer};
 use shared_memory::ShmemError;
 use thiserror::Error;
@@ -9,12 +10,10 @@ pub mod seqlock;
 pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
 pub mod messages;
-pub mod sequencer;
-pub mod simulator;
-
 pub use messages::InternalMessage;
 
 use crate::{
+    actor::Actor,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
     utils::last_part_of_typename,
@@ -175,11 +174,11 @@ impl<S: TrackedSenders, R> Connections<S, R> {
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct Spine<Db> {
-    sender_sim_to_sequencer: Sender<SimulatorToSequencer>,
-    receiver_sim_to_sequencer: crossbeam_channel::Receiver<InternalMessage<SimulatorToSequencer>>,
+    sender_simulator_to_sequencer: Sender<SimulatorToSequencer>,
+    receiver_simulator_to_sequencer: crossbeam_channel::Receiver<InternalMessage<SimulatorToSequencer>>,
 
-    sender_sequencer_to_sim: Sender<SequencerToSimulator<Db>>,
-    receiver_sequencer_to_sim: crossbeam_channel::Receiver<InternalMessage<SequencerToSimulator<Db>>>,
+    sender_sequencer_to_simulator: Sender<SequencerToSimulator<Db>>,
+    receiver_sequencer_to_simulator: crossbeam_channel::Receiver<InternalMessage<SequencerToSimulator<Db>>>,
 
     sender_sequencer_to_rpc: Sender<SequencerToRpc>,
     receiver_sequencer_to_rpc: crossbeam_channel::Receiver<InternalMessage<SequencerToRpc>>,
@@ -189,39 +188,126 @@ pub struct Spine<Db> {
 
     sender_eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     receiver_eth_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<Arc<Transaction>>>,
+
+    sender_blockfetch_to_sequencer: Sender<Result<Block, reqwest::Error>>,
+    receiver_blockfetch_to_sequencer: crossbeam_channel::Receiver<InternalMessage<Result<Block, reqwest::Error>>>,
 }
 
 impl<Db> Default for Spine<Db> {
     fn default() -> Self {
-        let (sender_sim_to_sequencer, receiver_sim_to_sequencer) = crossbeam_channel::bounded(4096);
-        let (sender_sequencer_to_sim, receiver_sequencer_to_sim) = crossbeam_channel::bounded(4096);
+        let (sender_simulator_to_sequencer, receiver_simulator_to_sequencer) = crossbeam_channel::bounded(4096);
+        let (sender_sequencer_to_simulator, receiver_sequencer_to_simulator) = crossbeam_channel::bounded(4096);
         let (sender_sequencer_to_rpc, receiver_sequencer_to_rpc) = crossbeam_channel::bounded(4096);
         let (sender_engine_rpc_to_sequencer, receiver_engine_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_eth_rpc_to_sequencer, receiver_eth_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
+        let (sender_blockfetch_to_sequencer, receiver_blockfetch_to_sequencer) = crossbeam_channel::bounded(4096);
         Self {
-            sender_sim_to_sequencer,
-            receiver_sim_to_sequencer,
-            sender_sequencer_to_sim,
-            receiver_sequencer_to_sim,
+            sender_simulator_to_sequencer,
+            receiver_simulator_to_sequencer,
+            sender_sequencer_to_simulator,
+            receiver_sequencer_to_simulator,
             sender_sequencer_to_rpc,
             receiver_sequencer_to_rpc,
             sender_engine_rpc_to_sequencer,
             receiver_engine_rpc_to_sequencer,
             sender_eth_rpc_to_sequencer,
             receiver_eth_rpc_to_sequencer,
+            sender_blockfetch_to_sequencer,
+            receiver_blockfetch_to_sequencer,
         }
     }
 }
 
-impl<Db> From<&Spine<Db>> for Sender<messages::EngineApi> {
+macro_rules! from_spine {
+    ($T:ty, $v:ident) => {
+        paste::item! {
+            impl<Db> From<&Spine<Db>> for Sender<$T> {
+                fn from(spine: &Spine<Db>) -> Self {
+                    spine.[<sender_ $v>].clone()
+                }
+            }
+
+            impl<Db> From<&Spine<Db>> for crossbeam_channel::Receiver<InternalMessage<$T>> {
+                fn from(spine: &Spine<Db>) -> Self {
+                    spine.[<receiver_ $v>].clone()
+                }
+            }
+
+            impl<Db> AsRef<Sender<$T>> for SendersSpine<Db> {
+                fn as_ref(&self) -> &Sender<$T> {
+                    &self.$v
+                }
+            }
+            impl<Db> AsMut<Receiver<$T>> for ReceiversSpine<Db> {
+                fn as_mut(&mut self) -> &mut Receiver<$T> {
+                    &mut self.$v
+                }
+            }
+        }
+    };
+}
+
+from_spine!(SimulatorToSequencer, simulator_to_sequencer);
+from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator);
+from_spine!(SequencerToRpc, sequencer_to_rpc);
+from_spine!(messages::EngineApi, engine_rpc_to_sequencer);
+from_spine!(Arc<Transaction>, eth_rpc_to_sequencer);
+
+//TODO: remove allow dead code
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub struct SendersSpine<Db> {
+    sequencer_to_simulator: Sender<SequencerToSimulator<Db>>,
+    sequencer_to_rpc: Sender<SequencerToRpc>,
+    simulator_to_sequencer: Sender<SimulatorToSequencer>,
+    engine_rpc_to_sequencer: Sender<messages::EngineApi>,
+    eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
+    blockfetch_to_sequencer: Sender<Result<Block, reqwest::Error>>,
+    timestamp: IngestionTime,
+}
+
+impl<Db> From<&Spine<Db>> for SendersSpine<Db> {
     fn from(value: &Spine<Db>) -> Self {
-        value.sender_engine_rpc_to_sequencer.clone()
+        Self {
+            sequencer_to_simulator: value.sender_sequencer_to_simulator.clone(),
+            sequencer_to_rpc: value.sender_sequencer_to_rpc.clone(),
+            simulator_to_sequencer: value.sender_simulator_to_sequencer.clone(),
+            engine_rpc_to_sequencer: value.sender_engine_rpc_to_sequencer.clone(),
+            eth_rpc_to_sequencer: value.sender_eth_rpc_to_sequencer.clone(),
+            blockfetch_to_sequencer: value.sender_blockfetch_to_sequencer.clone(),
+            timestamp: Default::default(),
+        }
     }
 }
 
-impl<Db> From<&Spine<Db>> for Sender<Arc<Transaction>> {
-    fn from(value: &Spine<Db>) -> Self {
-        value.sender_eth_rpc_to_sequencer.clone()
+impl<Db> TrackedSenders for SendersSpine<Db> {
+    fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
+        self.timestamp = ingestion_t;
+    }
+
+    fn ingestion_t(&self) -> IngestionTime {
+        self.timestamp
+    }
+}
+
+#[derive(Debug)]
+pub struct ReceiversSpine<Db> {
+    simulator_to_sequencer: Receiver<SimulatorToSequencer>,
+    sequencer_to_simulator: Receiver<SequencerToSimulator<Db>>,
+    sequencer_to_rpc: Receiver<SequencerToRpc>,
+    engine_rpc_to_sequencer: Receiver<messages::EngineApi>,
+    eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
+}
+
+impl<Db: Send> ReceiversSpine<Db> {
+    pub fn attach<A: Actor<Db>>(actor: &A, spine: &Spine<Db>) -> Self {
+        Self {
+            simulator_to_sequencer: Receiver::new(actor.name(), spine.into()),
+            sequencer_to_simulator: Receiver::new(actor.name(), spine.into()),
+            engine_rpc_to_sequencer: Receiver::new(actor.name(), spine.into()),
+            eth_rpc_to_sequencer: Receiver::new(actor.name(), spine.into()),
+            sequencer_to_rpc: Receiver::new(actor.name(), spine.into()),
+        }
     }
 }
 

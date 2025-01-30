@@ -13,7 +13,6 @@ use revm_primitives::{
     Account, AccountInfo, Address, Bytecode, HashMap, B256, U256,
 };
 
-pub mod cached;
 mod error;
 mod init;
 

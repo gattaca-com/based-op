@@ -5,8 +5,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{self, SimulatorToSequencer},
-        sequencer::{ReceiversSequencer, SendersSequencer},
-        Connections, Spine,
+        Connections, ReceiversSpine, SendersSpine,
     },
     transaction::Transaction,
 };
@@ -47,17 +46,14 @@ impl<Db: DatabaseRef> Sequencer<Db> {
 
 const DEFAULT_BASE_FEE: u64 = 10;
 
-impl<Db> Actor for Sequencer<Db>
+impl<Db> Actor<Db> for Sequencer<Db>
 where
     Db: BopDB + Send,
     <Db as DatabaseRef>::Error: std::fmt::Debug,
 {
-    type Receivers = ReceiversSequencer;
-    type Senders = SendersSequencer<Db>;
-
     const CORE_AFFINITY: Option<usize> = Some(0);
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSequencer<Db>, ReceiversSequencer>) {
+    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         connections.receive(|msg: SimulatorToSequencer, _| {
             info!("received {}", msg.as_ref());
             match msg {
@@ -74,14 +70,6 @@ where
             info!("received msg from ethapi");
             self.tx_pool.handle_new_tx(msg, &self.db, DEFAULT_BASE_FEE, senders);
         });
-    }
-
-    fn create_senders(&self, spine: &Spine<Db>) -> Self::Senders {
-        spine.into()
-    }
-
-    fn create_receivers(&self, spine: &Spine<Db>) -> Self::Receivers {
-        Self::Receivers::new(self, spine)
     }
 }
 
