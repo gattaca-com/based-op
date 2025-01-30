@@ -44,6 +44,8 @@ alloy-rlp = "0.3.10"
 reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
 reth-primitives = { path = "../reth/crates/primitives", features = ["optimism"] }
 reth-optimism-evm = { path = "../reth/crates/optimism/evm", features = ["optimism"] }
+reth-primitives-traits = { path = "../reth/crates/primitives/primitives-traits", features = ["optimism"] }
+reth-optimism-primitives = { path = "../reth/crates/optimism/primitives", features = ["optimism"] }
 
 futures = "0.3.31"
 op-alloy-consensus = { version = "=0.9.0", features = ["k256"] }
