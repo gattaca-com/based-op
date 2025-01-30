@@ -9,10 +9,10 @@ bop-common.workspace = true
 bop-rpc.workspace = true
 bop-simulator.workspace = true
 bop-sequencer.workspace = true
-bop-db.workspace = true
 tokio.workspace = true
 
 tracing.workspace = true
 
 alloy-provider.workspace = true
 alloy-eips.workspace = true
+revm-primitives.workspace = true

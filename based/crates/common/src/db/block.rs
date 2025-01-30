@@ -13,7 +13,7 @@ use reth_trie_common::updates::TrieUpdates;
 use revm::db::BundleState;
 use revm_primitives::{db::DatabaseRef, AccountInfo, Address, Bytecode, B256, U256};
 
-use crate::{cache::ReadCaches, error::Error, BopDbRead};
+use super::{cache::ReadCaches, BopDbRead, Error};
 
 pub type ProviderReadOnly =
     DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>;
@@ -23,6 +23,7 @@ pub type ProviderReadOnly =
 pub struct BlockDB {
     provider: Arc<ProviderReadOnly>,
     caches: ReadCaches,
+    unique_hash: B256,
 }
 
 impl Debug for BlockDB {
@@ -36,7 +37,7 @@ impl BlockDB {
         caches: ReadCaches,
         provider: DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
     ) -> Self {
-        Self { provider: Arc::new(provider), caches }
+        Self { provider: Arc::new(provider), caches, unique_hash: B256::random() }
     }
 }
 
@@ -77,5 +78,8 @@ impl BopDbRead for BlockDB {
     /// Returns 0 if the database is empty.
     fn block_number(&self) -> Result<u64, Error> {
         self.provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
+    }
+    fn unique_hash(&self) -> B256 {
+        self.unique_hash
     }
 }
