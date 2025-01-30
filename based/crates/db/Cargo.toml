@@ -43,7 +43,6 @@ reth-provider = { path = "../../../reth/crates/storage/provider", features = [
 ] }
 reth-chainspec = { path = "../../../reth/crates/chainspec" }
 reth-fs-util = { path = "../../../reth/crates/fs-util" }
-#reth-execution-errors = { path = "../../../reth/crates/" }
 reth-db-api = { path = "../../../reth/crates/storage/db-api", features = [ "optimism" ]}
 reth-primitives-traits = { path = "../../../reth/crates/primitives-traits", features = [
     "test-utils",
