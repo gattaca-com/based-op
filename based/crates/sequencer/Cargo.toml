@@ -23,3 +23,9 @@ tracing.workspace = true
 # networking
 reqwest.workspace = true
 crossbeam-channel.workspace = true
+
+reth-optimism-evm.workspace = true
+
+# tmp
+reth-optimism-node.workspace = true
+reth-optimism-cli.workspace = true

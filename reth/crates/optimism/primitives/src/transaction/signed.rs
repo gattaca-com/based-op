@@ -15,6 +15,7 @@ use alloy_primitives::{
     keccak256, Address, Bytes, PrimitiveSignature as Signature, TxHash, TxKind, Uint, B256,
 };
 use alloy_rlp::Header;
+use reth_primitives::sign_message;
 use core::{
     hash::{Hash, Hasher},
     mem,

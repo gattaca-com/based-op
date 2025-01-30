@@ -35,24 +35,35 @@ bop-simulator = { path = "crates/simulator" }
 # alloy
 alloy-consensus = "0.9.2"
 alloy-eips = "0.9.2"
-alloy-primitives = { version = "0.8.19", features = ["getrandom"] }
+alloy-primitives = { version = "0.8.15", default-features = false, features = ["getrandom"] }
 alloy-rpc-types = { version = "0.9.2", features = ["engine"] }
-op-alloy-rpc-types-engine = "0.9.6"
 alloy-rlp = "0.3.11"
 alloy-provider = "0.9.2"
-
-# TODO: use current crate
-reth-rpc-layer = { git = "https://github.com/paradigmxyz/reth", tag = "v1.1.5" }
-reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
-
-futures = "0.3.31"
-op-alloy-consensus = { version = "0.9.2", features = ["k256"] }
 alloy-signer = "0.9.2"
 alloy-signer-local = "0.9.2"
 alloy-network = "0.9.2"
+
+# op
+op-alloy-rpc-types-engine = { version =  "0.9.0", default-features = false }
+op-alloy-consensus = { version = "=0.9.0", default-features = false, features = ["k256"] } 
+
+# reth
+reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
+
+# reth op
+reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
+reth-optimism-node = { path = "../reth/crates/optimism/node", features = ["optimism"] }
+reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = ["optimism"] }
+
 # revm
-revm-primitives = "15.1.0"
-revm = "19.4.0"
+revm-primitives = { version = "15.1.0", features = [
+    "std",
+], default-features = false }
+revm = { version = "19.2.0", features = [
+    "std",
+    "secp256k1",
+    "optional_balance_check",
+], default-features = false }
 
 # web
 axum = { version = "0.8.1", features = ["macros"] }
@@ -84,6 +95,7 @@ shared_memory = "^0.12"
 core_affinity = "0.8.1"
 crossbeam-channel = "0.5.14"
 signal-hook = "0.3.17"
+futures = "0.3.31"
 
 # misc
 eyre = "0.6.12"
