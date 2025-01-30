@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
+use alloy_provider::Provider;
 use bop_common::{
     actor::Actor,
     communication::Spine,
@@ -37,6 +38,8 @@ fn main() {
             start_engine_rpc(&rpc_config, &spine_c, &rt);
             start_eth_rpc(&rpc_config, &spine_c, db_c, &rt);
 
+            rt.spawn(spam_rpc_txs(rpc_config.eth_api_addr));
+
             rt.block_on(wait_for_signal())
         });
         let sim_0 = Simulator::new(0);
@@ -50,4 +53,25 @@ fn main() {
         let sequencer = Sequencer::new(db, rt_c);
         sequencer.run(s, &spine, None, Some(3));
     });
+}
+
+async fn spam_rpc_txs(addr: SocketAddr) {
+    use std::time::Duration;
+
+    use alloy_eips::eip2718::Encodable2718;
+    use alloy_provider::ProviderBuilder;
+    use bop_common::transaction::Transaction;
+
+    let url = format!("http://{}", addr).parse().unwrap();
+
+    let provider = ProviderBuilder::new().on_http(url);
+
+    loop {
+        let tx = Transaction::random().tx.encoded_2718();
+        let pending = provider.send_raw_transaction(&tx).await.expect("failed to send tx");
+        let hash = pending.tx_hash();
+        tracing::debug!(%hash, "sent tx");
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }

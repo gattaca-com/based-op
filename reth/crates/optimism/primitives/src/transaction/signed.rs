@@ -26,7 +26,7 @@ use op_alloy_consensus::{OpPooledTransaction, OpTypedTransaction, TxDeposit};
 #[cfg(any(test, feature = "reth-codec"))]
 use proptest as _;
 use reth_primitives_traits::{
-    crypto::secp256k1::{recover_signer, recover_signer_unchecked, sign_message},
+    crypto::secp256k1::{recover_signer, recover_signer_unchecked},
     transaction::error::TransactionConversionError,
     InMemorySize, SignedTransaction,
 };
