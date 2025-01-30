@@ -2,6 +2,7 @@ pub mod simulated;
 pub mod tx_list;
 
 use alloy_consensus::{Transaction as TransactionTrait, TxEip1559};
+use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, Bytes, B256, U256};
 use op_alloy_consensus::OpTxEnvelope;
 use revm_primitives::TxKind;
@@ -91,7 +92,18 @@ impl Transaction {
         Self { sender: from, tx: OpTxEnvelope::Eip1559(signed_tx) }
     }
 
-    pub fn decode(_bytes: Bytes) -> Result<Self, alloy_rlp::Error> {
-        todo!()
+    pub fn decode(bytes: Bytes) -> Result<Self, alloy_rlp::Error> {
+        let tx = OpTxEnvelope::decode_2718(&mut bytes.as_ref())?;
+
+        let sender = match &tx {
+            OpTxEnvelope::Legacy(signed) => signed.recover_signer().unwrap(),
+            OpTxEnvelope::Eip2930(signed) => signed.recover_signer().unwrap(),
+            OpTxEnvelope::Eip1559(signed) => signed.recover_signer().unwrap(),
+            OpTxEnvelope::Eip7702(signed) => signed.recover_signer().unwrap(),
+            OpTxEnvelope::Deposit(_sealed) => Address::ZERO,
+            _ => panic!("invalid tx type"),
+        };
+
+        Ok(Self { sender, tx })
     }
 }
