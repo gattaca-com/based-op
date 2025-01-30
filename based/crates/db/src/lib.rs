@@ -3,40 +3,54 @@ use std::{
     sync::Arc,
 };
 
-use reth_db::{Bytecodes, CanonicalHeaders, Database, DatabaseEnv, PlainAccountState, PlainStorageState};
-use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx};
+use alloy_primitives::B256;
+use parking_lot::RwLock;
+use reth_db::DatabaseEnv;
 use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_provider::ProviderFactory;
+use reth_trie_common::updates::TrieUpdates;
+use revm::db::BundleState;
 use revm_primitives::{
     db::{DatabaseCommit, DatabaseRef},
-    Account, AccountInfo, Address, Bytecode, HashMap, B256, U256,
+    Account, Address, HashMap,
 };
 
+mod block;
+mod cache;
 mod error;
 mod init;
+mod util;
 
 pub use error::Error;
 pub use init::init_database;
 
+use crate::{block::BlockDB, cache::ReadCaches};
+
 /// Database trait for all DB operations.
-pub trait BopDB:
-    DatabaseRef<Error: Debug> + DatabaseCommit + BopDbRead + Send + Sync + 'static + Clone + Debug
-{
-}
-impl<T> BopDB for T where
-    T: BopDbRead + DatabaseRef<Error: Debug> + DatabaseCommit + Send + Sync + 'static + Clone + Debug
-{
+pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
+    /// Returns a read-only database that is valid for the current block only.
+    fn block_db_readonly(&self) -> Result<Arc<impl BopDbRead>, Error>;
 }
 
 /// Database read functions
-pub trait BopDbRead {
+pub trait BopDbRead: DatabaseRef<Error: Debug> {
     fn get_nonce(&self, address: Address) -> u64;
+
+    /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
+    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;
 }
 
-#[derive(Clone)]
 pub struct DB {
-    provider: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+    factory: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+    caches: ReadCaches,
+    block: RwLock<Option<Arc<BlockDB>>>,
+}
+
+impl Clone for DB {
+    fn clone(&self) -> Self {
+        Self { factory: self.factory.clone(), caches: self.caches.clone(), block: RwLock::new(None) }
+    }
 }
 
 impl Debug for DB {
@@ -45,44 +59,20 @@ impl Debug for DB {
     }
 }
 
-impl DatabaseRef for DB {
-    type Error = error::Error;
+impl BopDB for DB {
+    fn block_db_readonly(&self) -> Result<Arc<impl BopDbRead>, Error> {
+        if let Some(block) = self.block.read().as_ref().cloned() {
+            return Ok(block);
+        }
 
-    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        let tx = self.provider.db_ref().tx().map_err(Error::ReadTransactionError)?;
-        tx.get::<PlainAccountState>(address)
-            .map(|opt| opt.map(|account| account.into()))
-            .map_err(Error::ReadTransactionError)
-    }
-
-    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        let tx = self.provider.db_ref().tx().map_err(Error::ReadTransactionError)?;
-        let code = tx.get::<Bytecodes>(code_hash).map_err(Error::ReadTransactionError)?;
-        Ok(code.unwrap_or_default().0)
-    }
-
-    fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        let tx = self.provider.db_ref().tx().map_err(Error::ReadTransactionError)?;
-        let mut cursor = tx.cursor_dup_read::<PlainStorageState>().map_err(Error::ReadTransactionError)?;
-        let entry = cursor.seek_by_key_subkey(address, index.into()).map_err(Error::ReadTransactionError)?;
-        Ok(entry.map(|e| e.value).unwrap_or_default())
-    }
-
-    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
-        let tx = self.provider.db_ref().tx().map_err(Error::ReadTransactionError)?;
-        let hash = tx.get::<CanonicalHeaders>(number).map_err(Error::ReadTransactionError)?;
-        Ok(hash.unwrap_or_default())
+        let block = Arc::new(BlockDB::new(self.caches.clone(), self.factory.provider().map_err(Error::ProviderError)?));
+        self.block.write().replace(block.clone());
+        Ok(block)
     }
 }
 
 impl DatabaseCommit for DB {
     fn commit(&mut self, _changes: HashMap<Address, Account>) {
         todo!()
-    }
-}
-
-impl BopDbRead for DB {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.basic_ref(address).ok().flatten().map(|acc| acc.nonce).unwrap_or_default()
     }
 }

@@ -12,7 +12,7 @@ pub enum Error {
     #[error("Database could not be initialised: {0}")]
     DatabaseInitialisationError(String),
     #[error(transparent)]
-    StaticProviderError(#[from] ProviderError),
+    ProviderError(#[from] ProviderError),
     #[error("Read transaction error: {0}")]
     ReadTransactionError(DatabaseError),
 }
