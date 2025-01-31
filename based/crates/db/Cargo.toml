@@ -6,9 +6,11 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+parking_lot.workspace = true
 revm-primitives.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+moka = "0.12.10"
 
 # alloy
 alloy-primitives.workspace = true
@@ -42,7 +44,6 @@ reth-provider = { path = "../../../reth/crates/storage/provider", features = [
 ] }
 reth-chainspec = { path = "../../../reth/crates/chainspec" }
 reth-fs-util = { path = "../../../reth/crates/fs-util" }
-#reth-execution-errors = { path = "../../../reth/crates/" }
 reth-db-api = { path = "../../../reth/crates/storage/db-api" }
 reth-primitives-traits = { path = "../../../reth/crates/primitives-traits", features = [
     "test-utils",
@@ -51,3 +52,7 @@ reth-node-types = { path = "../../../reth/crates/node/types" }
 reth-node-ethereum = { path = "../../../reth/crates/ethereum/node", features = [
     "test-utils",
 ] }
+reth-revm.workspace = true
+reth-chain-state.workspace = true
+reth-optimism-chainspec.workspace = true
+reth-optimism-node.workspace = true
