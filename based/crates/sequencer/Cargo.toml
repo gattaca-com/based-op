@@ -12,43 +12,23 @@ bop-db.workspace = true
 
 # alloy
 alloy-rpc-types.workspace = true
-alloy-provider.workspace = true
-alloy-consensus.workspace = true
-
-# op alloy
-op-alloy-consensus.workspace = true
-
-# reth
-reth-evm.workspace = true
-reth-primitives.workspace = true
-reth-primitives-traits.workspace = true
-
-# reth op
-reth-optimism-evm.workspace = true
-reth-optimism-chainspec.workspace = true
-reth-optimism-primitives.workspace = true
-reth-optimism-consensus.workspace = true
-
-# revm
-revm-primitives.workspace = true
-revm.workspace = true
 op-alloy-rpc-types-engine.workspace = true
 
 # async
 tokio.workspace = true
 futures.workspace = true
 
+revm-primitives.workspace = true
 tracing.workspace = true
 
 # networking
 reqwest.workspace = true
 crossbeam-channel.workspace = true
 
-# tmp here so that the the compiler picks up the reth op crates
-reth-optimism-evm.workspace = true
 # misc
 strum_macros.workspace = true
 # tmp
 reth-optimism-node.workspace = true
 reth-optimism-cli.workspace = true
+reth-optimism-evm.workspace = true
 
