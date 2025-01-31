@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use alloy_primitives::{Address, U256};
-use revm_primitives::Account;
 use bop_db::{BopDB, BopDbRead};
-use revm_primitives::db::DatabaseRef;
+use revm_primitives::{db::DatabaseRef, Account};
 
 fn main() {
     let db_dir = "/Users/vladimir/data";
