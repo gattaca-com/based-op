@@ -77,7 +77,7 @@ where
     }
 }
 
-impl<Db: DatabaseRef> Sequencer<Db> {
+impl<Db: DatabaseRef + BopDbRead> Sequencer<Db> {
     /// Handles messages from the engine API.
     ///
     /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
@@ -89,7 +89,7 @@ impl<Db: DatabaseRef> Sequencer<Db> {
                 parent_beacon_block_root: _,
                 res_tx: _,
             } => {
-                let seq_block_number = payload.payload_inner.payload_inner.block_number; // TODO: this should be accessible from the DB
+                let seq_block_number = self.db.block_number().expect("failed to get block number from db");
                 let payload_block_number = payload.payload_inner.payload_inner.block_number;
 
                 if payload_block_number <= seq_block_number {
