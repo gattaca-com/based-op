@@ -7,6 +7,7 @@ use bop_common::{
     time::Duration,
     transaction::{SimulatedTxList, Transaction, TxList},
 };
+use bop_db::BopDbRead;
 use revm_primitives::db::DatabaseRef;
 
 use crate::transaction::active::Active;
@@ -34,7 +35,7 @@ impl TxPool {
         sim_sender: Option<&SendersSpine<Db>>,
     ) 
     {
-        let mut state_nonce = db.get_nonce(new_tx.sender_());
+        let mut state_nonce = db.get_nonce(new_tx.sender());
         let nonce = new_tx.nonce();
         // check nonce is valid
         if nonce < state_nonce {
@@ -87,9 +88,6 @@ impl TxPool {
 
     #[allow(unused)]
     fn handle_new_block<Db: BopDbRead>(&mut self, mined_txs: &[Arc<Transaction>], base_fee: u64, db: &Db)
-    where
-        Db: DatabaseRef,
-        <Db as DatabaseRef>::Error: std::fmt::Debug,
     {
         // Remove all mined txs from tx pool
         // We loop through backwards for a small efficiency boost here,
@@ -108,7 +106,7 @@ impl TxPool {
 
         // Send mineable txs for each active sender to simulator
         for (sender, sender_txs) in self.pool_data.iter() {
-            let mut expected_nonce = db.get_nonce(&sender);
+            let mut expected_nonce = db.get_nonce(*sender);
             if let Some(txs) = sender_txs.ready(&mut expected_nonce, base_fee) {
                 self.send_sim_requests_for_txs(txs);
             }

@@ -10,7 +10,7 @@ use bop_common::{
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use bop_db::{BopDB, BopDbRead, DBSorting};
+use bop_db::{BopDB, BopDbRead, DBFrag, DBSorting};
 use reth_evm::ConfigureEvm;
 use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
 use reth_optimism_evm::OpEvmConfig;
@@ -20,19 +20,19 @@ use tracing::info;
 
 pub struct Simulator<'a, Db: DatabaseRef> {
     id: usize,
-    evm: Evm<'a, (), CacheDB<DBSorting<Db>>>,
+    evm: Evm<'a, (), CacheDB<Arc<CacheDB<Db>>>>,
 }
 
 impl<'a, Db: BopDbRead> Simulator<'a, Db> {
     pub fn create_and_run(connections: SpineConnections<Db>, db: Db, id: usize, actor_config: ActorConfig) {
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
         let evmconfig = OpEvmConfig::new(chainspec);
-        let cache = CacheDB::new(Arc::new(CacheDB::new(Arc::new(CacheDB::new(db)))));
+        let cache = CacheDB::new(Arc::new(CacheDB::new(db)));
         let evm: Evm<'_, (), _> = evmconfig.evm(cache);
         Simulator::new(id, evm).run(connections, actor_config);
     }
 
-    pub fn new(id: usize, evm: Evm<'a, (), DBSorting<Db>>) -> Self {
+    pub fn new(id: usize, evm: Evm<'a, (), CacheDB<Arc<CacheDB<Db>>>>) -> Self {
         Self { id, evm }
     }
 
@@ -50,8 +50,8 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
         *self.evm.block_mut() = env;
     }
 
-    fn set_db(&mut self, db: DBSorting<Db>) {
-        *self.evm.db_mut() = db;
+    fn set_db(&mut self, db: Arc<CacheDB<Db>>) {
+        *self.evm.db_mut() = CacheDB::new(db);
     }
 
     fn set_spec_id(&mut self, spec_id: SpecId) {

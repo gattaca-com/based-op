@@ -38,8 +38,7 @@ pub enum SequencerState<DbRead> {
         /// build a new cachedb on top of for sorting
         /// starting a new sort
         db: DBFrag<DbRead>,
-        blocks: Vec<BuiltBlock<DbRead>>,
-        best_block: BuiltBlock<DbRead>,
+        block: BuiltBlock,
         until: Instant,
     },
     Syncing {
@@ -58,19 +57,17 @@ impl<DbRead> SequencerState<DbRead> {
         use SequencerEvent::*;
         use SequencerState::*;
         match (event, self) {
-            (BlockSync(block), WaitingForSync) => todo!(),
-            (BlockSync(block), WaitingForPayloadAttributes) => todo!(),
-            (BlockSync(block), Sorting { db, blocks, best_block, until }) => todo!(),
-            (BlockSync(block), Syncing { last_block_number }) => todo!(),
+            (BlockSync(block_with_senders), WaitingForSync) => todo!(),
+            (BlockSync(block_with_senders), WaitingForPayloadAttributes) => todo!(),
+            (BlockSync(block_with_senders), Sorting { db, block, until }) => todo!(),
+            (BlockSync(block_with_senders), Syncing { last_block_number }) => todo!(),
             (ReceivedPayloadAttribues(op_payload_builder_attributes), WaitingForSync) => todo!(),
             (ReceivedPayloadAttribues(op_payload_builder_attributes), WaitingForPayloadAttributes) => todo!(),
-            (ReceivedPayloadAttribues(op_payload_builder_attributes), Sorting { db, blocks, best_block, until }) => {
-                todo!()
-            }
+            (ReceivedPayloadAttribues(op_payload_builder_attributes), Sorting { db, block, until }) => todo!(),
             (ReceivedPayloadAttribues(op_payload_builder_attributes), Syncing { last_block_number }) => todo!(),
             (NewTx(arc), WaitingForSync) => todo!(),
             (NewTx(arc), WaitingForPayloadAttributes) => todo!(),
-            (NewTx(arc), Sorting { db, blocks, best_block, until }) => todo!(),
+            (NewTx(arc), Sorting { db, block, until }) => todo!(),
             (NewTx(arc), Syncing { last_block_number }) => todo!(),
         }
     }

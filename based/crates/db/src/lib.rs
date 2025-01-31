@@ -1,10 +1,11 @@
 use std::{
     fmt::{Debug, Formatter},
+    ops::Deref,
     sync::Arc,
 };
 
 use alloy_primitives::B256;
-use parking_lot::RwLock;
+use parking_lot::{RwLock, RwLockReadGuard};
 use reth_db::DatabaseEnv;
 use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
@@ -13,7 +14,7 @@ use reth_trie_common::updates::TrieUpdates;
 use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
     db::{DatabaseCommit, DatabaseRef},
-    Account, Address, HashMap,
+    Account, AccountInfo, Address, Bytecode, HashMap, U256,
 };
 
 pub mod alloy_db;
@@ -28,30 +29,60 @@ pub use init::init_database;
 pub use util::state_changes_to_bundle_state;
 
 use crate::{block::BlockDB, cache::ReadCaches};
-/// DB That adds chunks on top of last on chain block
-pub type DBFrag<Db> = RwLock<CacheDB<Db>>;
 /// DB to be used while sorting, adds on top of the last frag
 pub type DBSorting<Db> = Arc<CacheDB<DBFrag<Db>>>;
 
-// impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
-//     type Error = <Db as DatabaseRef>::Error;
+/// DB That adds chunks on top of last on chain block
+#[derive(Clone, Debug)]
+pub struct DBFrag<Db> {
+    db: Arc<RwLock<CacheDB<Db>>>,
+}
 
-//     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-//         todo!()
-//     }
+impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
+    type Error = <Db as DatabaseRef>::Error;
 
-//     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-//         todo!()
-//     }
+    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        self.db.read().basic_ref(address)
+    }
 
-//     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-//         todo!()
-//     }
+    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        self.db.read().code_by_hash_ref(code_hash)
+    }
 
-//     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
-//         todo!()
-//     }
-// }
+    fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        self.db.read().storage_ref(address, index)
+    }
+
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        self.db.read().block_hash_ref(number)
+    }
+}
+
+impl<Db: BopDbRead> BopDbRead for CacheDB<Db> {
+    fn get_nonce(&self, address: Address) -> u64 {
+        self.db.get_nonce(address)
+    }
+
+    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
+        self.db.calculate_state_root(bundle_state)
+    }
+}
+
+impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
+    fn get_nonce(&self, address: Address) -> u64 {
+        self.db.read().get_nonce(address)
+    }
+
+    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
+        self.db.read().calculate_state_root(bundle_state)
+    }
+}
+
+impl<Db: BopDbRead> From<Db> for DBFrag<Db> {
+    fn from(value: Db) -> Self {
+        Self { db: Arc::new(RwLock::new(CacheDB::new(value))) }
+    }
+}
 
 /// Database trait for all DB operations.
 pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {

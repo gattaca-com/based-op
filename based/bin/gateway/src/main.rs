@@ -7,7 +7,7 @@ use bop_common::{
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
-use bop_db::{init_database, BopDB};
+use bop_db::{init_database, BopDB, BopDbRead, DBFrag};
 use bop_rpc::{start_engine_rpc, start_eth_rpc};
 use bop_sequencer::{Sequencer, SequencerConfig};
 use bop_simulator::Simulator;
@@ -26,7 +26,7 @@ fn main() {
     let max_cached_storages = 100_000;
 
     let bop_db = init_database("./", max_cached_accounts, max_cached_storages).expect("can't run");
-    let db_read = RwLock::new(bop_db.readonly().expect("Failed to create read-only DB"));
+    let db_read: DBFrag<_> = bop_db.readonly().expect("Failed to create read-only DB").into();
     let db_c = db_read.clone();
 
     std::thread::scope(|s| {
