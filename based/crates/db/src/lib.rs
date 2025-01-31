@@ -25,13 +25,16 @@ mod util;
 
 pub use error::Error;
 pub use init::init_database;
+pub use util::state_changes_to_bundle_state;
 
 use crate::{block::BlockDB, cache::ReadCaches};
 
 /// Database trait for all DB operations.
 pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
+    type ReadOnly: BopDbRead;
+
     /// Returns a read-only database.
-    fn readonly(&self) -> Result<impl BopDbRead, Error>;
+    fn readonly(&self) -> Result<Self::ReadOnly, Error>;
 }
 
 /// Database read functions
@@ -63,7 +66,9 @@ impl Debug for DB {
 }
 
 impl BopDB for DB {
-    fn readonly(&self) -> Result<impl BopDbRead, Error> {
+    type ReadOnly = BlockDB;
+
+    fn readonly(&self) -> Result<Self::ReadOnly, Error> {
         if let Some(block) = self.block.read().as_ref().cloned() {
             return Ok(block);
         }
