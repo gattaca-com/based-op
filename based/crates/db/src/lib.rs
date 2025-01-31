@@ -16,9 +16,9 @@ use revm_primitives::{
     Account, Address, HashMap,
 };
 
+pub mod alloy_db;
 mod block;
 mod cache;
-pub mod alloy_db;
 mod error;
 mod init;
 mod util;

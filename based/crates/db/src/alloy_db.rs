@@ -38,7 +38,7 @@ impl<T: Transport + Clone, N: Network, P: Provider<T, N>> AlloyDB<T, N, P> {
     }
 
     /// Set the block number on which the queries will be based on.
-    /// 
+    ///
     /// We subtract 1 from the block number, as the state we want to fetch is the end of the previous block.
     pub fn set_block_number(&mut self, block_number: u64) {
         self.block_number = BlockId::from(block_number.saturating_sub(1));
@@ -49,14 +49,17 @@ impl<T: Transport + Clone, N: Network, P: Provider<T, N>> DatabaseRef for AlloyD
     type Error = ProviderError;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        let (nonce, balance, code) = self.rt.block_on(async {
-            let (nonce, balance, code) = tokio::join!(
-                self.provider.get_transaction_count(address).block_id(self.block_number).into_future(),
-                self.provider.get_balance(address).block_id(self.block_number).into_future(),
-                self.provider.get_code_at(address).block_id(self.block_number).into_future()
-            );
-            Result::<_, TransportError>::Ok((nonce?, balance?, code?))
-        }).map_err(|e| ProviderError::Database(DatabaseError::Other(e.to_string())))?;
+        let (nonce, balance, code) = self
+            .rt
+            .block_on(async {
+                let (nonce, balance, code) = tokio::join!(
+                    self.provider.get_transaction_count(address).block_id(self.block_number).into_future(),
+                    self.provider.get_balance(address).block_id(self.block_number).into_future(),
+                    self.provider.get_code_at(address).block_id(self.block_number).into_future()
+                );
+                Result::<_, TransportError>::Ok((nonce?, balance?, code?))
+            })
+            .map_err(|e| ProviderError::Database(DatabaseError::Other(e.to_string())))?;
 
         let code = Bytecode::new_raw(code.0.into());
         let code_hash = code.hash_slow();
@@ -65,11 +68,14 @@ impl<T: Transport + Clone, N: Network, P: Provider<T, N>> DatabaseRef for AlloyD
     }
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
-        let block = self.rt.block_on(
-            self.provider
-                // SAFETY: We know number <= u64::MAX, so we can safely convert it to u64
-                .get_block_by_number(number.into(), false.into()),
-        ).map_err(|e| ProviderError::Database(DatabaseError::Other(e.to_string())))?;
+        let block = self
+            .rt
+            .block_on(
+                self.provider
+                    // SAFETY: We know number <= u64::MAX, so we can safely convert it to u64
+                    .get_block_by_number(number.into(), false.into()),
+            )
+            .map_err(|e| ProviderError::Database(DatabaseError::Other(e.to_string())))?;
         // SAFETY: If the number is given, the block is supposed to be finalized, so unwrapping is safe.
         Ok(B256::new(*block.unwrap().header().hash()))
     }
@@ -81,7 +87,10 @@ impl<T: Transport + Clone, N: Network, P: Provider<T, N>> DatabaseRef for AlloyD
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         let f = self.provider.get_storage_at(address, index).block_id(self.block_number);
-        let slot_val = self.rt.block_on(f.into_future()).map_err(|e| ProviderError::Database(DatabaseError::Other(e.to_string())))?;
+        let slot_val = self
+            .rt
+            .block_on(f.into_future())
+            .map_err(|e| ProviderError::Database(DatabaseError::Other(e.to_string())))?;
         Ok(slot_val)
     }
 }

@@ -29,8 +29,10 @@ pub struct Sequencer<Db> {
 
     /// Used for fetching blocks from the RPC when our db is behind the chain head.
     /// Blocks are fetched async and returned to the sequencer through this channel.
-    sender_fetch_blocks_to_sequencer: crossbeam_channel::Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
-    receiver_fetch_blocks_to_sequencer: crossbeam_channel::Receiver<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    sender_fetch_blocks_to_sequencer:
+        crossbeam_channel::Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    receiver_fetch_blocks_to_sequencer:
+        crossbeam_channel::Receiver<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
 }
 
 impl<Db: DatabaseRef> Sequencer<Db> {

@@ -1,11 +1,16 @@
+#![allow(unused)] // TODO: remove
+
 use std::{fmt::Display, sync::Arc};
 
+use reth_evm::execute::{
+    BlockExecutionError, BlockExecutionOutput, BlockExecutionStrategy, BlockExecutionStrategyFactory, ExecuteOutput,
+    ProviderError,
+};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::OpExecutionStrategyFactory;
-use reth_evm::execute::{BlockExecutionError, BlockExecutionOutput, BlockExecutionStrategy, BlockExecutionStrategyFactory, ExecuteOutput, ProviderError};
+use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
 use revm::Database;
-use reth_optimism_primitives::{OpBlock, OpReceipt};
 
 pub(crate) mod fetch_blocks;
 
@@ -21,13 +26,21 @@ impl BlockExecutor {
         Self { chain_spec, execution_factory }
     }
 
-    /// Execute a block and return the final execution output. 
+    /// Execute a block and return the final execution output.
     /// Verifies the block post execution.
-    pub fn execute<DB>(&mut self, block: &BlockWithSenders<OpBlock>, db: DB) -> Result<BlockExecutionOutput<OpReceipt>, BlockExecutionError>
-        where
-        DB: Database<Error: Into<ProviderError> + Display>
+    pub fn execute<DB>(
+        &mut self,
+        block: &BlockWithSenders<OpBlock>,
+        db: DB,
+    ) -> Result<BlockExecutionOutput<OpReceipt>, BlockExecutionError>
+    where
+        DB: Database<Error: Into<ProviderError> + Display>,
     {
-        tracing::info!("BlockExecutor::execute called for block number: {}, parent hash: {}", block.header.number, block.header.parent_hash);
+        tracing::info!(
+            "BlockExecutor::execute called for block number: {}, parent hash: {}",
+            block.header.number,
+            block.header.parent_hash
+        );
         let mut executor = self.execution_factory.create_strategy(db);
 
         // Apply the block.
@@ -54,9 +67,8 @@ mod tests {
     use reqwest::Client;
     use reth_optimism_chainspec::OpChainSpecBuilder;
 
-    use crate::block_sync::fetch_blocks::{fetch_block, TEST_BASE_RPC_URL};
-
     use super::*;
+    use crate::block_sync::fetch_blocks::{fetch_block, TEST_BASE_RPC_URL};
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";
 
@@ -78,8 +90,7 @@ mod tests {
         let block = rt.block_on(async { fetch_block(25767332, &client, &rpc_url).await.unwrap() });
 
         // Create the alloydb.
-        let client = ProviderBuilder::new()
-            .on_http(rpc_url.parse().unwrap());
+        let client = ProviderBuilder::new().on_http(rpc_url.parse().unwrap());
         let alloydb = AlloyDB::new(client, block.header.number, rt).expect("failed to create alloydb");
 
         // Execute the block.
