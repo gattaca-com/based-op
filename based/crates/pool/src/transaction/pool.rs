@@ -26,17 +26,15 @@ impl TxPool {
 
     /// Handles an incoming transaction. If the sim_sender is None, the assumption is that we are not yet
     /// ready to send simulation for top of block simulation
-    pub fn handle_new_tx<Db>(
+    pub fn handle_new_tx<Db: bop_db::BopDbRead>(
         &mut self,
         new_tx: Arc<Transaction>,
         db: &Db,
         base_fee: u64,
         sim_sender: Option<&SendersSpine<Db>>,
-    ) where
-        Db: DatabaseRef,
-        <Db as DatabaseRef>::Error: std::fmt::Debug,
+    ) 
     {
-        let mut state_nonce = get_nonce(db, new_tx.sender());
+        let mut state_nonce = db.get_nonce(new_tx.sender_());
         let nonce = new_tx.nonce();
         // check nonce is valid
         if nonce < state_nonce {
@@ -88,7 +86,7 @@ impl TxPool {
     }
 
     #[allow(unused)]
-    fn handle_new_block<Db>(&mut self, mined_txs: &[Arc<Transaction>], base_fee: u64, db: &Db)
+    fn handle_new_block<Db: BopDbRead>(&mut self, mined_txs: &[Arc<Transaction>], base_fee: u64, db: &Db)
     where
         Db: DatabaseRef,
         <Db as DatabaseRef>::Error: std::fmt::Debug,
@@ -110,7 +108,7 @@ impl TxPool {
 
         // Send mineable txs for each active sender to simulator
         for (sender, sender_txs) in self.pool_data.iter() {
-            let mut expected_nonce = get_nonce(&db, *sender);
+            let mut expected_nonce = db.get_nonce(&sender);
             if let Some(txs) = sender_txs.ready(&mut expected_nonce, base_fee) {
                 self.send_sim_requests_for_txs(txs);
             }
@@ -136,13 +134,4 @@ impl TxPool {
     pub fn active_empty(&self) -> bool {
         self.active_txs.is_empty()
     }
-}
-
-#[inline]
-fn get_nonce<Db>(db: &Db, address: Address) -> u64
-where
-    Db: DatabaseRef,
-    <Db as DatabaseRef>::Error: std::fmt::Debug,
-{
-    db.basic_ref(address).unwrap().map_or(0, |acc| acc.nonce)
 }

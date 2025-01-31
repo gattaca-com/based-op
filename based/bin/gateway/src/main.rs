@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use bop_common::{
     actor::{Actor, ActorConfig},
@@ -26,8 +26,8 @@ fn main() {
     let max_cached_storages = 100_000;
 
     let bop_db = init_database("./", max_cached_accounts, max_cached_storages).expect("can't run");
-    let db = bop_db.readonly().expect("Failed to create read-only DB");
-    let db_c = db.clone();
+    let db_read = RwLock::new(bop_db.readonly().expect("Failed to create read-only DB"));
+    let db_c = db_read.clone();
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -44,13 +44,13 @@ fn main() {
 
             rt.block_on(wait_for_signal())
         });
-        let db_s = db.clone();
+        let db_s = db_read.clone();
         s.spawn(|| {
-            let sequencer = Sequencer::new(db_s, rt_c, SequencerConfig::default());
+            let sequencer = Sequencer::new(bop_db, db_read, rt_c, SequencerConfig::default());
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
         for (i, core) in (1..4).enumerate() {
-            let db_sim = db.clone();
+            let db_sim = db_read.clone();
             let connections = spine.to_connections(format!("Simulator-{core}"));
             s.spawn(move || {
                 Simulator::create_and_run(connections, db_sim, i, ActorConfig::default());

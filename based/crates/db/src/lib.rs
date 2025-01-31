@@ -29,9 +29,29 @@ pub use util::state_changes_to_bundle_state;
 
 use crate::{block::BlockDB, cache::ReadCaches};
 /// DB That adds chunks on top of last on chain block
-pub type DBFrag<Db> = CacheDB<Arc<CacheDB<Db>>>;
-/// DB to be used while sorting, adds on top of the last chunk
-pub type DBSorting<Db> = CacheDB<Arc<DBFrag<Db>>>;
+pub type DBFrag<Db> = RwLock<CacheDB<Db>>;
+/// DB to be used while sorting, adds on top of the last frag
+pub type DBSorting<Db> = Arc<CacheDB<DBFrag<Db>>>;
+
+// impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
+//     type Error = <Db as DatabaseRef>::Error;
+
+//     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+//         todo!()
+//     }
+
+//     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+//         todo!()
+//     }
+
+//     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+//         todo!()
+//     }
+
+//     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+//         todo!()
+//     }
+// }
 
 /// Database trait for all DB operations.
 pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {

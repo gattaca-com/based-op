@@ -11,6 +11,27 @@ bop-pool.workspace = true
 bop-db.workspace = true
 
 # alloy
+alloy-provider.workspace = true
+alloy-consensus.workspace = true
+
+# op alloy
+op-alloy-consensus.workspace = true
+
+# reth
+reth-evm.workspace = true
+reth-primitives.workspace = true
+reth-primitives-traits.workspace = true
+
+# reth op
+reth-optimism-evm.workspace = true
+reth-optimism-chainspec.workspace = true
+reth-optimism-primitives.workspace = true
+reth-optimism-consensus.workspace = true
+
+# revm
+revm-primitives.workspace = true
+revm.workspace = true
+
 alloy-rpc-types.workspace = true
 op-alloy-rpc-types-engine.workspace = true
 
@@ -18,7 +39,6 @@ op-alloy-rpc-types-engine.workspace = true
 tokio.workspace = true
 futures.workspace = true
 
-revm-primitives.workspace = true
 tracing.workspace = true
 
 # networking
@@ -30,5 +50,4 @@ strum_macros.workspace = true
 # tmp
 reth-optimism-node.workspace = true
 reth-optimism-cli.workspace = true
-reth-optimism-evm.workspace = true
 

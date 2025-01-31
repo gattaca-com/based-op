@@ -20,7 +20,7 @@ use tracing::info;
 
 pub struct Simulator<'a, Db: DatabaseRef> {
     id: usize,
-    evm: Evm<'a, (), DBSorting<Db>>,
+    evm: Evm<'a, (), CacheDB<DBSorting<Db>>>,
 }
 
 impl<'a, Db: BopDbRead> Simulator<'a, Db> {

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use alloy_consensus::Block;
-use alloy_rpc_types::{engine::ForkchoiceState};
+use alloy_rpc_types::engine::ForkchoiceState;
 use bop_common::{
     actor::Actor,
     communication::{
@@ -13,11 +13,11 @@ use bop_common::{
 };
 use bop_db::{BopDB, BopDbRead, DBFrag, DBSorting};
 use bop_pool::transaction::pool::TxPool;
-use reth_optimism_primitives::OpTransactionSigned;
-use reth_primitives::BlockWithSenders;
 use built_block::BuiltBlock;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reth_optimism_node::OpPayloadBuilderAttributes;
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives::BlockWithSenders;
 use revm_primitives::db::DatabaseRef;
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
@@ -29,7 +29,7 @@ pub(crate) mod block_sync;
 pub(crate) mod built_block;
 
 #[derive(Clone, Debug, Default, AsRefStr)]
-pub enum SequencerState<Db> {
+pub enum SequencerState<DbRead> {
     #[default]
     WaitingForSync,
     WaitingForPayloadAttributes,
@@ -37,9 +37,9 @@ pub enum SequencerState<Db> {
         /// This is the db that is built on top of the last block chunk to be used to
         /// build a new cachedb on top of for sorting
         /// starting a new sort
-        db: DBFrag<Db>,
-        blocks: Vec<BuiltBlock<Db>>,
-        best_block: BuiltBlock<Db>,
+        db: DBFrag<DbRead>,
+        blocks: Vec<BuiltBlock<DbRead>>,
+        best_block: BuiltBlock<DbRead>,
         until: Instant,
     },
     Syncing {
@@ -48,11 +48,11 @@ pub enum SequencerState<Db> {
     },
 }
 
-impl<Db> SequencerState<Db> {
-    pub fn update(
+impl<DbRead> SequencerState<DbRead> {
+    pub fn update<Db:BopDB>(
         mut self,
         event: SequencerEvent,
-        shared_data: &mut SharedData<Db>,
+        shared_data: &mut SharedData<Db, DbRead>,
         senders: &SendersSpine<Db>,
     ) -> Self {
         use SequencerEvent::*;
@@ -79,7 +79,7 @@ impl<Db> SequencerState<Db> {
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SequencerEvent {
-    BlockSync(Result<Block, reqwest::Error>),
+    BlockSync(Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>),
     ReceivedPayloadAttribues(Option<Box<OpPayloadBuilderAttributes>>),
     NewTx(Arc<Transaction>),
 }
@@ -95,9 +95,10 @@ impl Default for SequencerConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct SharedData<Db> {
+pub struct SharedData<Db, DbRead> {
     tx_pool: TxPool,
     db: Db,
+    frag_db: DBFrag<DbRead>,
     runtime: Arc<Runtime>,
     config: SequencerConfig,
     fork_choice_state: ForkchoiceState,
@@ -105,16 +106,17 @@ pub struct SharedData<Db> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Sequencer<Db> {
-    state: SequencerState<Db>,
-    data: SharedData<Db>,
+pub struct Sequencer<Db, DbRead> {
+    state: SequencerState<DbRead>,
+    data: SharedData<Db, DbRead>,
 }
 
-impl<Db: DatabaseRef> Sequencer<Db> {
-    pub fn new(db: Db, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
+impl<Db: BopDB, DbRead: BopDbRead> Sequencer<Db, DbRead> {
+    pub fn new(db: Db, frag_db: DBFrag<DbRead>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         Self {
             data: SharedData {
                 db,
+                frag_db,
                 runtime,
                 config,
                 tx_pool: Default::default(),
@@ -128,7 +130,7 @@ impl<Db: DatabaseRef> Sequencer<Db> {
 
 const DEFAULT_BASE_FEE: u64 = 10;
 
-impl<DbRead: BopDbRead, Db: BopDbRead + BopDB> Actor<DbRead> for Sequencer<Db> {
+impl<Db: BopDB, DbRead: BopDbRead> Actor<DbRead> for Sequencer<Db, DbRead> {
     const CORE_AFFINITY: Option<usize> = Some(0);
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<DbRead>, ReceiversSpine<DbRead>>) {
@@ -153,8 +155,8 @@ impl<DbRead: BopDbRead, Db: BopDbRead + BopDB> Actor<DbRead> for Sequencer<Db> {
     }
 }
 
-impl<Db: BopDB + BopDbRead> Sequencer<Db> {
-    fn handle_block(&mut self, block_result: Result<Block, reqwest::Error>) {
+impl<Db: BopDB, DbRead: BopDbRead> Sequencer<Db, DbRead> {
+    fn handle_block(&mut self, block_result: Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>) {
         let block = block_result.expect("failed to fetch block");
         todo!()
         // if block.header.number == payload_block_number - 1 {
@@ -165,7 +167,7 @@ impl<Db: BopDB + BopDbRead> Sequencer<Db> {
     /// Handles messages from the engine API.
     ///
     /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
-    fn handle_engine_api_message<DbRead>(&self, msg: messages::EngineApi, senders: &SendersSpine<DbRead>) {
+    fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<DbRead>) {
         match msg {
             messages::EngineApi::NewPayloadV3 {
                 payload,
