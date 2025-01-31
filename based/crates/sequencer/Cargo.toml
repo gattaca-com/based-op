@@ -12,10 +12,26 @@ bop-db.workspace = true
 
 # alloy
 alloy-rpc-types.workspace = true
+alloy-provider.workspace = true
+alloy-primitives.workspace = true
+alloy-consensus.workspace = true
+alloy-eips.workspace = true
+
+# op alloy
+op-alloy-consensus.workspace = true
+op-alloy-rpc-types.workspace = true
+
+# reth
+reth-evm.workspace = true
+reth-primitives.workspace = true
+reth-primitives-traits.workspace = true
+reth-consensus.workspace = true
 
 # reth op
 reth-optimism-evm.workspace = true
 reth-optimism-chainspec.workspace = true
+reth-optimism-primitives.workspace = true
+reth-optimism-consensus.workspace = true
 
 # revm
 revm-primitives.workspace = true
