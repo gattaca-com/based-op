@@ -71,7 +71,7 @@ impl Transaction {
         env.chain_id = self.chain_id();
         env.nonce = Some(self.nonce());
         env.access_list = self.access_list().cloned().unwrap_or_default().0;
-        env.blob_hashes = self.blob_versioned_hashes().map(|t| Vec::from_iter(t.iter().cloned())).unwrap_or_default();
+        env.blob_hashes = self.blob_versioned_hashes().map(|t| t.to_vec()).unwrap_or_default();
         env.max_fee_per_blob_gas = self.max_fee_per_blob_gas().map(U256::from);
         env.optimism = self.into()
     }
