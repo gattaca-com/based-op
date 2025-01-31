@@ -29,12 +29,14 @@ use crate::{block::BlockDB, cache::ReadCaches};
 
 /// Database trait for all DB operations.
 pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
-    /// Returns a read-only database that is valid for the current block only.
+    /// Returns a read-only database.
     fn readonly(&self) -> Result<impl BopDbRead, Error>;
 }
 
 /// Database read functions
 pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone + Debug {
+    /// Returns the current `nonce` value for the account with the specified address. Zero is
+    /// returned if no account is found.
     fn get_nonce(&self, address: Address) -> u64;
 
     /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
