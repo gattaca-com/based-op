@@ -1,4 +1,4 @@
-use std::{fs, io, path::Path, sync::Arc};
+use std::{fs, path::Path, sync::Arc};
 
 use parking_lot::RwLock;
 use reth_chainspec::ChainSpecBuilder;
@@ -47,10 +47,15 @@ pub fn init_database<P: AsRef<Path>>(
 
 fn create_or_check_dir<P: AsRef<Path>>(dir: &P) -> Result<(), Error> {
     if fs::exists(dir).map_err(|e| Error::DirNotReadable(path_string(dir), e))? {
-        let dir_metadata = fs::metadata(dir).map_err(|e| Error::DirNotReadable(path_string(dir), e))?;
-        if dir_metadata.permissions().readonly() {
-            tracing::error!(dir = path_string(dir), "Database directory is read-only");
-            return Err(Error::DirNotWritable(path_string(dir), io::ErrorKind::PermissionDenied.into()));
+        let test_file = dir.as_ref().join("ACCESS_CHECK");
+        match fs::File::create(&test_file) {
+            Ok(_) => {
+                let _ = fs::remove_file(&test_file);
+            }
+            Err(e) => {
+                tracing::error!(dir = path_string(dir), "Database directory is read-only");
+                return Err(Error::DirNotWritable(path_string(dir), e));
+            }
         }
     } else {
         fs::create_dir_all(dir).map_err(|e| Error::DirNotWritable(path_string(dir), e))?;
