@@ -7,17 +7,17 @@ use crate::transaction::{simulated::transaction::SimulatedTx, TxList};
 /// First is Simulated Top Of Block
 #[derive(Clone, Debug)]
 pub struct SimulatedTxList {
-    pub first: SimulatedTx,
-    pub txs: TxList,
+    pub current: SimulatedTx,
+    pub pending: TxList,
 }
 
 impl SimulatedTxList {
-    pub fn new(first: SimulatedTx, txs: TxList) -> SimulatedTxList {
-        SimulatedTxList { first, txs }
+    pub fn new(current: SimulatedTx, pending: TxList) -> SimulatedTxList {
+        SimulatedTxList { current, pending }
     }
 
     pub fn len(&self) -> usize {
-        self.txs.len() + 1
+        self.pending.len() + 1
     }
 }
 
@@ -25,6 +25,6 @@ impl Deref for SimulatedTxList {
     type Target = SimulatedTx;
 
     fn deref(&self) -> &Self::Target {
-        &self.first
+        &self.current
     }
 }
