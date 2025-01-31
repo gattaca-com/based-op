@@ -63,7 +63,7 @@ mod tests {
 
     use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
-    use bop_db::alloy_db::AlloyDB;
+    use bop_common::db::alloy_db::AlloyDB;
     use reqwest::Client;
     use reth_optimism_chainspec::OpChainSpecBuilder;
 

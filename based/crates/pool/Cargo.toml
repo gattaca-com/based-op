@@ -6,7 +6,6 @@ rust-version.workspace = true
 
 [dependencies]
 bop-common.workspace = true
-bop-db.workspace = true
 alloy-primitives.workspace = true
 alloy-consensus.workspace = true
 tracing.workspace = true

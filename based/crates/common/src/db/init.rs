@@ -7,8 +7,7 @@ use reth_db::{init_db, ClientVersion};
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
 
-use super::{Error, DB};
-use crate::cache::ReadCaches;
+use super::{cache::ReadCaches, Error, DB};
 
 /// Initialise the database.
 /// # Params

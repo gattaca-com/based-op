@@ -7,7 +7,7 @@ use bop_common::{
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
-use bop_db::{init_database, BopDB, BopDbRead, DBFrag};
+use bop_common::db::{init_database, BopDB, BopDbRead, DBFrag};
 use bop_rpc::{start_engine_rpc, start_eth_rpc};
 use bop_sequencer::{Sequencer, SequencerConfig};
 use bop_simulator::Simulator;
@@ -25,8 +25,8 @@ fn main() {
     let max_cached_accounts = 10_000;
     let max_cached_storages = 100_000;
 
-    let bop_db = init_database("./", max_cached_accounts, max_cached_storages).expect("can't run");
-    let db_read: DBFrag<_> = bop_db.readonly().expect("Failed to create read-only DB").into();
+    let db_bop = init_database("./", max_cached_accounts, max_cached_storages).expect("can't run");
+    let db_read: DBFrag<_> = db_bop.readonly().expect("Failed to create read-only DB").into();
     let db_c = db_read.clone();
 
     std::thread::scope(|s| {
@@ -46,7 +46,7 @@ fn main() {
         });
         let db_s = db_read.clone();
         s.spawn(|| {
-            let sequencer = Sequencer::new(bop_db, db_read, rt_c, SequencerConfig::default());
+            let sequencer = Sequencer::new(db_bop, db_s, rt_c, SequencerConfig::default());
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
         for (i, core) in (1..4).enumerate() {

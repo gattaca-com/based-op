@@ -1,5 +1,5 @@
 use bop_common::{communication::Spine, config::Config};
-use bop_db::BopDbRead;
+use bop_common::db::BopDbRead;
 use engine::EngineRpcServer;
 use eth::EthRpcServer;
 use tokio::runtime::Runtime;

@@ -10,7 +10,7 @@ use bop_common::{
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use bop_db::{BopDB, BopDbRead, DBFrag, DBSorting};
+use bop_common::db::{BopDB, BopDbRead, DBFrag, DBSorting};
 use reth_evm::ConfigureEvm;
 use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
 use reth_optimism_evm::OpEvmConfig;
@@ -24,7 +24,7 @@ pub struct Simulator<'a, Db: DatabaseRef> {
 }
 
 impl<'a, Db: BopDbRead> Simulator<'a, Db> {
-    pub fn create_and_run(connections: SpineConnections<Db>, db: Db, id: usize, actor_config: ActorConfig) {
+    pub fn create_and_run(connections: SpineConnections<DBFrag<Db>>, db: DBFrag<Db>, id: usize, actor_config: ActorConfig) {
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
         let evmconfig = OpEvmConfig::new(chainspec);
         let cache = CacheDB::new(Arc::new(CacheDB::new(db)));
@@ -59,11 +59,11 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
     }
 }
 
-impl<Db: BopDbRead> Actor<Db> for Simulator<'_, Db> {
+impl<Db: BopDbRead> Actor<Db> for Simulator<'_, DBFrag<Db>> {
     const CORE_AFFINITY: Option<usize> = None;
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
-        connections.receive(|msg: SequencerToSimulator<Db>, senders| {
+    fn loop_body(&mut self, connections: &mut SpineConnections<DBFrag<Db>>) {
+        connections.receive(|msg: SequencerToSimulator<DBFrag<Db>>, senders| {
             info!("received {}", msg.as_ref());
             match msg {
                 SequencerToSimulator::SimulateTx(_db, tx) => {

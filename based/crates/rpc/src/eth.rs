@@ -7,7 +7,7 @@ use bop_common::{
     communication::{messages::RpcResult, Sender, Spine},
     transaction::Transaction,
 };
-use bop_db::{BopDB, BopDbRead};
+use bop_common::db::{BopDB, BopDbRead};
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 

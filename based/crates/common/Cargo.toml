@@ -15,6 +15,8 @@ alloy-rlp.workspace = true
 alloy-signer.workspace = true
 alloy-signer-local.workspace = true
 alloy-network.workspace = true
+alloy-provider.workspace = true
+alloy-transport.workspace = true
 
 # op alloy
 op-alloy-rpc-types-engine.workspace = true
@@ -29,7 +31,15 @@ reth-optimism-chainspec.workspace = true
 reth-evm.workspace = true
 reth-primitives.workspace = true
 reth-optimism-primitives.workspace = true
-
+reth-node-types.workspace = true
+reth-db.workspace = true
+reth-node-ethereum.workspace = true
+reth-provider.workspace = true
+reth-trie-common.workspace = true
+reth-storage-api.workspace = true
+reth-db-api.workspace = true
+reth-chainspec.workspace = true
+reth-storage-errors.workspace = true
 crossbeam-channel.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -52,6 +62,8 @@ shared_memory.workspace = true
 jsonrpsee.workspace = true
 core_affinity.workspace = true
 signal-hook.workspace = true
+parking_lot.workspace = true
+moka.workspace = true
 
 rand.workspace = true
 strum_macros.workspace = true

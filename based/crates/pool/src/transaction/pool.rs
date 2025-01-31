@@ -7,7 +7,7 @@ use bop_common::{
     time::Duration,
     transaction::{SimulatedTxList, Transaction, TxList},
 };
-use bop_db::BopDbRead;
+use bop_common::db::BopDbRead;
 use revm_primitives::db::DatabaseRef;
 
 use crate::transaction::active::Active;
@@ -27,7 +27,7 @@ impl TxPool {
 
     /// Handles an incoming transaction. If the sim_sender is None, the assumption is that we are not yet
     /// ready to send simulation for top of block simulation
-    pub fn handle_new_tx<Db: bop_db::BopDbRead>(
+    pub fn handle_new_tx<Db: bop_common::db::BopDbRead>(
         &mut self,
         new_tx: Arc<Transaction>,
         db: &Db,

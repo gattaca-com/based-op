@@ -13,7 +13,7 @@ use reth_trie_common::updates::TrieUpdates;
 use revm::db::BundleState;
 use revm_primitives::{db::DatabaseRef, AccountInfo, Address, Bytecode, B256, U256};
 
-use crate::{cache::ReadCaches, error::Error, BopDbRead};
+use super::{cache::ReadCaches, BopDbRead, Error};
 
 pub type ProviderReadOnly =
     DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>;

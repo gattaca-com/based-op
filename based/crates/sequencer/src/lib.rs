@@ -11,7 +11,7 @@ use bop_common::{
     time::{Duration, Instant},
     transaction::Transaction,
 };
-use bop_db::{BopDB, BopDbRead, DBFrag, DBSorting};
+use bop_common::db::{BopDB, BopDbRead, DBFrag, DBSorting};
 use bop_pool::transaction::pool::TxPool;
 use built_block::BuiltBlock;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
@@ -130,7 +130,7 @@ const DEFAULT_BASE_FEE: u64 = 10;
 impl<Db: BopDB, DbRead: BopDbRead> Actor<DbRead> for Sequencer<Db, DbRead> {
     const CORE_AFFINITY: Option<usize> = Some(0);
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<DbRead>, ReceiversSpine<DbRead>>) {
+    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<DBFrag<DbRead>>, ReceiversSpine<DBFrag<DbRead>>>) {
         connections.receive(|msg: SimulatorToSequencer, _| {
             todo!();
         });
@@ -164,7 +164,7 @@ impl<Db: BopDB, DbRead: BopDbRead> Sequencer<Db, DbRead> {
     /// Handles messages from the engine API.
     ///
     /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
-    fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<DbRead>) {
+    fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<DBFrag<DbRead>>) {
         match msg {
             messages::EngineApi::NewPayloadV3 {
                 payload,
