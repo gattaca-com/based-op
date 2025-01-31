@@ -50,10 +50,15 @@ op-alloy-consensus = { version = "=0.9.0", default-features = false, features = 
 # reth
 reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
 
+# reth-db
+reth-revm = { path = "../reth/crates/revm" }
+reth-chain-state = { path = "../reth/crates/chain-state" }
+
 # reth op
 reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
 reth-optimism-node = { path = "../reth/crates/optimism/node", features = ["optimism"] }
 reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = ["optimism"] }
+reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
 
 # revm
 revm-primitives = { version = "15.1.0", features = [

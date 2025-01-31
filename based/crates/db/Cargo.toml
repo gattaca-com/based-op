@@ -52,7 +52,7 @@ reth-node-types = { path = "../../../reth/crates/node/types" }
 reth-node-ethereum = { path = "../../../reth/crates/ethereum/node", features = [
     "test-utils",
 ] }
-reth-revm = { path = "../../../reth/crates/revm" }
-reth-chain-state = { path = "../../../reth/crates/chain-state" }
-reth-optimism-chainspec = { path = "../../../reth/crates/optimism/chainspec" }
-reth-optimism-node = { path = "../../../reth/crates/optimism/node" }
+reth-revm.workspace = true
+reth-chain-state.workspace = true
+reth-optimism-chainspec.workspace = true
+reth-optimism-node.workspace = true
