@@ -22,7 +22,6 @@ op-alloy-consensus.workspace = true
 
 #revm
 revm-primitives.workspace = true
-revm.workspace = true
 
 crossbeam-channel.workspace = true
 tokio.workspace = true

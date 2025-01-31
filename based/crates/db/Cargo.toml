@@ -14,45 +14,29 @@ moka = "0.12.10"
 
 # alloy
 alloy-primitives.workspace = true
+alloy-provider.workspace = true
+alloy-transport.workspace = true
+alloy-eips.workspace = true
 
 # revm
 revm.workspace = true
+
+# async
+tokio.workspace = true
 
 # Reth DB dpeendencies
 reth-db = { path = "../../../reth/crates/storage/db" }
 reth-storage-api = { path = "../../../reth/crates/storage/storage-api" }
 reth-storage-errors = { path = "../../../reth/crates/storage/errors" }
-reth-db-common = { path = "../../../reth/crates/storage/db-common" }
-reth-trie = { path = "../../../reth/crates/trie/trie", features = [
-    "triehash",
-    "serde",
-    "test-utils",
-] }
-reth-trie-db = { path = "../../../reth/crates/trie/db", features = [
-    "test-utils",
-] }
-reth-trie-parallel = { path = "../../../reth/crates/trie/parallel" }
-reth-tasks = { path = "../../../reth/crates/tasks", features = [
-    "rayon",
-] }
 reth-trie-common = { path = "../../../reth/crates/trie/common", features = [
     "test-utils",
 ] }
-reth-codecs = { path = "../../../reth/crates/storage/codecs" }
 reth-provider = { path = "../../../reth/crates/storage/provider", features = [
     "test-utils",
 ] }
 reth-chainspec = { path = "../../../reth/crates/chainspec" }
-reth-fs-util = { path = "../../../reth/crates/fs-util" }
 reth-db-api = { path = "../../../reth/crates/storage/db-api" }
-reth-primitives-traits = { path = "../../../reth/crates/primitives-traits", features = [
-    "test-utils",
-] }
 reth-node-types = { path = "../../../reth/crates/node/types" }
 reth-node-ethereum = { path = "../../../reth/crates/ethereum/node", features = [
     "test-utils",
 ] }
-reth-revm.workspace = true
-reth-chain-state.workspace = true
-reth-optimism-chainspec.workspace = true
-reth-optimism-node.workspace = true

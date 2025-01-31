@@ -16,6 +16,7 @@ use alloy_primitives::{
 };
 use alloy_rlp::Header;
 use reth_primitives::sign_message;
+use revm_primitives::U256;
 use core::{
     hash::{Hash, Hasher},
     mem,
@@ -23,7 +24,7 @@ use core::{
 use derive_more::{AsRef, Deref};
 #[cfg(not(feature = "std"))]
 use once_cell::sync::OnceCell as OnceLock;
-use op_alloy_consensus::{OpPooledTransaction, OpTypedTransaction, TxDeposit};
+use op_alloy_consensus::{OpPooledTransaction, OpTxEnvelope, OpTypedTransaction, TxDeposit};
 #[cfg(any(test, feature = "reth-codec"))]
 use proptest as _;
 use reth_primitives_traits::{
@@ -71,6 +72,19 @@ impl OpTransactionSigned {
     /// Returns whether this transaction is a deposit.
     pub const fn is_deposit(&self) -> bool {
         matches!(self.transaction, OpTypedTransaction::Deposit(_))
+    }
+
+    /// Warning: the signature for a deposit transaction is always zero
+    pub fn from_envelope(envelope: OpTxEnvelope) -> Self {
+        let signature = match &envelope {
+            OpTxEnvelope::Legacy(tx) => tx.signature().clone(),
+            OpTxEnvelope::Eip2930(tx) => tx.signature().clone(),
+            OpTxEnvelope::Eip1559(tx) => tx.signature().clone(),
+            OpTxEnvelope::Eip7702(tx) => tx.signature().clone(),
+            OpTxEnvelope::Deposit(_) => Signature::new(U256::ZERO, U256::ZERO, false),
+            _ => unreachable!(),
+        };
+        Self::new(envelope.into(), signature)
     }
 }
 

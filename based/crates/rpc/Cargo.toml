@@ -9,11 +9,9 @@ bop-common.workspace = true
 bop-db.workspace = true
 alloy-primitives.workspace = true
 op-alloy-rpc-types-engine.workspace = true
-alloy-rlp.workspace = true
 alloy-rpc-types.workspace = true
 
 tokio.workspace = true
 tracing.workspace = true
 
-eyre.workspace = true
 jsonrpsee.workspace = true

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_rpc_types::Block;
+use alloy_consensus::Block;
 use bop_common::{
     actor::Actor,
     communication::{
@@ -11,6 +11,8 @@ use bop_common::{
 };
 use bop_db::BopDbRead;
 use bop_pool::transaction::pool::TxPool;
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives::BlockWithSenders;
 use revm_primitives::db::DatabaseRef;
 use tokio::runtime::Runtime;
 use tracing::info;
@@ -27,8 +29,10 @@ pub struct Sequencer<Db> {
 
     /// Used for fetching blocks from the RPC when our db is behind the chain head.
     /// Blocks are fetched async and returned to the sequencer through this channel.
-    sender_fetch_blocks_to_sequencer: crossbeam_channel::Sender<Result<Block, reqwest::Error>>,
-    receiver_fetch_blocks_to_sequencer: crossbeam_channel::Receiver<Result<Block, reqwest::Error>>,
+    sender_fetch_blocks_to_sequencer:
+        crossbeam_channel::Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    receiver_fetch_blocks_to_sequencer:
+        crossbeam_channel::Receiver<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
 }
 
 impl<Db: DatabaseRef> Sequencer<Db> {

@@ -1,11 +1,19 @@
 use std::time::Duration;
 
-use alloy_rpc_types::Block;
+use alloy_consensus::Block;
+use alloy_rpc_types::Block as RpcBlock;
 use bop_common::rpc::{RpcParam, RpcRequest, RpcResponse};
 use crossbeam_channel::Sender;
 use futures::future::join_all;
+use op_alloy_consensus::OpTxEnvelope;
 use reqwest::Client;
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives::BlockWithSenders;
+use reth_primitives_traits::SignedTransaction;
 use tokio::{runtime::Runtime, task::JoinHandle};
+
+#[allow(unused)]
+pub(crate) const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
 
 /// Fetches a range of blocks sends them through the channel.
 ///
@@ -13,11 +21,11 @@ use tokio::{runtime::Runtime, task::JoinHandle};
 /// and pushed in that order to the block sync.
 ///
 /// curr_block/end_block are inclusive
-pub fn fetch_blocks_and_send_sequentially(
+pub(crate) fn fetch_blocks_and_send_sequentially(
     curr_block: u64,
     end_block: u64,
     url: String,
-    block_sender: Sender<Result<Block, reqwest::Error>>,
+    block_sender: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
     runtime: &Runtime,
 ) -> JoinHandle<()> {
     runtime.spawn(async move {
@@ -25,11 +33,11 @@ pub fn fetch_blocks_and_send_sequentially(
     })
 }
 
-async fn async_fetch_blocks_and_send_sequentially(
+pub(crate) async fn async_fetch_blocks_and_send_sequentially(
     mut curr_block: u64,
     end_block: u64,
     url: String,
-    block_sender: Sender<Result<Block, reqwest::Error>>,
+    block_sender: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
 ) {
     const BATCH_SIZE: u64 = 20;
 
@@ -40,7 +48,8 @@ async fn async_fetch_blocks_and_send_sequentially(
         let batch_end = (curr_block + BATCH_SIZE - 1).min(end_block);
         let futures = (curr_block..=batch_end).map(|i| fetch_block(i, &client, &url));
 
-        let mut blocks: Vec<Result<Block, reqwest::Error>> = join_all(futures).await;
+        let mut blocks: Vec<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>> =
+            join_all(futures).await;
 
         // If any fail, send them first so block sync can handle errors.
         blocks.sort_unstable_by_key(|res| res.as_ref().map_or(0, |block| block.header.number));
@@ -54,7 +63,11 @@ async fn async_fetch_blocks_and_send_sequentially(
     tracing::info!("Fetching and sending blocks done. Last fetched block: {}", curr_block - 1);
 }
 
-async fn fetch_block(block_number: u64, client: &Client, url: &str) -> Result<Block, reqwest::Error> {
+pub(crate) async fn fetch_block(
+    block_number: u64,
+    client: &Client,
+    url: &str,
+) -> Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error> {
     const MAX_RETRIES: u32 = 10;
 
     let r = RpcRequest {
@@ -68,8 +81,8 @@ async fn fetch_block(block_number: u64, client: &Client, url: &str) -> Result<Bl
     let mut backoff_ms = 10;
     let mut last_err = None;
     for retry in 0..MAX_RETRIES {
-        match req.try_clone().unwrap().send().await?.json::<RpcResponse<Block>>().await {
-            Ok(block) => return Ok(block.result),
+        match req.try_clone().unwrap().send().await?.json::<RpcResponse<RpcBlock<OpTxEnvelope>>>().await {
+            Ok(block) => return Ok(convert_block(block.result)),
             Err(err) => {
                 tracing::warn!(
                     error=?err,
@@ -87,35 +100,72 @@ async fn fetch_block(block_number: u64, client: &Client, url: &str) -> Result<Bl
     Err(last_err.unwrap())
 }
 
+/// Converts an RPC block with OpTxEnvelope transactions to a consensus block with OpTransactionSigned
+pub fn convert_block(block: RpcBlock<OpTxEnvelope>) -> BlockWithSenders<Block<OpTransactionSigned>> {
+    // First convert the block to consensus format
+    let consensus_block = block.into_consensus();
+
+    // Now convert the transactions
+    let mut recovery_buf = Vec::with_capacity(200);
+    let (converted_txs, senders): (Vec<_>, Vec<_>) = consensus_block
+        .body
+        .transactions
+        .into_iter()
+        .map(|tx| {
+            let signed_tx = OpTransactionSigned::from_envelope(tx);
+            recovery_buf.clear(); // Reuse buffer for next transaction
+            let sender = signed_tx
+                .recover_signer_unchecked_with_buf(&mut recovery_buf)
+                .expect("transaction signature must be valid");
+            (signed_tx, sender)
+        })
+        .unzip();
+
+    let block = Block {
+        header: consensus_block.header,
+        body: alloy_consensus::BlockBody {
+            transactions: converted_txs,
+            ommers: consensus_block.body.ommers,
+            withdrawals: consensus_block.body.withdrawals,
+        },
+    };
+
+    BlockWithSenders::new_unchecked(block, senders)
+}
+
 #[cfg(test)]
 mod tests {
     use crossbeam_channel::bounded;
 
     use super::*;
 
-    const TEST_RPC_URL: &str = "https://ethereum-rpc.publicnode.com";
-
     #[tokio::test]
     async fn test_single_block_fetch() {
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
 
-        let block = fetch_block(21732902, &client, TEST_RPC_URL).await.unwrap();
+        let block = fetch_block(25738473, &client, TEST_BASE_RPC_URL).await.unwrap();
 
-        assert_eq!(block.header.number, 21732902);
-        assert_eq!(block.header.hash.to_string(), "0xd1ffce2d95bb99bd57ce36dd88757136583b0572acbc04ec8704e6a769b926e6");
+        assert_eq!(block.header.number, 25738473);
+        assert_eq!(
+            block.header.hash_slow().to_string(),
+            "0xad9e6c25e60e711e5e99684892848adc06d44b1cc0e5056b06fcead6c7eb6186"
+        );
+
+        assert!(!block.body.transactions.is_empty());
+        assert!(block.body.transactions.first().unwrap().is_deposit());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_batch_fetch_ordering() {
         let (sender, receiver) = bounded(100);
 
-        let start_block = 21732880;
-        let end_block = 21732900;
+        let start_block = 25738473;
+        let end_block = 25738483;
 
         tokio::spawn(async_fetch_blocks_and_send_sequentially(
             start_block,
             end_block,
-            TEST_RPC_URL.to_string(),
+            TEST_BASE_RPC_URL.to_string(),
             sender,
         ));
 

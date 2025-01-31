@@ -7,12 +7,9 @@ rust-version.workspace = true
 [dependencies]
 bop-common.workspace = true
 alloy-primitives.workspace = true
-tracing.workspace = true
 
 # revm
 revm-primitives.workspace = true
 
 # data structures
 rustc-hash.workspace = true
-
-

@@ -42,13 +42,19 @@ alloy-provider = "0.9.2"
 alloy-signer = "0.9.2"
 alloy-signer-local = "0.9.2"
 alloy-network = "0.9.2"
+alloy-transport = { version = "0.9.2" }
 
 # op
 op-alloy-rpc-types-engine = { version =  "0.9.0", default-features = false }
 op-alloy-consensus = { version = "=0.9.0", default-features = false, features = ["k256"] } 
+op-alloy-rpc-types = { version = "0.9.0" }
 
 # reth
 reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
+reth-evm = { path = "../reth/crates/evm" }
+reth-primitives = { path = "../reth/crates/primitives" }
+reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
+reth-consensus = { path = "../reth/crates/consensus/consensus" }
 
 # reth-db
 reth-revm = { path = "../reth/crates/revm" }
@@ -56,9 +62,11 @@ reth-chain-state = { path = "../reth/crates/chain-state" }
 
 # reth op
 reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
+reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
+reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
 reth-optimism-node = { path = "../reth/crates/optimism/node", features = ["optimism"] }
 reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = ["optimism"] }
-reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
+reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
 
 # revm
 revm-primitives = { version = "15.1.0", features = [
