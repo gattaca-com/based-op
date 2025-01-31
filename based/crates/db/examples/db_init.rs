@@ -5,7 +5,8 @@ use bop_db::{BopDB, BopDbRead};
 use revm_primitives::{db::DatabaseRef, Account};
 
 fn main() {
-    let db_dir = "/Users/vladimir/data";
+    let args = std::env::args().collect::<Vec<_>>();
+    let db_dir = args[1].as_str();
     let db = bop_db::init_database(db_dir, 10_000, 100_000).expect("Failed to init DB");
     let db_ro = db.readonly().expect("failed to get readonly DB");
     let addr = Address::from_str("0x8344fe2D13b7abCad95CFF08e4E9a070365C1309").unwrap();
