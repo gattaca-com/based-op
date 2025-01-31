@@ -45,7 +45,7 @@ impl ReadCaches {
             .or_try_insert_with(|| {
                 let (address, index) = key;
                 let mut cursor = tx.cursor_dup_read::<PlainStorageState>().map_err(Error::ReadTransactionError)?;
-                let storage_key = util::index_to_storage_key(&index);
+                let storage_key = util::index_to_storage_key(index);
                 match cursor.seek_by_key_subkey(*address, storage_key).map_err(Error::ReadTransactionError)? {
                     Some(entry) if entry.key == storage_key => Ok(entry.value),
                     _ => Ok(U256::default()),
