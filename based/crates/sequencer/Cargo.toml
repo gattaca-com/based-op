@@ -22,6 +22,7 @@ op-alloy-consensus.workspace = true
 reth-evm.workspace = true
 reth-primitives.workspace = true
 reth-primitives-traits.workspace = true
+reth-consensus.workspace = true
 
 # reth op
 reth-optimism-evm.workspace = true
@@ -42,6 +43,9 @@ tracing.workspace = true
 # networking
 reqwest.workspace = true
 crossbeam-channel.workspace = true
+
+# misc
+thiserror.workspace = true
 
 # tmp here so that the the compiler picks up the reth op crates
 reth-optimism-node.workspace = true
