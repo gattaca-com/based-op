@@ -40,7 +40,7 @@ impl Transaction {
             OpTxEnvelope::Eip1559(tx) => &tx.tx().nonce,
             OpTxEnvelope::Eip7702(tx) => &tx.tx().nonce,
             OpTxEnvelope::Deposit(_) => &0,
-            _ => todo!(),
+            _ => unreachable!(),
         }
     }
 
@@ -67,7 +67,7 @@ impl Transaction {
         env.gas_priority_fee = self.max_priority_fee_per_gas().map(U256::from);
         env.transact_to = self.to().into();
         env.value = self.value();
-        env.data = revm::primitives::Bytes::from_iter(self.input().iter());
+        env.data = self.input().clone();
         env.chain_id = self.chain_id();
         env.nonce = Some(self.nonce());
         env.access_list = self.access_list().cloned().unwrap_or_default().0;

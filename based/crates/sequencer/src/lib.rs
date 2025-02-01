@@ -88,7 +88,7 @@ pub enum SequencerEvent {
     SimResult(SimulatorToSequencer),
 }
 
-impl<DbRead: Clone> SequencerState<DbRead> {
+impl<DbRead: BopDbRead> SequencerState<DbRead> {
     pub fn start_sorting<Db>(data: &SharedData<Db, DbRead>) -> Self {
         Self::Sorting {
             frag: BuiltFrag::new(CacheDB::new(data.frag_db.clone()), data.config.max_gas),
@@ -233,7 +233,6 @@ impl<Db: BopDB, DbRead: BopDbRead> Actor<DbRead> for Sequencer<Db, DbRead> {
         });
 
         connections.receive(|msg, senders| {
-            info!("received msg from ethapi");
             self.state = std::mem::take(&mut self.state).update(SequencerEvent::NewTx(msg), &mut self.data, senders);
         });
 

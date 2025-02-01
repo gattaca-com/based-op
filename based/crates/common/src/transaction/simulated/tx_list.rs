@@ -19,15 +19,19 @@ impl SimulatedTxList {
     }
 
     pub fn len(&self) -> usize {
-        self.pending.len() + 1
+        self.pending.len() + self.current.is_some() as usize
     }
 
     pub fn hash(&self) -> B256 {
         self.current.as_ref().map(|t| t.tx_hash()).unwrap_or_else(|| self.pending.tx_hash())
     }
 
+    /// Removes the active transaction for the sender from the list.
+    /// Returns true if all transactions for this sender have now been applied.
     pub fn pop(&mut self) -> bool {
+        debug_assert!(self.current.is_some(), "Tried popping on a SimulatedTxList with current None: {self:#?}");
         self.current = None;
+
         self.pending.is_empty()
     }
 

@@ -19,21 +19,20 @@ use revm_primitives::{BlockEnv, SpecId};
 use tracing::info;
 
 pub struct Simulator<'a, Db: DatabaseRef> {
-    id: usize,
     evm: Evm<'a, (), CacheDB<Arc<CacheDB<Db>>>>,
 }
 
 impl<'a, Db: BopDbRead> Simulator<'a, Db> {
-    pub fn create_and_run(connections: SpineConnections<DBFrag<Db>>, db: DBFrag<Db>, id: usize, actor_config: ActorConfig) {
+    pub fn create_and_run(connections: SpineConnections<DBFrag<Db>>, db: DBFrag<Db>, actor_config: ActorConfig) {
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
         let evmconfig = OpEvmConfig::new(chainspec);
         let cache = CacheDB::new(Arc::new(CacheDB::new(db)));
         let evm: Evm<'_, (), _> = evmconfig.evm(cache);
-        Simulator::new(id, evm).run(connections, actor_config);
+        Simulator::new(evm).run(connections, actor_config);
     }
 
-    pub fn new(id: usize, evm: Evm<'a, (), CacheDB<Arc<CacheDB<Db>>>>) -> Self {
-        Self { id, evm }
+    pub fn new(evm: Evm<'a, (), CacheDB<Arc<CacheDB<Db>>>>) -> Self {
+        Self { evm }
     }
 
     fn simulate_tx(&mut self, tx: Arc<Transaction>) -> Result<SimulatedTx, SimulationError> {

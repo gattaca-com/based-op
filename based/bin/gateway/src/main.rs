@@ -53,7 +53,7 @@ fn main() {
             let db_sim = db_read.clone();
             let connections = spine.to_connections(format!("Simulator-{core}"));
             s.spawn(move || {
-                Simulator::create_and_run(connections, db_sim, i, ActorConfig::default());
+                Simulator::create_and_run(connections, db_sim, ActorConfig::default());
             });
         }
     });
