@@ -35,11 +35,11 @@ impl ActorConfig {
 pub trait Actor<Db: Send>: Sized {
     const CORE_AFFINITY: Option<usize> = None;
 
-    fn loop_body(&mut self, _connections: &mut SpineConnections<DBFrag<Db>>) {}
-    fn on_init(&mut self, _connections: &mut SpineConnections<DBFrag<Db>>) {}
-    fn on_exit(self, _connections: &mut SpineConnections<DBFrag<Db>>) {}
+    fn loop_body(&mut self, _connections: &mut SpineConnections<Db>) {}
+    fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {}
+    fn on_exit(self, _connections: &mut SpineConnections<Db>) {}
 
-    fn run(mut self, mut connections: SpineConnections<DBFrag<Db>>, actor_config: ActorConfig) {
+    fn run(mut self, mut connections: SpineConnections<Db>, actor_config: ActorConfig) {
         let name = last_part_of_typename::<Self>();
         let _s = span!(Level::INFO, "", system = last_part_of_typename::<Self>()).entered();
         //TODO: Verify that this doesn't add too much time to the loop

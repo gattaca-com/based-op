@@ -34,7 +34,7 @@ impl TxPool {
         new_tx: Arc<Transaction>,
         db: &DBFrag<Db>,
         base_fee: u64,
-        sim_sender: Option<&SendersSpine<Db>>,
+        sim_sender: &SendersSpine<Db>,
     ) {
         let state_nonce = db.get_nonce(new_tx.sender());
         let nonce = new_tx.nonce();
@@ -85,7 +85,7 @@ impl TxPool {
     }
 
     /// Validates simualted tx. If valid, fetch its TxList and save the new [SimulatedTxList] to `active_txs`.
-    pub fn handle_simulated(&mut self) {
+    pub fn handle_simulated(&mut self,) {
         // TODO: check validity. Success/ correct sim state etc
 
         let simulated_tx: SimulatedTx = todo!();
@@ -104,7 +104,7 @@ impl TxPool {
         mined_txs: &[Arc<Transaction>],
         base_fee: u64,
         db: &DBFrag<Db>,
-        sim_sender: Option<&SendersSpine<Db>>,
+        sim_sender: &SendersSpine<Db>,
     ) {
         // Remove all mined txs from tx pool
         // We loop through backwards for a small efficiency boost here,
@@ -131,21 +131,12 @@ impl TxPool {
     }
 
     /// If this is called with `None` the assumption is that we are not yet ready to send top-of-block sims.
-    fn send_sim_requests_for_tx<Db: BopDbRead>(
-        tx: &Arc<Transaction>,
-        db: &DBFrag<Db>,
-        sim_sender: Option<&SendersSpine<Db>>,
-    ) {
-        if let Some(sim_sender) = sim_sender {
-            // If we had more evms / db messages this isn't strictly needed. Its done to keep sorting db types equivalent with tof db
-            let db =Arc::new(CacheDB::new(db.clone()));
-
-            if let Err(error) = sim_sender
-                .send_timeout(SequencerToSimulator::SimulateTx(db, tx.clone()), Duration::from_millis(10))
-            {
-                tracing::warn!(?error, "couldn't send simulator message");
-                debug_assert!(false, "Couldn't send simulator message");
-            }
+    fn send_sim_requests_for_tx<Db: BopDbRead>(tx: &Arc<Transaction>, db: &DBFrag<Db>, sim_sender: &SendersSpine<Db>) {
+        if let Err(error) =
+            sim_sender.send_timeout(SequencerToSimulator::SimulateTxTof(db.clone(), tx.clone()), Duration::from_millis(10))
+        {
+            tracing::warn!(?error, "couldn't send simulator message");
+            debug_assert!(false, "Couldn't send simulator message");
         }
     }
 

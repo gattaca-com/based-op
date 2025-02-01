@@ -3,9 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types::{Block, BlockId, BlockNumberOrTag, TransactionReceipt};
 use bop_common::{
-    api::EthApiServer,
-    communication::{messages::RpcResult, Sender, Spine},
-    transaction::Transaction,
+    api::EthApiServer, communication::{messages::RpcResult, Sender, Spine}, db::DBFrag, transaction::Transaction
 };
 use bop_common::db::{BopDB, BopDbRead};
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
@@ -13,11 +11,11 @@ use tracing::{error, info, trace, Level};
 
 pub struct EthRpcServer<D> {
     new_order_tx: Sender<Arc<Transaction>>,
-    db: D,
+    db: DBFrag<D>,
 }
 
 impl<D: BopDbRead> EthRpcServer<D> {
-    pub fn new(spine: &Spine<D>, db: D) -> Self {
+    pub fn new(spine: &Spine<D>, db: DBFrag<D>) -> Self {
         Self { new_order_tx: spine.into(), db }
     }
 

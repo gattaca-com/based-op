@@ -6,11 +6,11 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationError},
         Connections, ReceiversSpine, SendersSpine, Spine, SpineConnections, TrackedSenders,
     },
+    db::{BopDB, BopDbRead, DBFrag, DBSorting},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use bop_common::db::{BopDB, BopDbRead, DBFrag, DBSorting};
 use reth_evm::ConfigureEvm;
 use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
 use reth_optimism_evm::OpEvmConfig;
@@ -19,20 +19,26 @@ use revm_primitives::{BlockEnv, SpecId};
 use tracing::info;
 
 pub struct Simulator<'a, Db: DatabaseRef> {
+    /// Top of frag evm
+    evm_tof: Evm<'a, (), CacheDB<Db>>,
+    /// Evm on top of partially built frag
     evm: Evm<'a, (), CacheDB<Arc<CacheDB<Db>>>>,
 }
 
 impl<'a, Db: BopDbRead> Simulator<'a, Db> {
-    pub fn create_and_run(connections: SpineConnections<DBFrag<Db>>, db: DBFrag<Db>, actor_config: ActorConfig) {
+    pub fn create_and_run(connections: SpineConnections<Db>, db: DBFrag<Db>, actor_config: ActorConfig) {
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
         let evmconfig = OpEvmConfig::new(chainspec);
+
+        let cache_tof = CacheDB::new(db.clone());
+        let evm_tof: Evm<'_, (), _> = evmconfig.evm(cache_tof);
         let cache = CacheDB::new(Arc::new(CacheDB::new(db)));
         let evm: Evm<'_, (), _> = evmconfig.evm(cache);
-        Simulator::new(evm).run(connections, actor_config);
+        Simulator::new(evm_tof, evm).run(connections, actor_config);
     }
 
-    pub fn new(evm: Evm<'a, (), CacheDB<Arc<CacheDB<Db>>>>) -> Self {
-        Self { evm }
+    pub fn new(evm_tof: Evm<'a, (), CacheDB<Db>>, evm: Evm<'a, (), CacheDB<Arc<CacheDB<Db>>>>) -> Self {
+        Self { evm, evm_tof }
     }
 
     fn simulate_tx(&mut self, tx: Arc<Transaction>) -> Result<SimulatedTx, SimulationError> {
@@ -61,11 +67,14 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
 impl<Db: BopDbRead> Actor<Db> for Simulator<'_, DBFrag<Db>> {
     const CORE_AFFINITY: Option<usize> = None;
 
-    fn loop_body(&mut self, connections: &mut SpineConnections<DBFrag<Db>>) {
-        connections.receive(|msg: SequencerToSimulator<DBFrag<Db>>, senders| {
+    fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
+        connections.receive(|msg: SequencerToSimulator<Db>, senders| {
             info!("received {}", msg.as_ref());
             match msg {
                 SequencerToSimulator::SimulateTx(_db, tx) => {
+                    todo!()
+                }
+                SequencerToSimulator::SimulateTxTof(_db, tx) => {
                     todo!()
                 }
                 SequencerToSimulator::NewBlock => {

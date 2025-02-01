@@ -220,8 +220,10 @@ pub enum SequencerToSimulator<Db> {
     /// cached block dependent state
     //TODO: Add if anything should be communicated here
     NewBlock,
-    //TODO: add cachedb
+    /// Simulate Tx on top of a partially built frag
     SimulateTx(Arc<CacheDB<DBFrag<Db>>>, Arc<Transaction>),
+    /// Simulate Tx Top of frag
+    SimulateTxTof(DBFrag<Db>, Arc<Transaction>),
 }
 
 #[derive(Clone, Debug)]
@@ -234,8 +236,10 @@ pub struct SimulatorToSequencer {
 #[derive(Clone, Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SimulatorToSequencerMsg {
-    //TODO: changes this to have the SimulatedTxList or so
+    /// During sorting/on top of any state
     Tx(SimulatedTx),
+    /// Specifically on top of top of fragment
+    TxTof(SimulatedTx)
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]

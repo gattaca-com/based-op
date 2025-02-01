@@ -119,12 +119,13 @@ impl<DbRead: BopDbRead> SequencerState<DbRead> {
         mut self,
         tx: Arc<Transaction>,
         data: &mut SharedData<Db, DbRead>,
-        senders: &SendersSpine<DBFrag<DbRead>>,
+        senders: &SendersSpine<DbRead>,
     ) -> Self {
-        todo!()
+        data.tx_pool.handle_new_tx(tx, &data.frag_db, DEFAULT_BASE_FEE, senders);
+        self
     }
 
-    fn handle_sim_result(mut self, result: SimulatorToSequencer, senders: &SendersSpine<DBFrag<DbRead>>) -> Self {
+    fn handle_sim_result(mut self, result: SimulatorToSequencer, senders: &SendersSpine<DbRead>) -> Self {
         match self {
             SequencerState::Sorting { mut frag, until, in_flight_sims, mut next_to_be_applied, tof_snapshot }
                 if in_flight_sims == 0 =>
@@ -141,7 +142,7 @@ impl<DbRead: BopDbRead> SequencerState<DbRead> {
         }
     }
 
-    fn _update<Db>(mut self, data: &mut SharedData<Db, DbRead>, senders: &SendersSpine<DBFrag<DbRead>>) -> Self {
+    fn _update<Db>(mut self, data: &mut SharedData<Db, DbRead>, senders: &SendersSpine<DbRead>) -> Self {
         match self {
             SequencerState::Sorting { frag, until, in_flight_sims, tof_snapshot, next_to_be_applied }
                 if until < Instant::now() =>
@@ -156,7 +157,7 @@ impl<DbRead: BopDbRead> SequencerState<DbRead> {
         mut self,
         event: SequencerEvent,
         data: &mut SharedData<Db, DbRead>,
-        senders: &SendersSpine<DBFrag<DbRead>>,
+        senders: &SendersSpine<DbRead>,
     ) -> Self {
         use SequencerEvent::*;
         match event {
@@ -222,7 +223,7 @@ impl<Db: BopDB, DbRead: BopDbRead> Actor<DbRead> for Sequencer<Db, DbRead> {
 
     fn loop_body(
         &mut self,
-        connections: &mut Connections<SendersSpine<DBFrag<DbRead>>, ReceiversSpine<DBFrag<DbRead>>>,
+        connections: &mut Connections<SendersSpine<DbRead>, ReceiversSpine<DbRead>>,
     ) {
         connections.receive(|msg: SimulatorToSequencer, _| {
             todo!();
@@ -255,7 +256,7 @@ impl<Db: BopDB, DbRead: BopDbRead> Sequencer<Db, DbRead> {
     /// Handles messages from the engine API.
     ///
     /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
-    fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<DBFrag<DbRead>>) {
+    fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<DbRead>) {
         match msg {
             messages::EngineApi::NewPayloadV3 {
                 payload,
