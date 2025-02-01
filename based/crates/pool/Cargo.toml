@@ -12,6 +12,7 @@ tracing.workspace = true
 
 # revm
 revm-primitives.workspace = true
+revm.workspace = true
 
 # data structures
 rustc-hash.workspace = true

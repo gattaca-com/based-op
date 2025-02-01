@@ -175,7 +175,7 @@ mod tests {
         let mut blocks_received = 0;
 
         while let Ok(block_result) = receiver.recv() {
-            let block = block_result.unwrap();
+            let block = block_result.data().as_ref().unwrap();
             blocks_received += 1;
 
             assert!(block.header.number > prev_block_num, "Blocks must be in ascending order");
