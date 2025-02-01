@@ -29,10 +29,10 @@ impl TxPool {
 
     /// Handles an incoming transaction. If the sim_sender is None, the assumption is that we are not yet
     /// ready to send simulation for top of block simulation
-    pub fn handle_new_tx<Db: bop_common::db::BopDbRead>(
+    pub fn handle_new_tx<Db: BopDbRead>(
         &mut self,
         new_tx: Arc<Transaction>,
-        db: &Arc<CacheDB<DBFrag<Db>>>,
+        db: &DBFrag<Db>,
         base_fee: u64,
         sim_sender: Option<&SendersSpine<Db>>,
     ) {
@@ -103,7 +103,7 @@ impl TxPool {
         &mut self,
         mined_txs: &[Arc<Transaction>],
         base_fee: u64,
-        db: &Arc<CacheDB<DBFrag<Db>>>,
+        db: &DBFrag<Db>,
         sim_sender: Option<&SendersSpine<Db>>,
     ) {
         // Remove all mined txs from tx pool
@@ -131,14 +131,17 @@ impl TxPool {
     }
 
     /// If this is called with `None` the assumption is that we are not yet ready to send top-of-block sims.
-    fn send_sim_requests_for_tx<Db: bop_common::db::BopDbRead>(
+    fn send_sim_requests_for_tx<Db: BopDbRead>(
         tx: &Arc<Transaction>,
-        db: &Arc<CacheDB<DBFrag<Db>>>,
+        db: &DBFrag<Db>,
         sim_sender: Option<&SendersSpine<Db>>,
     ) {
         if let Some(sim_sender) = sim_sender {
+            // If we had more evms / db messages this isn't strictly needed. Its done to keep sorting db types equivalent with tof db
+            let db =Arc::new(CacheDB::new(db.clone()));
+
             if let Err(error) = sim_sender
-                .send_timeout(SequencerToSimulator::SimulateTx(db.clone(), tx.clone()), Duration::from_millis(10))
+                .send_timeout(SequencerToSimulator::SimulateTx(db, tx.clone()), Duration::from_millis(10))
             {
                 tracing::warn!(?error, "couldn't send simulator message");
                 debug_assert!(false, "Couldn't send simulator message");
