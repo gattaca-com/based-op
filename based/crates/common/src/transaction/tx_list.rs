@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Deref, slice::Iter, sync::Arc};
+use std::{collections::VecDeque, ops::Deref, sync::Arc};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
 
@@ -64,20 +64,18 @@ impl TxList {
     /// provided nonce that is ready for processing. Only txs with gas_price > base_fee
     /// are included.
     #[inline]
-    pub fn ready(&self, curr_nonce: &mut u64, base_fee: u64) -> Option<Vec<Arc<Transaction>>> {
-        if self.is_empty() || self.peek_nonce().unwrap() > *curr_nonce {
+    pub fn ready(&self, mut curr_nonce: u64, base_fee: u64) -> Option<Self> {
+        if self.is_empty() || self.peek_nonce().unwrap() > curr_nonce {
             return None;
         }
 
-        let mut ready_txs = vec![];
+        let mut ready_txs = Self::default();
         for next_tx in self.iter() {
-            if next_tx.nonce() != *curr_nonce ||
-                next_tx.gas_price_or_max_fee().map_or(false, |price| price < base_fee as u128)
-            {
+            if next_tx.nonce() != curr_nonce || !next_tx.valid_for_block(base_fee) {
                 break;
             }
 
-            *curr_nonce += 1;
+            curr_nonce += 1;
             ready_txs.push(next_tx.clone());
         }
 
@@ -86,6 +84,47 @@ impl TxList {
         }
 
         Some(ready_txs)
+    }
+
+    /// Returns Some(tx) if the next tx is ready for processing.
+    /// Checks ready for processing through:
+    /// 1. nonce == curr_nonce
+    /// 2. gas_price >= base_fee
+    #[inline]
+    pub fn first_ready(&self, curr_nonce: u64, base_fee: u64) -> Option<&Arc<Transaction>> {
+        let Some(next_tx) = self.peek() else {
+            return None;
+        };
+
+        if next_tx.nonce() != curr_nonce || !next_tx.valid_for_block(base_fee) {
+            return None;
+        }
+
+        Some(next_tx)
+    }
+
+    /// Returns whether a specific target nonce can be processed this block.
+    /// Checks for consecutive transactions from curr_nonce up to target_nonce,
+    /// ensuring all transactions in between have sufficient gas price to cover the base fee.
+    #[inline]
+    pub fn nonce_ready(&self, mut curr_nonce: u64, base_fee: u64, target_nonce: u64) -> bool {
+        if target_nonce < curr_nonce {
+            return false;
+        }
+
+        for tx in self.iter() {
+            if tx.nonce() != curr_nonce || !tx.valid_for_block(base_fee) {
+                return false;
+            }
+
+            if curr_nonce == target_nonce {
+                return true;
+            }
+
+            curr_nonce += 1;
+        }
+
+        false
     }
 
     /// Returns effective gas price at base_fee for tx with given nonce, or 0 if not found
@@ -99,6 +138,12 @@ impl TxList {
     #[inline]
     pub fn get(&self, nonce: &u64) -> Option<&Arc<Transaction>> {
         self.txs.binary_search_by_key(nonce, |tx| tx.nonce()).ok().map(|index| &self.txs[index])
+    }
+
+    /// Pushes a transaction onto the end of the list.
+    #[inline]
+    pub fn push(&mut self, tx: Arc<Transaction>) {
+        self.txs.push_back(tx);
     }
 
     pub fn len(&self) -> usize {
@@ -127,8 +172,8 @@ impl TxList {
         self.txs.binary_search_by_key(nonce, |tx| tx.nonce()).is_ok()
     }
 
-    pub(crate) fn front(&self) -> Option<&Arc<Transaction>> {
-        self.txs.front()
+    pub(crate) fn pop_front(&mut self) -> Option<Arc<Transaction>> {
+        self.txs.pop_front()
     }
 }
 

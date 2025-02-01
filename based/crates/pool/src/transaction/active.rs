@@ -1,5 +1,5 @@
 use alloy_primitives::Address;
-use bop_common::transaction::SimulatedTxList;
+use bop_common::transaction::{SimulatedTxList, TxList};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]
@@ -19,7 +19,7 @@ impl Active {
     }
 
     #[inline]
-    pub fn push(&mut self, tx: SimulatedTxList) {
+    pub fn put(&mut self, tx: SimulatedTxList) {
         let sender = tx.sender();
 
         if let Some(&index) = self.senders.get(&sender) {
@@ -60,5 +60,10 @@ impl Active {
     #[inline]
     pub fn num_txs(&self) -> usize {
         self.txs.iter().map(|tx| tx.len()).sum()
+    }
+
+    #[inline]
+    pub fn tx_list_mut(&mut self, sender: &Address) -> Option<&mut SimulatedTxList> {
+        self.senders.get_mut(sender).map(|index| &mut self.txs[*index])
     }
 }

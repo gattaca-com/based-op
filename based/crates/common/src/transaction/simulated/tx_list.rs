@@ -1,12 +1,13 @@
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
+use alloy_consensus::Transaction as AlloyTransactionTrait;
 use revm_primitives::{Address, B256};
 
 use crate::transaction::{simulated::transaction::SimulatedTx, Transaction, TxList};
 
-/// A list of simulated transactions from a single sender.
-/// nonce-sorted, i.e. txs[0].nonce = state[address].nonce + 1.
-/// First is Simulated Top Of Block
+/// Current contains the current active tx for this sender.
+/// i.e., current.nonce = state[address].nonce.
+/// Pending contains all other txs for this sender in nonce order.
 #[derive(Clone, Debug)]
 pub struct SimulatedTxList {
     pub current: Option<SimulatedTx>,
@@ -14,8 +15,36 @@ pub struct SimulatedTxList {
 }
 
 impl SimulatedTxList {
-    pub fn new(current: SimulatedTx, pending: TxList) -> SimulatedTxList {
+    /// Takes a TxList containing all txs for a sender and the simulated tx of the first tx in pending
+    /// and returns a SimulatedTxList.
+    ///
+    /// Will optionally trim the current tx from the pending list.
+    pub fn new(current: SimulatedTx, pending: &TxList) -> SimulatedTxList {
+        let mut pending = pending.clone();
+
+        // Remove current from pending
+        if pending.peek_nonce().is_some_and(|nonce| current.nonce() == nonce) {
+            pending.pop_front();
+        }
+
+        debug_assert!(
+            pending.peek_nonce().map_or(true, |nonce| current.nonce() == nonce + 1),
+            "pending tx list nonce must be consecutive from current"
+        );
+
         SimulatedTxList { current: Some(current), pending }
+    }
+
+    /// Updates the pending tx list.
+    /// Will optionally trim the current tx from the pending list.
+    #[inline]
+    pub fn new_pending(&mut self, mut pending: TxList) {
+        if let Some(current) = &self.current {
+            if pending.peek_nonce().is_some_and(|nonce| current.nonce() == nonce) {
+                pending.pop_front();
+            }
+        }
+        self.pending = pending;
     }
 
     pub fn len(&self) -> usize {
@@ -39,7 +68,11 @@ impl SimulatedTxList {
         if let Some(tx) = &self.current {
             tx.tx.sender
         } else {
-            self.pending.front().as_ref().map(|t| t.sender).unwrap_or_default()
+            self.pending.peek().map(|t| t.sender).unwrap_or_default()
         }
+    }
+
+    pub fn push(&mut self, tx: Arc<Transaction>) {
+        self.pending.push(tx);
     }
 }
