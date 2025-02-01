@@ -1,4 +1,4 @@
-use std::{ops::Deref, slice::Iter, sync::Arc};
+use std::{collections::VecDeque, ops::Deref, slice::Iter, sync::Arc};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
 
@@ -7,7 +7,7 @@ use crate::transaction::Transaction;
 /// A nonce-sorted list of transactions from a single sender.
 #[derive(Clone, Debug, Default)]
 pub struct TxList {
-    txs: Vec<Arc<Transaction>>,
+    txs: VecDeque<Arc<Transaction>>,
 }
 
 impl TxList {
@@ -18,7 +18,7 @@ impl TxList {
         let new_nonce = new_tx.nonce();
 
         if self.txs.is_empty() || self.txs[self.txs.len() - 1].nonce() < new_nonce {
-            self.txs.push(new_tx);
+            self.txs.push_back(new_tx);
             return;
         }
 
@@ -109,34 +109,38 @@ impl TxList {
         self.txs.is_empty()
     }
 
-    pub fn iter(&self) -> Iter<'_, Arc<Transaction>> {
+    pub fn iter(&self) -> impl Iterator<Item = &Arc<Transaction>> {
         self.txs.iter()
     }
 
     /// Returns the nonce of the first transaction in the list
     pub fn peek_nonce(&self) -> Option<u64> {
-        self.txs.first().map(|tx| tx.tx.nonce())
+        self.txs.front().map(|tx| tx.tx.nonce())
     }
 
     /// Returns a reference to the first transaction in the list
     pub fn peek(&self) -> Option<&Arc<Transaction>> {
-        self.txs.first()
+        self.txs.front()
     }
 
     pub fn contains(&self, nonce: &u64) -> bool {
         self.txs.binary_search_by_key(nonce, |tx| tx.nonce()).is_ok()
     }
+
+    pub(crate) fn front(&self) -> Option<&Arc<Transaction>> {
+        self.txs.front()
+    }
 }
 
 impl From<Arc<Transaction>> for TxList {
     fn from(tx: Arc<Transaction>) -> Self {
-        Self { txs: vec![tx] }
+        Self { txs: VecDeque::from(vec![tx]) }
     }
 }
 
 impl From<Vec<Arc<Transaction>>> for TxList {
     fn from(txs: Vec<Arc<Transaction>>) -> Self {
-        Self { txs }
+        Self { txs: VecDeque::from(txs) }
     }
 }
 

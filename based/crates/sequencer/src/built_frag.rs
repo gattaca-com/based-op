@@ -1,0 +1,29 @@
+use std::sync::Arc;
+
+use bop_common::{
+    db::DBFrag,
+    transaction::{SimulatedTx, SimulatedTxList, Transaction},
+};
+use revm::{db::CacheDB, DatabaseCommit};
+
+#[derive(Clone, Debug)]
+pub struct BuiltFrag<DbRead> {
+    pub db: CacheDB<DBFrag<DbRead>>,
+    pub gas_remaining: u64,
+    pub payment: u64,
+    pub txs: Vec<SimulatedTx>,
+    //TODO: bloom receipts etc
+}
+
+impl<DbRead> BuiltFrag<DbRead> {
+    pub fn new(db: CacheDB<DBFrag<DbRead>>, max_gas: u64) -> Self {
+        Self { db, gas_remaining: max_gas, payment: 0, txs: vec![] }
+    }
+
+    pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
+        self.db.commit(tx.take_state());
+        self.payment += tx.payment;
+        self.gas_remaining -= tx.as_ref().result.gas_used();
+        self.txs.push(tx);
+    }
+}

@@ -14,8 +14,7 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 
 use crate::{
-    time::{Duration, IngestionTime, Instant, Nanos},
-    transaction::{SimulatedTx, SimulatedTxList, Transaction},
+    db::DBFrag, time::{Duration, IngestionTime, Instant, Nanos}, transaction::{SimulatedTx, SimulatedTxList, Transaction}
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
@@ -222,7 +221,7 @@ pub enum SequencerToSimulator<Db> {
     //TODO: Add if anything should be communicated here
     NewBlock,
     //TODO: add cachedb
-    SimulateTx(Arc<CacheDB<Db>>, Arc<Transaction>),
+    SimulateTx(Arc<CacheDB<DBFrag<Db>>>, Arc<Transaction>),
 }
 
 #[derive(Clone, Debug)]

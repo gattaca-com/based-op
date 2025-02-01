@@ -5,20 +5,21 @@ use alloy_rpc_types::engine::ForkchoiceState;
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, SimulatorToSequencer},
+        messages::{self, SimulationError, SimulatorToSequencer},
         Connections, ReceiversSpine, SendersSpine,
     },
+    db::{BopDB, BopDbRead, DBFrag, DBSorting},
     time::{Duration, Instant},
-    transaction::Transaction,
+    transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
-use bop_common::db::{BopDB, BopDbRead, DBFrag, DBSorting};
 use bop_pool::transaction::pool::TxPool;
-use built_block::BuiltBlock;
+use built_frag::BuiltFrag;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reth_optimism_node::OpPayloadBuilderAttributes;
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
-use revm_primitives::db::DatabaseRef;
+use revm::db::CacheDB;
+use revm_primitives::{db::DatabaseRef, B256};
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::info;
@@ -26,7 +27,36 @@ use tracing::info;
 use crate::block_sync::fetch_blocks::fetch_blocks_and_send_sequentially;
 
 pub(crate) mod block_sync;
-pub(crate) mod built_block;
+pub(crate) mod built_frag;
+
+#[derive(Clone, Debug, Default)]
+pub struct SortingFragOrders {
+    orders: Vec<SimulatedTxList>,
+}
+
+impl SortingFragOrders {
+    fn len(&self) -> usize {
+        self.orders.len()
+    }
+
+    pub fn remove(&mut self, hash: B256) {
+        for i in (0..self.len() - 1).rev() {
+            let order = &mut self.orders[i];
+            if order.hash() == hash {
+                if order.pop() {
+                    self.orders.swap_remove(i);
+                    return;
+                }
+            }
+        }
+    }
+}
+
+impl<Db, DbRead> From<&SharedData<Db, DbRead>> for SortingFragOrders {
+    fn from(value: &SharedData<Db, DbRead>) -> Self {
+        Self { orders: value.tx_pool.clone_active() }
+    }
+}
 
 #[derive(Clone, Debug, Default, AsRefStr)]
 pub enum SequencerState<DbRead> {
@@ -37,40 +67,16 @@ pub enum SequencerState<DbRead> {
         /// This is the db that is built on top of the last block chunk to be used to
         /// build a new cachedb on top of for sorting
         /// starting a new sort
-        db: DBFrag<DbRead>,
-        block: BuiltBlock,
+        frag: BuiltFrag<DbRead>,
         until: Instant,
+        in_flight_sims: usize,
+        tof_snapshot: SortingFragOrders,
+        next_to_be_applied: Option<SimulatedTx>,
     },
     Syncing {
         /// When the stage reaches this syncing is done
         last_block_number: u64,
     },
-}
-
-impl<DbRead> SequencerState<DbRead> {
-    pub fn update<Db:BopDB>(
-        mut self,
-        event: SequencerEvent,
-        shared_data: &mut SharedData<Db, DbRead>,
-        senders: &SendersSpine<Db>,
-    ) -> Self {
-        use SequencerEvent::*;
-        use SequencerState::*;
-        match (event, self) {
-            (BlockSync(block_with_senders), WaitingForSync) => todo!(),
-            (BlockSync(block_with_senders), WaitingForPayloadAttributes) => todo!(),
-            (BlockSync(block_with_senders), Sorting { db, block, until }) => todo!(),
-            (BlockSync(block_with_senders), Syncing { last_block_number }) => todo!(),
-            (ReceivedPayloadAttribues(op_payload_builder_attributes), WaitingForSync) => todo!(),
-            (ReceivedPayloadAttribues(op_payload_builder_attributes), WaitingForPayloadAttributes) => todo!(),
-            (ReceivedPayloadAttribues(op_payload_builder_attributes), Sorting { db, block, until }) => todo!(),
-            (ReceivedPayloadAttribues(op_payload_builder_attributes), Syncing { last_block_number }) => todo!(),
-            (NewTx(arc), WaitingForSync) => todo!(),
-            (NewTx(arc), WaitingForPayloadAttributes) => todo!(),
-            (NewTx(arc), Sorting { db, block, until }) => todo!(),
-            (NewTx(arc), Syncing { last_block_number }) => todo!(),
-        }
-    }
 }
 
 #[derive(Debug, AsRefStr)]
@@ -79,15 +85,99 @@ pub enum SequencerEvent {
     BlockSync(Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>),
     ReceivedPayloadAttribues(Option<Box<OpPayloadBuilderAttributes>>),
     NewTx(Arc<Transaction>),
+    SimResult(SimulatorToSequencer),
+}
+
+impl<DbRead: Clone> SequencerState<DbRead> {
+    pub fn start_sorting<Db>(data: &SharedData<Db, DbRead>) -> Self {
+        Self::Sorting {
+            frag: BuiltFrag::new(CacheDB::new(data.frag_db.clone()), data.config.max_gas),
+            until: Instant::now() + data.config.frag_duration,
+            in_flight_sims: 0,
+            next_to_be_applied: None,
+            tof_snapshot: data.into(),
+        }
+    }
+
+    fn handle_block_sync<Db>(
+        mut self,
+        block: Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>,
+        data: &mut SharedData<Db, DbRead>,
+    ) -> Self {
+        todo!()
+    }
+
+    fn handle_payload_attributes<Db>(
+        mut self,
+        attributes: Option<Box<OpPayloadBuilderAttributes>>,
+        data: &mut SharedData<Db, DbRead>,
+    ) -> Self {
+        todo!()
+    }
+
+    fn handle_new_tx<Db>(
+        mut self,
+        tx: Arc<Transaction>,
+        data: &mut SharedData<Db, DbRead>,
+        senders: &SendersSpine<DBFrag<DbRead>>,
+    ) -> Self {
+        todo!()
+    }
+
+    fn handle_sim_result(mut self, result: SimulatorToSequencer, senders: &SendersSpine<DBFrag<DbRead>>) -> Self {
+        match self {
+            SequencerState::Sorting { mut frag, until, in_flight_sims, mut next_to_be_applied, tof_snapshot }
+                if in_flight_sims == 0 =>
+            {
+                if let Some(tx_to_apply) = std::mem::take(&mut next_to_be_applied) {
+                    frag.apply_tx(tx_to_apply)
+                }
+                todo!()
+            }
+            s => {
+                debug_assert!(false, "Can't handle SimResult in state {}", s.as_ref());
+                s
+            }
+        }
+    }
+
+    fn _update<Db>(mut self, data: &mut SharedData<Db, DbRead>, senders: &SendersSpine<DBFrag<DbRead>>) -> Self {
+        match self {
+            SequencerState::Sorting { frag, until, in_flight_sims, tof_snapshot, next_to_be_applied }
+                if until < Instant::now() =>
+            {
+                todo!()
+            }
+            _ => self,
+        }
+    }
+
+    pub fn update<Db: BopDB>(
+        mut self,
+        event: SequencerEvent,
+        data: &mut SharedData<Db, DbRead>,
+        senders: &SendersSpine<DBFrag<DbRead>>,
+    ) -> Self {
+        use SequencerEvent::*;
+        match event {
+            BlockSync(block) => self.handle_block_sync(block, data),
+            ReceivedPayloadAttribues(attributes) => self.handle_payload_attributes(attributes, data),
+            NewTx(tx) => self.handle_new_tx(tx, data, senders),
+            SimResult(res) => self.handle_sim_result(res, senders),
+        }
+        ._update(data, senders)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct SequencerConfig {
     frag_duration: Duration,
+    max_gas: u64,
+    n_per_loop: usize,
 }
 impl Default for SequencerConfig {
     fn default() -> Self {
-        Self { frag_duration: Duration::from_millis(200) }
+        Self { frag_duration: Duration::from_millis(200), max_gas: 300_000_000, n_per_loop: 10 }
     }
 }
 
@@ -130,7 +220,10 @@ const DEFAULT_BASE_FEE: u64 = 10;
 impl<Db: BopDB, DbRead: BopDbRead> Actor<DbRead> for Sequencer<Db, DbRead> {
     const CORE_AFFINITY: Option<usize> = Some(0);
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<DBFrag<DbRead>>, ReceiversSpine<DBFrag<DbRead>>>) {
+    fn loop_body(
+        &mut self,
+        connections: &mut Connections<SendersSpine<DBFrag<DbRead>>, ReceiversSpine<DBFrag<DbRead>>>,
+    ) {
         connections.receive(|msg: SimulatorToSequencer, _| {
             todo!();
         });
@@ -139,10 +232,9 @@ impl<Db: BopDB, DbRead: BopDbRead> Actor<DbRead> for Sequencer<Db, DbRead> {
             self.handle_engine_api_message(msg, senders);
         });
 
-        connections.receive(|msg: Arc<Transaction>, senders| {
+        connections.receive(|msg, senders| {
             info!("received msg from ethapi");
-            todo!();
-            // self.tx_pool.handle_new_tx(msg, &self.db, DEFAULT_BASE_FEE, Some(senders));
+            self.state = std::mem::take(&mut self.state).update(SequencerEvent::NewTx(msg), &mut self.data, senders);
         });
 
         connections.receive(|msg, _| {
