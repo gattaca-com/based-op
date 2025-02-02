@@ -87,7 +87,7 @@ impl TxPool {
     /// Validates simualted tx. If valid, fetch its TxList and save the new [SimulatedTxList] to `active_txs`.
     pub fn handle_simulated(&mut self, simulated_tx: SimulatedTx) {
         if !simulated_tx.result_and_state.result.is_success() {
-            //TODO: @George is it correct that we should remove all the txs if tof fails?
+            //TODO: @Guys is it correct that we should remove all the txs if tof fails?
             // or should we just wait till maybe a later stage
             self.remove(simulated_tx.sender_ref())
         }
@@ -105,13 +105,7 @@ impl TxPool {
         let _ = self.pool_data.remove(sender);
     }
 
-    fn handle_new_block<Db: BopDbRead>(
-        &mut self,
-        mined_txs: &[Arc<Transaction>],
-        base_fee: u64,
-        db: &DBFrag<Db>,
-        sim_sender: &SendersSpine<Db>,
-    ) {
+    pub fn handle_new_block(&mut self, mined_txs: &[Arc<Transaction>], base_fee: u64) {
         // Remove all mined txs from tx pool
         // We loop through backwards for a small efficiency boost here,
         // forward removes all nonces for sender lower than start so if a sender
@@ -128,12 +122,13 @@ impl TxPool {
         self.active_txs.clear();
 
         // Send next nonce for each active sender to simulator
-        for (sender, sender_txs) in self.pool_data.iter() {
-            let db_nonce = db.get_nonce(*sender);
-            if let Some(first_tx) = sender_txs.first_ready(db_nonce, base_fee) {
-                TxPool::send_sim_requests_for_tx(first_tx, db, sim_sender);
-            }
-        }
+        // TODO: this should only be done when the sort starts
+        // for (sender, sender_txs) in self.pool_data.iter() {
+        //     let db_nonce = db.get_nonce(*sender);
+        //     if let Some(first_tx) = sender_txs.first_ready(db_nonce, base_fee) {
+        //         TxPool::send_sim_requests_for_tx(first_tx, db, sim_sender);
+        //     }
+        // }
     }
 
     /// If this is called with `None` the assumption is that we are not yet ready to send top-of-block sims.

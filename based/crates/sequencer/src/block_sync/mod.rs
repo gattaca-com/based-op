@@ -191,18 +191,6 @@ impl BlockSync {
 
         Ok(BlockExecutionOutput { state, receipts, requests, gas_used })
     }
-
-    pub(crate) fn fetch_until_last<Db: BopDbRead>(
-        &self,
-        last_block_number: u64,
-        senders: &SendersSpine<Db>,
-    ) -> Result<Option<u64>, BlockSyncError> {
-        todo!()
-    }
-
-    pub(crate) fn last_block_number(&self) -> u64 {
-        todo!()
-    }
 }
 
 #[cfg(test)]

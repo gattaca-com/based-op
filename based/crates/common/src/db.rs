@@ -11,9 +11,12 @@ use parking_lot::RwLock;
 use reth_db::DatabaseEnv;
 use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
-use reth_provider::ProviderFactory;
+use reth_provider::{ProviderError, ProviderFactory};
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::{BundleState, CacheDB};
+use revm::{
+    db::{BundleState, CacheDB},
+    Database,
+};
 use revm_primitives::{
     db::{DatabaseCommit, DatabaseRef},
     Account, AccountInfo, Address, Bytecode, EvmState, HashMap, U256,
@@ -30,6 +33,7 @@ use block::BlockDB;
 use cache::ReadCaches;
 pub use error::Error;
 pub use init::init_database;
+use strum_macros::AsRefStr;
 pub use util::state_changes_to_bundle_state;
 
 /// Database trait for all DB operations.
@@ -82,7 +86,6 @@ pub struct DBFrag<Db> {
     db: Arc<RwLock<CacheDB<Db>>>,
     unique_hash: B256,
 }
-
 impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
@@ -256,6 +259,39 @@ impl BopDbRead for DB {
     }
 
     fn block_number(&self) -> Result<u64, Error> {
+        todo!()
+    }
+}
+
+pub enum DBError {}
+// these two are needed for blocksync
+impl std::fmt::Display for DBError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+impl Into<ProviderError> for DBError {
+    fn into(self) -> ProviderError {
+        todo!()
+    }
+}
+// also this
+impl Database for DB {
+    type Error = DBError;
+
+    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        todo!()
+    }
+
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        todo!()
+    }
+
+    fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        todo!()
+    }
+
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
         todo!()
     }
 }

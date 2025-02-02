@@ -3,10 +3,12 @@ pub mod tx_list;
 
 use std::ops::Deref;
 
-use alloy_consensus::{Transaction as TransactionTrait, TxEip1559};
+use alloy_consensus::{SignableTransaction, Transaction as TransactionTrait, TxEip1559};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, Bytes, B256, U256};
 use op_alloy_consensus::{DepositTransaction, OpTxEnvelope};
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives_traits::SignedTransaction;
 use revm_primitives::{OptimismFields, TxEnv, TxKind};
 pub use simulated::{SimulatedTx, SimulatedTxList};
 pub use tx_list::TxList;
@@ -22,6 +24,10 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    pub fn new(tx: OpTxEnvelope, sender: Address) -> Self {
+        Self { tx, sender }
+    }
+
     #[inline]
     pub fn sender(&self) -> Address {
         self.sender
@@ -145,5 +151,28 @@ impl From<&Transaction> for OptimismFields {
         } else {
             Self::default()
         }
+    }
+}
+
+impl From<OpTransactionSigned> for Transaction {
+    fn from(value: OpTransactionSigned) -> Self {
+        let sender = value.recover_signer().expect("could not recover signer");
+        let signature = value.signature;
+        let tx = match value.transaction {
+            op_alloy_consensus::OpTypedTransaction::Legacy(tx_legacy) => {
+                OpTxEnvelope::Legacy(tx_legacy.into_signed(signature))
+            }
+            op_alloy_consensus::OpTypedTransaction::Eip2930(tx_eip2930) => {
+                OpTxEnvelope::Eip2930(tx_eip2930.into_signed(signature))
+            }
+            op_alloy_consensus::OpTypedTransaction::Eip1559(tx_eip1559) => {
+                OpTxEnvelope::Eip1559(tx_eip1559.into_signed(signature))
+            }
+            op_alloy_consensus::OpTypedTransaction::Eip7702(tx_eip7702) => {
+                OpTxEnvelope::Eip7702(tx_eip7702.into_signed(signature))
+            }
+            op_alloy_consensus::OpTypedTransaction::Deposit(_) => OpTxEnvelope::Deposit(todo!()),
+        };
+        Self { tx, sender }
     }
 }
