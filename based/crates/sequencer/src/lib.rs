@@ -2,10 +2,11 @@ use std::{ops::Deref, sync::Arc};
 
 use alloy_consensus::Block;
 use alloy_rpc_types::engine::ForkchoiceState;
+use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, SequencerToSimulator, SimulationError, SimulatorToSequencer},
+        messages::{self, BlockSyncMessage, SequencerToSimulator, SimulationError, SimulatorToSequencer},
         Connections, ReceiversSpine, SendersSpine, TrackedSenders,
     },
     db::{BopDB, BopDbRead, DBFrag, DBSorting},
@@ -15,6 +16,8 @@ use bop_common::{
 use bop_pool::transaction::pool::TxPool;
 use built_frag::BuiltFrag;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
+use reqwest::Url;
+use reth_optimism_chainspec::OpChainSpecBuilder;
 use reth_optimism_node::OpPayloadBuilderAttributes;
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
@@ -24,7 +27,6 @@ use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, info, warn, Instrument};
 
-use crate::block_sync::fetch_blocks::fetch_blocks_and_send_sequentially;
 
 pub(crate) mod block_sync;
 pub(crate) mod built_frag;
@@ -152,7 +154,7 @@ pub enum SequencerState<Db: BopDB> {
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SequencerEvent<Db: BopDbRead> {
-    BlockSync(Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>),
+    BlockSync(BlockSyncMessage),
     ReceivedPayloadAttribues(Option<Box<OpPayloadBuilderAttributes>>),
     NewTx(Arc<Transaction>),
     SimResult(SimulatorToSequencer<Db>),
@@ -165,10 +167,15 @@ impl<Db: BopDB> SequencerState<Db> {
 
     fn handle_block_sync(
         mut self,
-        block: Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>,
+        block: BlockSyncMessage,
         data: &mut SharedData<Db>,
     ) -> Self {
-        todo!()
+        let Ok(block) = block else {
+            todo!("handle block sync error");
+
+        };
+        todo!("implement applying block as Db does not implement BopDbRead");
+        // data.block_executor.apply_and_commit_block(block, data.db)
     }
 
     fn handle_payload_attributes(
@@ -280,15 +287,16 @@ impl<Db: BopDB> SequencerState<Db> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct SequencerConfig {
     frag_duration: Duration,
     max_gas: u64,
     n_per_loop: usize,
+    rpc_url: Url,
 }
 impl Default for SequencerConfig {
     fn default() -> Self {
-        Self { frag_duration: Duration::from_millis(200), max_gas: 300_000_000, n_per_loop: 10 }
+        Self { frag_duration: Duration::from_millis(200), max_gas: 300_000_000, n_per_loop: 10, rpc_url: todo!() }
     }
 }
 
@@ -297,7 +305,7 @@ pub struct SharedData<Db: BopDB> {
     tx_pool: TxPool,
     db: Db,
     frag_db: DBFrag<Db::ReadOnly>,
-    runtime: Arc<Runtime>,
+    block_executor: BlockSync,
     config: SequencerConfig,
     fork_choice_state: ForkchoiceState,
     payload_attributes: Box<OpPayloadAttributes>,
@@ -317,7 +325,11 @@ impl<Db: BopDB> Sequencer<Db> {
             data: SharedData {
                 db,
                 frag_db,
-                runtime,
+                block_executor: BlockSync::new(
+                    Arc::new(OpChainSpecBuilder::base_mainnet().build()),
+                    runtime,
+                    config.rpc_url.clone(),
+                ),
                 config,
                 tx_pool: Default::default(),
                 fork_choice_state: Default::default(),
@@ -348,61 +360,26 @@ impl<Db: BopDB> Actor<Db::ReadOnly> for Sequencer<Db> {
             self.state = std::mem::take(&mut self.state).update(SequencerEvent::NewTx(msg), &mut self.data, senders);
         });
 
-        connections.receive(|msg, _| {
+        connections.receive(|msg, senders| {
             // Process blocks as they arrive
-            self.handle_block(msg);
+            self.state = std::mem::take(&mut self.state).update(SequencerEvent::BlockSync(msg), &mut self.data, senders);
         });
     }
 }
 
 impl<Db: BopDB> Sequencer<Db> {
-    fn handle_block(&mut self, block_result: Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>) {
-        let block = block_result.expect("failed to fetch block");
-        todo!()
-        // if block.header.number == payload_block_number - 1 {
-        //     //TODO: switch in or out of block sync state
-        // }
-    }
-
     /// Handles messages from the engine API.
     ///
     /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
     fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<Db::ReadOnly>) {
         match msg {
             messages::EngineApi::NewPayloadV3 {
-                payload: _,
+                payload,
                 versioned_hashes: _,
                 parent_beacon_block_root: _,
                 res_tx: _,
             } => {
-                let seq_block_number = payload.payload_inner.payload_inner.block_number; // TODO: this should be accessible from the DB
-                let payload_block_number = payload.payload_inner.payload_inner.block_number;
-
-                if payload_block_number <= seq_block_number {
-                    tracing::debug!(
-                        "ignoring old payload for block {} because sequencer is at {}",
-                        payload_block_number,
-                        seq_block_number
-                    );
-                    return;
-                }
-
-                if payload_block_number > seq_block_number + 1 {
-                    tracing::info!(
-                        "sequencer is behind, fetching blocks from {} to {}",
-                        seq_block_number + 1,
-                        payload_block_number
-                    );
-
-                    fetch_blocks_and_send_sequentially(
-                        seq_block_number + 1,
-                        payload_block_number - 1,
-                        "TODO".to_string(),
-                        senders.into(),
-                        &self.data.runtime,
-                    );
-                }
-
+                todo!("fetch blocks")
                 // TODO: apply new payload
             }
             messages::EngineApi::ForkChoiceUpdatedV3 { fork_choice_state: _, payload_attributes: _, res_tx: _ } => {}

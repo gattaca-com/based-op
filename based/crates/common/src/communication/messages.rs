@@ -4,9 +4,12 @@ use std::{
 };
 
 use alloy_primitives::B256;
-use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
+use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadError, PayloadId, PayloadStatus};
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use reth_evm::execute::BlockExecutionError;
+use reth_optimism_primitives::OpBlock;
+use reth_primitives::BlockWithSenders;
 use revm::{db::CacheDB, DatabaseRef};
 use revm_primitives::{Address, EVMError};
 use serde::{Deserialize, Serialize};
@@ -269,3 +272,19 @@ pub enum SimulationError<DbError> {
 
 #[derive(Clone, Copy, Debug, PartialEq, AsRefStr)]
 pub enum SequencerToExternal {}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BlockSyncError {
+    #[error("Block fetch failed: {0}")]
+    Fetch(#[from] reqwest::Error),
+    #[error("Block execution failed: {0}")]
+    Execution(#[from] BlockExecutionError),
+    #[error("DB error: {0}")]
+    BopDb(#[from] crate::db::Error),
+    #[error("Payload error: {0}")]
+    Payload(#[from] PayloadError),
+    #[error("Failed to recover transaction signer")]
+    SignerRecovery,
+}
+
+pub type BlockSyncMessage = Result<BlockWithSenders<OpBlock>, BlockSyncError>;

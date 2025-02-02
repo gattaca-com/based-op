@@ -1,8 +1,8 @@
 use std::{fs::read_dir, path::Path, sync::Arc};
 
 use alloy_consensus::Block;
-use messages::{SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
-use reth_optimism_primitives::OpTransactionSigned;
+use messages::{BlockSyncMessage, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
+use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
 use shared_memory::ShmemError;
 use thiserror::Error;
@@ -191,9 +191,9 @@ pub struct Spine<Db: BopDbRead> {
     sender_eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     receiver_eth_rpc_to_sequencer: CrossBeamReceiver<Arc<Transaction>>,
 
-    sender_blockfetch_to_sequencer: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    sender_blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     receiver_blockfetch_to_sequencer:
-        CrossBeamReceiver<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+        CrossBeamReceiver<BlockSyncMessage>,
 }
 
 impl<Db: BopDbRead> Default for Spine<Db> {
@@ -266,7 +266,7 @@ from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator);
 from_spine!(SequencerToExternal, sequencer_to_rpc);
 from_spine!(messages::EngineApi, engine_rpc_to_sequencer);
 from_spine!(Arc<Transaction>, eth_rpc_to_sequencer);
-from_spine!(Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>, blockfetch_to_sequencer);
+from_spine!(BlockSyncMessage, blockfetch_to_sequencer);
 
 //TODO: remove allow dead code
 #[allow(dead_code)]
@@ -277,7 +277,7 @@ pub struct SendersSpine<Db: BopDbRead> {
     simulator_to_sequencer: Sender<SimulatorToSequencer<Db>>,
     engine_rpc_to_sequencer: Sender<messages::EngineApi>,
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
-    blockfetch_to_sequencer: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     timestamp: IngestionTime,
 }
 
@@ -312,7 +312,7 @@ pub struct ReceiversSpine<Db: BopDbRead> {
     sequencer_to_rpc: Receiver<SequencerToExternal>,
     engine_rpc_to_sequencer: Receiver<messages::EngineApi>,
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
-    blockfetch_to_sequencer: Receiver<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
 }
 
 impl<Db: BopDbRead> ReceiversSpine<Db> {

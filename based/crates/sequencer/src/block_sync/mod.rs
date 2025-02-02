@@ -8,9 +8,15 @@ use std::{
 
 use alloy_consensus::Block;
 use alloy_rpc_types::engine::{ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, PayloadError};
-use bop_common::communication::messages::EngineApi;
-use bop_db::{BopDB, BopDbRead};
+use bop_common::{
+    communication::{
+        messages::{BlockSyncError, BlockSyncMessage, EngineApi},
+        SendersSpine,
+    },
+    db::{BopDB, BopDbRead},
+};
 use crossbeam_channel::{Receiver, Sender};
+use fetch_blocks::async_fetch_blocks_and_send_sequentially;
 use op_alloy_consensus::OpTxEnvelope;
 use reqwest::{Client, Url};
 use reth_consensus::ConsensusError;
@@ -26,22 +32,19 @@ use reth_primitives_traits::SignedTransaction;
 use revm::{db::DbAccount, Database, DatabaseRef};
 use tokio::runtime::Runtime;
 
-use crate::fetch_blocks_and_send_sequentially;
 
 pub(crate) mod fetch_blocks;
 
-#[derive(Debug, thiserror::Error)]
-pub enum BlockSyncError {
-    #[error("Block fetch failed: {0}")]
-    Fetch(#[from] reqwest::Error),
-    #[error("Block execution failed: {0}")]
-    Execution(#[from] BlockExecutionError),
-    #[error("DB error: {0}")]
-    BopDb(#[from] bop_db::Error),
-    #[error("Payload error: {0}")]
-    Payload(#[from] PayloadError),
-    #[error("Failed to recover transaction signer")]
-    SignerRecovery,
+fn payload_to_block(payload: ExecutionPayload, sidecar: ExecutionPayloadSidecar) -> BlockSyncMessage {
+    let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
+    let block_senders = block
+        .body
+        .transactions
+        .iter()
+        .map(|tx| tx.recover_signer_unchecked())
+        .collect::<Option<Vec<_>>>()
+        .ok_or(BlockSyncError::SignerRecovery)?;
+    Ok(BlockWithSenders { block, senders: block_senders })
 }
 
 #[derive(Debug, Clone)]
@@ -52,45 +55,36 @@ pub struct BlockSync {
 
     /// Used to fetch blocks from an EL node.
     rpc_url: Url,
-
-    /// Used for fetching blocks from the RPC when our db is behind the chain head.
-    /// Blocks are fetched async and returned to `BlockSync` through this channel.
-    sender_fetch_blocks_to_sequencer: Sender<Result<BlockWithSenders<OpBlock>, reqwest::Error>>,
-    receiver_fetch_blocks_to_sequencer: Receiver<Result<BlockWithSenders<OpBlock>, reqwest::Error>>,
 }
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
     pub fn new(chain_spec: Arc<OpChainSpec>, runtime: Arc<Runtime>, rpc_url: Url) -> Self {
         let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
-        let (sender_fetch_blocks_to_sequencer, receiver_fetch_blocks_to_sequencer) = crossbeam_channel::bounded(1_000);
-        Self {
-            chain_spec,
-            execution_factory,
-            runtime,
-            rpc_url,
-            sender_fetch_blocks_to_sequencer,
-            receiver_fetch_blocks_to_sequencer,
-        }
+        Self { chain_spec, execution_factory, runtime, rpc_url }
     }
 
     /// Processes a new execution payload from the engine API.
     /// Commits changes to the database.
     ///
     /// Fetches blocks from the RPC if the sequencer is behind the chain head.
-    pub fn apply_new_payload<DB>(
+    pub fn apply_new_payload<DB, DbRead>(
         &mut self,
         payload: ExecutionPayload,
         sidecar: ExecutionPayloadSidecar,
         db: DB,
+        senders: &SendersSpine<DbRead>,
     ) -> Result<(), BlockSyncError>
     where
         DB: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
+        DbRead: BopDbRead,
     {
         let start = Instant::now();
 
         let payload_block_number = payload.block_number();
-        let db_block_head = db.block_number()?;
+        let cur_block = payload_to_block(payload, sidecar);
+        todo!();
+        let db_block_head = 0; /* db.block_number()? */
         tracing::info!("handling new payload for block number: {payload_block_number}, db_block_head: {db_block_head}");
 
         // This case occurs when the sequencer is behind the chain head.
@@ -103,48 +97,28 @@ impl BlockSync {
                 "sequencer is behind, fetching blocks"
             );
 
-            fetch_blocks_and_send_sequentially(
+            self.runtime.spawn(async_fetch_blocks_and_send_sequentially(
                 db_block_head + 1,
                 payload_block_number - 1,
                 self.rpc_url.clone(),
-                self.sender_fetch_blocks_to_sequencer.clone(),
-                &self.runtime,
-            );
-
-            // Apply and commit blocks as they arrive.
-            // Blocks come in sequentially through the channel.
-            while let Ok(block_result) = self.receiver_fetch_blocks_to_sequencer.try_recv() {
-                let block = block_result?;
-                self.apply_and_commit_block(&block, db.clone());
-                if block.header.number == payload_block_number - 1 {
-                    break;
-                }
-            }
+                senders.into(),
+                Some(cur_block),
+            ));
+        } else {
+            // Apply and commit the payload block.
+            self.apply_and_commit_block(&cur_block?, db)?;
         }
-
-        // Apply and commit the payload block.
-        let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
-        let senders = block
-            .body
-            .transactions
-            .iter()
-            .map(|tx| tx.recover_signer_unchecked())
-            .collect::<Option<Vec<_>>>()
-            .ok_or(BlockSyncError::SignerRecovery)?;
-        let block_with_senders = BlockWithSenders { block, senders };
-        self.apply_and_commit_block(&block_with_senders, db)?;
-
-        tracing::info!(latency = ?start.elapsed(), "applied all blocks");
         Ok(())
     }
 
     /// Executes and validates a block at the current state, committing changes to the database.
     /// Handles chain reorgs by rewinding state if parent hash mismatch is detected.
-    fn apply_and_commit_block<DB>(&mut self, block: &BlockWithSenders<OpBlock>, db: DB) -> Result<(), BlockSyncError>
+    pub fn apply_and_commit_block<DB>(&mut self, block: &BlockWithSenders<OpBlock>, db: DB) -> Result<(), BlockSyncError>
     where
         DB: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
     {
-        debug_assert!(block.header.number == db.block_number()? + 1, "can only apply blocks sequentially");
+        todo!();
+        //debug_assert!(block.header.number == db.block_number()? + 1, "can only apply blocks sequentially");
 
         // Reorg check
         if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {

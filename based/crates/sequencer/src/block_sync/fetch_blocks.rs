@@ -3,7 +3,7 @@ use std::time::Duration;
 use alloy_consensus::Block;
 use alloy_rpc_types::Block as RpcBlock;
 use bop_common::{
-    communication::Sender,
+    communication::{messages::BlockSyncMessage, Sender},
     rpc::{RpcParam, RpcRequest, RpcResponse},
 };
 use futures::future::join_all;
@@ -23,21 +23,14 @@ pub(crate) const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
 /// and pushed in that order to the block sync.
 ///
 /// curr_block/end_block are inclusive
-pub(crate) fn fetch_blocks_and_send_sequentially(
-    curr_block: u64,
-    end_block: u64,
-    url: Url,
-    block_sender: Sender<Result<BlockWithSenders<OpBlock>, reqwest::Error>>,
-    rt: &Runtime,
-) -> JoinHandle<()> {
-    rt.spawn(async_fetch_blocks_and_send_sequentially(curr_block, end_block, url, block_sender))
-}
-
+///
+/// We first send all the previous blocks, then we send the last one if last_block is Some
 pub(crate) async fn async_fetch_blocks_and_send_sequentially(
     mut curr_block: u64,
     end_block: u64,
     url: Url,
-    block_sender: Sender<Result<BlockWithSenders<OpBlock>, reqwest::Error>>,
+    block_sender: Sender<BlockSyncMessage>,
+    last_block: Option<BlockSyncMessage>,
 ) {
     const BATCH_SIZE: u64 = 20;
 
@@ -53,13 +46,17 @@ pub(crate) async fn async_fetch_blocks_and_send_sequentially(
         // If any fail, send them first so block sync can handle errors.
         blocks.sort_unstable_by_key(|res| res.as_ref().map_or(0, |block| block.header.number));
         for block in blocks {
-            let _ = block_sender.send(block.into());
+            block_sender.send(block.map_err(|e| e.into()).into()).expect("couldn't send block sync");
         }
 
         curr_block = batch_end + 1;
     }
 
     tracing::info!("Fetching and sending blocks done. Last fetched block: {}", curr_block - 1);
+    if let Some(cur_block) = last_block {
+        tracing::info!("Sending current block");
+        block_sender.send(cur_block.into()).expect("couldn't send block sync");
+    }
 }
 
 pub(crate) async fn fetch_block(
@@ -164,6 +161,7 @@ mod tests {
             end_block,
             TEST_BASE_RPC_URL.parse().unwrap(),
             sender,
+            None,
         ));
 
         let mut prev_block_num = start_block - 1;
