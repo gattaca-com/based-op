@@ -28,6 +28,10 @@ revm.workspace = true
 tokio.workspace = true
 
 # Reth DB dpeendencies
+reth-optimism-chainspec.workspace = true
+reth-optimism-node.workspace = true
+reth-optimism-primitives.workspace = true
+reth-primitives.workspace = true
 reth-db = { path = "../../../reth/crates/storage/db" }
 reth-storage-api = { path = "../../../reth/crates/storage/storage-api" }
 reth-storage-errors = { path = "../../../reth/crates/storage/errors" }
@@ -40,8 +44,4 @@ reth-provider = { path = "../../../reth/crates/storage/provider", features = [
 reth-chainspec = { path = "../../../reth/crates/chainspec" }
 reth-db-api = { path = "../../../reth/crates/storage/db-api" }
 reth-node-types = { path = "../../../reth/crates/node/types" }
-reth-node-ethereum = { path = "../../../reth/crates/ethereum/node", features = [
-    "test-utils",
-] }
-
 reqwest.workspace = true

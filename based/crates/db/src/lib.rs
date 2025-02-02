@@ -6,8 +6,8 @@ use std::{
 use alloy_primitives::B256;
 use parking_lot::RwLock;
 use reth_db::DatabaseEnv;
-use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
+use reth_optimism_node::OpNode;
 use reth_provider::ProviderFactory;
 use reth_trie_common::updates::TrieUpdates;
 use revm::db::BundleState;
@@ -18,6 +18,7 @@ use revm_primitives::{
 
 pub mod alloy_db;
 mod block;
+mod block_commit;
 mod cache;
 mod error;
 mod init;
@@ -51,7 +52,7 @@ pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone +
 }
 
 pub struct DB {
-    factory: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+    factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
     caches: ReadCaches,
     block: RwLock<Option<BlockDB>>,
 }

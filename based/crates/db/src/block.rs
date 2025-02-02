@@ -5,8 +5,8 @@ use std::{
 
 use reth_db::{cursor::DbCursorRO, Bytecodes, CanonicalHeaders, DatabaseEnv};
 use reth_db_api::transaction::DbTx;
-use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
+use reth_optimism_node::OpNode;
 use reth_provider::{DatabaseProviderRO, LatestStateProviderRef};
 use reth_storage_api::{HashedPostStateProvider, StateRootProvider};
 use reth_trie_common::updates::TrieUpdates;
@@ -15,8 +15,7 @@ use revm_primitives::{db::DatabaseRef, AccountInfo, Address, Bytecode, B256, U25
 
 use crate::{cache::ReadCaches, error::Error, BopDbRead};
 
-pub type ProviderReadOnly =
-    DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>;
+pub type ProviderReadOnly = DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>;
 
 /// Database access per-block. This is only valid between database commits. Uses read caching.
 #[derive(Clone)]
@@ -34,7 +33,7 @@ impl Debug for BlockDB {
 impl BlockDB {
     pub(super) fn new(
         caches: ReadCaches,
-        provider: DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+        provider: DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
     ) -> Self {
         Self { provider: Arc::new(provider), caches }
     }

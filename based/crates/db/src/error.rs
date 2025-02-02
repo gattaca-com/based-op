@@ -1,5 +1,6 @@
 use std::io;
 
+use alloy_primitives::BlockNumber;
 use reth_storage_errors::{db::DatabaseError, provider::ProviderError};
 use thiserror::Error;
 
@@ -17,4 +18,6 @@ pub enum Error {
     ReadTransactionError(#[from] DatabaseError),
     #[error("{0}")]
     Other(String),
+    #[error("State root mismatch: {0}")]
+    StateRootError(BlockNumber),
 }
