@@ -6,8 +6,8 @@ use bop_common::rpc::{RpcParam, RpcRequest, RpcResponse};
 use crossbeam_channel::Sender;
 use futures::future::join_all;
 use op_alloy_consensus::OpTxEnvelope;
-use reqwest::Client;
-use reth_optimism_primitives::OpTransactionSigned;
+use reqwest::{Client, Url};
+use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
 use tokio::{runtime::Runtime, task::JoinHandle};
@@ -24,20 +24,18 @@ pub(crate) const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
 pub(crate) fn fetch_blocks_and_send_sequentially(
     curr_block: u64,
     end_block: u64,
-    url: String,
-    block_sender: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
-    runtime: &Runtime,
+    url: Url,
+    block_sender: Sender<Result<BlockWithSenders<OpBlock>, reqwest::Error>>,
+    rt: &Runtime,
 ) -> JoinHandle<()> {
-    runtime.spawn(async move {
-        async_fetch_blocks_and_send_sequentially(curr_block, end_block, url, block_sender).await;
-    })
+    rt.spawn(async_fetch_blocks_and_send_sequentially(curr_block, end_block, url, block_sender))
 }
 
 pub(crate) async fn async_fetch_blocks_and_send_sequentially(
     mut curr_block: u64,
     end_block: u64,
-    url: String,
-    block_sender: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    url: Url,
+    block_sender: Sender<Result<BlockWithSenders<OpBlock>, reqwest::Error>>,
 ) {
     const BATCH_SIZE: u64 = 20;
 
@@ -46,10 +44,9 @@ pub(crate) async fn async_fetch_blocks_and_send_sequentially(
 
     while curr_block <= end_block {
         let batch_end = (curr_block + BATCH_SIZE - 1).min(end_block);
-        let futures = (curr_block..=batch_end).map(|i| fetch_block(i, &client, &url));
+        let futures = (curr_block..=batch_end).map(|i| fetch_block(i, &client, url.clone()));
 
-        let mut blocks: Vec<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>> =
-            join_all(futures).await;
+        let mut blocks: Vec<Result<BlockWithSenders<OpBlock>, reqwest::Error>> = join_all(futures).await;
 
         // If any fail, send them first so block sync can handle errors.
         blocks.sort_unstable_by_key(|res| res.as_ref().map_or(0, |block| block.header.number));
@@ -66,8 +63,8 @@ pub(crate) async fn async_fetch_blocks_and_send_sequentially(
 pub(crate) async fn fetch_block(
     block_number: u64,
     client: &Client,
-    url: &str,
-) -> Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error> {
+    url: Url,
+) -> Result<BlockWithSenders<OpBlock>, reqwest::Error> {
     const MAX_RETRIES: u32 = 10;
 
     let r = RpcRequest {
@@ -101,7 +98,7 @@ pub(crate) async fn fetch_block(
 }
 
 /// Converts an RPC block with OpTxEnvelope transactions to a consensus block with OpTransactionSigned
-pub fn convert_block(block: RpcBlock<OpTxEnvelope>) -> BlockWithSenders<Block<OpTransactionSigned>> {
+pub fn convert_block(block: RpcBlock<OpTxEnvelope>) -> BlockWithSenders<OpBlock> {
     // First convert the block to consensus format
     let consensus_block = block.into_consensus();
 
@@ -135,6 +132,7 @@ pub fn convert_block(block: RpcBlock<OpTxEnvelope>) -> BlockWithSenders<Block<Op
 
 #[cfg(test)]
 mod tests {
+    use alloy_primitives::b256;
     use crossbeam_channel::bounded;
 
     use super::*;
@@ -143,13 +141,10 @@ mod tests {
     async fn test_single_block_fetch() {
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
 
-        let block = fetch_block(25738473, &client, TEST_BASE_RPC_URL).await.unwrap();
+        let block = fetch_block(25738473, &client, TEST_BASE_RPC_URL.parse().unwrap()).await.unwrap();
 
         assert_eq!(block.header.number, 25738473);
-        assert_eq!(
-            block.header.hash_slow().to_string(),
-            "0xad9e6c25e60e711e5e99684892848adc06d44b1cc0e5056b06fcead6c7eb6186"
-        );
+        assert_eq!(block.header.hash_slow(), b256!("ad9e6c25e60e711e5e99684892848adc06d44b1cc0e5056b06fcead6c7eb6186"));
 
         assert!(!block.body.transactions.is_empty());
         assert!(block.body.transactions.first().unwrap().is_deposit());
@@ -165,7 +160,7 @@ mod tests {
         tokio::spawn(async_fetch_blocks_and_send_sequentially(
             start_block,
             end_block,
-            TEST_BASE_RPC_URL.to_string(),
+            TEST_BASE_RPC_URL.parse().unwrap(),
             sender,
         ));
 

@@ -14,5 +14,7 @@ pub enum Error {
     #[error(transparent)]
     ProviderError(#[from] ProviderError),
     #[error("Read transaction error: {0}")]
-    ReadTransactionError(DatabaseError),
+    ReadTransactionError(#[from] DatabaseError),
+    #[error("{0}")]
+    Other(String),
 }

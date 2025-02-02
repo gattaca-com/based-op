@@ -45,6 +45,9 @@ pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone +
 
     /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;
+
+    /// Returns the current block head number.
+    fn block_number(&self) -> Result<u64, Error>;
 }
 
 pub struct DB {

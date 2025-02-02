@@ -1,40 +1,45 @@
-use std::{future::IntoFuture, sync::Arc};
+use std::{fmt::Debug, future::IntoFuture, sync::Arc};
 
+use alloy_consensus::BlockHeader;
 use alloy_eips::BlockId;
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{
     network::{primitives::HeaderResponse, BlockResponse},
-    Network, Provider,
+    Provider, RootProvider,
 };
-use alloy_transport::{Transport, TransportError};
+use alloy_transport::TransportError;
+use alloy_transport_http::Http;
+use op_alloy_network::Optimism;
 use reth_db::DatabaseError;
 use reth_provider::ProviderError;
-use revm::DatabaseRef;
-use revm_primitives::{db::Database, AccountInfo, Bytecode};
+use reth_trie_common::updates::TrieUpdates;
+use revm::{db::BundleState, DatabaseCommit, DatabaseRef};
+use revm_primitives::{db::Database, Account, AccountInfo, Bytecode, HashMap};
 use tokio::runtime::Runtime;
 
-/// An alloy-powered REVM [Database].
+use crate::{BopDB, BopDbRead, Error};
+
+type AlloyProvider = RootProvider<Http<reqwest::Client>, Optimism>;
+
+/// A stripped down version of [`revm::db::AlloyDB`].
 ///
 /// When accessing the database, it'll use the given provider to fetch the corresponding account's data.
-#[derive(Debug)]
-pub struct AlloyDB<T: Transport + Clone, N: Network, P: Provider<T, N>> {
+#[derive(Debug, Clone)]
+pub struct AlloyDB {
     /// The provider to fetch the data from.
-    provider: P,
+    provider: AlloyProvider,
     /// The block number on which the queries will be based on.
     block_number: BlockId,
     /// handle to the tokio runtime
     rt: Arc<Runtime>,
-    _marker: std::marker::PhantomData<fn() -> (T, N)>,
 }
 
-impl<T: Transport + Clone, N: Network, P: Provider<T, N>> AlloyDB<T, N, P> {
+impl AlloyDB {
     /// Create a new AlloyDB instance, with a [Provider] and a block.
     /// We subtract 1 from the block number, as the state we want to fetch is the end of the previous block.
-    ///
-    /// Returns `None` if no tokio runtime is available or if the current runtime is a current-thread runtime.
-    pub fn new(provider: P, block_number: u64, rt: Arc<Runtime>) -> Option<Self> {
+    pub fn new(provider: AlloyProvider, block_number: u64, rt: Arc<Runtime>) -> Self {
         let block_number = BlockId::from(block_number.saturating_sub(1));
-        Some(Self { provider, block_number, rt, _marker: std::marker::PhantomData })
+        Self { provider, block_number, rt }
     }
 
     /// Set the block number on which the queries will be based on.
@@ -45,7 +50,7 @@ impl<T: Transport + Clone, N: Network, P: Provider<T, N>> AlloyDB<T, N, P> {
     }
 }
 
-impl<T: Transport + Clone, N: Network, P: Provider<T, N>> DatabaseRef for AlloyDB<T, N, P> {
+impl DatabaseRef for AlloyDB {
     type Error = ProviderError;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
@@ -95,7 +100,7 @@ impl<T: Transport + Clone, N: Network, P: Provider<T, N>> DatabaseRef for AlloyD
     }
 }
 
-impl<T: Transport + Clone, N: Network, P: Provider<T, N>> Database for AlloyDB<T, N, P> {
+impl Database for AlloyDB {
     type Error = ProviderError;
 
     #[inline]
@@ -119,23 +124,68 @@ impl<T: Transport + Clone, N: Network, P: Provider<T, N>> Database for AlloyDB<T
     }
 }
 
+impl DatabaseCommit for AlloyDB {
+    fn commit(&mut self, _: HashMap<Address, Account>) {
+        // No-op, as we don't need to commit to the database.
+    }
+}
+
+impl BopDbRead for AlloyDB {
+    fn get_nonce(&self, address: Address) -> u64 {
+        self.basic_ref(address).ok().flatten().map_or(0, |acc| acc.nonce)
+    }
+
+    /// Fetches the state
+    fn calculate_state_root(&self, _: &BundleState) -> Result<(B256, TrieUpdates), Error> {
+        debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
+
+        let next_block = self.block_number.as_u64().expect("block number is valid") + 1;
+
+        let root = self
+            .rt
+            .block_on(self.provider.get_block_by_number(next_block.into(), false.into()))
+            .map_err(|e| Error::Other(e.to_string()))?
+            .ok_or_else(|| Error::Other(format!("Block not found: {next_block}")))?
+            .header()
+            .state_root();
+
+        Ok((root, TrieUpdates::default()))
+    }
+
+    /// Returns the current block head number.
+    fn block_number(&self) -> Result<u64, Error> {
+        debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
+        Ok(self.block_number.as_u64().unwrap())
+    }
+}
+
+impl BopDB for AlloyDB {
+    type ReadOnly = Self;
+
+    fn readonly(&self) -> Result<Self::ReadOnly, Error> {
+        Ok(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use alloy_provider::ProviderBuilder;
+    use revm_primitives::address;
 
     use super::*;
 
     #[test]
     #[ignore = "flaky RPC"]
     fn can_get_basic() {
-        let client = ProviderBuilder::new()
+        let provider = ProviderBuilder::new()
+            .network()
             .on_http("https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27".parse().unwrap());
-        let alloydb = AlloyDB::new(client, 16148323, Arc::new(Runtime::new().unwrap()));
+        let alloydb = AlloyDB::new(provider, 16148323, Arc::new(Runtime::new().unwrap()));
 
         // ETH/USDT pair on Uniswap V2
-        let address: Address = "0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852".parse().unwrap();
+        let address = address!("0d4a11d5EEaaC28EC3F61d100daF4d40471f1852");
 
-        let acc_info = alloydb.unwrap().basic_ref(address).unwrap().unwrap();
+        let acc_info = alloydb.basic_ref(address).unwrap().unwrap();
         assert!(acc_info.exists());
     }
 }

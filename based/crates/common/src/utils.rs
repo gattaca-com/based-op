@@ -75,8 +75,13 @@ pub fn init_tracing(
     (worker_guard, stdout_guard)
 }
 
-pub fn initialize_test_tracing() {
-    tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
+pub fn initialize_test_tracing(level: tracing::Level) {
+    let mut env_filter = tracing_subscriber::EnvFilter::builder().from_env_lossy();
+    for directive in DEFAULT_TRACING_ENV_FILTERS {
+        env_filter = env_filter.add_directive(directive.parse().unwrap());
+    }
+
+    tracing_subscriber::fmt().with_max_level(level).with_env_filter(env_filter).init();
 }
 
 pub async fn wait_for_signal() -> eyre::Result<()> {

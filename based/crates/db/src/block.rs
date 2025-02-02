@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use reth_db::{Bytecodes, CanonicalHeaders, DatabaseEnv};
+use reth_db::{cursor::DbCursorRO, Bytecodes, CanonicalHeaders, DatabaseEnv};
 use reth_db_api::transaction::DbTx;
 use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
@@ -71,5 +71,11 @@ impl BopDbRead for BlockDB {
         let latest_state = LatestStateProviderRef::new(self.provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(bundle_state);
         latest_state.state_root_with_updates(hashed_state).map_err(Error::ProviderError)
+    }
+
+    /// Returns the highest block number in the canonical chain.
+    /// Returns 0 if the database is empty.
+    fn block_number(&self) -> Result<u64, Error> {
+        self.provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
     }
 }
