@@ -62,8 +62,7 @@ mod tests {
     use std::time::Duration;
 
     use alloy_provider::ProviderBuilder;
-    use bop_common::utils::initialize_test_tracing;
-    use bop_common::db::alloy_db::AlloyDB;
+    use bop_common::{db::alloy_db::AlloyDB, utils::initialize_test_tracing};
     use reqwest::Client;
     use reth_optimism_chainspec::OpChainSpecBuilder;
 

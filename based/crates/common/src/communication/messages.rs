@@ -198,11 +198,11 @@ pub enum RpcError {
 impl From<RpcError> for RpcErrorObject<'static> {
     fn from(value: RpcError) -> Self {
         match value {
-            RpcError::Internal
-            | RpcError::Timeout(_)
-            | RpcError::ChannelClosed(_)
-            | RpcError::Jsonrpsee(_)
-            | RpcError::TokioJoin(_) => internal_error(),
+            RpcError::Internal |
+            RpcError::Timeout(_) |
+            RpcError::ChannelClosed(_) |
+            RpcError::Jsonrpsee(_) |
+            RpcError::TokioJoin(_) => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
@@ -229,7 +229,7 @@ pub enum SequencerToSimulator<Db> {
     SimulateTxTof(DBFrag<Db>, Arc<Transaction>),
 }
 
-#[derive( Debug)]
+#[derive(Debug)]
 pub struct SimulatorToSequencer<Db: BopDbRead> {
     order_hash: B256,
     id: usize,

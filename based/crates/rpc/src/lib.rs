@@ -1,5 +1,8 @@
-use bop_common::{communication::Spine, config::Config};
-use bop_common::db::{BopDbRead, DBFrag};
+use bop_common::{
+    communication::Spine,
+    config::Config,
+    db::{BopDbRead, DBFrag},
+};
 use engine::EngineRpcServer;
 use eth::EthRpcServer;
 use tokio::runtime::Runtime;

@@ -7,7 +7,10 @@ use core_affinity::CoreId;
 use tracing::{info, span, warn, Level};
 
 use crate::{
-    communication::SpineConnections, db::{BopDbRead, DBFrag}, time::{vsync, Duration, Timer}, utils::last_part_of_typename
+    communication::SpineConnections,
+    db::{BopDbRead, DBFrag},
+    time::{vsync, Duration, Timer},
+    utils::last_part_of_typename,
 };
 
 #[derive(Copy, Clone, Default)]

@@ -2,11 +2,11 @@ use std::{fs::read_dir, path::Path, sync::Arc};
 
 use alloy_consensus::Block;
 use messages::{SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives::BlockWithSenders;
 use revm::DatabaseRef;
 use shared_memory::ShmemError;
 use thiserror::Error;
-use reth_optimism_primitives::OpTransactionSigned;
-use reth_primitives::BlockWithSenders;
 
 pub mod queue;
 pub mod seqlock;
@@ -16,7 +16,10 @@ pub mod messages;
 pub use messages::InternalMessage;
 
 use crate::{
-    db::{BopDB, BopDbRead}, time::{Duration, IngestionTime, Instant, Timer}, transaction::Transaction, utils::last_part_of_typename
+    db::{BopDB, BopDbRead},
+    time::{Duration, IngestionTime, Instant, Timer},
+    transaction::Transaction,
+    utils::last_part_of_typename,
 };
 
 // TODO: turn this into a macro
@@ -190,7 +193,9 @@ pub struct Spine<Db: BopDbRead> {
     receiver_eth_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<Arc<Transaction>>>,
 
     sender_blockfetch_to_sequencer: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
-    receiver_blockfetch_to_sequencer: crossbeam_channel::Receiver<InternalMessage<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>>,
+    receiver_blockfetch_to_sequencer: crossbeam_channel::Receiver<
+        InternalMessage<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    >,
 }
 
 impl<Db: BopDbRead> Default for Spine<Db> {

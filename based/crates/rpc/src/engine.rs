@@ -3,10 +3,13 @@ use std::net::SocketAddr;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
-    api::EngineApiServer, communication::{
+    api::EngineApiServer,
+    communication::{
         messages::{self, EngineApi, RpcResult},
         Sender, Spine,
-    }, db::BopDbRead, time::Duration
+    },
+    db::BopDbRead,
+    time::Duration,
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};

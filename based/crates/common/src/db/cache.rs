@@ -12,7 +12,6 @@ use revm_primitives::AccountInfo;
 
 use super::{util, Error};
 
-
 /// Caches used to accelerate database reads. Cache entries are retained according to LRU policy.
 /// On database commits, corresponding entries in the caches are invalidated.
 #[derive(Clone)]

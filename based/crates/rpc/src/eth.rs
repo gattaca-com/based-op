@@ -3,9 +3,11 @@ use std::{net::SocketAddr, sync::Arc};
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types::{Block, BlockId, BlockNumberOrTag, TransactionReceipt};
 use bop_common::{
-    api::EthApiServer, communication::{messages::RpcResult, Sender, Spine}, db::DBFrag, transaction::Transaction
+    api::EthApiServer,
+    communication::{messages::RpcResult, Sender, Spine},
+    db::{BopDB, BopDbRead, DBFrag},
+    transaction::Transaction,
 };
-use bop_common::db::{BopDB, BopDbRead};
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 
