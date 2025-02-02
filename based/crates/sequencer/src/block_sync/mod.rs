@@ -142,12 +142,13 @@ impl BlockSync {
     /// Handles chain reorgs by rewinding state if parent hash mismatch is detected.
     fn apply_and_commit_block<DB>(&mut self, block: &BlockWithSenders<OpBlock>, db: DB) -> Result<(), BlockSyncError>
     where
-        DB: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
+        DB: BopDB,
     {
-        debug_assert!(block.header.number == db.block_number()? + 1, "can only apply blocks sequentially");
+        let db_ro = db.readonly()?;
+        debug_assert!(block.header.number == db_ro.block_number()? + 1, "can only apply blocks sequentially");
 
         // Reorg check
-        if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {
+        if let Ok(db_parent_hash) = db_ro.block_hash_ref(block.header.number.saturating_sub(1)) {
             if db_parent_hash != block.header.parent_hash {
                 tracing::warn!(
                     "reorg detected at: {}. db_parent_hash: {db_parent_hash:?}, block_hash: {:?}",
@@ -160,9 +161,8 @@ impl BlockSync {
             }
         }
 
-        let execution_output = self.execute(block, db)?;
-
-        // TODO: commit changes here
+        let execution_output = self.execute(block, &db_ro)?;
+        db.commit_block(block, execution_output)?;
 
         Ok(())
     }
@@ -172,7 +172,7 @@ impl BlockSync {
     pub fn execute<DB>(
         &mut self,
         block: &BlockWithSenders<OpBlock>,
-        db: DB,
+        db: &DB,
     ) -> Result<BlockExecutionOutput<OpReceipt>, BlockExecutionError>
     where
         DB: BopDbRead + Database<Error: Into<ProviderError> + Display>,

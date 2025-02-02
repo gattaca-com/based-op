@@ -11,7 +11,10 @@ use reth_provider::{DatabaseProviderRO, LatestStateProviderRef};
 use reth_storage_api::{HashedPostStateProvider, StateRootProvider};
 use reth_trie_common::updates::TrieUpdates;
 use revm::db::BundleState;
-use revm_primitives::{db::DatabaseRef, AccountInfo, Address, Bytecode, B256, U256};
+use revm_primitives::{
+    db::{Database, DatabaseRef},
+    AccountInfo, Address, Bytecode, B256, U256,
+};
 
 use crate::{cache::ReadCaches, error::Error, BopDbRead};
 
@@ -58,6 +61,30 @@ impl DatabaseRef for BlockDB {
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
         let hash = self.provider.tx_ref().get::<CanonicalHeaders>(number).map_err(Error::ReadTransactionError)?;
         Ok(hash.unwrap_or_default())
+    }
+}
+
+impl Database for BlockDB {
+    type Error = Error;
+
+    #[inline]
+    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        self.basic_ref(address)
+    }
+
+    #[inline]
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        self.code_by_hash_ref(code_hash)
+    }
+
+    #[inline]
+    fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        self.storage_ref(address, index)
+    }
+
+    #[inline]
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
+        self.block_hash_ref(number)
     }
 }
 

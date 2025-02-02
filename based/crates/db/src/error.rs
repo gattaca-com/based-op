@@ -21,3 +21,17 @@ pub enum Error {
     #[error("State root mismatch: {0}")]
     StateRootError(BlockNumber),
 }
+
+impl From<Error> for ProviderError {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::DirNotReadable(path, _) => ProviderError::FsPathError(path),
+            Error::DirNotWritable(path, _) => ProviderError::FsPathError(path),
+            Error::DatabaseInitialisationError(e) => ProviderError::Database(DatabaseError::Other(e)),
+            Error::ProviderError(e) => e,
+            Error::ReadTransactionError(e) => ProviderError::Database(e),
+            Error::Other(e) => ProviderError::Database(DatabaseError::Other(e)),
+            Error::StateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
+        }
+    }
+}

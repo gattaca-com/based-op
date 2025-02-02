@@ -11,7 +11,9 @@ use alloy_transport::TransportError;
 use alloy_transport_http::Http;
 use op_alloy_network::Optimism;
 use reth_db::DatabaseError;
-use reth_provider::ProviderError;
+use reth_optimism_primitives::{OpBlock, OpReceipt};
+use reth_primitives::BlockWithSenders;
+use reth_provider::{BlockExecutionOutput, ProviderError};
 use reth_trie_common::updates::TrieUpdates;
 use revm::{db::BundleState, DatabaseCommit, DatabaseRef};
 use revm_primitives::{db::Database, Account, AccountInfo, Bytecode, HashMap};
@@ -164,6 +166,15 @@ impl BopDB for AlloyDB {
 
     fn readonly(&self) -> Result<Self::ReadOnly, Error> {
         Ok(self.clone())
+    }
+
+    fn commit_block(
+        &self,
+        _block: &BlockWithSenders<OpBlock>,
+        _block_execution_output: BlockExecutionOutput<OpReceipt>,
+    ) -> Result<(), Error> {
+        // No-op
+        Ok(())
     }
 }
 
