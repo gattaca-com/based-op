@@ -5,12 +5,13 @@ use std::{
 };
 
 use alloy_primitives::B256;
-use alloy_provider::builder;
 use auto_impl::auto_impl;
+use op_alloy_rpc_types::OpTransactionReceipt;
 use parking_lot::RwLock;
 use reth_db::DatabaseEnv;
 use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
+use reth_optimism_primitives::OpBlock;
 use reth_provider::ProviderFactory;
 use reth_trie_common::updates::TrieUpdates;
 use revm::db::{BundleState, CacheDB};
@@ -44,10 +45,6 @@ pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
 /// Database read functions
 #[auto_impl(&, Arc)]
 pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone + Debug {
-    /// Returns the current `nonce` value for the account with the specified address. Zero is
-    /// returned if no account is found.
-    fn get_nonce(&self, address: Address) -> u64;
-
     /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;
 
@@ -56,10 +53,6 @@ pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone +
 }
 
 impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.db.get_nonce(address)
-    }
-
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.calculate_state_root(bundle_state)
     }
@@ -96,11 +89,43 @@ impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
     }
 }
 
-impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.db.read().get_nonce(address)
+impl<Db: DatabaseRef> DBFrag<Db> {
+    pub fn get_nonce(&self, _address: Address) -> Result<u64, Error> {
+        todo!()
+        // self.basic_ref(address).map(|info| info.map(|info| info.nonce).unwrap_or_default())
     }
 
+    pub fn get_balance(&self, _address: Address) -> Result<U256, Error> {
+        todo!()
+        // self.basic_ref(address).map(|info| info.map(|info| info.balance).unwrap_or_default())
+    }
+
+    pub fn get_latest_block_number(&self) -> Result<u64, Error> {
+        todo!()
+    }
+
+    pub fn get_latest_block(&self) -> Result<OpBlock, Error> {
+        todo!()
+    }
+
+    pub fn get_latest_block_hash(&self) -> Result<B256, Error> {
+        todo!()
+    }
+
+    pub fn get_block_by_number(&self, _number: u64) -> Result<OpBlock, Error> {
+        todo!()
+    }
+
+    pub fn get_block_by_hash(&self, _hash: B256) -> Result<OpBlock, Error> {
+        todo!()
+    }
+
+    pub fn get_transaction_receipt(&self, _hash: B256) -> Result<OpTransactionReceipt, Error> {
+        todo!()
+    }
+}
+
+impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.read().calculate_state_root(bundle_state)
     }
@@ -162,10 +187,6 @@ impl<DbRead: DatabaseRef> DatabaseRef for DBSorting<DbRead> {
     }
 }
 impl<DbRead: BopDbRead> BopDbRead for DBSorting<DbRead> {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.db.get_nonce(address)
-    }
-
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.calculate_state_root(bundle_state)
     }

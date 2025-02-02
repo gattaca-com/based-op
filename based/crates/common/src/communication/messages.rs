@@ -7,7 +7,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use revm::{db::CacheDB, DatabaseRef};
+use revm::DatabaseRef;
 use revm_primitives::{Address, EVMError};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;

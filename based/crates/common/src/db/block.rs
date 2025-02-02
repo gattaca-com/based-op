@@ -64,10 +64,6 @@ impl DatabaseRef for BlockDB {
 }
 
 impl BopDbRead for BlockDB {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.basic_ref(address).ok().flatten().map(|acc| acc.nonce).unwrap_or_default()
-    }
-
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         let latest_state = LatestStateProviderRef::new(self.provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(bundle_state);

@@ -36,7 +36,7 @@ impl TxPool {
         base_fee: u64,
         sim_sender: &SendersSpine<Db>,
     ) {
-        let state_nonce = db.get_nonce(new_tx.sender());
+        let state_nonce = db.get_nonce(new_tx.sender()).expect("failed to get nonce"); // FIXME
         let nonce = new_tx.nonce();
         // check nonce is valid
         if nonce < state_nonce {
@@ -129,7 +129,7 @@ impl TxPool {
 
         // Send next nonce for each active sender to simulator
         for (sender, sender_txs) in self.pool_data.iter() {
-            let db_nonce = db.get_nonce(*sender);
+            let db_nonce = db.get_nonce(*sender).expect("failed to get nonce"); // FIXME
             if let Some(first_tx) = sender_txs.first_ready(db_nonce, base_fee) {
                 TxPool::send_sim_requests_for_tx(first_tx, db, sim_sender);
             }

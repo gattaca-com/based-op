@@ -1,14 +1,18 @@
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types::{
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
-    Block, BlockId, BlockNumberOrTag, TransactionReceipt,
+    BlockId, BlockNumberOrTag,
 };
 use jsonrpsee::proc_macros::rpc;
+use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use reth_optimism_primitives::OpTransactionSigned;
 
 use crate::communication::messages::RpcResult;
 
 pub const CAPABILITIES: &[&str] = &["engine_forkchoiceUpdatedV3", "engine_getPayloadV3", "engine_newPayloadV3"];
+
+pub type OpRpcBlock = alloy_rpc_types::Block<OpTransactionSigned>;
 
 /// The Engine API is used by the consensus layer to interact with the execution layer. Here we
 /// implement a minimal subset of the API for the gateway to return blocks to the op-node
@@ -58,15 +62,15 @@ pub trait EthApi {
 
     /// Returns the receipt of a transaction by transaction hash
     #[method(name = "getTransactionReceipt")]
-    async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<TransactionReceipt>>;
+    async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>>;
 
     /// Returns a block with a given identifier
     #[method(name = "getBlockByNumber")]
-    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<Block>>;
+    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>>;
 
     /// Returns information about a block by hash.
     #[method(name = "getBlockByHash")]
-    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<Block>>;
+    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>>;
 
     // DB
 
