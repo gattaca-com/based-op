@@ -39,11 +39,6 @@ impl BlockDB {
     ) -> Self {
         Self { provider: Arc::new(provider), caches, unique_hash: B256::random() }
     }
-    /// Returns the highest block number in the canonical chain.
-    /// Returns 0 if the database is empty.
-    pub fn block_number(&self) -> Result<u64, Error> {
-        self.provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
-    }
 }
 
 impl DatabaseRef for BlockDB {
@@ -82,7 +77,10 @@ impl BopDbRead for BlockDB {
     fn unique_hash(&self) -> B256 {
         self.unique_hash
     }
-    fn block_number(&self) -> Result<u64,Error> {
-        todo!()
+
+    /// Returns the highest block number in the canonical chain.
+    /// Returns 0 if the database is empty.
+    fn block_number(&self) -> Result<u64, Error> {
+        self.provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
     }
 }

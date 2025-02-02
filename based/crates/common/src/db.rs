@@ -70,7 +70,10 @@ impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
     fn unique_hash(&self) -> B256 {
         self.db.unique_hash()
     }
-    fn block_number(&self) -> Result<u64, Error>{todo!()}
+
+    fn block_number(&self) -> Result<u64, Error> {
+        todo!()
+    }
 }
 
 /// DB That adds chunks on top of last on chain block
@@ -112,7 +115,10 @@ impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
     fn unique_hash(&self) -> B256 {
         self.unique_hash
     }
-    fn block_number(&self) -> Result<u64, Error>{todo!()}
+
+    fn block_number(&self) -> Result<u64, Error> {
+        todo!()
+    }
 }
 
 impl<Db: BopDbRead> From<Db> for DBFrag<Db> {
@@ -178,7 +184,10 @@ impl<DbRead: BopDbRead> BopDbRead for DBSorting<DbRead> {
     fn unique_hash(&self) -> B256 {
         self.unique_hash
     }
-    fn block_number(&self) -> Result<u64, Error>{todo!()}
+
+    fn block_number(&self) -> Result<u64, Error> {
+        todo!()
+    }
 }
 
 pub struct DB {
@@ -245,7 +254,10 @@ impl BopDbRead for DB {
     fn unique_hash(&self) -> B256 {
         todo!()
     }
-    fn block_number(&self) -> Result<u64, Error>{todo!()}
+
+    fn block_number(&self) -> Result<u64, Error> {
+        todo!()
+    }
 }
 
 impl DatabaseCommit for DB {

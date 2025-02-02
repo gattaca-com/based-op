@@ -192,8 +192,7 @@ pub struct Spine<Db: BopDbRead> {
     receiver_eth_rpc_to_sequencer: CrossBeamReceiver<Arc<Transaction>>,
 
     sender_blockfetch_to_sequencer: Sender<BlockSyncMessage>,
-    receiver_blockfetch_to_sequencer:
-        CrossBeamReceiver<BlockSyncMessage>,
+    receiver_blockfetch_to_sequencer: CrossBeamReceiver<BlockSyncMessage>,
 }
 
 impl<Db: BopDbRead> Default for Spine<Db> {

@@ -32,7 +32,6 @@ use reth_primitives_traits::SignedTransaction;
 use revm::{db::DbAccount, Database, DatabaseRef};
 use tokio::runtime::Runtime;
 
-
 pub(crate) mod fetch_blocks;
 
 fn payload_to_block(payload: ExecutionPayload, sidecar: ExecutionPayloadSidecar) -> BlockSyncMessage {
@@ -73,7 +72,7 @@ impl BlockSync {
         &mut self,
         payload: ExecutionPayload,
         sidecar: ExecutionPayloadSidecar,
-        db: DB,
+        db: &DB,
         senders: &SendersSpine<DbRead>,
     ) -> Result<Option<u64>, BlockSyncError>
     where
@@ -114,12 +113,15 @@ impl BlockSync {
 
     /// Executes and validates a block at the current state, committing changes to the database.
     /// Handles chain reorgs by rewinding state if parent hash mismatch is detected.
-    pub fn apply_and_commit_block<DB>(&mut self, block: &BlockWithSenders<OpBlock>, db: DB) -> Result<(), BlockSyncError>
+    pub fn apply_and_commit_block<DB>(
+        &mut self,
+        block: &BlockWithSenders<OpBlock>,
+        db: &DB,
+    ) -> Result<(), BlockSyncError>
     where
         DB: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
     {
-        todo!();
-        //debug_assert!(block.header.number == db.block_number()? + 1, "can only apply blocks sequentially");
+        debug_assert!(block.header.number == db.block_number()? + 1, "can only apply blocks sequentially");
 
         // Reorg check
         if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {
@@ -147,7 +149,7 @@ impl BlockSync {
     pub fn execute<DB>(
         &mut self,
         block: &BlockWithSenders<OpBlock>,
-        db: DB,
+        db: &DB,
     ) -> Result<BlockExecutionOutput<OpReceipt>, BlockExecutionError>
     where
         DB: BopDbRead + Database<Error: Into<ProviderError> + Display>,
@@ -188,6 +190,18 @@ impl BlockSync {
         );
 
         Ok(BlockExecutionOutput { state, receipts, requests, gas_used })
+    }
+
+    pub(crate) fn fetch_until_last<Db: BopDbRead>(
+        &self,
+        last_block_number: u64,
+        senders: &SendersSpine<Db>,
+    ) -> Result<Option<u64>, BlockSyncError> {
+        todo!()
+    }
+
+    pub(crate) fn last_block_number(&self) -> u64 {
+        todo!()
     }
 }
 

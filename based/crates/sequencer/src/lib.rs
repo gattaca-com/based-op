@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc};
+use std::{fmt::Display, ops::Deref, sync::Arc};
 
 use alloy_consensus::Block;
 use alloy_rpc_types::engine::ForkchoiceState;
@@ -17,127 +17,18 @@ use bop_pool::transaction::pool::TxPool;
 use built_frag::BuiltFrag;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reqwest::Url;
+use reth_evm::execute::ProviderError;
 use reth_optimism_chainspec::OpChainSpecBuilder;
-use reth_optimism_node::OpPayloadBuilderAttributes;
-use reth_optimism_primitives::OpTransactionSigned;
-use reth_primitives::BlockWithSenders;
-use revm::db::CacheDB;
-use revm_primitives::{db::DatabaseRef, Address, BlockEnv, B256, U256};
+use revm::Database;
+use revm_primitives::{Address, B256};
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
-use tracing::{error, info, warn, Instrument};
-
+use tracing::{error, warn};
 
 pub(crate) mod block_sync;
 pub(crate) mod built_frag;
-
-#[derive(Clone, Debug, Default)]
-pub struct SortingFragOrders {
-    orders: Vec<SimulatedTxList>,
-}
-
-impl SortingFragOrders {
-    fn len(&self) -> usize {
-        self.orders.len()
-    }
-
-    pub fn remove_from_sender(&mut self, sender: &Address, base_fee: u64) {
-        for i in (0..self.len() - 1).rev() {
-            let order = &mut self.orders[i];
-            if &order.sender() == sender {
-                if order.pop(base_fee) {
-                    self.orders.swap_remove(i);
-                    return;
-                }
-            }
-        }
-    }
-
-    pub fn remove_hash(&mut self, hash: &B256, base_fee: u64) {
-        for i in (0..self.len() - 1).rev() {
-            let order = &mut self.orders[i];
-            if &order.hash() == hash {
-                if order.pop(base_fee) {
-                    self.orders.swap_remove(i);
-                    return;
-                }
-            }
-        }
-    }
-
-    pub fn put(&mut self, tx: SimulatedTx) {
-        let sender = tx.sender();
-        for order in self.orders.iter_mut().rev() {
-            if order.sender() == sender {
-                order.put(tx);
-                return;
-            }
-        }
-    }
-}
-
-impl Deref for SortingFragOrders {
-    type Target = Vec<SimulatedTxList>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.orders
-    }
-}
-
-impl<Db: BopDB> From<&SharedData<Db>> for SortingFragOrders {
-    fn from(value: &SharedData<Db>) -> Self {
-        Self { orders: value.tx_pool.clone_active() }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct SortingData<Db: BopDB> {
-    /// This is the db that is built on top of the last block chunk to be used to
-    /// build a new cachedb on top of for sorting
-    /// starting a new sort
-    frag: BuiltFrag<Db::ReadOnly>,
-    until: Instant,
-    in_flight_sims: usize,
-    tof_snapshot: SortingFragOrders,
-    next_to_be_applied: Option<SimulatedTx>,
-}
-impl<Db: BopDB> SortingData<Db> {
-    pub fn apply_and_send_next(
-        mut self,
-        n_sims_per_loop: usize,
-        senders: &SendersSpine<Db::ReadOnly>,
-        base_fee: u64,
-    ) -> Self {
-        if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
-            self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
-            self.frag = self.frag.apply_tx(tx_to_apply);
-        }
-
-        let db = self.frag.state();
-
-        for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
-            debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
-            let tx = t.unwrap();
-            if senders.send_timeout(SequencerToSimulator::SimulateTx(tx, db.clone()), Duration::from_millis(10)).is_ok()
-            {
-                self.in_flight_sims += 1
-            }
-        }
-        self
-    }
-}
-
-impl<Db: BopDB> From<&SharedData<Db>> for SortingData<Db> {
-    fn from(data: &SharedData<Db>) -> Self {
-        Self {
-            frag: BuiltFrag::new(data.frag_db.clone().into(), data.config.max_gas),
-            until: Instant::now() + data.config.frag_duration,
-            in_flight_sims: 0,
-            next_to_be_applied: None,
-            tof_snapshot: data.into(),
-        }
-    }
-}
+pub(crate) mod sorting;
+use sorting::SortingData;
 
 #[derive(Clone, Debug, Default, AsRefStr)]
 pub enum SequencerState<Db: BopDB> {
@@ -155,45 +46,63 @@ pub enum SequencerState<Db: BopDB> {
 #[repr(u8)]
 pub enum SequencerEvent<Db: BopDbRead> {
     BlockSync(BlockSyncMessage),
-    ReceivedPayloadAttribues(Option<Box<OpPayloadBuilderAttributes>>),
     NewTx(Arc<Transaction>),
     SimResult(SimulatorToSequencer<Db>),
-    EngineApi(messages::EngineApi)
+    EngineApi(messages::EngineApi),
 }
 
-impl<Db: BopDB> SequencerState<Db> {
+impl<Db> SequencerState<Db>
+where
+    Db: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
+{
     pub fn start_sorting(data: &SharedData<Db>) -> Self {
         Self::Sorting(data.into())
     }
 
     fn handle_block_sync(
-        mut self,
+        self,
         block: BlockSyncMessage,
         data: &mut SharedData<Db>,
+        senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
         let Ok(block) = block else {
             todo!("handle block sync error");
-
         };
-        todo!("implement applying block as Db does not implement BopDbRead");
-        // data.block_executor.apply_and_commit_block(block, data.db)
-    }
-
-    fn handle_payload_attributes(
-        mut self,
-        attributes: Option<Box<OpPayloadBuilderAttributes>>,
-        data: &mut SharedData<Db>,
-    ) -> Self {
-        todo!()
+        use SequencerState::*;
+        match self {
+            WaitingForSync | WaitingForPayloadAttributes => {
+                data.block_executor.apply_and_commit_block(&block, &data.db).expect("issue syncing block");
+                //TODO: handle payload before blocksync
+                WaitingForPayloadAttributes
+            }
+            Syncing { last_block_number } => {
+                data.block_executor.apply_and_commit_block(&block, &data.db).expect("issue syncing block");
+                if block.number != last_block_number {
+                    return Syncing { last_block_number };
+                }
+                //TODO: refetch to check whether it's actually still the last
+                let new_last = data.block_executor.last_block_number();
+                if new_last == last_block_number {
+                    return WaitingForPayloadAttributes;
+                } else {
+                    data.block_executor.fetch_until_last(last_block_number, senders).expect("issue syncing block");
+                    return Syncing { last_block_number: new_last };
+                }
+            }
+            _ => {
+                debug_assert!(false, "Should not have received block sync update while in state {self:?}");
+                self
+            }
+        }
     }
 
     fn handle_new_tx(
-        mut self,
+        self,
         tx: Arc<Transaction>,
         data: &mut SharedData<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
-        data.tx_pool.handle_new_tx(tx, &data.frag_db, DEFAULT_BASE_FEE, senders);
+        data.tx_pool.handle_new_tx(tx, &data.frag_db, data.base_fee, senders);
         self
     }
 
@@ -213,29 +122,11 @@ impl<Db: BopDB> SequencerState<Db> {
                 };
 
                 // handle sim on wrong state
-                if result.unique_hash != sort_data.frag.db.unique_hash() {
+                if sort_data.is_valid(result.unique_hash) {
                     warn!("received sim result on wrong state, dropping");
                     return SequencerState::Sorting(sort_data);
                 }
-
-                sort_data.in_flight_sims -= 1;
-
-                // handle errored sim
-                let Ok(simulated_tx) = simulated_tx.inspect_err(|e| error!("simming tx for sender {sender} {e}",))
-                else {
-                    sort_data.tof_snapshot.remove_from_sender(&sender, data.base_fee);
-                    return SequencerState::Sorting(sort_data);
-                };
-
-                let tx_to_put_back =
-                    if sort_data.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment) {
-                        sort_data.next_to_be_applied.replace(simulated_tx)
-                    } else {
-                        Some(simulated_tx)
-                    };
-                if let Some(tx) = tx_to_put_back {
-                    sort_data.tof_snapshot.put(tx)
-                }
+                sort_data.handle_sim(simulated_tx, sender, data.base_fee);
                 SequencerState::Sorting(sort_data)
             }
             TxTof(simulated_tx) => {
@@ -258,39 +149,43 @@ impl<Db: BopDB> SequencerState<Db> {
         }
     }
 
-    fn _update(mut self, data: &mut SharedData<Db>, senders: &SendersSpine<Db::ReadOnly>) -> Self {
+    fn _update(self, data: &mut SharedData<Db>, senders: &SendersSpine<Db::ReadOnly>) -> Self {
         use SequencerState::*;
         match self {
-            Sorting(sorting_data) if sorting_data.until < Instant::now() => {
+            Sorting(sorting_data) if sorting_data.should_frag() => {
                 todo!("Seal and send frag")
             }
-            Sorting(sorting_data) if sorting_data.in_flight_sims == 0 => {
+            Sorting(sorting_data) if sorting_data.finished_iteration() => {
                 Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, senders, data.base_fee))
             }
             _ => self,
         }
     }
 
-    fn handle_engine_api(&self, msg: messages::EngineApi, data: &mut SharedData<Db>, senders: &SendersSpine<<Db as BopDB>::ReadOnly>) -> SequencerState<Db> {
+    fn handle_engine_api(
+        self,
+        msg: messages::EngineApi,
+        data: &mut SharedData<Db>,
+        senders: &SendersSpine<<Db as BopDB>::ReadOnly>,
+    ) -> SequencerState<Db> {
         todo!()
     }
+
     pub fn update(
-        mut self,
+        self,
         event: SequencerEvent<Db::ReadOnly>,
         data: &mut SharedData<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
         use SequencerEvent::*;
         match event {
-            BlockSync(block) => self.handle_block_sync(block, data),
-            ReceivedPayloadAttribues(attributes) => self.handle_payload_attributes(attributes, data),
+            BlockSync(block) => self.handle_block_sync(block, data, senders),
             NewTx(tx) => self.handle_new_tx(tx, data, senders),
-            SimResult(res) => self.handle_sim_result(res,data, senders),
-            EngineApi(msg) => self.handle_engine_api(msg, data, senders)
+            SimResult(res) => self.handle_sim_result(res, data, senders),
+            EngineApi(msg) => self.handle_engine_api(msg, data, senders),
         }
         ._update(data, senders)
     }
-
 }
 
 #[derive(Clone, Debug)]
@@ -307,7 +202,7 @@ impl Default for SequencerConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct SharedData<Db: BopDB> {
+pub struct SharedData<Db: BopDB + BopDbRead> {
     tx_pool: TxPool,
     db: Db,
     frag_db: DBFrag<Db::ReadOnly>,
@@ -320,12 +215,12 @@ pub struct SharedData<Db: BopDB> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Sequencer<Db: BopDB> {
+pub struct Sequencer<Db: BopDB + BopDbRead> {
     state: SequencerState<Db>,
     data: SharedData<Db>,
 }
 
-impl<Db: BopDB> Sequencer<Db> {
+impl<Db: BopDB + BopDbRead> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         Self {
             data: SharedData {
@@ -347,9 +242,10 @@ impl<Db: BopDB> Sequencer<Db> {
     }
 }
 
-const DEFAULT_BASE_FEE: u64 = 10;
-
-impl<Db: BopDB> Actor<Db::ReadOnly> for Sequencer<Db> {
+impl<Db> Actor<Db::ReadOnly> for Sequencer<Db>
+where
+    Db: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
+{
     const CORE_AFFINITY: Option<usize> = Some(0);
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db::ReadOnly>, ReceiversSpine<Db::ReadOnly>>) {
@@ -369,7 +265,8 @@ impl<Db: BopDB> Actor<Db::ReadOnly> for Sequencer<Db> {
 
         connections.receive(|msg, senders| {
             // Process blocks as they arrive
-            self.state = std::mem::take(&mut self.state).update(SequencerEvent::BlockSync(msg), &mut self.data, senders);
+            self.state =
+                std::mem::take(&mut self.state).update(SequencerEvent::BlockSync(msg), &mut self.data, senders);
         });
     }
 }

@@ -48,6 +48,7 @@ impl AlloyDB {
     pub fn set_block_number(&mut self, block_number: u64) {
         self.block_number = BlockId::from(block_number.saturating_sub(1));
     }
+
     /// Returns the current block head number.
     pub fn block_number(&self) -> Result<u64, Error> {
         debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
@@ -103,7 +104,6 @@ impl DatabaseRef for AlloyDB {
             .map_err(|e| ProviderError::Database(DatabaseError::Other(e.to_string())))?;
         Ok(slot_val)
     }
-
 }
 
 impl Database for AlloyDB {
@@ -159,7 +159,7 @@ impl BopDbRead for AlloyDB {
     }
 
     fn unique_hash(&self) -> B256 {
-         todo!("remove this")
+        todo!("remove this")
     }
 
     /// Returns the current block head number.
