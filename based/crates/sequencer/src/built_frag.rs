@@ -1,6 +1,5 @@
-
 use bop_common::{
-    db::DBFrag,
+    db::{DBFrag, DBSorting},
     transaction::SimulatedTx,
 };
 use revm::{db::CacheDB, DatabaseCommit};
@@ -8,7 +7,7 @@ use revm_primitives::U256;
 
 #[derive(Clone, Debug)]
 pub struct BuiltFrag<DbRead> {
-    pub db: CacheDB<DBFrag<DbRead>>,
+    pub db: DBSorting<DbRead>,
     pub gas_remaining: u64,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
@@ -16,7 +15,7 @@ pub struct BuiltFrag<DbRead> {
 }
 
 impl<DbRead: std::fmt::Debug> BuiltFrag<DbRead> {
-    pub fn new(db: CacheDB<DBFrag<DbRead>>, max_gas: u64) -> Self {
+    pub fn new(db: DBSorting<DbRead>, max_gas: u64) -> Self {
         Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![] }
     }
 

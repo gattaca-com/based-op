@@ -138,3 +138,4 @@ clap = { version = "4.5.27", features = ["derive", "env"] }
 strum = "0.24"
 strum_macros = "0.24"
 paste = "0.1.18"
+auto_impl = "1.2.1"

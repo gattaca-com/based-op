@@ -85,10 +85,12 @@ impl TxPool {
     }
 
     /// Validates simualted tx. If valid, fetch its TxList and save the new [SimulatedTxList] to `active_txs`.
-    pub fn handle_simulated(&mut self,) {
-        // TODO: check validity. Success/ correct sim state etc
-
-        let simulated_tx: SimulatedTx = todo!();
+    pub fn handle_simulated(&mut self, simulated_tx: SimulatedTx) {
+        if !simulated_tx.result_and_state.result.is_success() {
+            //TODO: @George is it correct that we should remove all the txs if tof fails?
+            // or should we just wait till maybe a later stage
+            self.remove(simulated_tx.sender_ref())
+        }
 
         let Some(tx_list) = self.pool_data.get(simulated_tx.sender_ref()) else {
             tracing::warn!(sender = ?simulated_tx.sender(), "Couldn't find tx list for valid simulated tx");
@@ -97,6 +99,10 @@ impl TxPool {
 
         let simulated_tx_list = SimulatedTxList::new(simulated_tx, tx_list);
         self.active_txs.put(simulated_tx_list);
+    }
+
+    pub fn remove(&mut self, sender: &Address) {
+        let _ = self.pool_data.remove(sender);
     }
 
     fn handle_new_block<Db: BopDbRead>(
@@ -132,8 +138,8 @@ impl TxPool {
 
     /// If this is called with `None` the assumption is that we are not yet ready to send top-of-block sims.
     fn send_sim_requests_for_tx<Db: BopDbRead>(tx: &Arc<Transaction>, db: &DBFrag<Db>, sim_sender: &SendersSpine<Db>) {
-        if let Err(error) =
-            sim_sender.send_timeout(SequencerToSimulator::SimulateTxTof(tx.clone(), db.clone()), Duration::from_millis(10))
+        if let Err(error) = sim_sender
+            .send_timeout(SequencerToSimulator::SimulateTxTof(tx.clone(), db.clone()), Duration::from_millis(10))
         {
             tracing::warn!(?error, "couldn't send simulator message");
             debug_assert!(false, "Couldn't send simulator message");

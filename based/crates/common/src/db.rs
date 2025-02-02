@@ -1,9 +1,12 @@
 use std::{
     fmt::{Debug, Formatter},
+    ops::Deref,
     sync::Arc,
 };
 
 use alloy_primitives::B256;
+use alloy_provider::builder;
+use auto_impl::auto_impl;
 use parking_lot::RwLock;
 use reth_db::DatabaseEnv;
 use reth_node_ethereum::EthereumNode;
@@ -13,7 +16,7 @@ use reth_trie_common::updates::TrieUpdates;
 use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
     db::{DatabaseCommit, DatabaseRef},
-    Account, AccountInfo, Address, Bytecode, HashMap, U256,
+    Account, AccountInfo, Address, Bytecode, EvmState, HashMap, U256,
 };
 
 pub mod alloy_db;
@@ -28,13 +31,49 @@ use cache::ReadCaches;
 pub use error::Error;
 pub use init::init_database;
 pub use util::state_changes_to_bundle_state;
-/// DB to be used while sorting, adds on top of the last frag
-pub type DBSorting<Db> = Arc<CacheDB<DBFrag<Db>>>;
+
+/// Database trait for all DB operations.
+#[auto_impl(&, Arc)]
+pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
+    type ReadOnly: BopDbRead;
+
+    /// Returns a read-only database.
+    fn readonly(&self) -> Result<Self::ReadOnly, Error>;
+}
+
+/// Database read functions
+#[auto_impl(&, Arc)]
+pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone + Debug {
+    /// Returns the current `nonce` value for the account with the specified address. Zero is
+    /// returned if no account is found.
+    fn get_nonce(&self, address: Address) -> u64;
+
+    /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
+    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;
+
+    /// Get a unique hash of current state
+    fn unique_hash(&self) -> B256;
+}
+
+impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
+    fn get_nonce(&self, address: Address) -> u64 {
+        self.db.get_nonce(address)
+    }
+
+    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
+        self.db.calculate_state_root(bundle_state)
+    }
+
+    fn unique_hash(&self) -> B256 {
+        self.db.unique_hash()
+    }
+}
 
 /// DB That adds chunks on top of last on chain block
 #[derive(Clone, Debug)]
 pub struct DBFrag<Db> {
     db: Arc<RwLock<CacheDB<Db>>>,
+    unique_hash: B256,
 }
 
 impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
@@ -57,16 +96,6 @@ impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
     }
 }
 
-impl<Db: BopDbRead> BopDbRead for CacheDB<Db> {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.db.get_nonce(address)
-    }
-
-    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
-        self.db.calculate_state_root(bundle_state)
-    }
-}
-
 impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
     fn get_nonce(&self, address: Address) -> u64 {
         self.db.read().get_nonce(address)
@@ -75,30 +104,75 @@ impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.read().calculate_state_root(bundle_state)
     }
+
+    fn unique_hash(&self) -> B256 {
+        self.unique_hash
+    }
 }
 
 impl<Db: BopDbRead> From<Db> for DBFrag<Db> {
     fn from(value: Db) -> Self {
-        Self { db: Arc::new(RwLock::new(CacheDB::new(value))) }
+        Self { db: Arc::new(RwLock::new(CacheDB::new(value))), unique_hash: B256::random() }
     }
 }
 
-/// Database trait for all DB operations.
-pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
-    type ReadOnly: BopDbRead;
-
-    /// Returns a read-only database.
-    fn readonly(&self) -> Result<Self::ReadOnly, Error>;
+/// DB That is used when sorting a new frag
+#[derive(Clone, Debug)]
+pub struct DBSorting<Db> {
+    db: CacheDB<DBFrag<Db>>,
+    unique_hash: B256,
 }
 
-/// Database read functions
-pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone + Debug {
-    /// Returns the current `nonce` value for the account with the specified address. Zero is
-    /// returned if no account is found.
-    fn get_nonce(&self, address: Address) -> u64;
+impl<Db> DBSorting<Db> {
+    pub fn commit(&mut self, state: EvmState) {
+        self.db.commit(state);
+        self.unique_hash = B256::random()
+    }
+}
 
-    /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
-    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;
+impl<Db: BopDbRead> From<DBFrag<Db>> for DBSorting<Db> {
+    fn from(value: DBFrag<Db>) -> Self {
+        Self { db: CacheDB::new(value), unique_hash: B256::random() }
+    }
+}
+impl<Db> Deref for DBSorting<Db> {
+    type Target = CacheDB<DBFrag<Db>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.db
+    }
+}
+impl<DbRead: DatabaseRef> DatabaseRef for DBSorting<DbRead> {
+    type Error = DbRead::Error;
+
+    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        self.db.basic_ref(address)
+    }
+
+    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        self.db.code_by_hash_ref(code_hash)
+    }
+
+    fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        self.db.storage_ref(address, index)
+    }
+
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        self.db.block_hash_ref(number)
+    }
+}
+impl<DbRead: BopDbRead> BopDbRead for DBSorting<DbRead> {
+    fn get_nonce(&self, address: Address) -> u64 {
+        self.db.get_nonce(address)
+    }
+
+    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
+        self.db.calculate_state_root(bundle_state)
+    }
+
+    fn unique_hash(&self) -> B256 {
+        self.unique_hash
+    }
 }
 
 pub struct DB {

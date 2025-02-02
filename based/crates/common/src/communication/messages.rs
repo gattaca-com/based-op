@@ -8,14 +8,14 @@ use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpd
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use revm::{db::CacheDB, DatabaseRef};
-use revm_primitives::EVMError;
+use revm_primitives::{Address, EVMError};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
 use tokio::sync::oneshot;
 
 use crate::{
-    db::{BopDbRead, DBFrag},
+    db::{BopDbRead, DBFrag, DBSorting},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
 };
@@ -224,32 +224,38 @@ pub enum SequencerToSimulator<Db> {
     //TODO: Add if anything should be communicated here
     NewBlock,
     /// Simulate Tx on top of a partially built frag
-    SimulateTx(Arc<Transaction>, Arc<CacheDB<DBFrag<Db>>>, ),
+    SimulateTx(Arc<Transaction>, Arc<DBSorting<Db>>),
     /// Simulate Tx Top of frag
-    //TODO: Db can be set on frag commit once we broadcast msgs to sims
+    //TODO: Db could be set on frag commit once we broadcast msgs to sims
     SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
 }
 
 #[derive(Debug)]
 pub struct SimulatorToSequencer<Db: BopDbRead> {
-    order_hash: B256,
-    msg: Result<SimulatorToSequencerMsg, SimulationError<<Db as DatabaseRef>::Error>>,
+    pub sender: Address,
+    pub unique_hash: B256,
+    pub msg: SimulatorToSequencerMsg<Db>,
 }
 
 impl<Db: BopDbRead> SimulatorToSequencer<Db> {
-    pub fn new(order_hash: B256, msg:Result<SimulatorToSequencerMsg, SimulationError<<Db as DatabaseRef>::Error>>) -> Self {
-        Self { order_hash, msg }
+    pub fn new(sender: Address, unique_hash: B256, msg: SimulatorToSequencerMsg<Db>) -> Self {
+        Self { sender, unique_hash, msg }
+    }
+
+    pub fn sender(&self) -> &Address {
+        &self.sender
     }
 }
 
+pub type SimulationResult<T, Db> = Result<T, SimulationError<<Db as DatabaseRef>::Error>>;
 
-#[derive(Clone, Debug, AsRefStr)]
+#[derive(Debug, AsRefStr)]
 #[repr(u8)]
-pub enum SimulatorToSequencerMsg {
+pub enum SimulatorToSequencerMsg<Db: BopDbRead> {
     /// During sorting/on top of any state
-    Tx(SimulatedTx),
+    Tx(SimulationResult<SimulatedTx, Db>),
     /// Specifically on top of top of fragment
-    TxTof(SimulatedTx),
+    TxTof(SimulationResult<SimulatedTx, Db>),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]

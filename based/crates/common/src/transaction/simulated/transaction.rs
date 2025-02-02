@@ -2,9 +2,9 @@ use std::{ops::Deref, sync::Arc};
 
 use alloy_primitives::U256;
 use revm::DatabaseRef;
-use revm_primitives::{Address, EvmState, ResultAndState};
+use revm_primitives::{Address, EvmState, ResultAndState, B256};
 
-use crate::transaction::Transaction;
+use crate::{db::BopDbRead, transaction::Transaction};
 
 #[derive(Clone, Debug)]
 pub struct SimulatedTx {
@@ -15,11 +15,11 @@ pub struct SimulatedTx {
     /// Coinbase balance diff, after_sim - before_sim
     pub payment: U256,
 }
+
 impl SimulatedTx {
-    pub fn new<Db>(tx: Arc<Transaction>, result_and_state: ResultAndState, orig_state: Db, coinbase: Address) -> Self
+    pub fn new<Db>(tx: Arc<Transaction>, result_and_state: ResultAndState, orig_state: &Db, coinbase: Address) -> Self
     where
-        Db: DatabaseRef,
-        <Db as DatabaseRef>::Error: std::fmt::Debug,
+        Db: BopDbRead,
     {
         let start_balance = orig_state
             .basic_ref(coinbase)
