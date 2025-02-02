@@ -67,14 +67,15 @@ impl BlockSync {
     /// Processes a new execution payload from the engine API.
     /// Commits changes to the database.
     ///
-    /// Fetches blocks from the RPC if the sequencer is behind the chain head.
+    /// Fetches blocks from the RPC if the sequencer is behind the chain head,
+    /// and in that case returns what the head block will be.
     pub fn apply_new_payload<DB, DbRead>(
         &mut self,
         payload: ExecutionPayload,
         sidecar: ExecutionPayloadSidecar,
         db: DB,
         senders: &SendersSpine<DbRead>,
-    ) -> Result<(), BlockSyncError>
+    ) -> Result<Option<u64>, BlockSyncError>
     where
         DB: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
         DbRead: BopDbRead,
@@ -83,8 +84,7 @@ impl BlockSync {
 
         let payload_block_number = payload.block_number();
         let cur_block = payload_to_block(payload, sidecar);
-        todo!();
-        let db_block_head = 0; /* db.block_number()? */
+        let db_block_head = db.block_number()?;
         tracing::info!("handling new payload for block number: {payload_block_number}, db_block_head: {db_block_head}");
 
         // This case occurs when the sequencer is behind the chain head.
@@ -104,11 +104,12 @@ impl BlockSync {
                 senders.into(),
                 Some(cur_block),
             ));
+            Ok(Some(payload_block_number))
         } else {
             // Apply and commit the payload block.
             self.apply_and_commit_block(&cur_block?, db)?;
+            Ok(None)
         }
-        Ok(())
     }
 
     /// Executes and validates a block at the current state, committing changes to the database.

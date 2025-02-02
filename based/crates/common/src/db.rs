@@ -53,6 +53,9 @@ pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone +
 
     /// Get a unique hash of current state
     fn unique_hash(&self) -> B256;
+
+    /// Get a unique hash of current state
+    fn block_number(&self) -> Result<u64, Error>;
 }
 
 impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
@@ -67,6 +70,7 @@ impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
     fn unique_hash(&self) -> B256 {
         self.db.unique_hash()
     }
+    fn block_number(&self) -> Result<u64, Error>{todo!()}
 }
 
 /// DB That adds chunks on top of last on chain block
@@ -108,6 +112,7 @@ impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
     fn unique_hash(&self) -> B256 {
         self.unique_hash
     }
+    fn block_number(&self) -> Result<u64, Error>{todo!()}
 }
 
 impl<Db: BopDbRead> From<Db> for DBFrag<Db> {
@@ -173,6 +178,7 @@ impl<DbRead: BopDbRead> BopDbRead for DBSorting<DbRead> {
     fn unique_hash(&self) -> B256 {
         self.unique_hash
     }
+    fn block_number(&self) -> Result<u64, Error>{todo!()}
 }
 
 pub struct DB {
@@ -205,6 +211,41 @@ impl BopDB for DB {
         self.block.write().replace(block.clone());
         Ok(block)
     }
+}
+
+impl DatabaseRef for DB {
+    type Error = <<DB as BopDB>::ReadOnly as DatabaseRef>::Error;
+
+    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        todo!()
+    }
+
+    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        todo!()
+    }
+
+    fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        todo!()
+    }
+
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        todo!()
+    }
+}
+
+impl BopDbRead for DB {
+    fn get_nonce(&self, address: Address) -> u64 {
+        todo!()
+    }
+
+    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
+        todo!()
+    }
+
+    fn unique_hash(&self) -> B256 {
+        todo!()
+    }
+    fn block_number(&self) -> Result<u64, Error>{todo!()}
 }
 
 impl DatabaseCommit for DB {

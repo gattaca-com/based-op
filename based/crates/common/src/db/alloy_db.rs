@@ -162,6 +162,11 @@ impl BopDbRead for AlloyDB {
          todo!("remove this")
     }
 
+    /// Returns the current block head number.
+    fn block_number(&self) -> Result<u64, Error> {
+        debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
+        Ok(self.block_number.as_u64().unwrap())
+    }
 }
 
 impl BopDB for AlloyDB {

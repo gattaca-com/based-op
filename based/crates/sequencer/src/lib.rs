@@ -158,6 +158,7 @@ pub enum SequencerEvent<Db: BopDbRead> {
     ReceivedPayloadAttribues(Option<Box<OpPayloadBuilderAttributes>>),
     NewTx(Arc<Transaction>),
     SimResult(SimulatorToSequencer<Db>),
+    EngineApi(messages::EngineApi)
 }
 
 impl<Db: BopDB> SequencerState<Db> {
@@ -198,8 +199,8 @@ impl<Db: BopDB> SequencerState<Db> {
 
     fn handle_sim_result(
         self,
-        data: &mut SharedData<Db>,
         result: SimulatorToSequencer<Db::ReadOnly>,
+        data: &mut SharedData<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
         use messages::SimulatorToSequencerMsg::*;
@@ -270,6 +271,9 @@ impl<Db: BopDB> SequencerState<Db> {
         }
     }
 
+    fn handle_engine_api(&self, msg: messages::EngineApi, data: &mut SharedData<Db>, senders: &SendersSpine<<Db as BopDB>::ReadOnly>) -> SequencerState<Db> {
+        todo!()
+    }
     pub fn update(
         mut self,
         event: SequencerEvent<Db::ReadOnly>,
@@ -281,10 +285,12 @@ impl<Db: BopDB> SequencerState<Db> {
             BlockSync(block) => self.handle_block_sync(block, data),
             ReceivedPayloadAttribues(attributes) => self.handle_payload_attributes(attributes, data),
             NewTx(tx) => self.handle_new_tx(tx, data, senders),
-            SimResult(res) => self.handle_sim_result(data, res, senders),
+            SimResult(res) => self.handle_sim_result(res,data, senders),
+            EngineApi(msg) => self.handle_engine_api(msg, data, senders)
         }
         ._update(data, senders)
     }
+
 }
 
 #[derive(Clone, Debug)]
@@ -353,7 +359,8 @@ impl<Db: BopDB> Actor<Db::ReadOnly> for Sequencer<Db> {
         });
 
         connections.receive(|msg, senders| {
-            self.handle_engine_api_message(msg, senders);
+            self.state =
+                std::mem::take(&mut self.state).update(SequencerEvent::EngineApi(msg), &mut self.data, senders);
         });
 
         connections.receive(|msg, senders| {
@@ -364,26 +371,5 @@ impl<Db: BopDB> Actor<Db::ReadOnly> for Sequencer<Db> {
             // Process blocks as they arrive
             self.state = std::mem::take(&mut self.state).update(SequencerEvent::BlockSync(msg), &mut self.data, senders);
         });
-    }
-}
-
-impl<Db: BopDB> Sequencer<Db> {
-    /// Handles messages from the engine API.
-    ///
-    /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
-    fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<Db::ReadOnly>) {
-        match msg {
-            messages::EngineApi::NewPayloadV3 {
-                payload,
-                versioned_hashes: _,
-                parent_beacon_block_root: _,
-                res_tx: _,
-            } => {
-                todo!("fetch blocks")
-                // TODO: apply new payload
-            }
-            messages::EngineApi::ForkChoiceUpdatedV3 { fork_choice_state: _, payload_attributes: _, res_tx: _ } => {}
-            messages::EngineApi::GetPayloadV3 { payload_id: _, res: _ } => {}
-        }
     }
 }

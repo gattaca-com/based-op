@@ -82,4 +82,7 @@ impl BopDbRead for BlockDB {
     fn unique_hash(&self) -> B256 {
         self.unique_hash
     }
+    fn block_number(&self) -> Result<u64,Error> {
+        todo!()
+    }
 }
