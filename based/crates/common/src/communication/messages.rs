@@ -7,14 +7,17 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use revm::db::CacheDB;
+use revm::{db::CacheDB, DatabaseRef};
+use revm_primitives::EVMError;
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
 use tokio::sync::oneshot;
 
 use crate::{
-    db::DBFrag, time::{Duration, IngestionTime, Instant, Nanos}, transaction::{SimulatedTx, SimulatedTxList, Transaction}
+    db::{BopDbRead, DBFrag},
+    time::{Duration, IngestionTime, Instant, Nanos},
+    transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
@@ -195,11 +198,11 @@ pub enum RpcError {
 impl From<RpcError> for RpcErrorObject<'static> {
     fn from(value: RpcError) -> Self {
         match value {
-            RpcError::Internal |
-            RpcError::Timeout(_) |
-            RpcError::ChannelClosed(_) |
-            RpcError::Jsonrpsee(_) |
-            RpcError::TokioJoin(_) => internal_error(),
+            RpcError::Internal
+            | RpcError::Timeout(_)
+            | RpcError::ChannelClosed(_)
+            | RpcError::Jsonrpsee(_)
+            | RpcError::TokioJoin(_) => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
@@ -226,11 +229,11 @@ pub enum SequencerToSimulator<Db> {
     SimulateTxTof(DBFrag<Db>, Arc<Transaction>),
 }
 
-#[derive(Clone, Debug)]
-pub struct SimulatorToSequencer {
+#[derive( Debug)]
+pub struct SimulatorToSequencer<Db: BopDbRead> {
     order_hash: B256,
     id: usize,
-    msg: Result<SimulatorToSequencerMsg, SimulationError>,
+    msg: Result<SimulatorToSequencerMsg, SimulationError<<Db as DatabaseRef>::Error>>,
 }
 
 #[derive(Clone, Debug, AsRefStr)]
@@ -239,12 +242,14 @@ pub enum SimulatorToSequencerMsg {
     /// During sorting/on top of any state
     Tx(SimulatedTx),
     /// Specifically on top of top of fragment
-    TxTof(SimulatedTx)
+    TxTof(SimulatedTx),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]
 #[repr(u8)]
-pub enum SimulationError {
+pub enum SimulationError<DbError> {
+    #[error("Evm error")]
+    EvmError(#[from] EVMError<DbError>),
     #[error("Order pays nothing")]
     ZeroPayment,
 }

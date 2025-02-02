@@ -41,14 +41,13 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
         Self { evm, evm_tof }
     }
 
-    fn simulate_tx(&mut self, tx: Arc<Transaction>) -> Result<SimulatedTx, SimulationError> {
-        todo!()
-        // tx.fill_tx_env(self.evm.tx_mut());
-        // let res = self.evm.transact()
-        // SimulatedTx {
-        //     tx,
-
-        // }
+    fn simulate_tx(
+        &mut self,
+        tx: Arc<Transaction>,
+    ) -> Result<SimulatedTx, SimulationError<<Db as DatabaseRef>::Error>> {
+        tx.fill_tx_env(self.evm.tx_mut());
+        let res = self.evm.transact()?;
+        Ok(SimulatedTx::new(tx, res, self.evm.db(), self.evm.block().coinbase))
     }
 
     fn set_blockenv(&mut self, env: BlockEnv) {

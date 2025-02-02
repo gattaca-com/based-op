@@ -52,14 +52,14 @@ impl SortingFragOrders {
     }
 }
 
-impl<Db, DbRead> From<&SharedData<Db, DbRead>> for SortingFragOrders {
-    fn from(value: &SharedData<Db, DbRead>) -> Self {
+impl<Db: BopDB> From<&SharedData<Db>> for SortingFragOrders {
+    fn from(value: &SharedData<Db>) -> Self {
         Self { orders: value.tx_pool.clone_active() }
     }
 }
 
 #[derive(Clone, Debug, Default, AsRefStr)]
-pub enum SequencerState<DbRead> {
+pub enum SequencerState<Db: BopDB> {
     #[default]
     WaitingForSync,
     WaitingForPayloadAttributes,
@@ -67,7 +67,7 @@ pub enum SequencerState<DbRead> {
         /// This is the db that is built on top of the last block chunk to be used to
         /// build a new cachedb on top of for sorting
         /// starting a new sort
-        frag: BuiltFrag<DbRead>,
+        frag: BuiltFrag<Db::ReadOnly>,
         until: Instant,
         in_flight_sims: usize,
         tof_snapshot: SortingFragOrders,
@@ -81,15 +81,15 @@ pub enum SequencerState<DbRead> {
 
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
-pub enum SequencerEvent {
+pub enum SequencerEvent<Db: BopDbRead> {
     BlockSync(Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>),
     ReceivedPayloadAttribues(Option<Box<OpPayloadBuilderAttributes>>),
     NewTx(Arc<Transaction>),
-    SimResult(SimulatorToSequencer),
+    SimResult(SimulatorToSequencer<Db>),
 }
 
-impl<DbRead: BopDbRead> SequencerState<DbRead> {
-    pub fn start_sorting<Db>(data: &SharedData<Db, DbRead>) -> Self {
+impl<Db: BopDB> SequencerState<Db> {
+    pub fn start_sorting(data: &SharedData<Db>) -> Self {
         Self::Sorting {
             frag: BuiltFrag::new(CacheDB::new(data.frag_db.clone()), data.config.max_gas),
             until: Instant::now() + data.config.frag_duration,
@@ -99,33 +99,37 @@ impl<DbRead: BopDbRead> SequencerState<DbRead> {
         }
     }
 
-    fn handle_block_sync<Db>(
+    fn handle_block_sync(
         mut self,
         block: Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>,
-        data: &mut SharedData<Db, DbRead>,
+        data: &mut SharedData<Db>,
     ) -> Self {
         todo!()
     }
 
-    fn handle_payload_attributes<Db>(
+    fn handle_payload_attributes(
         mut self,
         attributes: Option<Box<OpPayloadBuilderAttributes>>,
-        data: &mut SharedData<Db, DbRead>,
+        data: &mut SharedData<Db>,
     ) -> Self {
         todo!()
     }
 
-    fn handle_new_tx<Db>(
+    fn handle_new_tx(
         mut self,
         tx: Arc<Transaction>,
-        data: &mut SharedData<Db, DbRead>,
-        senders: &SendersSpine<DbRead>,
+        data: &mut SharedData<Db>,
+        senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
         data.tx_pool.handle_new_tx(tx, &data.frag_db, DEFAULT_BASE_FEE, senders);
         self
     }
 
-    fn handle_sim_result(mut self, result: SimulatorToSequencer, senders: &SendersSpine<DbRead>) -> Self {
+    fn handle_sim_result(
+        mut self,
+        result: SimulatorToSequencer<Db::ReadOnly>,
+        senders: &SendersSpine<Db::ReadOnly>,
+    ) -> Self {
         match self {
             SequencerState::Sorting { mut frag, until, in_flight_sims, mut next_to_be_applied, tof_snapshot }
                 if in_flight_sims == 0 =>
@@ -142,7 +146,7 @@ impl<DbRead: BopDbRead> SequencerState<DbRead> {
         }
     }
 
-    fn _update<Db>(mut self, data: &mut SharedData<Db, DbRead>, senders: &SendersSpine<DbRead>) -> Self {
+    fn _update(mut self, data: &mut SharedData<Db>, senders: &SendersSpine<Db::ReadOnly>) -> Self {
         match self {
             SequencerState::Sorting { frag, until, in_flight_sims, tof_snapshot, next_to_be_applied }
                 if until < Instant::now() =>
@@ -153,11 +157,11 @@ impl<DbRead: BopDbRead> SequencerState<DbRead> {
         }
     }
 
-    pub fn update<Db: BopDB>(
+    pub fn update(
         mut self,
-        event: SequencerEvent,
-        data: &mut SharedData<Db, DbRead>,
-        senders: &SendersSpine<DbRead>,
+        event: SequencerEvent<Db::ReadOnly>,
+        data: &mut SharedData<Db>,
+        senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
         use SequencerEvent::*;
         match event {
@@ -183,10 +187,10 @@ impl Default for SequencerConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct SharedData<Db, DbRead> {
+pub struct SharedData<Db: BopDB> {
     tx_pool: TxPool,
     db: Db,
-    frag_db: DBFrag<DbRead>,
+    frag_db: DBFrag<Db::ReadOnly>,
     runtime: Arc<Runtime>,
     config: SequencerConfig,
     fork_choice_state: ForkchoiceState,
@@ -194,13 +198,13 @@ pub struct SharedData<Db, DbRead> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Sequencer<Db, DbRead> {
-    state: SequencerState<DbRead>,
-    data: SharedData<Db, DbRead>,
+pub struct Sequencer<Db: BopDB> {
+    state: SequencerState<Db>,
+    data: SharedData<Db>,
 }
 
-impl<Db: BopDB, DbRead: BopDbRead> Sequencer<Db, DbRead> {
-    pub fn new(db: Db, frag_db: DBFrag<DbRead>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
+impl<Db: BopDB> Sequencer<Db> {
+    pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         Self {
             data: SharedData {
                 db,
@@ -218,14 +222,11 @@ impl<Db: BopDB, DbRead: BopDbRead> Sequencer<Db, DbRead> {
 
 const DEFAULT_BASE_FEE: u64 = 10;
 
-impl<Db: BopDB, DbRead: BopDbRead> Actor<DbRead> for Sequencer<Db, DbRead> {
+impl<Db: BopDB> Actor<Db::ReadOnly> for Sequencer<Db> {
     const CORE_AFFINITY: Option<usize> = Some(0);
 
-    fn loop_body(
-        &mut self,
-        connections: &mut Connections<SendersSpine<DbRead>, ReceiversSpine<DbRead>>,
-    ) {
-        connections.receive(|msg: SimulatorToSequencer, _| {
+    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db::ReadOnly>, ReceiversSpine<Db::ReadOnly>>) {
+        connections.receive(|msg: SimulatorToSequencer<Db::ReadOnly>, _| {
             todo!();
         });
 
@@ -244,7 +245,7 @@ impl<Db: BopDB, DbRead: BopDbRead> Actor<DbRead> for Sequencer<Db, DbRead> {
     }
 }
 
-impl<Db: BopDB, DbRead: BopDbRead> Sequencer<Db, DbRead> {
+impl<Db: BopDB> Sequencer<Db> {
     fn handle_block(&mut self, block_result: Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>) {
         let block = block_result.expect("failed to fetch block");
         todo!()
@@ -256,7 +257,7 @@ impl<Db: BopDB, DbRead: BopDbRead> Sequencer<Db, DbRead> {
     /// Handles messages from the engine API.
     ///
     /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
-    fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<DbRead>) {
+    fn handle_engine_api_message(&self, msg: messages::EngineApi, senders: &SendersSpine<Db::ReadOnly>) {
         match msg {
             messages::EngineApi::NewPayloadV3 {
                 payload,

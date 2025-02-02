@@ -24,12 +24,11 @@ mod error;
 mod init;
 mod util;
 
+use block::BlockDB;
+use cache::ReadCaches;
 pub use error::Error;
 pub use init::init_database;
 pub use util::state_changes_to_bundle_state;
-
-use block::BlockDB;
-use cache::ReadCaches;
 /// DB to be used while sorting, adds on top of the last frag
 pub type DBSorting<Db> = Arc<CacheDB<DBFrag<Db>>>;
 

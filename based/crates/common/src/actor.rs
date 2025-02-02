@@ -7,7 +7,7 @@ use core_affinity::CoreId;
 use tracing::{info, span, warn, Level};
 
 use crate::{
-    communication::SpineConnections, db::DBFrag, time::{vsync, Duration, Timer}, utils::last_part_of_typename
+    communication::SpineConnections, db::{BopDbRead, DBFrag}, time::{vsync, Duration, Timer}, utils::last_part_of_typename
 };
 
 #[derive(Copy, Clone, Default)]
@@ -32,7 +32,7 @@ impl ActorConfig {
     }
 }
 
-pub trait Actor<Db: Send>: Sized {
+pub trait Actor<Db: BopDbRead>: Sized {
     const CORE_AFFINITY: Option<usize> = None;
 
     fn loop_body(&mut self, _connections: &mut SpineConnections<Db>) {}
