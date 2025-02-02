@@ -12,7 +12,7 @@ use bop_common::communication::messages::EngineApi;
 use bop_db::{BopDB, BopDbRead};
 use crossbeam_channel::{Receiver, Sender};
 use op_alloy_consensus::OpTxEnvelope;
-use reqwest::Client;
+use reqwest::{Client, Url};
 use reth_consensus::ConsensusError;
 use reth_evm::execute::{
     BlockExecutionError, BlockExecutionOutput, BlockExecutionStrategy, BlockExecutionStrategyFactory, ExecuteOutput,
@@ -51,24 +51,24 @@ pub struct BlockSync {
     runtime: Arc<Runtime>,
 
     /// Used to fetch blocks from an EL node.
-    rpc_url: String,
+    rpc_url: Url,
 
     /// Used for fetching blocks from the RPC when our db is behind the chain head.
     /// Blocks are fetched async and returned to `BlockSync` through this channel.
-    sender_fetch_blocks_to_sequencer: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
-    receiver_fetch_blocks_to_sequencer: Receiver<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
+    sender_fetch_blocks_to_sequencer: Sender<Result<BlockWithSenders<OpBlock>, reqwest::Error>>,
+    receiver_fetch_blocks_to_sequencer: Receiver<Result<BlockWithSenders<OpBlock>, reqwest::Error>>,
 }
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
-    pub fn new(chain_spec: Arc<OpChainSpec>, runtime: Arc<Runtime>, rpc_url: &str) -> Self {
+    pub fn new(chain_spec: Arc<OpChainSpec>, runtime: Arc<Runtime>, rpc_url: Url) -> Self {
         let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
         let (sender_fetch_blocks_to_sequencer, receiver_fetch_blocks_to_sequencer) = crossbeam_channel::bounded(1_000);
         Self {
             chain_spec,
             execution_factory,
             runtime,
-            rpc_url: rpc_url.to_string(),
+            rpc_url,
             sender_fetch_blocks_to_sequencer,
             receiver_fetch_blocks_to_sequencer,
         }
@@ -238,18 +238,20 @@ mod tests {
 
         // Get RPC URL from environment
         let rpc_url = std::env::var(ENV_RPC_URL).unwrap_or(TEST_BASE_RPC_URL.to_string());
+        let rpc_url = Url::parse(&rpc_url).unwrap();
         tracing::info!("RPC URL: {}", rpc_url);
 
         // Create the block executor.
         let chain_spec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
-        let mut block_executor = BlockSync::new(chain_spec, rt.clone(), &rpc_url);
+        let mut block_executor = BlockSync::new(chain_spec, rt.clone(), rpc_url.clone());
 
         // Fetch the block from the RPC.
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        let block = rt.block_on(async { fetch_block(25771900, &client, &rpc_url).await.unwrap() });
+        let url = rpc_url.clone();
+        let block = rt.block_on(async { fetch_block(25771900, &client, url).await.unwrap() });
 
         // Create the alloydb.
-        let client = ProviderBuilder::new().on_http(rpc_url.parse().unwrap());
+        let client = ProviderBuilder::new().network().on_http(rpc_url);
         let alloydb = AlloyDB::new(client, block.header.number, rt);
 
         // Execute the block.
