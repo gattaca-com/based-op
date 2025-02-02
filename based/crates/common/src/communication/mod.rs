@@ -81,14 +81,16 @@ pub trait TrackedSenders {
     }
 }
 
+pub type CrossBeamReceiver<T> = crossbeam_channel::Receiver<InternalMessage<T>>;
+
 #[derive(Clone, Debug)]
 pub struct Receiver<T> {
-    receiver: crossbeam_channel::Receiver<InternalMessage<T>>,
+    receiver: CrossBeamReceiver<T>,
     timer: Timer,
 }
 
 impl<T> Receiver<T> {
-    pub fn new<S: AsRef<str>>(system_name: S, receiver: crossbeam_channel::Receiver<InternalMessage<T>>) -> Self {
+    pub fn new<S: AsRef<str>>(system_name: S, receiver: CrossBeamReceiver<T>) -> Self {
         Self { receiver, timer: Timer::new(format!("{}-{}", system_name.as_ref(), last_part_of_typename::<T>())) }
     }
 
@@ -172,29 +174,26 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 }
 
-// TODO remove
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct Spine<Db: BopDbRead> {
     sender_simulator_to_sequencer: Sender<SimulatorToSequencer<Db>>,
-    receiver_simulator_to_sequencer: crossbeam_channel::Receiver<InternalMessage<SimulatorToSequencer<Db>>>,
+    receiver_simulator_to_sequencer: CrossBeamReceiver<SimulatorToSequencer<Db>>,
 
     sender_sequencer_to_simulator: Sender<SequencerToSimulator<Db>>,
-    receiver_sequencer_to_simulator: crossbeam_channel::Receiver<InternalMessage<SequencerToSimulator<Db>>>,
+    receiver_sequencer_to_simulator: CrossBeamReceiver<SequencerToSimulator<Db>>,
 
     sender_sequencer_to_rpc: Sender<SequencerToExternal>,
-    receiver_sequencer_to_rpc: crossbeam_channel::Receiver<InternalMessage<SequencerToExternal>>,
+    receiver_sequencer_to_rpc: CrossBeamReceiver<SequencerToExternal>,
 
     sender_engine_rpc_to_sequencer: Sender<messages::EngineApi>,
-    receiver_engine_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<messages::EngineApi>>,
+    receiver_engine_rpc_to_sequencer: CrossBeamReceiver<messages::EngineApi>,
 
     sender_eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
-    receiver_eth_rpc_to_sequencer: crossbeam_channel::Receiver<InternalMessage<Arc<Transaction>>>,
+    receiver_eth_rpc_to_sequencer: CrossBeamReceiver<Arc<Transaction>>,
 
     sender_blockfetch_to_sequencer: Sender<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
-    receiver_blockfetch_to_sequencer: crossbeam_channel::Receiver<
-        InternalMessage<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
-    >,
+    receiver_blockfetch_to_sequencer:
+        CrossBeamReceiver<Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>>,
 }
 
 impl<Db: BopDbRead> Default for Spine<Db> {
@@ -237,7 +236,7 @@ macro_rules! from_spine {
                 }
             }
 
-            impl<Db: BopDbRead> From<&Spine<Db>> for crossbeam_channel::Receiver<InternalMessage<$T>> {
+            impl<Db: BopDbRead> From<&Spine<Db>> for CrossBeamReceiver<$T> {
                 fn from(spine: &Spine<Db>) -> Self {
                     spine.[<receiver_ $v>].clone()
                 }
