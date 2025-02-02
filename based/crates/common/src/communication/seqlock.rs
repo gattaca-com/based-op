@@ -296,7 +296,7 @@ mod tests {
         let mut got_110 = false;
         while !done.load(Ordering::Relaxed) {
             lock.read(&mut msg);
-            if msg.len() == 0 {
+            if msg.is_empty() {
                 got_empty = true;
                 continue;
             }

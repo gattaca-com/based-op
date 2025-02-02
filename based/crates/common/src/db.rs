@@ -1,11 +1,10 @@
 use std::{
     fmt::{Debug, Formatter},
-    ops::Deref,
     sync::Arc,
 };
 
 use alloy_primitives::B256;
-use parking_lot::{RwLock, RwLockReadGuard};
+use parking_lot::RwLock;
 use reth_db::DatabaseEnv;
 use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;

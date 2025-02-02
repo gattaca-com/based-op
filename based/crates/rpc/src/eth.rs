@@ -5,7 +5,7 @@ use alloy_rpc_types::{Block, BlockId, BlockNumberOrTag, TransactionReceipt};
 use bop_common::{
     api::EthApiServer,
     communication::{messages::RpcResult, Sender, Spine},
-    db::{BopDB, BopDbRead, DBFrag},
+    db::{BopDbRead, DBFrag},
     transaction::Transaction,
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};

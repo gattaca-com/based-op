@@ -1,6 +1,6 @@
 use std::{ops::Deref, sync::Arc};
 
-use alloy_primitives::{B256, U256};
+use alloy_primitives::U256;
 use revm::DatabaseRef;
 use revm_primitives::{Address, EvmState, ResultAndState};
 

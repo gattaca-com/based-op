@@ -17,7 +17,7 @@ use tokio::sync::oneshot;
 use crate::{
     db::{BopDbRead, DBFrag},
     time::{Duration, IngestionTime, Instant, Nanos},
-    transaction::{SimulatedTx, SimulatedTxList, Transaction},
+    transaction::{SimulatedTx, Transaction},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]

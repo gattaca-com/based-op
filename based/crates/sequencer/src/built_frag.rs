@@ -1,8 +1,7 @@
-use std::sync::Arc;
 
 use bop_common::{
     db::DBFrag,
-    transaction::{SimulatedTx, SimulatedTxList, Transaction},
+    transaction::SimulatedTx,
 };
 use revm::{db::CacheDB, DatabaseCommit};
 use revm_primitives::U256;

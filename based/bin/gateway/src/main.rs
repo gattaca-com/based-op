@@ -1,11 +1,10 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use bop_common::{
     actor::{Actor, ActorConfig},
     communication::Spine,
     config::Config,
-    db::{init_database, BopDB, BopDbRead, DBFrag},
-    time::Duration,
+    db::{init_database, BopDB, DBFrag},
     utils::{init_tracing, wait_for_signal},
 };
 use bop_rpc::{start_engine_rpc, start_eth_rpc};

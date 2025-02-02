@@ -1,5 +1,5 @@
 use alloy_primitives::Address;
-use bop_common::transaction::{SimulatedTxList, TxList};
+use bop_common::transaction::SimulatedTxList;
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]

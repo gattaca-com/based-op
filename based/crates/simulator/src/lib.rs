@@ -1,18 +1,15 @@
-use std::{mem::MaybeUninit, sync::Arc};
+use std::sync::Arc;
 
 use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{
-        messages::{SequencerToSimulator, SimulationError},
-        Connections, ReceiversSpine, SendersSpine, Spine, SpineConnections, TrackedSenders,
+        messages::{SequencerToSimulator, SimulationError}, SpineConnections,
     },
-    db::{BopDB, BopDbRead, DBFrag, DBSorting},
-    time::Duration,
+    db::{BopDbRead, DBFrag},
     transaction::{SimulatedTx, Transaction},
-    utils::last_part_of_typename,
 };
 use reth_evm::ConfigureEvm;
-use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
+use reth_optimism_chainspec::OpChainSpecBuilder;
 use reth_optimism_evm::OpEvmConfig;
 use revm::{db::CacheDB, DatabaseRef, Evm};
 use revm_primitives::{BlockEnv, SpecId};

@@ -4,7 +4,6 @@ use alloy_consensus::Block;
 use messages::{SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
-use revm::DatabaseRef;
 use shared_memory::ShmemError;
 use thiserror::Error;
 
@@ -16,7 +15,7 @@ pub mod messages;
 pub use messages::InternalMessage;
 
 use crate::{
-    db::{BopDB, BopDbRead},
+    db::BopDbRead,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
     utils::last_part_of_typename,

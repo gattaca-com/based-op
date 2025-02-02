@@ -8,7 +8,7 @@ use tracing::{info, span, warn, Level};
 
 use crate::{
     communication::SpineConnections,
-    db::{BopDbRead, DBFrag},
+    db::BopDbRead,
     time::{vsync, Duration, Timer},
     utils::last_part_of_typename,
 };

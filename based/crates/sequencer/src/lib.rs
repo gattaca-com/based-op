@@ -5,10 +5,10 @@ use alloy_rpc_types::engine::ForkchoiceState;
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, SimulationError, SimulatorToSequencer},
+        messages::{self, SimulatorToSequencer},
         Connections, ReceiversSpine, SendersSpine,
     },
-    db::{BopDB, BopDbRead, DBFrag, DBSorting},
+    db::{BopDB, BopDbRead, DBFrag},
     time::{Duration, Instant},
     transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
@@ -19,10 +19,9 @@ use reth_optimism_node::OpPayloadBuilderAttributes;
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use revm::db::CacheDB;
-use revm_primitives::{db::DatabaseRef, B256};
+use revm_primitives::B256;
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
-use tracing::info;
 
 use crate::block_sync::fetch_blocks::fetch_blocks_and_send_sequentially;
 
@@ -42,11 +41,9 @@ impl SortingFragOrders {
     pub fn remove(&mut self, hash: B256) {
         for i in (0..self.len() - 1).rev() {
             let order = &mut self.orders[i];
-            if order.hash() == hash {
-                if order.pop() {
-                    self.orders.swap_remove(i);
-                    return;
-                }
+            if order.hash() == hash && order.pop() {
+                self.orders.swap_remove(i);
+                return;
             }
         }
     }
@@ -100,7 +97,7 @@ impl<Db: BopDB> SequencerState<Db> {
     }
 
     fn handle_block_sync(
-        mut self,
+        self,
         block: Result<BlockWithSenders<Block<OpTransactionSigned>>, reqwest::Error>,
         data: &mut SharedData<Db>,
     ) -> Self {
@@ -108,7 +105,7 @@ impl<Db: BopDB> SequencerState<Db> {
     }
 
     fn handle_payload_attributes(
-        mut self,
+        self,
         attributes: Option<Box<OpPayloadBuilderAttributes>>,
         data: &mut SharedData<Db>,
     ) -> Self {
@@ -116,7 +113,7 @@ impl<Db: BopDB> SequencerState<Db> {
     }
 
     fn handle_new_tx(
-        mut self,
+        self,
         tx: Arc<Transaction>,
         data: &mut SharedData<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
@@ -126,7 +123,7 @@ impl<Db: BopDB> SequencerState<Db> {
     }
 
     fn handle_sim_result(
-        mut self,
+        self,
         result: SimulatorToSequencer<Db::ReadOnly>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
@@ -146,7 +143,7 @@ impl<Db: BopDB> SequencerState<Db> {
         }
     }
 
-    fn _update(mut self, data: &mut SharedData<Db>, senders: &SendersSpine<Db::ReadOnly>) -> Self {
+    fn _update(self, data: &mut SharedData<Db>, senders: &SendersSpine<Db::ReadOnly>) -> Self {
         match self {
             SequencerState::Sorting { frag, until, in_flight_sims, tof_snapshot, next_to_be_applied }
                 if until < Instant::now() =>
@@ -158,7 +155,7 @@ impl<Db: BopDB> SequencerState<Db> {
     }
 
     pub fn update(
-        mut self,
+        self,
         event: SequencerEvent<Db::ReadOnly>,
         data: &mut SharedData<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
