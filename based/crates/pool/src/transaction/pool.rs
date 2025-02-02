@@ -85,7 +85,7 @@ impl TxPool {
     }
 
     /// Validates simualted tx. If valid, fetch its TxList and save the new [SimulatedTxList] to `active_txs`.
-    pub fn handle_simulated(&mut self) {
+    pub fn handle_simulated(&mut self,) {
         // TODO: check validity. Success/ correct sim state etc
 
         let simulated_tx: SimulatedTx = todo!();
@@ -132,8 +132,8 @@ impl TxPool {
 
     /// If this is called with `None` the assumption is that we are not yet ready to send top-of-block sims.
     fn send_sim_requests_for_tx<Db: BopDbRead>(tx: &Arc<Transaction>, db: &DBFrag<Db>, sim_sender: &SendersSpine<Db>) {
-        if let Err(error) = sim_sender
-            .send_timeout(SequencerToSimulator::SimulateTxTof(db.clone(), tx.clone()), Duration::from_millis(10))
+        if let Err(error) =
+            sim_sender.send_timeout(SequencerToSimulator::SimulateTxTof(tx.clone(), db.clone()), Duration::from_millis(10))
         {
             tracing::warn!(?error, "couldn't send simulator message");
             debug_assert!(false, "Couldn't send simulator message");

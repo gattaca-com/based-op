@@ -224,17 +224,24 @@ pub enum SequencerToSimulator<Db> {
     //TODO: Add if anything should be communicated here
     NewBlock,
     /// Simulate Tx on top of a partially built frag
-    SimulateTx(Arc<CacheDB<DBFrag<Db>>>, Arc<Transaction>),
+    SimulateTx(Arc<Transaction>, Arc<CacheDB<DBFrag<Db>>>, ),
     /// Simulate Tx Top of frag
-    SimulateTxTof(DBFrag<Db>, Arc<Transaction>),
+    //TODO: Db can be set on frag commit once we broadcast msgs to sims
+    SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
 }
 
 #[derive(Debug)]
 pub struct SimulatorToSequencer<Db: BopDbRead> {
     order_hash: B256,
-    id: usize,
     msg: Result<SimulatorToSequencerMsg, SimulationError<<Db as DatabaseRef>::Error>>,
 }
+
+impl<Db: BopDbRead> SimulatorToSequencer<Db> {
+    pub fn new(order_hash: B256, msg:Result<SimulatorToSequencerMsg, SimulationError<<Db as DatabaseRef>::Error>>) -> Self {
+        Self { order_hash, msg }
+    }
+}
+
 
 #[derive(Clone, Debug, AsRefStr)]
 #[repr(u8)]
