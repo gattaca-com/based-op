@@ -176,6 +176,16 @@ impl BopDB for AlloyDB {
         // No-op
         Ok(())
     }
+
+    fn commit_block_unchecked(
+        &self,
+        _block: &BlockWithSenders<OpBlock>,
+        _block_execution_output: BlockExecutionOutput<OpReceipt>,
+        _trie_updates: TrieUpdates,
+    ) -> Result<(), Error> {
+        // No-op
+        Ok(())
+    }
 }
 
 #[cfg(test)]
