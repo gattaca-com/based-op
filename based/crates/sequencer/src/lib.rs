@@ -1,81 +1,305 @@
-use std::sync::Arc;
+use std::{fmt::Display, ops::Deref, sync::Arc};
 
+use alloy_consensus::{Block, SignableTransaction};
+use alloy_rpc_types::engine::{ExecutionPayload, ForkchoiceState};
+use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, SimulatorToSequencer},
-        Connections, ReceiversSpine, SendersSpine,
+        messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulationError, SimulatorToSequencer},
+        Connections, ReceiversSpine, SendersSpine, TrackedSenders,
     },
-    transaction::Transaction,
+    db::{BopDB, BopDbRead, DBFrag, DBSorting},
+    time::{Duration, Instant},
+    transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
-use bop_db::BopDbRead;
 use bop_pool::transaction::pool::TxPool;
-use revm_primitives::db::DatabaseRef;
+use built_frag::BuiltFrag;
+use op_alloy_consensus::OpTxEnvelope;
+use op_alloy_rpc_types_engine::OpPayloadAttributes;
+use reqwest::Url;
+use reth_evm::execute::ProviderError;
+use reth_optimism_chainspec::OpChainSpecBuilder;
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives_traits::SignedTransaction;
+use revm::Database;
+use revm_primitives::{Address, B256};
+use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
-use tracing::info;
-
-use crate::block_sync::fetch_blocks::fetch_blocks_and_send_sequentially;
+use tracing::{error, warn};
 
 pub(crate) mod block_sync;
+pub(crate) mod built_frag;
+pub(crate) mod sorting;
+use sorting::SortingData;
 
-#[allow(dead_code)]
-pub struct Sequencer<Db> {
-    tx_pool: TxPool,
-    db: Db,
-    runtime: Arc<Runtime>,
+#[derive(Clone, Debug, Default, AsRefStr)]
+pub enum SequencerState<Db: BopDB> {
+    #[default]
+    WaitingForSync,
+    WaitingForPayloadAttributes,
+    Sorting(SortingData<Db>),
+    Syncing {
+        /// When the stage reaches this syncing is done
+        last_block_number: u64,
+    },
 }
 
-impl<Db: DatabaseRef> Sequencer<Db> {
-    pub fn new(db: Db, runtime: Arc<Runtime>) -> Self {
-        Self { db, tx_pool: TxPool::default(), runtime }
+#[derive(Debug, AsRefStr)]
+#[repr(u8)]
+pub enum SequencerEvent<Db: BopDbRead> {
+    BlockSync(BlockSyncMessage),
+    NewTx(Arc<Transaction>),
+    SimResult(SimulatorToSequencer<Db>),
+    EngineApi(EngineApi),
+}
+
+impl<Db> SequencerState<Db>
+where
+    Db: BopDB + BopDbRead,
+{
+    fn handle_engine_api(
+        self,
+        msg: EngineApi,
+        data: &mut SharedData<Db>,
+        senders: &SendersSpine<<Db as BopDB>::ReadOnly>,
+    ) -> SequencerState<Db> {
+        match msg {
+            EngineApi::ForkChoiceUpdatedV3 { payload_attributes: Some(payload_attributes), .. } => {
+                data.payload_attributes = payload_attributes;
+                match self {
+                    SequencerState::WaitingForSync | SequencerState::Syncing { .. } => self,
+                    SequencerState::WaitingForPayloadAttributes => {
+                        data.create_and_apply_first_frag();
+                        SequencerState::Sorting(SortingData::from(&(*data)))
+                    }
+                    _ => {
+                        debug_assert!(false, "Don't handle payload attributes during {}", self.as_ref());
+                        self
+                    }
+                }
+            }
+            EngineApi::NewPayloadV3 { payload, .. } => {
+                match self {
+                    SequencerState::WaitingForSync |
+                    SequencerState::WaitingForPayloadAttributes |
+                    SequencerState::Syncing { .. } => {
+                        //TODO: @Guys what should be the exection sidecar?
+                        if let Some(last_block_number) = data
+                            .block_executor
+                            .apply_new_payload(ExecutionPayload::V3(payload), Default::default(), &data.db, senders)
+                            .expect("Issue with block sync")
+                        {
+                            SequencerState::Syncing { last_block_number }
+                        } else {
+                            SequencerState::WaitingForPayloadAttributes
+                        }
+                    }
+                    _ => {
+                        debug_assert!(false, "Should not have received new payload  while in state {self:?}");
+                        self
+                    }
+                }
+            }
+            _ => todo!(),
+        }
+    }
+
+    fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SharedData<Db>) -> Self {
+        let Ok(block) = block else {
+            todo!("handle block sync error");
+        };
+        use SequencerState::*;
+        match self {
+            WaitingForSync | WaitingForPayloadAttributes => {
+                data.block_executor.apply_and_commit_block(&block, &data.db).expect("issue syncing block");
+                let txs = block.into_transactions().into_iter().map(|t| Arc::new(t.into())).collect::<Vec<_>>();
+                data.tx_pool.handle_new_block(&txs, data.base_fee);
+                //TODO: handle case of payload before blocksync
+                WaitingForPayloadAttributes
+            }
+            Syncing { last_block_number } => {
+                data.block_executor.apply_and_commit_block(&block, &data.db).expect("issue syncing block");
+                if block.number != last_block_number {
+                    Syncing { last_block_number }
+                } else {
+                    WaitingForPayloadAttributes
+                }
+            }
+            _ => {
+                debug_assert!(false, "Should not have received block sync update while in state {self:?}");
+                self
+            }
+        }
+    }
+
+    fn handle_new_tx(
+        self,
+        tx: Arc<Transaction>,
+        data: &mut SharedData<Db>,
+        senders: &SendersSpine<Db::ReadOnly>,
+    ) -> Self {
+        data.tx_pool.handle_new_tx(tx, &data.frag_db, data.base_fee, senders);
+        self
+    }
+
+    fn handle_sim_result(
+        self,
+        result: SimulatorToSequencer<Db::ReadOnly>,
+        data: &mut SharedData<Db>,
+        senders: &SendersSpine<Db::ReadOnly>,
+    ) -> Self {
+        use messages::SimulatorToSequencerMsg::*;
+        let sender = *result.sender();
+        match result.msg {
+            Tx(simulated_tx) => {
+                // make sure we are actually sorting
+                let SequencerState::Sorting(mut sort_data) = self else {
+                    return self;
+                };
+
+                // handle sim on wrong state
+                if sort_data.is_valid(result.unique_hash) {
+                    warn!("received sim result on wrong state, dropping");
+                    return SequencerState::Sorting(sort_data);
+                }
+                sort_data.handle_sim(simulated_tx, sender, data.base_fee);
+                SequencerState::Sorting(sort_data)
+            }
+            TxTof(simulated_tx) => {
+                match simulated_tx {
+                    Ok(res) if result.unique_hash == data.frag_db.unique_hash() => data.tx_pool.handle_simulated(res),
+                    // resend because was on the wrong hash
+                    Ok(res) => {
+                        let _ = senders.send_timeout(
+                            SequencerToSimulator::SimulateTxTof(res.tx, data.frag_db.clone()),
+                            Duration::from_millis(10),
+                        );
+                    }
+                    Err(e) => {
+                        error!("simming tx {e}");
+                        data.tx_pool.remove(&sender)
+                    }
+                }
+                self
+            }
+        }
+    }
+
+    fn _update(self, data: &mut SharedData<Db>, senders: &SendersSpine<Db::ReadOnly>) -> Self {
+        use SequencerState::*;
+        match self {
+            Sorting(sorting_data) if sorting_data.should_frag() => {
+                todo!("Seal and send frag")
+            }
+            Sorting(sorting_data) if sorting_data.finished_iteration() => {
+                Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, senders, data.base_fee))
+            }
+            _ => self,
+        }
+    }
+
+    pub fn update(
+        self,
+        event: SequencerEvent<Db::ReadOnly>,
+        data: &mut SharedData<Db>,
+        senders: &SendersSpine<Db::ReadOnly>,
+    ) -> Self {
+        use SequencerEvent::*;
+        match event {
+            BlockSync(block) => self.handle_block_sync(block, data),
+            NewTx(tx) => self.handle_new_tx(tx, data, senders),
+            SimResult(res) => self.handle_sim_result(res, data, senders),
+            EngineApi(msg) => self.handle_engine_api(msg, data, senders),
+        }
+        ._update(data, senders)
     }
 }
 
-const DEFAULT_BASE_FEE: u64 = 10;
+#[derive(Clone, Debug)]
+pub struct SequencerConfig {
+    frag_duration: Duration,
+    max_gas: u64,
+    n_per_loop: usize,
+    rpc_url: Url,
+}
+impl Default for SequencerConfig {
+    fn default() -> Self {
+        Self { frag_duration: Duration::from_millis(200), max_gas: 300_000_000, n_per_loop: 10, rpc_url: todo!() }
+    }
+}
 
-impl<Db> Actor<Db> for Sequencer<Db>
+#[derive(Clone, Debug)]
+pub struct SharedData<Db: BopDB> {
+    tx_pool: TxPool,
+    db: Db,
+    frag_db: DBFrag<Db::ReadOnly>,
+    block_executor: BlockSync,
+    config: SequencerConfig,
+    fork_choice_state: ForkchoiceState,
+    payload_attributes: Box<OpPayloadAttributes>,
+    //TODO: set from blocksync
+    base_fee: u64,
+}
+impl<Db: BopDB> SharedData<Db> {
+    fn create_and_apply_first_frag(&self) {
+        todo!()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Sequencer<Db: BopDB> {
+    state: SequencerState<Db>,
+    data: SharedData<Db>,
+}
+
+impl<Db: BopDB> Sequencer<Db> {
+    pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
+        Self {
+            data: SharedData {
+                db,
+                frag_db,
+                block_executor: BlockSync::new(
+                    Arc::new(OpChainSpecBuilder::base_mainnet().build()),
+                    runtime,
+                    config.rpc_url.clone(),
+                ),
+                config,
+                tx_pool: Default::default(),
+                fork_choice_state: Default::default(),
+                payload_attributes: Default::default(),
+                base_fee: Default::default(),
+            },
+            state: Default::default(),
+        }
+    }
+}
+
+impl<Db> Actor<Db::ReadOnly> for Sequencer<Db>
 where
-    Db: BopDbRead + Send,
-    <Db as DatabaseRef>::Error: std::fmt::Debug,
+    Db: BopDB + BopDbRead,
 {
     const CORE_AFFINITY: Option<usize> = Some(0);
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
-        connections.receive(|msg: SimulatorToSequencer, _| {
-            info!("received {}", msg.as_ref());
-            match msg {
-                SimulatorToSequencer::SimulatedTxList(_) => {}
-            };
+    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db::ReadOnly>, ReceiversSpine<Db::ReadOnly>>) {
+        connections.receive(|msg, senders| {
+            self.state =
+                std::mem::take(&mut self.state).update(SequencerEvent::SimResult(msg), &mut self.data, senders);
         });
 
-        connections.receive(|msg: messages::EngineApi, _| {
-            info!("received msg from engine api");
-            self.handle_engine_api_message(msg);
+        connections.receive(|msg, senders| {
+            self.state =
+                std::mem::take(&mut self.state).update(SequencerEvent::EngineApi(msg), &mut self.data, senders);
         });
 
-        connections.receive(|msg: Arc<Transaction>, senders| {
-            info!("received msg from ethapi");
-            self.tx_pool.handle_new_tx(msg, &self.db, DEFAULT_BASE_FEE, senders);
+        connections.receive(|msg, senders| {
+            self.state = std::mem::take(&mut self.state).update(SequencerEvent::NewTx(msg), &mut self.data, senders);
         });
-    }
-}
 
-impl<Db: DatabaseRef + BopDbRead> Sequencer<Db> {
-    /// Handles messages from the engine API.
-    ///
-    /// - `NewPayloadV3` triggers a block sync if the payload is for a new block.
-    fn handle_engine_api_message(&self, msg: messages::EngineApi) {
-        match msg {
-            messages::EngineApi::NewPayloadV3 {
-                payload: _,
-                versioned_hashes: _,
-                parent_beacon_block_root: _,
-                res_tx: _,
-            } => {
-                // TODO: apply new payload
-            }
-            messages::EngineApi::ForkChoiceUpdatedV3 { fork_choice_state: _, payload_attributes: _, res_tx: _ } => {}
-            messages::EngineApi::GetPayloadV3 { payload_id: _, res: _ } => {}
-        }
+        connections.receive(|msg, senders| {
+            // Process blocks as they arrive
+            self.state =
+                std::mem::take(&mut self.state).update(SequencerEvent::BlockSync(msg), &mut self.data, senders);
+        });
     }
 }

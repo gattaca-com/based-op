@@ -14,8 +14,11 @@ use reth_provider::{
 };
 use reth_storage_api::{HashedPostStateProvider, StorageLocation};
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::OriginalValuesKnown;
-use revm_primitives::{db::DatabaseCommit, Account, Address, HashMap};
+use revm::{
+    db::{BundleState, OriginalValuesKnown},
+    Database, DatabaseRef,
+};
+use revm_primitives::{db::DatabaseCommit, Account, AccountInfo, Address, Bytecode, HashMap, B256, U256};
 
 pub mod alloy_db;
 mod block;
@@ -44,6 +47,69 @@ impl Clone for DB {
 impl Debug for DB {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("DB")
+    }
+}
+
+impl DatabaseRef for DB {
+    type Error = <<DB as BopDB>::ReadOnly as DatabaseRef>::Error;
+
+    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        todo!()
+    }
+
+    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        todo!()
+    }
+
+    fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        todo!()
+    }
+
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        todo!()
+    }
+}
+
+impl Database for DB {
+    #[doc = " The database error type."]
+    type Error = bop_common::db::Error;
+
+    #[doc = " Get basic account information."]
+    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        todo!()
+    }
+
+    #[doc = " Get account code by its hash."]
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        todo!()
+    }
+
+    #[doc = " Get storage value of address at index."]
+    fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        todo!()
+    }
+
+    #[doc = " Get block hash by block number."]
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
+        todo!()
+    }
+}
+
+impl BopDbRead for DB {
+    fn get_nonce(&self, address: Address) -> u64 {
+        todo!()
+    }
+
+    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
+        todo!()
+    }
+
+    fn unique_hash(&self) -> B256 {
+        todo!()
+    }
+
+    fn block_number(&self) -> Result<u64, Error> {
+        todo!()
     }
 }
 

@@ -159,6 +159,10 @@ impl BopDbRead for AlloyDB {
         debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
         Ok(self.block_number.as_u64().unwrap())
     }
+
+    fn unique_hash(&self) -> B256 {
+        todo!()
+    }
 }
 
 impl BopDB for AlloyDB {

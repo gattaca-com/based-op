@@ -104,4 +104,8 @@ impl BopDbRead for BlockDB {
     fn block_number(&self) -> Result<u64, Error> {
         self.provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
     }
+
+    fn unique_hash(&self) -> B256 {
+        todo!()
+    }
 }

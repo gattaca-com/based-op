@@ -92,6 +92,14 @@ impl Add<Nanos> for Instant {
     }
 }
 
+impl Add<Duration> for Instant {
+    type Output = Instant;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Instant(self.0 + rhs.0)
+    }
+}
+
 impl AddAssign<Duration> for Instant {
     fn add_assign(&mut self, rhs: Duration) {
         self.0 += rhs.0

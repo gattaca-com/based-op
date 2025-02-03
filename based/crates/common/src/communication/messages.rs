@@ -4,16 +4,25 @@ use std::{
 };
 
 use alloy_primitives::B256;
-use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
+use alloy_rpc_types::engine::{
+    ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadError, PayloadId, PayloadStatus,
+};
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use reth_evm::execute::BlockExecutionError;
+use reth_optimism_primitives::OpBlock;
+use reth_primitives::BlockWithSenders;
+use revm::{db::CacheDB, DatabaseRef};
+use revm_primitives::{Address, EVMError};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
+use thiserror::Error;
 use tokio::sync::oneshot;
 
 use crate::{
+    db::{BopDbRead, DBFrag, DBSorting},
     time::{Duration, IngestionTime, Instant, Nanos},
-    transaction::Transaction,
+    transaction::{SimulatedTx, Transaction},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
@@ -213,20 +222,71 @@ fn internal_error() -> RpcErrorObject<'static> {
 }
 
 #[derive(Clone, Debug, AsRefStr)]
+#[repr(u8)]
 pub enum SequencerToSimulator<Db> {
     /// A signal for the simulators to reinitialize their
     /// cached block dependent state
     //TODO: Add if anything should be communicated here
     NewBlock,
-    //TODO: add cachedb
-    SimulateTxList(Option<Db> /* Arc<CacheDB<Db>> */, Vec<Arc<Transaction>>),
+    /// Simulate Tx on top of a partially built frag
+    SimulateTx(Arc<Transaction>, Arc<DBSorting<Db>>),
+    /// Simulate Tx Top of frag
+    //TODO: Db could be set on frag commit once we broadcast msgs to sims
+    SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
 }
 
-#[derive(Clone, Debug, AsRefStr)]
-pub enum SimulatorToSequencer {
-    //TODO: changes this to have the SimulatedTxList or so
-    SimulatedTxList(Vec<Arc<Transaction>>),
+#[derive(Debug)]
+pub struct SimulatorToSequencer<Db: BopDbRead> {
+    pub sender: Address,
+    pub unique_hash: B256,
+    pub msg: SimulatorToSequencerMsg<Db>,
+}
+
+impl<Db: BopDbRead> SimulatorToSequencer<Db> {
+    pub fn new(sender: Address, unique_hash: B256, msg: SimulatorToSequencerMsg<Db>) -> Self {
+        Self { sender, unique_hash, msg }
+    }
+
+    pub fn sender(&self) -> &Address {
+        &self.sender
+    }
+}
+
+pub type SimulationResult<T, Db> = Result<T, SimulationError<<Db as DatabaseRef>::Error>>;
+
+#[derive(Debug, AsRefStr)]
+#[repr(u8)]
+pub enum SimulatorToSequencerMsg<Db: BopDbRead> {
+    /// During sorting/on top of any state
+    Tx(SimulationResult<SimulatedTx, Db>),
+    /// Specifically on top of top of fragment
+    TxTof(SimulationResult<SimulatedTx, Db>),
+}
+
+#[derive(Clone, Debug, Error, AsRefStr)]
+#[repr(u8)]
+pub enum SimulationError<DbError> {
+    #[error("Evm error")]
+    EvmError(#[from] EVMError<DbError>),
+    #[error("Order pays nothing")]
+    ZeroPayment,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, AsRefStr)]
-pub enum SequencerToRpc {}
+pub enum SequencerToExternal {}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BlockSyncError {
+    #[error("Block fetch failed: {0}")]
+    Fetch(#[from] reqwest::Error),
+    #[error("Block execution failed: {0}")]
+    Execution(#[from] BlockExecutionError),
+    #[error("DB error: {0}")]
+    BopDb(#[from] crate::db::Error),
+    #[error("Payload error: {0}")]
+    Payload(#[from] PayloadError),
+    #[error("Failed to recover transaction signer")]
+    SignerRecovery,
+}
+
+pub type BlockSyncMessage = Result<BlockWithSenders<OpBlock>, BlockSyncError>;

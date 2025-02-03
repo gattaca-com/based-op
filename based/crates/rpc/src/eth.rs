@@ -5,19 +5,19 @@ use alloy_rpc_types::{Block, BlockId, BlockNumberOrTag, TransactionReceipt};
 use bop_common::{
     api::EthApiServer,
     communication::{messages::RpcResult, Sender, Spine},
+    db::{BopDbRead, DBFrag},
     transaction::Transaction,
 };
-use bop_db::BopDbRead;
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use tracing::{error, info, trace, Level};
 
 pub struct EthRpcServer<D> {
     new_order_tx: Sender<Arc<Transaction>>,
-    db: D,
+    db: DBFrag<D>,
 }
 
 impl<D: BopDbRead> EthRpcServer<D> {
-    pub fn new(spine: &Spine<D>, db: D) -> Self {
+    pub fn new(spine: &Spine<D>, db: DBFrag<D>) -> Self {
         Self { new_order_tx: spine.into(), db }
     }
 
@@ -40,7 +40,7 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
         trace!(?bytes, "new request");
 
         let tx = Arc::new(Transaction::decode(bytes)?);
-        let hash = tx.hash();
+        let hash = tx.tx_hash();
         let _ = self.new_order_tx.send(tx.into());
 
         Ok(hash)
