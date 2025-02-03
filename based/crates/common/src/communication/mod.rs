@@ -1,9 +1,7 @@
-use std::{fs::read_dir, path::Path, sync::Arc};
+use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
 
-use alloy_consensus::Block;
 use messages::{BlockSyncMessage, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
-use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
-use reth_primitives::BlockWithSenders;
+use revm_primitives::BlockEnv;
 use shared_memory::ShmemError;
 use thiserror::Error;
 
@@ -22,77 +20,109 @@ use crate::{
     utils::last_part_of_typename,
 };
 
+pub type CrossBeamReceiver<T> = crossbeam_channel::Receiver<InternalMessage<T>>;
+
+pub trait NonBlockingSender<T> {
+    fn try_send(&self, data: T) -> Result<(), T>;
+}
+
+pub trait HasSender<T> {
+    type Sender: NonBlockingSender<InternalMessage<T>>;
+    fn get_sender(&self) -> &Self::Sender;
+}
+
+pub trait NonBlockingReceiver<T> {
+    fn try_receive(&mut self) -> Option<T>;
+}
+
 // TODO: turn this into a macro
 pub trait TrackedSenders {
     fn set_ingestion_t(&mut self, ingestion_t: IngestionTime);
     fn ingestion_t(&self) -> IngestionTime;
 
-    fn send<T>(&self, data: T) -> Result<(), crossbeam_channel::SendError<InternalMessage<T>>>
+    fn send<T>(&self, data: T) -> Result<(), InternalMessage<T>>
     where
-        Self: AsRef<Sender<T>>,
+        Self: HasSender<T>,
     {
         let msg = self.ingestion_t().to_msg(data);
-        self.as_ref().send(msg)
-    }
-
-    fn send_log_err<T>(&self, data: T) -> Result<(), crossbeam_channel::SendError<InternalMessage<T>>>
-    where
-        Self: AsRef<Sender<T>>,
-    {
-        self.send(data).inspect_err(|e| tracing::error!("Couldn't send {}: {e}", last_part_of_typename::<T>()))
+        self.get_sender().try_send(msg)
     }
 
     fn send_forever<T>(&self, data: T)
     where
-        Self: AsRef<Sender<T>>,
+        Self: HasSender<T>,
     {
         if let Err(e) = self.send(data) {
-            tracing::error!("Couldn't send {}: {e}, retrying forever...", last_part_of_typename::<T>());
-            let mut msg = e.into_inner();
-            while let Err(e) = self.as_ref().send(msg) {
-                msg = e.into_inner();
+            tracing::error!("Couldn't send {}: retrying forever...", last_part_of_typename::<T>());
+            let mut msg = e.into_data();
+            while let Err(e) = self.send(msg) {
+                msg = e.into_data();
             }
         }
     }
 
-    fn send_timeout<T>(
-        &self,
-        data: T,
-        timeout: Duration,
-    ) -> Result<(), crossbeam_channel::SendError<InternalMessage<T>>>
+    fn send_timeout<T>(&self, data: T, timeout: Duration) -> Result<(), InternalMessage<T>>
     where
-        Self: AsRef<Sender<T>>,
+        Self: HasSender<T>,
     {
         if let Err(e) = self.send(data) {
-            tracing::error!("Couldn't send {}: {e}, retrying for {timeout}...", last_part_of_typename::<T>());
+            tracing::error!("Couldn't send {}: retrying for {timeout}...", last_part_of_typename::<T>());
             let curt = Instant::now();
-            let mut msg = e.into_inner();
-            while let Err(e) = self.as_ref().send(msg) {
+            let mut msg = e.into_data();
+            while let Err(e) = self.send(msg) {
                 if timeout < curt.elapsed() {
                     tracing::error!(
-                        "Couldn't send {}: {e}, retried for {timeout}, breaking off",
+                        "Couldn't send {}: retried for {timeout}, breaking off",
                         last_part_of_typename::<T>()
                     );
                     return Err(e);
                 }
-                msg = e.into_inner();
+                msg = e.into_data();
             }
         }
         Ok(())
     }
 }
 
-pub type CrossBeamReceiver<T> = crossbeam_channel::Receiver<InternalMessage<T>>;
-
-#[derive(Clone, Debug)]
-pub struct Receiver<T> {
-    receiver: CrossBeamReceiver<T>,
-    timer: Timer,
+impl<T> NonBlockingSender<T> for crossbeam_channel::Sender<T> {
+    fn try_send(&self, data: T) -> Result<(), T> {
+        self.send(data).map_err(|e| e.into_inner())
+    }
 }
 
-impl<T> Receiver<T> {
-    pub fn new<S: AsRef<str>>(system_name: S, receiver: CrossBeamReceiver<T>) -> Self {
-        Self { receiver, timer: Timer::new(format!("{}-{}", system_name.as_ref(), last_part_of_typename::<T>())) }
+impl<T> NonBlockingReceiver<T> for crossbeam_channel::Receiver<T> {
+    fn try_receive(&mut self) -> Option<T> {
+        self.try_recv().ok()
+    }
+}
+
+impl<T: Clone> NonBlockingSender<T> for Producer<T> {
+    fn try_send(&self, data: T) -> Result<(), T> {
+        self.produce_without_first(&data);
+        Ok(())
+    }
+}
+
+impl<T: Clone> NonBlockingReceiver<T> for Consumer<T> {
+    fn try_receive(&mut self) -> Option<T> {
+        self.try_consume()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Receiver<T, R = CrossBeamReceiver<T>> {
+    receiver: R,
+    timer: Timer,
+    _t: PhantomData<T>,
+}
+
+impl<T, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
+    pub fn new<S: AsRef<str>>(system_name: S, receiver: R) -> Self {
+        Self {
+            receiver,
+            timer: Timer::new(format!("{}-{}", system_name.as_ref(), last_part_of_typename::<T>())),
+            _t: PhantomData,
+        }
     }
 
     #[inline]
@@ -100,7 +130,7 @@ impl<T> Receiver<T> {
     where
         F: FnMut(T, &P),
     {
-        if let Ok(m) = self.receiver.try_recv() {
+        if let Some(m) = self.receiver.try_receive() {
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -118,7 +148,7 @@ impl<T> Receiver<T> {
     where
         F: FnMut(InternalMessage<T>, &P),
     {
-        if let Ok(m) = self.receiver.try_recv() {
+        if let Some(m) = self.receiver.try_receive() {
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -150,9 +180,10 @@ impl<S, R> Connections<S, R> {
 
 impl<S: TrackedSenders, R> Connections<S, R> {
     #[inline]
-    pub fn receive<T, F>(&mut self, mut f: F) -> bool
+    pub fn receive<T, F, RR>(&mut self, mut f: F) -> bool
     where
-        R: AsMut<Receiver<T>>,
+        RR: NonBlockingReceiver<InternalMessage<T>>,
+        R: AsMut<Receiver<T, RR>>,
         F: FnMut(T, &S),
     {
         let receiver = self.receivers.as_mut();
@@ -160,9 +191,10 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 
     #[inline]
-    pub fn receive_timestamp<T, F>(&mut self, mut f: F) -> bool
+    pub fn receive_timestamp<T, F, RR>(&mut self, mut f: F) -> bool
     where
-        R: AsMut<Receiver<T>>,
+        RR: NonBlockingReceiver<InternalMessage<T>>,
+        R: AsMut<Receiver<T, RR>>,
         F: FnMut(InternalMessage<T>, &S),
     {
         let receiver = self.receivers.as_mut();
@@ -170,9 +202,9 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 
     #[inline]
-    pub fn send<T>(&mut self, data: T) -> Result<(), crossbeam_channel::SendError<InternalMessage<T>>>
+    pub fn send<T, SS>(&mut self, data: T) -> Result<(), InternalMessage<T>>
     where
-        S: AsRef<Sender<T>>,
+        S: HasSender<T>,
     {
         self.senders.set_ingestion_t(IngestionTime::now());
         self.senders.send(data)
@@ -205,6 +237,8 @@ pub struct Spine<Db: BopDbRead> {
 
     sender_sequencer_frag_broadcast: Sender<FragMessage>,
     receiver_sequencer_frag_broadcast: CrossBeamReceiver<FragMessage>,
+
+    blockenv: Queue<InternalMessage<BlockEnv>>,
 }
 
 impl<Db: BopDbRead> Default for Spine<Db> {
@@ -217,6 +251,8 @@ impl<Db: BopDbRead> Default for Spine<Db> {
         let (sender_blockfetch_to_sequencer, receiver_blockfetch_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_sequencer_frag_broadcast, receiver_sequencer_frag_broadcast) = crossbeam_channel::bounded(4096);
 
+        // MPMC to be safe, should only be produced to by the sequencer but
+        let blockenv = Queue::new(4096, queue::QueueType::MPMC).expect("couldn't initialize queue");
         Self {
             sender_simulator_to_sequencer,
             receiver_simulator_to_sequencer,
@@ -232,6 +268,7 @@ impl<Db: BopDbRead> Default for Spine<Db> {
             receiver_blockfetch_to_sequencer,
             sender_sequencer_frag_broadcast,
             receiver_sequencer_frag_broadcast,
+            blockenv,
         }
     }
 }
@@ -243,7 +280,7 @@ impl<Db: BopDbRead> Spine<Db> {
 }
 
 macro_rules! from_spine {
-    ($T:ty, $v:ident) => {
+    ($T:ty, $v:ident, $S: tt) => {
         paste::item! {
             impl<Db: BopDbRead> From<&Spine<Db>> for Sender<$T> {
                 fn from(spine: &Spine<Db>) -> Self {
@@ -262,6 +299,14 @@ macro_rules! from_spine {
                     &self.$v
                 }
             }
+
+            impl<Db: BopDbRead> HasSender<$T> for SendersSpine<Db> {
+                type Sender = $S<$T>;
+                fn get_sender(&self) -> &Self::Sender {
+                    &self.$v
+                }
+            }
+
             impl<Db: BopDbRead> From<&'_ SendersSpine<Db>> for Sender<$T> {
                 fn from(value: &'_ SendersSpine<Db>) -> Self {
                     value.$v.clone()
@@ -276,13 +321,29 @@ macro_rules! from_spine {
     };
 }
 
-from_spine!(SimulatorToSequencer<Db>, simulator_to_sequencer);
-from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator);
-from_spine!(SequencerToExternal, sequencer_to_rpc);
-from_spine!(messages::EngineApi, engine_rpc_to_sequencer);
-from_spine!(Arc<Transaction>, eth_rpc_to_sequencer);
-from_spine!(BlockSyncMessage, blockfetch_to_sequencer);
-from_spine!(FragMessage, sequencer_frag_broadcast);
+from_spine!(FragMessage, sequencer_frag_broadcast, Sender);
+from_spine!(SimulatorToSequencer<Db>, simulator_to_sequencer, Sender);
+from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator, Sender);
+from_spine!(SequencerToExternal, sequencer_to_rpc, Sender);
+from_spine!(messages::EngineApi, engine_rpc_to_sequencer, Sender);
+from_spine!(Arc<Transaction>, eth_rpc_to_sequencer, Sender);
+from_spine!(BlockSyncMessage, blockfetch_to_sequencer, Sender);
+
+impl<Db: BopDbRead> HasSender<BlockEnv> for SendersSpine<Db> {
+    type Sender = Producer<InternalMessage<BlockEnv>>;
+
+    fn get_sender(&self) -> &Self::Sender {
+        &self.blockenv
+    }
+}
+
+impl<Db: BopDbRead> AsMut<Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>> for ReceiversSpine<Db> {
+    fn as_mut(&mut self) -> &mut Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>> {
+        &mut self.blockenv
+    }
+}
+
+
 //TODO: remove allow dead code
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -294,6 +355,7 @@ pub struct SendersSpine<Db: BopDbRead> {
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     sequencer_frag_broadcast: Sender<FragMessage>,
+    blockenv: Producer<InternalMessage<BlockEnv>>,
     timestamp: IngestionTime,
 }
 
@@ -307,6 +369,7 @@ impl<Db: BopDbRead> From<&Spine<Db>> for SendersSpine<Db> {
             eth_rpc_to_sequencer: value.sender_eth_rpc_to_sequencer.clone(),
             blockfetch_to_sequencer: value.sender_blockfetch_to_sequencer.clone(),
             sequencer_frag_broadcast: value.sender_sequencer_frag_broadcast.clone(),
+            blockenv: value.blockenv.clone().into(),
             timestamp: Default::default(),
         }
     }
@@ -331,6 +394,7 @@ pub struct ReceiversSpine<Db: BopDbRead> {
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
     sequencer_frag_broadcast: Receiver<FragMessage>,
+    blockenv: Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>,
 }
 
 impl<Db: BopDbRead> ReceiversSpine<Db> {
@@ -343,6 +407,7 @@ impl<Db: BopDbRead> ReceiversSpine<Db> {
             sequencer_to_rpc: Receiver::new(system_name.as_ref(), spine.into()),
             blockfetch_to_sequencer: Receiver::new(system_name.as_ref(), spine.into()),
             sequencer_frag_broadcast: Receiver::new(system_name.as_ref(), spine.into()),
+            blockenv: Receiver::new(system_name.as_ref(), spine.blockenv.clone().into()),
         }
     }
 }

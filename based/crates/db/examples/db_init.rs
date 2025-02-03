@@ -12,7 +12,7 @@ fn main() {
     let addr = Address::from_str("0x8344fe2D13b7abCad95CFF08e4E9a070365C1309").unwrap();
     if let Some(mut info) = db_ro.basic_ref(addr).expect("failed to query account info") {
         println!("loaded info: {info:?}");
-        info.balance = info.balance + U256::try_from(23).unwrap();
+        info.balance += U256::try_from(23).unwrap();
         info.nonce += 1;
 
         let account = Account::from(info);

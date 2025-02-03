@@ -26,6 +26,7 @@ pub struct Simulator<'a, Db: DatabaseRef> {
 
 impl<'a, Db: BopDbRead> Simulator<'a, Db> {
     pub fn create_and_run(connections: SpineConnections<Db>, db: DBFrag<Db>, actor_config: ActorConfig) {
+        //TODO: Is this fine?
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
         let evmconfig = OpEvmConfig::new(chainspec);
 
@@ -96,6 +97,9 @@ impl<Db: BopDbRead> Actor<Db> for Simulator<'_, Db> {
                     todo!()
                 }
             }
+        });
+        connections.receive(|msg, _| {
+            self.set_blockenv(msg);
         });
     }
 }

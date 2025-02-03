@@ -12,7 +12,7 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use reth_evm::execute::BlockExecutionError;
 use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
-use revm::{db::CacheDB, DatabaseRef};
+use revm::DatabaseRef;
 use revm_primitives::{Address, EVMError};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
