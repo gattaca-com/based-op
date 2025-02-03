@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use alloy_primitives::U256;
 use bop_common::{db::DBSorting, transaction::SimulatedTx};
+use revm::DatabaseCommit;
+use alloy_primitives::U256;
 
 /// Fragment of a block being sorted and built
 #[derive(Clone, Debug)]
