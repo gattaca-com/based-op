@@ -25,7 +25,7 @@ use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, warn};
 
-mod block_sync;
+pub mod block_sync;
 mod frag;
 mod sorting;
 

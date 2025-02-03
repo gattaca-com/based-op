@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{Address, B256, U256};
 use moka::sync::{Cache, CacheBuilder};
 use reth_db::{
     mdbx::{tx::Tx, RO},
@@ -10,7 +10,7 @@ use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx};
 use revm::db::BundleState;
 use revm_primitives::AccountInfo;
 
-use crate::{util, Error};
+use crate::Error;
 
 /// Caches used to accelerate database reads. Cache entries are retained according to LRU policy.
 /// On database commits, corresponding entries in the caches are invalidated.
@@ -45,7 +45,7 @@ impl ReadCaches {
             .or_try_insert_with(|| {
                 let (address, index) = key;
                 let mut cursor = tx.cursor_dup_read::<PlainStorageState>().map_err(Error::ReadTransactionError)?;
-                let storage_key = util::index_to_storage_key(index);
+                let storage_key = B256::from(index.to_be_bytes());
                 match cursor.seek_by_key_subkey(*address, storage_key).map_err(Error::ReadTransactionError)? {
                     Some(entry) if entry.key == storage_key => Ok(entry.value),
                     _ => Ok(U256::default()),
