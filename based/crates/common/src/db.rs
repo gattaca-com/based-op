@@ -57,7 +57,7 @@ impl From<Error> for ProviderError {
 pub trait BopDB:
     Database<Error: Into<ProviderError> + Display> + DatabaseCommit + Send + Sync + 'static + Clone + Debug
 {
-    type ReadOnly: BopDbRead;
+    type ReadOnly: BopDbRead + Database<Error: Into<ProviderError> + Display>;
 
     /// Returns a read-only database.
     fn readonly(&self) -> Result<Self::ReadOnly, Error>;
@@ -78,7 +78,9 @@ pub trait BopDB:
 
 /// Database read functions
 #[auto_impl(&, Arc)]
-pub trait BopDbRead: DatabaseRef<Error: Debug + Display> + Send + Sync + 'static + Clone + Debug {
+pub trait BopDbRead:
+    DatabaseRef<Error: Debug + Display + Into<ProviderError>> + Send + Sync + 'static + Clone + Debug
+{
     /// Returns the current `nonce` value for the account with the specified address. Zero is
     /// returned if no account is found.
     fn get_nonce(&self, address: Address) -> u64;

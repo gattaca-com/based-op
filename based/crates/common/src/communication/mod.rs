@@ -16,6 +16,7 @@ pub use messages::InternalMessage;
 
 use crate::{
     db::BopDbRead,
+    p2p::FragMessage,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
     utils::last_part_of_typename,
@@ -141,6 +142,10 @@ impl<S, R> Connections<S, R> {
     pub fn new(senders: S, receivers: R) -> Self {
         Self { senders, receivers }
     }
+
+    pub fn senders(&self) -> &S {
+        &self.senders
+    }
 }
 
 impl<S: TrackedSenders, R> Connections<S, R> {
@@ -172,6 +177,10 @@ impl<S: TrackedSenders, R> Connections<S, R> {
         self.senders.set_ingestion_t(IngestionTime::now());
         self.senders.send(data)
     }
+
+    pub fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
+        self.senders.set_ingestion_t(ingestion_t);
+    }
 }
 
 #[derive(Clone)]
@@ -193,6 +202,9 @@ pub struct Spine<Db: BopDbRead> {
 
     sender_blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     receiver_blockfetch_to_sequencer: CrossBeamReceiver<BlockSyncMessage>,
+
+    sender_sequencer_frag_broadcast: Sender<FragMessage>,
+    receiver_sequencer_frag_broadcast: CrossBeamReceiver<FragMessage>,
 }
 
 impl<Db: BopDbRead> Default for Spine<Db> {
@@ -203,6 +215,8 @@ impl<Db: BopDbRead> Default for Spine<Db> {
         let (sender_engine_rpc_to_sequencer, receiver_engine_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_eth_rpc_to_sequencer, receiver_eth_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_blockfetch_to_sequencer, receiver_blockfetch_to_sequencer) = crossbeam_channel::bounded(4096);
+        let (sender_sequencer_frag_broadcast, receiver_sequencer_frag_broadcast) = crossbeam_channel::bounded(4096);
+
         Self {
             sender_simulator_to_sequencer,
             receiver_simulator_to_sequencer,
@@ -216,6 +230,8 @@ impl<Db: BopDbRead> Default for Spine<Db> {
             receiver_eth_rpc_to_sequencer,
             sender_blockfetch_to_sequencer,
             receiver_blockfetch_to_sequencer,
+            sender_sequencer_frag_broadcast,
+            receiver_sequencer_frag_broadcast,
         }
     }
 }
@@ -266,7 +282,7 @@ from_spine!(SequencerToExternal, sequencer_to_rpc);
 from_spine!(messages::EngineApi, engine_rpc_to_sequencer);
 from_spine!(Arc<Transaction>, eth_rpc_to_sequencer);
 from_spine!(BlockSyncMessage, blockfetch_to_sequencer);
-
+from_spine!(FragMessage, sequencer_frag_broadcast);
 //TODO: remove allow dead code
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -277,6 +293,7 @@ pub struct SendersSpine<Db: BopDbRead> {
     engine_rpc_to_sequencer: Sender<messages::EngineApi>,
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
+    sequencer_frag_broadcast: Sender<FragMessage>,
     timestamp: IngestionTime,
 }
 
@@ -289,6 +306,7 @@ impl<Db: BopDbRead> From<&Spine<Db>> for SendersSpine<Db> {
             engine_rpc_to_sequencer: value.sender_engine_rpc_to_sequencer.clone(),
             eth_rpc_to_sequencer: value.sender_eth_rpc_to_sequencer.clone(),
             blockfetch_to_sequencer: value.sender_blockfetch_to_sequencer.clone(),
+            sequencer_frag_broadcast: value.sender_sequencer_frag_broadcast.clone(),
             timestamp: Default::default(),
         }
     }
@@ -312,6 +330,7 @@ pub struct ReceiversSpine<Db: BopDbRead> {
     engine_rpc_to_sequencer: Receiver<messages::EngineApi>,
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
+    sequencer_frag_broadcast: Receiver<FragMessage>,
 }
 
 impl<Db: BopDbRead> ReceiversSpine<Db> {
@@ -323,6 +342,7 @@ impl<Db: BopDbRead> ReceiversSpine<Db> {
             eth_rpc_to_sequencer: Receiver::new(system_name.as_ref(), spine.into()),
             sequencer_to_rpc: Receiver::new(system_name.as_ref(), spine.into()),
             blockfetch_to_sequencer: Receiver::new(system_name.as_ref(), spine.into()),
+            sequencer_frag_broadcast: Receiver::new(system_name.as_ref(), spine.into()),
         }
     }
 }
