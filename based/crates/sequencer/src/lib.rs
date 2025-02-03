@@ -261,7 +261,7 @@ impl Default for SequencerConfig {
             frag_duration: Duration::from_millis(200),
             max_gas: 300_000_000,
             n_per_loop: 10,
-            rpc_url: Url::parse("0.0.0.0:8003").unwrap(),
+            rpc_url: Url::parse("http://0.0.0.0:8003").unwrap(),
             evm_config,
         }
     }
@@ -293,7 +293,6 @@ impl<Db: BopDB> SharedData<Db> {
 pub struct Sequencer<Db: BopDB> {
     state: SequencerState<Db>,
     data: SharedData<Db>,
-    repeater: Repeater
 }
 
 impl<Db: BopDB> Sequencer<Db> {
@@ -316,7 +315,6 @@ impl<Db: BopDB> Sequencer<Db> {
                 parent_header: Default::default(),
             },
             state: Default::default(),
-            repeater: Repeater::every(Duration::from_secs(1))
         }
     }
 }
@@ -352,9 +350,6 @@ where
         });
 
         // tick checks on every loop
-        self.state = std::mem::take(&mut self.state).tick(&mut self.data, connections)
-        if self.repeater.fired() {
-            connections.send(BlockEnv::default());
-        }
+        self.state = std::mem::take(&mut self.state).tick(&mut self.data, connections);
     }
 }
