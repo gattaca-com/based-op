@@ -33,9 +33,9 @@ use sorting::SortingData;
 #[derive(Clone, Debug, Default, AsRefStr)]
 pub enum SequencerState<Db: BopDB> {
     #[default]
-    WaitingForSync,
+    WaitingForNewPayload,
     /// This holds the previous payload to be applied
-    WaitingForPayloadAttributes(ExecutionPayload, ExecutionPayloadSidecar),
+    WaitingForForkChoice(ExecutionPayload, ExecutionPayloadSidecar),
     Sorting(SortingData<Db::ReadOnly>),
     Syncing {
         /// When the stage reaches this syncing is done
@@ -85,15 +85,15 @@ where
             }
             (
                 EngineApi::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
-                SequencerState::WaitingForSync,
-            ) => SequencerState::WaitingForPayloadAttributes(
+                SequencerState::WaitingForNewPayload,
+            ) => SequencerState::WaitingForForkChoice(
                 ExecutionPayload::V3(payload),
                 ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes)),
             ),
 
             (
                 EngineApi::ForkChoiceUpdatedV3 { payload_attributes, res_tx, .. },
-                SequencerState::WaitingForPayloadAttributes(payload, sidecar),
+                SequencerState::WaitingForForkChoice(payload, sidecar),
             ) => {
                 if let Some(last_block_number) = data
                     .block_executor
@@ -122,7 +122,7 @@ where
                         .expect("couldn't send block env");
                     SequencerState::Sorting(SortingData::from(&(*data)))
                 } else {
-                    SequencerState::WaitingForSync
+                    SequencerState::WaitingForNewPayload
                 }
             }
             (EngineApi::GetPayloadV3 { payload_id, res }, Self::Sorting(sorting_data)) => {
@@ -149,7 +149,7 @@ where
                     Syncing { last_block_number }
                 } else {
                     // Wait until the next payload and attributes arrive
-                    WaitingForSync
+                    WaitingForNewPayload
                 }
             }
             _ => {
