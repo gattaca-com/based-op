@@ -28,11 +28,9 @@ impl BuiltFragOrders {
     pub fn remove_from_sender(&mut self, sender: &Address, base_fee: u64) {
         for i in (0..self.len() - 1).rev() {
             let order = &mut self.orders[i];
-            if &order.sender() == sender {
-                if order.pop(base_fee) {
-                    self.orders.swap_remove(i);
-                    return;
-                }
+            if &order.sender() == sender && order.pop(base_fee) {
+                self.orders.swap_remove(i);
+                return;
             }
         }
     }

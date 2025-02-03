@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
-use alloy_signer::k256::U256;
 use revm_primitives::{Address, B256};
 
 use crate::transaction::{simulated::transaction::SimulatedTx, Transaction, TxList};

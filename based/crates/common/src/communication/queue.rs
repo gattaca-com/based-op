@@ -73,7 +73,7 @@ pub struct InnerQueue<T> {
     buffer: [Seqlock<T>],
 }
 
-impl<T: Copy> InnerQueue<T> {
+impl<T: Clone> InnerQueue<T> {
     /// Allocs (unshared) memory and initializes a new queue from it.
     ///     QueueType::MPMC = multi producer multi consumer
     ///     QueueType::SPMC = single producer multi consumer
@@ -279,7 +279,7 @@ pub struct Queue<T> {
     inner: *const InnerQueue<T>,
 }
 
-impl<T: Copy> Queue<T> {
+impl<T: Clone> Queue<T> {
     pub fn new(len: usize, queue_type: QueueType) -> Result<Self, Error> {
         InnerQueue::new(len, queue_type).map(|inner| Self { inner })
     }
@@ -326,13 +326,13 @@ pub struct Producer<T> {
     pub queue: Queue<T>,
 }
 
-impl<T: Copy> From<Queue<T>> for Producer<T> {
+impl<T: Clone> From<Queue<T>> for Producer<T> {
     fn from(queue: Queue<T>) -> Self {
         Self { produced_first: 0, queue }
     }
 }
 
-impl<T: Copy> Producer<T> {
+impl<T: Clone> Producer<T> {
     pub fn produce(&mut self, msg: &T) -> usize {
         if self.produced_first == 0 {
             self.produced_first = 1;
@@ -364,7 +364,7 @@ pub struct ConsumerBare<T> {
     queue: Queue<T>,       // 48 fat ptr: (usize, pointer)
 }
 
-impl<T: Copy> ConsumerBare<T> {
+impl<T: Clone> ConsumerBare<T> {
     #[inline]
     pub fn recover_after_error(&mut self) {
         self.expected_version += 2;
@@ -428,7 +428,7 @@ impl<T> AsMut<ConsumerBare<T>> for ConsumerBare<T> {
     }
 }
 
-impl<T: Copy> From<Queue<T>> for ConsumerBare<T> {
+impl<T: Clone> From<Queue<T>> for ConsumerBare<T> {
     fn from(queue: Queue<T>) -> Self {
         let pos = queue.cur_pos();
         let expected_version = queue.version();
@@ -437,13 +437,13 @@ impl<T: Copy> From<Queue<T>> for ConsumerBare<T> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Consumer<T: 'static + Copy> {
+pub struct Consumer<T: 'static> {
     consumer: ConsumerBare<T>,
     message: T,
     should_log: bool,
 }
 
-impl<T: 'static + Copy> Consumer<T> {
+impl<T: 'static + Clone> Consumer<T> {
     /// Maybe consume one message in a queue with error recovery and logging,
     /// and return whether one was read
     #[inline]
@@ -461,6 +461,18 @@ impl<T: 'static + Copy> Consumer<T> {
                 self.consume(f)
             }
             Err(ReadError::Empty) => false,
+        }
+    }
+
+    #[inline]
+    pub fn try_consume(&mut self) -> Option<T> {
+        match self.consumer.try_consume(&mut self.message) {
+            Ok(()) => Some(self.message.clone()),
+            Err(ReadError::SpedPast) => {
+                self.log_and_recover();
+                self.try_consume()
+            }
+            Err(ReadError::Empty) => None,
         }
     }
 
@@ -487,7 +499,7 @@ impl<T: 'static + Copy> Consumer<T> {
     }
 }
 
-impl<T: Copy, Q: Into<ConsumerBare<T>>> From<Q> for Consumer<T> {
+impl<T: Clone, Q: Into<ConsumerBare<T>>> From<Q> for Consumer<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn from(queue: Q) -> Self {
         Self { consumer: queue.into(), message: unsafe { MaybeUninit::uninit().assume_init() }, should_log: true }
