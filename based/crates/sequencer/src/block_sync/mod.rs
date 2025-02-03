@@ -224,7 +224,7 @@ mod tests {
         // Fetch the block from the RPC.
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
         let url = rpc_url.clone();
-        let block = rt.block_on(async { fetch_block(25771900, &client, url).await.unwrap() });
+        let block = rt.block_on(async { fetch_block(2577, &client, url).await.unwrap() });
 
         // Create the alloydb.
         let client = ProviderBuilder::new().network().on_http(rpc_url);
