@@ -68,16 +68,15 @@ impl BlockSync {
     ///
     /// Fetches blocks from the RPC if the sequencer is behind the chain head,
     /// and in that case returns what the head block will be.
-    pub fn apply_new_payload<DB, DbRead>(
+    pub fn apply_new_payload<DB>(
         &mut self,
         payload: ExecutionPayload,
         sidecar: ExecutionPayloadSidecar,
         db: &DB,
-        senders: &SendersSpine<DbRead>,
+        senders: &SendersSpine<DB::ReadOnly>,
     ) -> Result<Option<u64>, BlockSyncError>
     where
-        DB: BopDB + BopDbRead,
-        DbRead: BopDbRead,
+        DB: BopDB,
     {
         let start = Instant::now();
 
@@ -119,12 +118,13 @@ impl BlockSync {
         db: &DB,
     ) -> Result<(), BlockSyncError>
     where
-        DB: BopDB + BopDbRead,
+        DB: BopDB,
     {
-        debug_assert!(block.header.number == db.block_number()? + 1, "can only apply blocks sequentially");
+        let db_ro = db.readonly().unwrap();
+        debug_assert!(block.header.number == db_ro.block_number()? + 1, "can only apply blocks sequentially");
 
         // Reorg check
-        if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {
+        if let Ok(db_parent_hash) = db_ro.block_hash_ref(block.header.number.saturating_sub(1)) {
             if db_parent_hash != block.header.parent_hash {
                 tracing::warn!(
                     "reorg detected at: {}. db_parent_hash: {db_parent_hash:?}, block_hash: {:?}",
@@ -137,7 +137,7 @@ impl BlockSync {
             }
         }
 
-        let execution_output = self.execute(block, db)?;
+        let execution_output = self.execute(block, &db_ro)?;
         db.commit_block(block, execution_output)?;
 
         Ok(())
@@ -151,7 +151,7 @@ impl BlockSync {
         db: &DB,
     ) -> Result<BlockExecutionOutput<OpReceipt>, BlockExecutionError>
     where
-        DB: BopDB + BopDbRead,
+        DB: BopDbRead + Database<Error: Into<ProviderError> + Display>,
     {
         let mut start = Instant::now();
 
