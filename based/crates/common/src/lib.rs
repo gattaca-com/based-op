@@ -3,6 +3,7 @@ pub mod api;
 pub mod communication;
 pub mod config;
 pub mod db;
+pub mod p2p;
 pub mod rpc;
 pub mod runtime;
 pub mod signing;

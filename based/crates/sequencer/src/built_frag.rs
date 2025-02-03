@@ -1,12 +1,9 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::sync::Arc;
 
-use bop_common::{
-    db::{DBFrag, DBSorting},
-    transaction::SimulatedTx,
-};
-use revm::{db::CacheDB, DatabaseCommit};
-use revm_primitives::U256;
+use alloy_primitives::U256;
+use bop_common::{db::DBSorting, transaction::SimulatedTx};
 
+/// Fragment of a block being sorted and built
 #[derive(Clone, Debug)]
 pub struct BuiltFrag<DbRead> {
     pub db: Arc<DBSorting<DbRead>>,
@@ -39,3 +36,7 @@ impl<DbRead: std::fmt::Debug + Clone> BuiltFrag<DbRead> {
         self.db.clone()
     }
 }
+
+// 1 add built block, frag state change to frag db, broadcast frag
+// State shared across sequencer states
+// TODO: add built block
