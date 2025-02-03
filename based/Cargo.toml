@@ -18,6 +18,11 @@ codegen-units = 1
 debug = false
 split-debuginfo = "off"
 
+[profile.dev]
+panic = "abort"
+[profile.release]
+panic = "abort"
+
 # Relase profile used when running locally.
 # Build optimised, but with all debug checks enabled.
 [profile.release-with-debug]

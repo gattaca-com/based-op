@@ -1,29 +1,25 @@
-use std::{fmt::Display, ops::Deref, sync::Arc};
+use std::sync::Arc;
 
-use alloy_consensus::{Block, SignableTransaction};
-use alloy_rpc_types::engine::{ExecutionPayload, ForkchoiceState};
+use alloy_consensus::Header;
+use alloy_rpc_types::engine::{CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ForkchoiceState};
 use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulationError, SimulatorToSequencer},
+        messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer},
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{BopDB, BopDbRead, DBFrag},
-    p2p::FragMessage,
-    time::{Duration, Instant},
-    transaction::{SimulatedTx, SimulatedTxList, Transaction},
+    time::Duration,
+    transaction::Transaction,
 };
 use bop_pool::transaction::pool::TxPool;
-use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reqwest::Url;
-use reth_evm::execute::ProviderError;
+use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_chainspec::OpChainSpecBuilder;
-use reth_optimism_primitives::OpTransactionSigned;
-use reth_primitives_traits::SignedTransaction;
-use revm::Database;
-use revm_primitives::{Address, B256};
+use reth_optimism_evm::OpEvmConfig;
+use revm_primitives::B256;
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, warn};
@@ -35,10 +31,16 @@ use sorting::SortingData;
 
 #[derive(Clone, Debug, Default, AsRefStr)]
 pub enum SequencerState<Db: BopDB> {
+    /// Synced and waiting for the next new payload message
     #[default]
-    WaitingForSync,
-    WaitingForPayloadAttributes,
+    WaitingForNewPayload,
+    /// Waiting for fork choice without attributes
+    WaitingForForkChoice(ExecutionPayload, ExecutionPayloadSidecar),
+    /// Waiting for fork choice with attributes
+    WaitingForAttributes,
+    /// Building frags and blocks
     Sorting(SortingData<Db::ReadOnly>),
+    /// Waiting for block sync
     Syncing {
         /// When the stage reaches this syncing is done
         last_block_number: u64,
@@ -64,44 +66,85 @@ where
         data: &mut SharedData<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> SequencerState<Db> {
-        match msg {
-            EngineApi::ForkChoiceUpdatedV3 { payload_attributes: Some(payload_attributes), .. } => {
-                data.payload_attributes = payload_attributes;
-                match self {
-                    SequencerState::WaitingForSync | SequencerState::Syncing { .. } => self,
-                    SequencerState::WaitingForPayloadAttributes => {
-                        data.create_and_apply_first_frag();
-                        SequencerState::Sorting(SortingData::from(&(*data)))
-                    }
-                    _ => {
-                        debug_assert!(false, "Don't handle payload attributes during {}", self.as_ref());
-                        self
-                    }
+        use EngineApi::*;
+        use SequencerState::*;
+
+        match (msg, self) {
+            (
+                NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
+                Syncing { last_block_number },
+            ) => {
+                let last_block_number = data
+                    .block_executor
+                    .apply_new_payload(
+                        ExecutionPayload::V3(payload),
+                        ExecutionPayloadSidecar::v3(CancunPayloadFields::new(
+                            parent_beacon_block_root,
+                            versioned_hashes,
+                        )),
+                        &data.db,
+                        Some(last_block_number),
+                        senders,
+                    )
+                    .expect("Issue with block sync")
+                    .expect("should have gotten a next last block number");
+                Syncing { last_block_number }
+            }
+
+            (
+                NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
+                WaitingForNewPayload | WaitingForAttributes,
+            ) => WaitingForForkChoice(
+                ExecutionPayload::V3(payload),
+                ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes)),
+            ),
+
+            (ForkChoiceUpdatedV3 { payload_attributes: None, .. }, WaitingForForkChoice(payload, sidecar)) => {
+                if let Some(last_block_number) = data
+                    .block_executor
+                    .apply_new_payload(payload, sidecar, &data.db, None, senders)
+                    .expect("Issue with block sync")
+                {
+                    Syncing { last_block_number }
+                } else {
+                    WaitingForAttributes
                 }
             }
-            EngineApi::NewPayloadV3 { payload, .. } => {
-                match self {
-                    SequencerState::WaitingForSync |
-                    SequencerState::WaitingForPayloadAttributes |
-                    SequencerState::Syncing { .. } => {
-                        //TODO: @Guys what should be the exection sidecar?
-                        if let Some(last_block_number) = data
-                            .block_executor
-                            .apply_new_payload(ExecutionPayload::V3(payload), Default::default(), &data.db, senders)
-                            .expect("Issue with block sync")
-                        {
-                            SequencerState::Syncing { last_block_number }
-                        } else {
-                            SequencerState::WaitingForPayloadAttributes
-                        }
-                    }
-                    _ => {
-                        debug_assert!(false, "Should not have received new payload  while in state {self:?}");
-                        self
-                    }
-                }
+
+            (ForkChoiceUpdatedV3 { payload_attributes: Some(attributes), .. }, WaitingForAttributes) => {
+                // start building
+
+                // data.payload_attributes = attributes;
+                data.create_and_apply_first_frag();
+                let next_attr = NextBlockEnvAttributes {
+                    timestamp: attributes.payload_attributes.timestamp,
+                    suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
+                    prev_randao: attributes.payload_attributes.prev_randao,
+                    gas_limit: data.parent_header.gas_limit,
+                };
+
+                let block_env = data
+                    .config
+                    .evm_config
+                    .next_cfg_and_block_env(&data.parent_header, next_attr)
+                    .expect("couldn't create blockenv");
+                // should never fail as its a broadcast
+                senders.send_timeout(block_env.block_env, Duration::from_millis(10)).expect("couldn't send block env");
+                Sorting(SortingData::from(&(*data)))
             }
-            _ => todo!(),
+
+            (GetPayloadV3 { payload_id, res }, Self::Sorting(sorting_data)) => {
+                todo!();
+                //sorting_data.commit_frag();
+                //res.send(data.build_block(payload_id))
+                // move to WaitingForNewPayload
+            }
+
+            // fallback
+            (m, s) => {
+                debug_assert!(false, "don't know how to handle msg {m:?} in state {}", s.as_ref());
+                s
+            }
         }
     }
 
@@ -111,19 +154,13 @@ where
         };
         use SequencerState::*;
         match self {
-            WaitingForSync | WaitingForPayloadAttributes => {
-                data.block_executor.apply_and_commit_block(&block, &data.db).expect("issue syncing block");
-                let txs = block.into_transactions().into_iter().map(|t| Arc::new(t.into())).collect::<Vec<_>>();
-                data.tx_pool.handle_new_block(&txs, data.base_fee);
-                //TODO: handle case of payload before blocksync
-                WaitingForPayloadAttributes
-            }
             Syncing { last_block_number } => {
                 data.block_executor.apply_and_commit_block(&block, &data.db).expect("issue syncing block");
                 if block.number != last_block_number {
                     Syncing { last_block_number }
                 } else {
-                    WaitingForPayloadAttributes
+                    // Wait until the next payload and attributes arrive
+                    WaitingForNewPayload
                 }
             }
             _ => {
@@ -224,10 +261,20 @@ pub struct SequencerConfig {
     max_gas: u64,
     n_per_loop: usize,
     rpc_url: Url,
+    evm_config: OpEvmConfig,
 }
 impl Default for SequencerConfig {
     fn default() -> Self {
-        Self { frag_duration: Duration::from_millis(200), max_gas: 300_000_000, n_per_loop: 10, rpc_url: todo!() }
+        let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
+        let evm_config = OpEvmConfig::new(chainspec);
+
+        Self {
+            frag_duration: Duration::from_millis(200),
+            max_gas: 300_000_000,
+            n_per_loop: 10,
+            rpc_url: Url::parse("http://0.0.0.0:8003").unwrap(),
+            evm_config,
+        }
     }
 }
 
@@ -239,7 +286,10 @@ pub struct SharedData<Db: BopDB> {
     frag_db: DBFrag<Db::ReadOnly>,
     block_executor: BlockSync,
     config: SequencerConfig,
+    parent_hash: B256,
+    parent_header: Header,
     fork_choice_state: ForkchoiceState,
+
     payload_attributes: Box<OpPayloadAttributes>,
     //TODO: set from blocksync
     base_fee: u64,
@@ -272,6 +322,8 @@ impl<Db: BopDB> Sequencer<Db> {
                 fork_choice_state: Default::default(),
                 payload_attributes: Default::default(),
                 base_fee: Default::default(),
+                parent_hash: Default::default(),
+                parent_header: Default::default(),
             },
             state: Default::default(),
         }
@@ -309,6 +361,6 @@ where
         });
 
         // tick checks on every loop
-        self.state = std::mem::take(&mut self.state).tick(&mut self.data, connections)
+        self.state = std::mem::take(&mut self.state).tick(&mut self.data, connections);
     }
 }
