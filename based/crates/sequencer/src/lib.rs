@@ -11,7 +11,7 @@ use bop_common::{
     },
     db::{BopDB, BopDbRead, DBFrag},
     p2p::FragMessage,
-    time::{Duration, Instant},
+    time::{Duration, Instant, Repeater},
     transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
 use bop_pool::transaction::pool::TxPool;
@@ -20,7 +20,7 @@ use reqwest::Url;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_chainspec::OpChainSpecBuilder;
 use reth_optimism_evm::OpEvmConfig;
-use revm_primitives::B256;
+use revm_primitives::{BlockEnv, B256};
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, warn};
@@ -261,7 +261,7 @@ impl Default for SequencerConfig {
             frag_duration: Duration::from_millis(200),
             max_gas: 300_000_000,
             n_per_loop: 10,
-            rpc_url: todo!(),
+            rpc_url: Url::parse("0.0.0.0:8003").unwrap(),
             evm_config,
         }
     }
@@ -293,6 +293,7 @@ impl<Db: BopDB> SharedData<Db> {
 pub struct Sequencer<Db: BopDB> {
     state: SequencerState<Db>,
     data: SharedData<Db>,
+    repeater: Repeater
 }
 
 impl<Db: BopDB> Sequencer<Db> {
@@ -315,6 +316,7 @@ impl<Db: BopDB> Sequencer<Db> {
                 parent_header: Default::default(),
             },
             state: Default::default(),
+            repeater: Repeater::every(Duration::from_secs(1))
         }
     }
 }
@@ -351,5 +353,8 @@ where
 
         // tick checks on every loop
         self.state = std::mem::take(&mut self.state).tick(&mut self.data, connections)
+        if self.repeater.fired() {
+            connections.send(BlockEnv::default());
+        }
     }
 }

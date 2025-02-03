@@ -54,6 +54,7 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
     }
 
     fn set_blockenv(&mut self, env: BlockEnv) {
+        info!("setting block_env: {env:#?}");
         *self.evm.block_mut() = env.clone();
         *self.evm_tof.block_mut() = env;
     }

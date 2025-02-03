@@ -202,7 +202,7 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 
     #[inline]
-    pub fn send<T, SS>(&mut self, data: T) -> Result<(), InternalMessage<T>>
+    pub fn send<T>(&mut self, data: T) -> Result<(), InternalMessage<T>>
     where
         S: HasSender<T>,
     {
