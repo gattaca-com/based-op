@@ -77,6 +77,18 @@ reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = [
     "optimism",
 ] }
 reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
+reth-db = { path = "../reth/crates/storage/db" }
+reth-storage-api = { path = "../reth/crates/storage/storage-api" }
+reth-storage-errors = { path = "../reth/crates/storage/errors" }
+reth-trie-common = { path = "../reth/crates/trie/common", features = [
+    "test-utils",
+] }
+reth-provider = { path = "../reth/crates/storage/provider", features = [
+    "test-utils",
+] }
+reth-chainspec = { path = "../reth/crates/chainspec" }
+reth-db-api = { path = "../reth/crates/storage/db-api" }
+reth-node-types = { path = "../reth/crates/node/types" }
 
 # revm
 revm-primitives = { version = "15.1.0", features = [

@@ -49,5 +49,15 @@ rand.workspace = true
 strum_macros.workspace = true
 paste.workspace = true
 
+# revm
+revm.workspace = true
+
+# Reth DB dependencies
+reth-optimism-primitives.workspace = true
+reth-primitives.workspace = true
+reth-storage-errors.workspace = true
+reth-trie-common.workspace = true
+reth-provider.workspace = true
+
 [dev-dependencies]
 serde_json.workspace = true

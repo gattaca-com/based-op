@@ -21,4 +21,7 @@ fn main() {
         let (root, updates) = db_ro.calculate_state_root(&bundle_state).unwrap();
         println!("Calculated state root: {root}, with updates {updates:?}");
     }
+
+    // Block sync
+    let block_number = db_ro.block_number().unwrap();
 }

@@ -3,55 +3,34 @@ use std::{
     sync::Arc,
 };
 
-use alloy_primitives::B256;
 use parking_lot::RwLock;
 use reth_db::DatabaseEnv;
-use reth_node_ethereum::EthereumNode;
 use reth_node_types::NodeTypesWithDBAdapter;
-use reth_provider::ProviderFactory;
-use reth_trie_common::updates::TrieUpdates;
-use revm::db::BundleState;
-use revm_primitives::{
-    db::{DatabaseCommit, DatabaseRef},
-    Account, Address, HashMap,
+use reth_optimism_node::OpNode;
+use reth_optimism_primitives::{OpBlock, OpReceipt};
+use reth_primitives::{BlockWithSenders, Receipts};
+use reth_provider::{
+    BlockExecutionOutput, ExecutionOutcome, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter,
 };
+use reth_storage_api::{HashedPostStateProvider, StorageLocation};
+use reth_trie_common::updates::TrieUpdates;
+use revm::db::OriginalValuesKnown;
+use revm_primitives::{db::DatabaseCommit, Account, Address, HashMap};
 
 pub mod alloy_db;
 mod block;
 mod cache;
-mod error;
 mod init;
 mod util;
 
-pub use error::Error;
+pub use bop_common::db::{BopDB, BopDbRead, Error};
 pub use init::init_database;
 pub use util::state_changes_to_bundle_state;
 
 use crate::{block::BlockDB, cache::ReadCaches};
 
-/// Database trait for all DB operations.
-pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
-    type ReadOnly: BopDbRead;
-
-    /// Returns a read-only database.
-    fn readonly(&self) -> Result<Self::ReadOnly, Error>;
-}
-
-/// Database read functions
-pub trait BopDbRead: DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone + Debug {
-    /// Returns the current `nonce` value for the account with the specified address. Zero is
-    /// returned if no account is found.
-    fn get_nonce(&self, address: Address) -> u64;
-
-    /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
-    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;
-
-    /// Returns the current block head number.
-    fn block_number(&self) -> Result<u64, Error>;
-}
-
 pub struct DB {
-    factory: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+    factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
     caches: ReadCaches,
     block: RwLock<Option<BlockDB>>,
 }
@@ -79,6 +58,59 @@ impl BopDB for DB {
         let block = BlockDB::new(self.caches.clone(), self.factory.provider().map_err(Error::ProviderError)?);
         self.block.write().replace(block.clone());
         Ok(block)
+    }
+
+    /// Commit a new block to the database.
+    fn commit_block(
+        &self,
+        block: &BlockWithSenders<OpBlock>,
+        block_execution_output: BlockExecutionOutput<OpReceipt>,
+    ) -> Result<(), Error> {
+        // Calculate state root and get trie updates.
+        let db_ro = self.readonly()?;
+        let (state_root, trie_updates) = db_ro.calculate_state_root(&block_execution_output.state)?;
+
+        if state_root != block.block.header.state_root {
+            tracing::error!("State root mismatch: {state_root}, block: {:?}", block.block.header);
+            return Err(Error::StateRootError(block.block.header.number));
+        }
+
+        self.commit_block_unchecked(block, block_execution_output, trie_updates)
+    }
+
+    /// Commit a new block to the database without performing state root check. This should only be
+    /// used if the state root calculation has already been performed upstream.
+    fn commit_block_unchecked(
+        &self,
+        block: &BlockWithSenders<OpBlock>,
+        block_execution_output: BlockExecutionOutput<OpReceipt>,
+        trie_updates: TrieUpdates,
+    ) -> Result<(), Error> {
+        // Hashed state and trie changes
+        let provider = self.factory.provider().map_err(Error::ProviderError)?;
+        let latest_state = LatestStateProviderRef::new(&provider);
+        let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
+
+        let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
+
+        // Write state and reverts.
+        rw_provider
+            .write_state(
+                ExecutionOutcome {
+                    bundle: block_execution_output.state,
+                    receipts: Receipts::from(block_execution_output.receipts),
+                    first_block: block.block.header.number,
+                    requests: vec![block_execution_output.requests],
+                },
+                OriginalValuesKnown::Yes,
+                StorageLocation::Both,
+            )
+            .map_err(Error::ProviderError)?;
+
+        rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
+        rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)?;
+
+        Ok(())
     }
 }
 
