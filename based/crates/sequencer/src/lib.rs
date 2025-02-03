@@ -7,14 +7,14 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulationError, SimulatorToSequencer},
-        Connections, ReceiversSpine, SendersSpine, TrackedSenders,
+        Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{BopDB, BopDbRead, DBFrag, DBSorting},
+    db::{BopDB, BopDbRead, DBFrag},
+    p2p::FragMessage,
     time::{Duration, Instant},
     transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
 use bop_pool::transaction::pool::TxPool;
-use built_frag::BuiltFrag;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reqwest::Url;
@@ -38,7 +38,7 @@ pub enum SequencerState<Db: BopDB> {
     #[default]
     WaitingForSync,
     WaitingForPayloadAttributes,
-    Sorting(SortingData<Db>),
+    Sorting(SortingData<Db::ReadOnly>),
     Syncing {
         /// When the stage reaches this syncing is done
         last_block_number: u64,
@@ -47,22 +47,22 @@ pub enum SequencerState<Db: BopDB> {
 
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
-pub enum SequencerEvent<Db: BopDbRead> {
+pub enum SequencerEvent<Db: BopDB> {
     BlockSync(BlockSyncMessage),
     NewTx(Arc<Transaction>),
-    SimResult(SimulatorToSequencer<Db>),
+    SimResult(SimulatorToSequencer<Db::ReadOnly>),
     EngineApi(EngineApi),
 }
 
 impl<Db> SequencerState<Db>
 where
-    Db: BopDB + BopDbRead,
+    Db: BopDB,
 {
     fn handle_engine_api(
         self,
         msg: EngineApi,
         data: &mut SharedData<Db>,
-        senders: &SendersSpine<<Db as BopDB>::ReadOnly>,
+        senders: &SendersSpine<Db::ReadOnly>,
     ) -> SequencerState<Db> {
         match msg {
             EngineApi::ForkChoiceUpdatedV3 { payload_attributes: Some(payload_attributes), .. } => {
@@ -186,14 +186,17 @@ where
         }
     }
 
-    fn _update(self, data: &mut SharedData<Db>, senders: &SendersSpine<Db::ReadOnly>) -> Self {
+    fn tick(self, data: &mut SharedData<Db>, connections: &mut SpineConnections<Db::ReadOnly>) -> Self {
         use SequencerState::*;
         match self {
             Sorting(sorting_data) if sorting_data.should_frag() => {
-                todo!("Seal and send frag")
+                let frag = sorting_data.get_frag();
+                let _ = connections.send(frag);
+
+                Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))
             }
             Sorting(sorting_data) if sorting_data.finished_iteration() => {
-                Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, senders, data.base_fee))
+                Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))
             }
             _ => self,
         }
@@ -201,7 +204,7 @@ where
 
     pub fn update(
         self,
-        event: SequencerEvent<Db::ReadOnly>,
+        event: SequencerEvent<Db>,
         data: &mut SharedData<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
@@ -212,7 +215,6 @@ where
             SimResult(res) => self.handle_sim_result(res, data, senders),
             EngineApi(msg) => self.handle_engine_api(msg, data, senders),
         }
-        ._update(data, senders)
     }
 }
 
@@ -233,6 +235,7 @@ impl Default for SequencerConfig {
 pub struct SharedData<Db: BopDB> {
     tx_pool: TxPool,
     db: Db,
+    /// DB with the frags applied on the last top of block
     frag_db: DBFrag<Db::ReadOnly>,
     block_executor: BlockSync,
     config: SequencerConfig,
@@ -277,29 +280,35 @@ impl<Db: BopDB> Sequencer<Db> {
 
 impl<Db> Actor<Db::ReadOnly> for Sequencer<Db>
 where
-    Db: BopDB + BopDbRead,
+    Db: BopDB,
 {
     const CORE_AFFINITY: Option<usize> = Some(0);
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db::ReadOnly>, ReceiversSpine<Db::ReadOnly>>) {
+        // handle sim results
         connections.receive(|msg, senders| {
             self.state =
                 std::mem::take(&mut self.state).update(SequencerEvent::SimResult(msg), &mut self.data, senders);
         });
 
+        // handle engine API messages from rpc
         connections.receive(|msg, senders| {
             self.state =
                 std::mem::take(&mut self.state).update(SequencerEvent::EngineApi(msg), &mut self.data, senders);
         });
 
+        // handle new transaction from rpc
         connections.receive(|msg, senders| {
             self.state = std::mem::take(&mut self.state).update(SequencerEvent::NewTx(msg), &mut self.data, senders);
         });
 
+        // handle block sync
         connections.receive(|msg, senders| {
-            // Process blocks as they arrive
             self.state =
                 std::mem::take(&mut self.state).update(SequencerEvent::BlockSync(msg), &mut self.data, senders);
         });
+
+        // tick checks on every loop
+        self.state = std::mem::take(&mut self.state).tick(&mut self.data, connections)
     }
 }
