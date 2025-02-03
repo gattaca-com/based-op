@@ -6,13 +6,12 @@ use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulationError, SimulatorToSequencer},
-        Connections, ReceiversSpine, SendersSpine, SpineConnections,TrackedSenders,
+        messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer},
+        Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{BopDB, BopDbRead, DBFrag},
-    p2p::FragMessage,
-    time::{Duration, Instant, Repeater},
-    transaction::{SimulatedTx, SimulatedTxList, Transaction},
+    time::Duration,
+    transaction::Transaction,
 };
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
@@ -20,7 +19,7 @@ use reqwest::Url;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_chainspec::OpChainSpecBuilder;
 use reth_optimism_evm::OpEvmConfig;
-use revm_primitives::{BlockEnv, B256};
+use revm_primitives::B256;
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, warn};
@@ -32,11 +31,16 @@ use sorting::SortingData;
 
 #[derive(Clone, Debug, Default, AsRefStr)]
 pub enum SequencerState<Db: BopDB> {
+    /// Synced and waiting for the next new payload message
     #[default]
     WaitingForNewPayload,
-    /// This holds the previous payload to be applied
+    /// Waiting for fork choice without attributes
     WaitingForForkChoice(ExecutionPayload, ExecutionPayloadSidecar),
+    /// Waiting for fork choice with attributes
+    WaitingForAttributes,
+    /// Building frags and blocks
     Sorting(SortingData<Db::ReadOnly>),
+    /// Waiting for block sync
     Syncing {
         /// When the stage reaches this syncing is done
         last_block_number: u64,
@@ -62,10 +66,13 @@ where
         data: &mut SharedData<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> SequencerState<Db> {
+        use EngineApi::*;
+        use SequencerState::*;
+
         match (msg, self) {
             (
-                EngineApi::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
-                SequencerState::Syncing { last_block_number },
+                NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
+                Syncing { last_block_number },
             ) => {
                 let last_block_number = data
                     .block_executor
@@ -81,55 +88,59 @@ where
                     )
                     .expect("Issue with block sync")
                     .expect("should have gotten a next last block number");
-                SequencerState::Syncing { last_block_number }
+                Syncing { last_block_number }
             }
+
             (
-                EngineApi::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
-                SequencerState::WaitingForNewPayload,
-            ) => SequencerState::WaitingForForkChoice(
+                NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
+                WaitingForNewPayload | WaitingForAttributes,
+            ) => WaitingForForkChoice(
                 ExecutionPayload::V3(payload),
                 ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes)),
             ),
 
-            (
-                EngineApi::ForkChoiceUpdatedV3 { payload_attributes, res_tx, .. },
-                SequencerState::WaitingForForkChoice(payload, sidecar),
-            ) => {
+            (ForkChoiceUpdatedV3 { payload_attributes: None, .. }, WaitingForForkChoice(payload, sidecar)) => {
                 if let Some(last_block_number) = data
                     .block_executor
                     .apply_new_payload(payload, sidecar, &data.db, None, senders)
                     .expect("Issue with block sync")
                 {
-                    SequencerState::Syncing { last_block_number }
-                } else if let Some(attributes) = payload_attributes {
-                    // data.payload_attributes = attributes;
-                    data.create_and_apply_first_frag();
-                    let next_attr = NextBlockEnvAttributes {
-                        timestamp: attributes.payload_attributes.timestamp,
-                        suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
-                        prev_randao: attributes.payload_attributes.prev_randao,
-                        gas_limit: data.parent_header.gas_limit,
-                    };
-
-                    let block_env = data
-                        .config
-                        .evm_config
-                        .next_cfg_and_block_env(&data.parent_header, next_attr)
-                        .expect("couldn't create blockenv");
-                    // should never fail as its a broadcast
-                    senders
-                        .send_timeout(block_env.block_env, Duration::from_millis(10))
-                        .expect("couldn't send block env");
-                    SequencerState::Sorting(SortingData::from(&(*data)))
+                    Syncing { last_block_number }
                 } else {
-                    SequencerState::WaitingForNewPayload
+                    WaitingForAttributes
                 }
             }
-            (EngineApi::GetPayloadV3 { payload_id, res }, Self::Sorting(sorting_data)) => {
+
+            (ForkChoiceUpdatedV3 { payload_attributes: Some(attributes), .. }, WaitingForAttributes) => {
+                // start building
+
+                // data.payload_attributes = attributes;
+                data.create_and_apply_first_frag();
+                let next_attr = NextBlockEnvAttributes {
+                    timestamp: attributes.payload_attributes.timestamp,
+                    suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
+                    prev_randao: attributes.payload_attributes.prev_randao,
+                    gas_limit: data.parent_header.gas_limit,
+                };
+
+                let block_env = data
+                    .config
+                    .evm_config
+                    .next_cfg_and_block_env(&data.parent_header, next_attr)
+                    .expect("couldn't create blockenv");
+                // should never fail as its a broadcast
+                senders.send_timeout(block_env.block_env, Duration::from_millis(10)).expect("couldn't send block env");
+                Sorting(SortingData::from(&(*data)))
+            }
+
+            (GetPayloadV3 { payload_id, res }, Self::Sorting(sorting_data)) => {
                 todo!();
                 //sorting_data.commit_frag();
                 //res.send(data.build_block(payload_id))
+                // move to WaitingForNewPayload
             }
+
+            // fallback
             (m, s) => {
                 debug_assert!(false, "don't know how to handle msg {m:?} in state {}", s.as_ref());
                 s
