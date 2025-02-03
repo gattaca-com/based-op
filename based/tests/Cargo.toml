@@ -1,0 +1,19 @@
+[package]
+name = "bop-tests"
+
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish = false
+
+[dev-dependencies]
+
+[dependencies]
+bop-db.workspace = true
+alloy-primitives.workspace = true
+revm.workspace = true
+
+[[test]]
+name = "main"
+path = "src/main.rs"
