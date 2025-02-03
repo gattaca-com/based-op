@@ -60,6 +60,13 @@ pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
         block: &BlockWithSenders<OpBlock>,
         block_execution_output: BlockExecutionOutput<OpReceipt>,
     ) -> Result<(), Error>;
+
+    fn commit_block_unchecked(
+        &self,
+        block: &BlockWithSenders<OpBlock>,
+        block_execution_output: BlockExecutionOutput<OpReceipt>,
+        trie_updates: TrieUpdates,
+    ) -> Result<(), Error>;
 }
 
 /// Database read functions

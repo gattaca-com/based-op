@@ -13,6 +13,7 @@ use reth_provider::{
     BlockExecutionOutput, ExecutionOutcome, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter,
 };
 use reth_storage_api::{HashedPostStateProvider, StorageLocation};
+use reth_trie_common::updates::TrieUpdates;
 use revm::db::OriginalValuesKnown;
 use revm_primitives::{db::DatabaseCommit, Account, Address, HashMap};
 
@@ -74,6 +75,17 @@ impl BopDB for DB {
             return Err(Error::StateRootError(block.block.header.number));
         }
 
+        self.commit_block_unchecked(block, block_execution_output, trie_updates)
+    }
+
+    /// Commit a new block to the database without performing state root check. This should only be
+    /// used if the state root calculation has already been performed upstream.
+    fn commit_block_unchecked(
+        &self,
+        block: &BlockWithSenders<OpBlock>,
+        block_execution_output: BlockExecutionOutput<OpReceipt>,
+        trie_updates: TrieUpdates,
+    ) -> Result<(), Error> {
         // Hashed state and trie changes
         let provider = self.factory.provider().map_err(Error::ProviderError)?;
         let latest_state = LatestStateProviderRef::new(&provider);
