@@ -56,7 +56,7 @@ pub enum SequencerEvent<Db: BopDbRead> {
 
 impl<Db> SequencerState<Db>
 where
-    Db: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
+    Db: BopDB + BopDbRead,
 {
     fn handle_engine_api(
         self,
@@ -230,7 +230,7 @@ impl Default for SequencerConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct SharedData<Db: BopDB + BopDbRead> {
+pub struct SharedData<Db: BopDB> {
     tx_pool: TxPool,
     db: Db,
     frag_db: DBFrag<Db::ReadOnly>,
@@ -241,22 +241,19 @@ pub struct SharedData<Db: BopDB + BopDbRead> {
     //TODO: set from blocksync
     base_fee: u64,
 }
-impl<Db: BopDB + BopDbRead> SharedData<Db> {
-    fn create_and_apply_first_frag(&self)
-    where
-        Db: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
-    {
+impl<Db: BopDB> SharedData<Db> {
+    fn create_and_apply_first_frag(&self) {
         todo!()
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Sequencer<Db: BopDB + BopDbRead> {
+pub struct Sequencer<Db: BopDB> {
     state: SequencerState<Db>,
     data: SharedData<Db>,
 }
 
-impl<Db: BopDB + BopDbRead> Sequencer<Db> {
+impl<Db: BopDB> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         Self {
             data: SharedData {
@@ -280,7 +277,7 @@ impl<Db: BopDB + BopDbRead> Sequencer<Db> {
 
 impl<Db> Actor<Db::ReadOnly> for Sequencer<Db>
 where
-    Db: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
+    Db: BopDB + BopDbRead,
 {
     const CORE_AFFINITY: Option<usize> = Some(0);
 

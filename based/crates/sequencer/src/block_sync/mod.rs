@@ -76,14 +76,14 @@ impl BlockSync {
         senders: &SendersSpine<DbRead>,
     ) -> Result<Option<u64>, BlockSyncError>
     where
-        DB: BopDB + BopDbRead + Database<Error: Into<ProviderError> + Display>,
+        DB: BopDB + BopDbRead,
         DbRead: BopDbRead,
     {
         let start = Instant::now();
 
         let payload_block_number = payload.block_number();
         let cur_block = payload_to_block(payload, sidecar);
-        let db_block_head = db.block_number()?;
+        let db_block_head = db.readonly().unwrap().block_number()?;
         tracing::info!("handling new payload for block number: {payload_block_number}, db_block_head: {db_block_head}");
 
         // This case occurs when the sequencer is behind the chain head.
@@ -119,13 +119,12 @@ impl BlockSync {
         db: &DB,
     ) -> Result<(), BlockSyncError>
     where
-        DB: BopDB,
+        DB: BopDB + BopDbRead,
     {
-        let db_ro = db.readonly()?;
-        debug_assert!(block.header.number == db_ro.block_number()? + 1, "can only apply blocks sequentially");
+        debug_assert!(block.header.number == db.block_number()? + 1, "can only apply blocks sequentially");
 
         // Reorg check
-        if let Ok(db_parent_hash) = db_ro.block_hash_ref(block.header.number.saturating_sub(1)) {
+        if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {
             if db_parent_hash != block.header.parent_hash {
                 tracing::warn!(
                     "reorg detected at: {}. db_parent_hash: {db_parent_hash:?}, block_hash: {:?}",
@@ -138,7 +137,7 @@ impl BlockSync {
             }
         }
 
-        let execution_output = self.execute(block, &db_ro)?;
+        let execution_output = self.execute(block, db)?;
         db.commit_block(block, execution_output)?;
 
         Ok(())
@@ -152,7 +151,7 @@ impl BlockSync {
         db: &DB,
     ) -> Result<BlockExecutionOutput<OpReceipt>, BlockExecutionError>
     where
-        DB: BopDbRead + Database<Error: Into<ProviderError> + Display>,
+        DB: BopDB + BopDbRead,
     {
         let mut start = Instant::now();
 
@@ -198,7 +197,8 @@ mod tests {
     use std::time::Duration;
 
     use alloy_provider::ProviderBuilder;
-    use bop_common::{db::alloy_db::AlloyDB, utils::initialize_test_tracing};
+    use bop_common::utils::initialize_test_tracing;
+    use bop_db::alloy_db::AlloyDB;
     use reqwest::Client;
     use reth_optimism_chainspec::OpChainSpecBuilder;
 
@@ -231,7 +231,7 @@ mod tests {
         let alloydb = AlloyDB::new(client, block.header.number, rt);
 
         // Execute the block.
-        let res = block_executor.apply_and_commit_block(&block, alloydb);
+        let res = block_executor.apply_and_commit_block(&block, &alloydb);
         tracing::info!("res: {:?}", res);
     }
 }

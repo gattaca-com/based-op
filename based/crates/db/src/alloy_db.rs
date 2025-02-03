@@ -19,7 +19,7 @@ use revm::{db::BundleState, DatabaseCommit, DatabaseRef};
 use revm_primitives::{db::Database, Account, AccountInfo, Bytecode, HashMap};
 use tokio::runtime::Runtime;
 
-use super::{BopDB, BopDbRead, Error};
+use crate::{BopDB, BopDbRead, Error};
 
 type AlloyProvider = RootProvider<Http<reqwest::Client>, Optimism>;
 
@@ -49,12 +49,6 @@ impl AlloyDB {
     /// We subtract 1 from the block number, as the state we want to fetch is the end of the previous block.
     pub fn set_block_number(&mut self, block_number: u64) {
         self.block_number = BlockId::from(block_number.saturating_sub(1));
-    }
-
-    /// Returns the current block head number.
-    pub fn block_number(&self) -> Result<u64, Error> {
-        debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
-        Ok(self.block_number.as_u64().unwrap())
     }
 }
 
@@ -160,14 +154,14 @@ impl BopDbRead for AlloyDB {
         Ok((root, TrieUpdates::default()))
     }
 
-    fn unique_hash(&self) -> B256 {
-        todo!("remove this")
-    }
-
     /// Returns the current block head number.
     fn block_number(&self) -> Result<u64, Error> {
         debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
         Ok(self.block_number.as_u64().unwrap())
+    }
+
+    fn unique_hash(&self) -> B256 {
+        todo!()
     }
 }
 

@@ -55,7 +55,7 @@ impl Deref for SortingFragOrders {
     }
 }
 
-impl<Db: BopDB + BopDbRead> From<&SharedData<Db>> for SortingFragOrders {
+impl<Db: BopDB> From<&SharedData<Db>> for SortingFragOrders {
     fn from(value: &SharedData<Db>) -> Self {
         Self { orders: value.tx_pool.clone_active() }
     }
@@ -134,7 +134,7 @@ impl<Db: BopDB> SortingData<Db> {
     }
 }
 
-impl<Db: BopDB + BopDbRead> From<&SharedData<Db>> for SortingData<Db> {
+impl<Db: BopDB> From<&SharedData<Db>> for SortingData<Db> {
     fn from(data: &SharedData<Db>) -> Self {
         Self {
             frag: BuiltFrag::new(data.frag_db.clone().into(), data.config.max_gas),

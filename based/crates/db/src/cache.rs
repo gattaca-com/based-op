@@ -10,7 +10,7 @@ use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx};
 use revm::db::BundleState;
 use revm_primitives::AccountInfo;
 
-use super::{util, Error};
+use crate::{util, Error};
 
 /// Caches used to accelerate database reads. Cache entries are retained according to LRU policy.
 /// On database commits, corresponding entries in the caches are invalidated.

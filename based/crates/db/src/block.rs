@@ -16,7 +16,7 @@ use revm_primitives::{
     AccountInfo, Address, Bytecode, B256, U256,
 };
 
-use super::{cache::ReadCaches, BopDbRead, Error};
+use crate::{cache::ReadCaches, BopDbRead, Error};
 
 pub type ProviderReadOnly = DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>;
 
@@ -25,7 +25,6 @@ pub type ProviderReadOnly = DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDB
 pub struct BlockDB {
     provider: Arc<ProviderReadOnly>,
     caches: ReadCaches,
-    unique_hash: B256,
 }
 
 impl Debug for BlockDB {
@@ -39,7 +38,7 @@ impl BlockDB {
         caches: ReadCaches,
         provider: DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
     ) -> Self {
-        Self { provider: Arc::new(provider), caches, unique_hash: B256::random() }
+        Self { provider: Arc::new(provider), caches }
     }
 }
 
@@ -100,13 +99,13 @@ impl BopDbRead for BlockDB {
         latest_state.state_root_with_updates(hashed_state).map_err(Error::ProviderError)
     }
 
-    fn unique_hash(&self) -> B256 {
-        self.unique_hash
-    }
-
     /// Returns the highest block number in the canonical chain.
     /// Returns 0 if the database is empty.
     fn block_number(&self) -> Result<u64, Error> {
         self.provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
+    }
+
+    fn unique_hash(&self) -> B256 {
+        todo!()
     }
 }

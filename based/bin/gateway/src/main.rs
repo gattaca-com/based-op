@@ -4,9 +4,10 @@ use bop_common::{
     actor::{Actor, ActorConfig},
     communication::Spine,
     config::Config,
-    db::{init_database, BopDB, DBFrag},
+    db::{BopDB, DBFrag},
     utils::{init_tracing, wait_for_signal},
 };
+use bop_db::init_database;
 use bop_rpc::{start_engine_rpc, start_eth_rpc};
 use bop_sequencer::{Sequencer, SequencerConfig};
 use bop_simulator::Simulator;

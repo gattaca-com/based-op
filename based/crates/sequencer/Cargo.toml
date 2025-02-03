@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 bop-common.workspace = true
 bop-pool.workspace = true
+bop-db.workspace = true
 
 # alloy
 alloy-provider.workspace = true
@@ -54,4 +55,3 @@ strum_macros.workspace = true
 # tmp
 reth-optimism-node.workspace = true
 reth-optimism-cli.workspace = true
-

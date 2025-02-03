@@ -30,6 +30,7 @@ bop-rpc = { path = "crates/rpc" }
 bop-pool = { path = "crates/pool" }
 bop-sequencer = { path = "crates/sequencer" }
 bop-simulator = { path = "crates/simulator" }
+bop-db = { path = "crates/db" }
 
 # alloy
 alloy-consensus = "0.9.2"
@@ -47,8 +48,10 @@ alloy-transport-http = "0.9.2"
 alloy-transport = "0.9.2"
 
 # op
-op-alloy-rpc-types-engine = { version =  "0.9.0", default-features = false }
-op-alloy-consensus = { version = "=0.9.0", default-features = false, features = ["k256"] } 
+op-alloy-rpc-types-engine = { version = "0.9.0", default-features = false }
+op-alloy-consensus = { version = "=0.9.0", default-features = false, features = [
+    "k256",
+] }
 op-alloy-rpc-types = "0.9.0"
 op-alloy-network = "0.9.0"
 
@@ -75,7 +78,6 @@ reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
 ] }
 
 
-
 # reth-db
 reth-revm = { path = "../reth/crates/revm" }
 reth-chain-state = { path = "../reth/crates/chain-state" }
@@ -84,21 +86,13 @@ reth-chain-state = { path = "../reth/crates/chain-state" }
 reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
 reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
 reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
-reth-optimism-node = { path = "../reth/crates/optimism/node", features = ["optimism"] }
-reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = ["optimism"] }
+reth-optimism-node = { path = "../reth/crates/optimism/node", features = [
+    "optimism",
+] }
+reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = [
+    "optimism",
+] }
 reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
-reth-db = { path = "../reth/crates/storage/db" }
-reth-storage-api = { path = "../reth/crates/storage/storage-api" }
-reth-storage-errors = { path = "../reth/crates/storage/errors" }
-reth-trie-common = { path = "../reth/crates/trie/common", features = [
-    "test-utils",
-] }
-reth-provider = { path = "../reth/crates/storage/provider", features = [
-    "test-utils",
-] }
-reth-chainspec = { path = "../reth/crates/chainspec" }
-reth-db-api = { path = "../reth/crates/storage/db-api" }
-reth-node-types = { path = "../reth/crates/node/types" }
 
 # revm
 revm-primitives = { version = "15.1.0", features = [

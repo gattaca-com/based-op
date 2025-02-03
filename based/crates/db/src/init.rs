@@ -6,7 +6,8 @@ use reth_optimism_chainspec::BASE_SEPOLIA;
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
 
-use super::{cache::ReadCaches, Error, DB};
+use super::{Error, DB};
+use crate::cache::ReadCaches;
 
 /// Initialise the database.
 /// # Params
