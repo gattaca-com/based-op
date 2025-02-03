@@ -1,9 +1,8 @@
 use std::{fs, path::Path, sync::Arc};
 
 use parking_lot::RwLock;
-use reth_chainspec::ChainSpecBuilder;
 use reth_db::{init_db, ClientVersion};
-// TODO use reth_optimism_chainspec::BASE_MAINNET;
+use reth_optimism_chainspec::BASE_SEPOLIA;
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
 
@@ -37,7 +36,8 @@ pub fn init_database<P: AsRef<Path>>(
         .with_exclusive(Some(false));
     let db = Arc::new(init_db(db_dir, db_args).map_err(|e| Error::DatabaseInitialisationError(e.to_string()))?);
 
-    let chain_spec = Arc::new(ChainSpecBuilder::mainnet().build()); // BASE_MAINNET.clone()
+    // TODO set from config
+    let chain_spec = BASE_SEPOLIA.clone();
 
     let factory = ProviderFactory::new(db, chain_spec, StaticFileProvider::read_write(static_files_dir)?);
     let caches = ReadCaches::new(max_cached_accounts, max_cached_storages);
