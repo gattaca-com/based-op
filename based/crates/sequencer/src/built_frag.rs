@@ -21,10 +21,9 @@ impl<DbRead: std::fmt::Debug + Clone> BuiltFrag<DbRead> {
         Self { db: Arc::new(db), gas_remaining: max_gas, payment: U256::ZERO, txs: vec![] }
     }
 
-    pub fn apply_tx(mut self, mut tx: SimulatedTx) -> Self {
-        let mut db = Arc::unwrap_or_clone(self.db);
+    pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
+        let db = Arc::make_mut(&mut self.db);
         db.commit(tx.take_state());
-        self.db = Arc::new(db);
         self.payment += tx.payment;
         debug_assert!(
             self.gas_remaining > tx.as_ref().result.gas_used(),
@@ -32,7 +31,6 @@ impl<DbRead: std::fmt::Debug + Clone> BuiltFrag<DbRead> {
         );
         self.gas_remaining -= tx.as_ref().result.gas_used();
         self.txs.push(tx);
-        self
     }
 
     pub fn state(&self) -> Arc<DBSorting<DbRead>> {

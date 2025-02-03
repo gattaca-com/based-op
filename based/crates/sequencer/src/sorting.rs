@@ -81,7 +81,7 @@ impl<Db: BopDB> SortingData<Db> {
     ) -> Self {
         if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
             self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
-            self.frag = self.frag.apply_tx(tx_to_apply);
+            self.frag.apply_tx(tx_to_apply);
         }
 
         let db = self.frag.state();
