@@ -16,7 +16,7 @@ use revm_primitives::{
     AccountInfo, Address, Bytecode, B256, U256,
 };
 
-use crate::{cache::ReadCaches, error::Error, BopDbRead};
+use crate::{cache::ReadCaches, BopDbRead, Error};
 
 pub type ProviderReadOnly = DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>;
 

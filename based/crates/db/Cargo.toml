@@ -6,6 +6,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+bop-common.workspace = true
 parking_lot.workspace = true
 revm-primitives.workspace = true
 thiserror.workspace = true
@@ -32,16 +33,13 @@ reth-optimism-chainspec.workspace = true
 reth-optimism-node.workspace = true
 reth-optimism-primitives.workspace = true
 reth-primitives.workspace = true
-reth-db = { path = "../../../reth/crates/storage/db" }
-reth-storage-api = { path = "../../../reth/crates/storage/storage-api" }
-reth-storage-errors = { path = "../../../reth/crates/storage/errors" }
-reth-trie-common = { path = "../../../reth/crates/trie/common", features = [
-    "test-utils",
-] }
-reth-provider = { path = "../../../reth/crates/storage/provider", features = [
-    "test-utils",
-] }
-reth-chainspec = { path = "../../../reth/crates/chainspec" }
-reth-db-api = { path = "../../../reth/crates/storage/db-api" }
-reth-node-types = { path = "../../../reth/crates/node/types" }
+reth-db.workspace = true
+reth-storage-api.workspace = true
+reth-storage-errors.workspace = true
+reth-trie-common.workspace = true
+reth-provider.workspace = true
+reth-chainspec.workspace = true
+reth-db-api.workspace = true
+reth-node-types.workspace = true
+
 reqwest.workspace = true

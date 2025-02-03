@@ -1,9 +1,8 @@
 use std::{
-    fmt::{Debug, Display, Formatter},
+    fmt::{Debug, Formatter},
     sync::Arc,
 };
 
-use alloy_primitives::B256;
 use parking_lot::RwLock;
 use reth_db::DatabaseEnv;
 use reth_node_types::NodeTypesWithDBAdapter;
@@ -14,55 +13,20 @@ use reth_provider::{
     BlockExecutionOutput, ExecutionOutcome, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter,
 };
 use reth_storage_api::{HashedPostStateProvider, StorageLocation};
-use reth_storage_errors::provider::ProviderError;
-use reth_trie_common::updates::TrieUpdates;
-use revm::db::{BundleState, OriginalValuesKnown};
-use revm_primitives::{
-    db::{Database, DatabaseCommit, DatabaseRef},
-    Account, Address, HashMap,
-};
+use revm::db::OriginalValuesKnown;
+use revm_primitives::{db::DatabaseCommit, Account, Address, HashMap};
 
 pub mod alloy_db;
 mod block;
 mod cache;
-mod error;
 mod init;
 mod util;
 
-pub use error::Error;
+pub use bop_common::db::{BopDB, BopDbRead, Error};
 pub use init::init_database;
 pub use util::state_changes_to_bundle_state;
 
 use crate::{block::BlockDB, cache::ReadCaches};
-
-/// Database trait for all DB operations.
-pub trait BopDB: DatabaseCommit + Send + Sync + 'static + Clone + Debug {
-    type ReadOnly: BopDbRead;
-
-    /// Returns a read-only database.
-    fn readonly(&self) -> Result<Self::ReadOnly, Error>;
-
-    fn commit_block(
-        &self,
-        block: &BlockWithSenders<OpBlock>,
-        block_execution_output: BlockExecutionOutput<OpReceipt>,
-    ) -> Result<(), Error>;
-}
-
-/// Database read functions
-pub trait BopDbRead:
-    Database<Error: Into<ProviderError> + Display> + DatabaseRef<Error: Debug> + Send + Sync + 'static + Clone + Debug
-{
-    /// Returns the current `nonce` value for the account with the specified address. Zero is
-    /// returned if no account is found.
-    fn get_nonce(&self, address: Address) -> u64;
-
-    /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
-    fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;
-
-    /// Returns the current block head number.
-    fn block_number(&self) -> Result<u64, Error>;
-}
 
 pub struct DB {
     factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
