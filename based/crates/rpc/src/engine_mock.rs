@@ -51,6 +51,10 @@ impl<Db: BopDbRead> Actor<Db> for MockEngineRpcServer {
             res_tx: tx,
         });
         let (tx, rx) = oneshot::channel();
-        connections.send(EngineApi::ForkChoiceUpdatedV3 { fork_choice_state: Default::default(), payload_attributes: Default::default(), res_tx: tx });
+        connections.send(EngineApi::ForkChoiceUpdatedV3 {
+            fork_choice_state: Default::default(),
+            payload_attributes: Default::default(),
+            res_tx: tx,
+        });
     }
 }

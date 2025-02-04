@@ -8,7 +8,7 @@ use reth_db_api::transaction::DbTx;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_provider::{providers::ConsistentDbView, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory};
-use reth_storage_api::{HashedPostStateProvider, StateRootProvider};
+use reth_storage_api::HashedPostStateProvider;
 use reth_trie::{StateRoot, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
@@ -37,7 +37,7 @@ impl BlockDB {
         StateRoot::new(DatabaseTrieCursorFactory::new(tx), DatabaseHashedCursorFactory::new(tx))
             .root()
             .map_err(Error::RethStateRootError)
-    } 
+    }
 }
 
 impl Debug for BlockDB {

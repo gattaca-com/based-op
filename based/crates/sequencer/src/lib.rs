@@ -353,11 +353,8 @@ pub struct Sequencer<Db: BopDB> {
 impl<Db: BopDB> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, config.max_gas);
-        let block_executor = BlockSync::new(
-            config.evm_config.chain_spec().clone(),
-            runtime.into(),
-            config.rpc_url.clone(),
-        );
+        let block_executor =
+            BlockSync::new(config.evm_config.chain_spec().clone(), runtime.into(), config.rpc_url.clone());
 
         Self {
             state: SequencerState::default(),

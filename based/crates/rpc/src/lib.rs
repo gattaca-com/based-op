@@ -1,13 +1,16 @@
 use bop_common::{
-    actor::{Actor, ActorConfig}, communication::Spine, config::Config, db::{BopDbRead, DBFrag}
+    actor::{Actor, ActorConfig},
+    communication::Spine,
+    config::Config,
+    db::{BopDbRead, DBFrag},
 };
 use engine::EngineRpcServer;
-use eth::EthRpcServer;
 use engine_mock::MockEngineRpcServer;
+use eth::EthRpcServer;
 use tokio::runtime::Runtime;
 
-mod engine_mock;
 mod engine;
+mod engine_mock;
 mod eth;
 
 pub fn start_engine_rpc<Db: BopDbRead>(config: &Config, spine: &Spine<Db>, rt: &Runtime) {

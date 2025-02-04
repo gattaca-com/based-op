@@ -1,6 +1,7 @@
 use std::{
     fmt::{Debug, Formatter},
-    sync::Arc, time::Instant,
+    sync::Arc,
+    time::Instant,
 };
 
 use parking_lot::RwLock;
