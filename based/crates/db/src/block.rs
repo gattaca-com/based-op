@@ -9,7 +9,9 @@ use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_provider::{DatabaseProviderRO, LatestStateProviderRef};
 use reth_storage_api::{HashedPostStateProvider, StateRootProvider};
+use reth_trie::StateRoot;
 use reth_trie_common::updates::TrieUpdates;
+use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
 use revm::db::BundleState;
 use revm_primitives::{
     db::{Database, DatabaseRef},
@@ -25,6 +27,15 @@ pub type ProviderReadOnly = DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDB
 pub struct BlockDB {
     provider: Arc<ProviderReadOnly>,
     caches: ReadCaches,
+}
+
+impl BlockDB {
+    pub fn state_root(&self) -> Result<B256, Error> {
+        let tx = self.provider.tx_ref();
+        StateRoot::new(DatabaseTrieCursorFactory::new(tx), DatabaseHashedCursorFactory::new(tx))
+            .root()
+            .map_err(Error::RethStateRootError)
+    }
 }
 
 impl Debug for BlockDB {

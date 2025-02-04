@@ -36,6 +36,8 @@ pub enum Error {
     Other(String),
     #[error("State root mismatch: {0}")]
     StateRootError(BlockNumber),
+    #[error("Reth state root error: {0}")]
+    RethStateRootError(#[from] reth_execution_errors::StateRootError),
 }
 
 impl From<Error> for ProviderError {
@@ -48,6 +50,7 @@ impl From<Error> for ProviderError {
             Error::ReadTransactionError(e) => ProviderError::Database(e),
             Error::Other(e) => ProviderError::Database(DatabaseError::Other(e)),
             Error::StateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
+            Error::RethStateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
         }
     }
 }
@@ -55,7 +58,7 @@ impl From<Error> for ProviderError {
 /// Database trait for all DB operations.
 #[auto_impl(&, Arc)]
 pub trait BopDB:
-    Database<Error: Into<ProviderError> + Display> + DatabaseCommit + Send + Sync + 'static + Clone + Debug
+    Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug
 {
     type ReadOnly: BopDbRead + Database<Error: Into<ProviderError> + Display>;
 

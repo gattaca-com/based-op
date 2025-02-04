@@ -14,6 +14,7 @@ use bop_common::{
         SendersSpine,
     },
     db::{BopDB, BopDbRead},
+    runtime::RuntimeOrHandle,
 };
 use crossbeam_channel::{Receiver, Sender};
 use fetch_blocks::async_fetch_blocks_and_send_sequentially;
@@ -32,7 +33,7 @@ use reth_primitives_traits::SignedTransaction;
 use revm::{db::DbAccount, Database, DatabaseRef};
 use tokio::runtime::Runtime;
 
-pub(crate) mod fetch_blocks;
+pub mod fetch_blocks;
 
 fn payload_to_block(payload: ExecutionPayload, sidecar: ExecutionPayloadSidecar) -> BlockSyncMessage {
     let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
@@ -50,7 +51,7 @@ fn payload_to_block(payload: ExecutionPayload, sidecar: ExecutionPayloadSidecar)
 pub struct BlockSync {
     chain_spec: Arc<OpChainSpec>,
     execution_factory: OpExecutionStrategyFactory,
-    runtime: Arc<Runtime>,
+    runtime: RuntimeOrHandle,
 
     /// Used to fetch blocks from an EL node.
     rpc_url: Url,
@@ -58,7 +59,7 @@ pub struct BlockSync {
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
-    pub fn new(chain_spec: Arc<OpChainSpec>, runtime: Arc<Runtime>, rpc_url: Url) -> Self {
+    pub fn new(chain_spec: Arc<OpChainSpec>, runtime: RuntimeOrHandle, rpc_url: Url) -> Self {
         let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
         Self { chain_spec, execution_factory, runtime, rpc_url }
     }
@@ -74,6 +75,7 @@ impl BlockSync {
         sidecar: ExecutionPayloadSidecar,
         db: &DB,
         senders: &SendersSpine<DB::ReadOnly>,
+        commit_block: bool,
     ) -> Result<Option<u64>, BlockSyncError>
     where
         DB: BopDB,
@@ -105,7 +107,7 @@ impl BlockSync {
             Ok(Some(payload_block_number))
         } else {
             // Apply and commit the payload block.
-            self.apply_and_commit_block(&cur_block?, db)?;
+            self.apply_and_commit_block(&cur_block?, db, commit_block)?;
             Ok(None)
         }
     }
@@ -116,10 +118,13 @@ impl BlockSync {
         &mut self,
         block: &BlockWithSenders<OpBlock>,
         db: &DB,
+        commit_block: bool,
     ) -> Result<(), BlockSyncError>
     where
         DB: BopDB,
     {
+        tracing::info!("Applying and committing block: {:?}", block.header.number);
+
         let db_ro = db.readonly().unwrap();
         debug_assert!(block.header.number == db_ro.block_number()? + 1, "can only apply blocks sequentially");
 
@@ -138,7 +143,9 @@ impl BlockSync {
         }
 
         let execution_output = self.execute(block, &db_ro)?;
-        db.commit_block(block, execution_output)?;
+        if commit_block {
+            db.commit_block(block, execution_output)?;
+        }
 
         Ok(())
     }
@@ -196,20 +203,23 @@ impl BlockSync {
 mod tests {
     use std::time::Duration;
 
+    use alloy_consensus::TxReceipt;
     use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
-    use bop_db::alloy_db::AlloyDB;
+    use bop_db::{alloy_db::AlloyDB, init_database};
     use reqwest::Client;
-    use reth_optimism_chainspec::OpChainSpecBuilder;
+    use reth_db::{tables, transaction::DbTx};
+    use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
+    use revm_primitives::address;
+    use tracing::level_filters::LevelFilter;
 
     use super::*;
-    use crate::block_sync::fetch_blocks::{fetch_block, TEST_BASE_RPC_URL};
+    use crate::block_sync::fetch_blocks::{fetch_block, TEST_BASE_RPC_URL, TEST_BASE_SEPOLIA_RPC_URL};
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";
 
     #[test]
     fn test_block_sync_with_alloydb() {
-        initialize_test_tracing(tracing::Level::INFO);
         let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
 
         // Get RPC URL from environment
@@ -218,8 +228,8 @@ mod tests {
         tracing::info!("RPC URL: {}", rpc_url);
 
         // Create the block executor.
-        let chain_spec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
-        let mut block_executor = BlockSync::new(chain_spec, rt.clone(), rpc_url.clone());
+        let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
+        let mut block_sync = BlockSync::new(chain_spec, RuntimeOrHandle::new_runtime(rt.clone()), rpc_url.clone());
 
         // Fetch the block from the RPC.
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
@@ -231,7 +241,32 @@ mod tests {
         let alloydb = AlloyDB::new(client, block.header.number, rt);
 
         // Execute the block.
-        let res = block_executor.apply_and_commit_block(&block, &alloydb);
+        let res = block_sync.apply_and_commit_block(&block, &alloydb, false);
         tracing::info!("res: {:?}", res);
+    }
+
+    #[test]
+    fn test_block_sync_with_on_disk_db() {
+        initialize_test_tracing(LevelFilter::INFO);
+
+        // Initialise the on disk db.
+        let db_location = std::env::var("DB_LOCATION").unwrap_or_else(|_| "/tmp/base_sepolia".to_string());
+        let db: bop_db::DB = init_database(&db_location, 1000, 1000).unwrap();
+        let db_head_block_number = db.readonly().unwrap().block_number().unwrap();
+        println!("DB Head Block Number: {:?}", db_head_block_number);
+
+        // initialise block sync and fetch block
+        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let rpc_url = Url::parse(TEST_BASE_SEPOLIA_RPC_URL).unwrap();
+
+        // Create the block executor.
+        let chain_spec = BASE_SEPOLIA.clone();
+        let mut block_sync = BlockSync::new(chain_spec, RuntimeOrHandle::new_runtime(rt.clone()), rpc_url.clone());
+
+        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
+        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &client, rpc_url).await.unwrap() });
+
+        // Execute the block.
+        assert!(block_sync.execute(&block, &db).is_ok());
     }
 }

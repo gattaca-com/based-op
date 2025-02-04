@@ -50,6 +50,7 @@ tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 reth-optimism-node.workspace = true
 reth-optimism-cli.workspace = true
+reth-execution-errors.workspace = true
 
 
 # networking

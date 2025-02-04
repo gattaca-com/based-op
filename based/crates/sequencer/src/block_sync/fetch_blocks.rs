@@ -16,6 +16,8 @@ use tokio::{runtime::Runtime, task::JoinHandle};
 
 #[allow(unused)]
 pub(crate) const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
+#[allow(unused)]
+pub(crate) const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.publicnode.com";
 
 /// Fetches a range of blocks sends them through the channel.
 ///
@@ -25,7 +27,7 @@ pub(crate) const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
 /// curr_block/end_block are inclusive
 ///
 /// We first send all the previous blocks, then we send the last one if last_block is Some
-pub(crate) async fn async_fetch_blocks_and_send_sequentially(
+pub async fn async_fetch_blocks_and_send_sequentially(
     mut curr_block: u64,
     end_block: u64,
     url: Url,
@@ -59,7 +61,7 @@ pub(crate) async fn async_fetch_blocks_and_send_sequentially(
     }
 }
 
-pub(crate) async fn fetch_block(
+pub async fn fetch_block(
     block_number: u64,
     client: &Client,
     url: Url,

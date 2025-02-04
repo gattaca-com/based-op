@@ -60,6 +60,17 @@ impl OpChainSpecBuilder {
         Self { inner }
     }
 
+    /// Construct a new builder from the base sepolia chain spec.
+    pub fn base_sepolia() -> Self {
+        let mut inner = ChainSpecBuilder::default()
+            .chain(BASE_SEPOLIA.chain)
+            .genesis(BASE_SEPOLIA.genesis.clone());
+        let forks = BASE_SEPOLIA.hardforks.clone();
+        inner = inner.with_forks(forks);
+
+        Self { inner }
+    }
+
     /// Construct a new builder from the optimism mainnet chain spec.
     pub fn optimism_mainnet() -> Self {
         let mut inner =
