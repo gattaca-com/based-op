@@ -7,11 +7,12 @@ use reth_db::{cursor::DbCursorRO, Bytecodes, CanonicalHeaders, DatabaseEnv};
 use reth_db_api::transaction::DbTx;
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
-use reth_provider::{DatabaseProviderRO, LatestStateProviderRef};
+use reth_provider::{providers::ConsistentDbView, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory};
 use reth_storage_api::{HashedPostStateProvider, StateRootProvider};
-use reth_trie::StateRoot;
+use reth_trie::{StateRoot, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
+use reth_trie_parallel::root::ParallelStateRoot;
 use revm::db::BundleState;
 use revm_primitives::{
     db::{Database, DatabaseRef},
@@ -26,6 +27,7 @@ pub type ProviderReadOnly = DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDB
 #[derive(Clone)]
 pub struct BlockDB {
     provider: Arc<ProviderReadOnly>,
+    factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
     caches: ReadCaches,
 }
 
@@ -35,7 +37,7 @@ impl BlockDB {
         StateRoot::new(DatabaseTrieCursorFactory::new(tx), DatabaseHashedCursorFactory::new(tx))
             .root()
             .map_err(Error::RethStateRootError)
-    }
+    } 
 }
 
 impl Debug for BlockDB {
@@ -47,9 +49,10 @@ impl Debug for BlockDB {
 impl BlockDB {
     pub(super) fn new(
         caches: ReadCaches,
-        provider: DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
-    ) -> Self {
-        Self { provider: Arc::new(provider), caches }
+        factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
+    ) -> Result<Self, Error> {
+        let provider = factory.provider().map_err(Error::ProviderError)?;
+        Ok(Self { provider: Arc::new(provider), caches, factory })
     }
 }
 
@@ -107,7 +110,10 @@ impl BopDbRead for BlockDB {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         let latest_state = LatestStateProviderRef::new(self.provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(bundle_state);
-        latest_state.state_root_with_updates(hashed_state).map_err(Error::ProviderError)
+
+        let consistent_view = ConsistentDbView::new_unchecked(self.factory.clone())?;
+        let parallel_state_root = ParallelStateRoot::new(consistent_view, TrieInput::from_state(hashed_state));
+        parallel_state_root.incremental_root_with_updates().map_err(Error::ParallelStateRootError)
     }
 
     /// Returns the highest block number in the canonical chain.

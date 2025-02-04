@@ -43,6 +43,7 @@ reth-db-api.workspace = true
 reth-node-types.workspace = true
 reth-trie.workspace = true
 reth-trie-db.workspace = true
+reth-trie-parallel.workspace = true
 
 # Networking
 reqwest.workspace = true

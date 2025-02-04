@@ -52,7 +52,7 @@ reth-optimism-node.workspace = true
 reth-optimism-cli.workspace = true
 reth-execution-errors.workspace = true
 reth-optimism-consensus.workspace = true
-
+reth-trie-parallel.workspace = true
 
 # networking
 reqwest.workspace = true

@@ -24,7 +24,6 @@ pub mod alloy_db;
 mod block;
 mod cache;
 mod init;
-mod util;
 
 pub use bop_common::db::{BopDB, BopDbRead, Error};
 pub use init::init_database;
@@ -126,7 +125,7 @@ impl BopDB for DB {
             return Ok(block);
         }
 
-        let block = BlockDB::new(self.caches.clone(), self.factory.provider().map_err(Error::ProviderError)?);
+        let block = BlockDB::new(self.caches.clone(), self.factory.clone())?;
         self.block.write().replace(block.clone());
         Ok(block)
     }

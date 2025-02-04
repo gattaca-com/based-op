@@ -84,6 +84,7 @@ reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
     "test-utils",
 ] }
 reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
+reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
 
 # reth-db
 reth-revm = { path = "../reth/crates/revm" }
