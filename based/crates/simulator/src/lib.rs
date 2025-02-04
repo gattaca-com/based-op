@@ -76,7 +76,7 @@ impl<Db: BopDbRead> Actor<Db> for Simulator<'_, Db> {
                     let _ = senders.send_timeout(
                         SimulatorToSequencer::new(
                             sender,
-                            db.unique_hash(),
+                            db.state_id(),
                             SimulatorToSequencerMsg::Tx(Self::simulate_tx(tx, db, &mut self.evm)),
                         ),
                         Duration::from_millis(10),
@@ -87,14 +87,11 @@ impl<Db: BopDbRead> Actor<Db> for Simulator<'_, Db> {
                     let _ = senders.send_timeout(
                         SimulatorToSequencer::new(
                             sender,
-                            db.unique_hash(),
+                            db.state_id(),
                             SimulatorToSequencerMsg::TxTof(Self::simulate_tx(tx, db, &mut self.evm_tof)),
                         ),
                         Duration::from_millis(10),
                     );
-                }
-                SequencerToSimulator::NewBlock => {
-                    todo!()
                 }
             }
         });

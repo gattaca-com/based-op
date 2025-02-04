@@ -23,5 +23,5 @@ fn main() {
     }
 
     // Block sync
-    let block_number = db_ro.block_number().unwrap();
+    let _block_number = db_ro.head_block_number().unwrap();
 }

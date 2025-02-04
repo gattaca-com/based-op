@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use bop_common::{runtime::RuntimeOrHandle, time::Duration, utils::initialize_test_tracing};
 use bop_db::{init_database, BopDB, BopDbRead};
@@ -36,10 +36,13 @@ async fn main() -> eyre::Result<()> {
     let rpc_url_clone = rpc_url.clone();
 
     let db: bop_db::DB = init_database(&args.db_path, 1000, 1000)?;
-    let db_head = db.readonly().unwrap().block_number()?;
+    let db_head = db.readonly().unwrap().head_block_number()?;
     let head_state_root = db.state_root()?;
 
-    tracing::info!("Starting sync. From block: {db_head} to block: {}. State root: {head_state_root:?}", args.end_block);
+    tracing::info!(
+        "Starting sync. From block: {db_head} to block: {}. State root: {head_state_root:?}",
+        args.end_block
+    );
 
     let chain_spec = BASE_SEPOLIA.clone();
     let handle: RuntimeOrHandle = tokio::runtime::Handle::current().into();

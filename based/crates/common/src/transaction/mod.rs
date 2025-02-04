@@ -175,7 +175,7 @@ impl From<OpTransactionSigned> for Transaction {
             op_alloy_consensus::OpTypedTransaction::Eip7702(tx_eip7702) => {
                 OpTxEnvelope::Eip7702(tx_eip7702.into_signed(signature))
             }
-            op_alloy_consensus::OpTypedTransaction::Deposit(_) => OpTxEnvelope::Deposit(todo!()),
+            op_alloy_consensus::OpTypedTransaction::Deposit(tx_deposit) => OpTxEnvelope::Deposit(tx_deposit.seal()),
         };
         Self { tx, sender }
     }
