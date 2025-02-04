@@ -1,24 +1,32 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use alloy_primitives::{Address, Bytes, B256, U256};
-use alloy_rpc_types::{Block, BlockId, BlockNumberOrTag, TransactionReceipt};
+use alloy_rpc_types::{BlockId, BlockNumberOrTag};
 use bop_common::{
-    api::EthApiServer,
+    api::{EthApiClient, EthApiServer, OpRpcBlock},
     communication::{messages::RpcResult, Sender, Spine},
     db::{BopDbRead, DBFrag},
     transaction::Transaction,
 };
-use jsonrpsee::{core::async_trait, server::ServerBuilder};
-use tracing::{error, info, trace, Level};
+use jsonrpsee::{
+    client_transport::ws::Url, core::async_trait, http_client::HttpClient as RpcClient, server::ServerBuilder,
+};
+use op_alloy_rpc_types::OpTransactionReceipt;
+use reth_optimism_primitives::OpBlock;
+use tracing::{error, info, trace, warn, Level};
 
-pub struct EthRpcServer<D> {
+pub struct EthRpcServer<Db> {
     new_order_tx: Sender<Arc<Transaction>>,
-    db: DBFrag<D>,
+    db: DBFrag<Db>,
+    // TODO: this is a temporary fallback while we dont have a gossip to share state, in practice we should not serve
+    // state directly from the gateway, and should only receive transactions
+    fallback: RpcClient,
 }
 
-impl<D: BopDbRead> EthRpcServer<D> {
-    pub fn new(spine: &Spine<D>, db: DBFrag<D>) -> Self {
-        Self { new_order_tx: spine.into(), db }
+impl<Db: BopDbRead> EthRpcServer<Db> {
+    pub fn new(spine: &Spine<Db>, db: DBFrag<Db>, fallback_url: Url) -> Self {
+        let fallback = RpcClient::builder().build(fallback_url).expect("failed building fallback rpc client");
+        Self { new_order_tx: spine.into(), db, fallback }
     }
 
     #[tracing::instrument(skip_all, name = "rpc_eth")]
@@ -49,24 +57,67 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
     // STORE
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<TransactionReceipt>> {
+    async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>> {
         trace!(%hash, "new request");
 
-        todo!()
+        let receipt = match self.db.get_transaction_receipt(hash) {
+            Ok(receipt) => Some(receipt),
+            Err(err) => {
+                warn!(%err, "failed db fetch");
+                let receipt = self.fallback.transaction_receipt(hash).await?;
+                receipt
+            }
+        };
+
+        Ok(receipt)
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<Block>> {
+    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>> {
         trace!(%number, full, "new request");
 
-        todo!()
+        let block = match number {
+            BlockNumberOrTag::Latest => match self.db.get_latest_block() {
+                Ok(block) => Some(convert_block(block, full)),
+                Err(err) => {
+                    warn!(%err, "failed latest db fetch");
+                    None
+                }
+            },
+            BlockNumberOrTag::Number(bn) => match self.db.get_block_by_number(bn) {
+                Ok(block) => Some(convert_block(block, full)),
+                Err(err) => {
+                    warn!(%err, "failed by number db fetch");
+                    None
+                }
+            },
+            BlockNumberOrTag::Finalized |
+            BlockNumberOrTag::Safe |
+            BlockNumberOrTag::Earliest |
+            BlockNumberOrTag::Pending => None,
+        };
+
+        if block.is_none() {
+            Ok(self.fallback.block_by_number(number, full).await?)
+        } else {
+            Ok(block)
+        }
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<Block>> {
+    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>> {
         trace!(%hash, full, "new request");
 
-        todo!()
+        let block = match self.db.get_block_by_hash(hash) {
+            Ok(block) => Some(convert_block(block, full)),
+            Err(err) => {
+                warn!(%err, "failed db fetch");
+                let block = self.fallback.block_by_hash(hash, full).await?;
+                block
+            }
+        };
+
+        Ok(block)
     }
 
     // DB
@@ -75,21 +126,62 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
     async fn block_number(&self) -> RpcResult<U256> {
         trace!("new request");
 
-        todo!()
+        let bn = match self.db.curr_block_number() {
+            Ok(bn) => U256::from(bn),
+            Err(err) => {
+                warn!(%err, "failed db fetch");
+                let bn = self.fallback.block_number().await?;
+                bn
+            }
+        };
+
+        Ok(bn)
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
         trace!(%address, ?block_number, "new request");
-        let nonce = self.db.get_nonce(address);
+        let is_latest = block_number.map(|bn| bn.is_latest()).unwrap_or(true);
+        let nonce = if is_latest {
+            match self.db.get_nonce(address) {
+                Ok(nonce) => U256::from(nonce),
+                Err(err) => {
+                    warn!(%err, "failed db fetch");
+                    let nonce = self.fallback.transaction_count(address, block_number).await?;
+                    nonce
+                }
+            }
+        } else {
+            let nonce = self.fallback.transaction_count(address, block_number).await?;
+            nonce
+        };
 
-        Ok(U256::from(nonce))
+        Ok(nonce)
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
         trace!(%address, ?block_number, "new request");
 
-        todo!()
+        let is_latest = block_number.map(|bn| bn.is_latest()).unwrap_or(true);
+        let balance = if is_latest {
+            match self.db.get_balance(address) {
+                Ok(balance) => U256::from(balance),
+                Err(err) => {
+                    warn!(%err, "failed db fetch");
+                    let balance = self.fallback.balance(address, block_number).await?;
+                    balance
+                }
+            }
+        } else {
+            let balance = self.fallback.balance(address, block_number).await?;
+            balance
+        };
+
+        Ok(balance)
     }
+}
+
+fn convert_block(_block: OpBlock, _full: bool) -> OpRpcBlock {
+    todo!()
 }
