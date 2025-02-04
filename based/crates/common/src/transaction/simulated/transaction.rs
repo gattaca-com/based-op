@@ -1,6 +1,11 @@
 use std::{ops::Deref, sync::Arc};
 
+use alloy_consensus::{Receipt, TxReceipt};
 use alloy_primitives::U256;
+use op_alloy_consensus::{OpDepositReceipt, OpTxType};
+use reth_optimism_consensus::calculate_receipt_root_no_memo_optimism;
+use reth_optimism_primitives::OpReceipt;
+use reth_primitives::{ReceiptWithBloom, TxType};
 use revm_primitives::{Address, EvmState, ResultAndState};
 
 use crate::{db::BopDbRead, transaction::Transaction};
@@ -36,6 +41,34 @@ impl SimulatedTx {
 
     pub fn take_state(&mut self) -> EvmState {
         std::mem::take(&mut self.result_and_state.state)
+    }
+
+    pub fn clone_state(&self) -> EvmState {
+        self.result_and_state.state.clone()
+    }
+
+    pub fn receipt(&self, cumulative_gas_used: u64) -> ReceiptWithBloom<OpReceipt> {
+        let receipt = Receipt {
+            logs: self.result_and_state.result.logs().to_owned(),
+            cumulative_gas_used,
+            status: alloy_consensus::Eip658Value::Eip658(self.result_and_state.result.is_success()),
+        };
+        let receipt = match self.tx.tx_type() {
+            OpTxType::Legacy => OpReceipt::Legacy(receipt),
+            OpTxType::Eip2930 => OpReceipt::Eip2930(receipt),
+            OpTxType::Eip1559 => OpReceipt::Eip1559(receipt),
+            OpTxType::Eip7702 => OpReceipt::Eip7702(receipt),
+            OpTxType::Deposit => OpReceipt::Deposit(OpDepositReceipt {
+                inner: receipt,
+                deposit_nonce: None,
+                // The deposit receipt version was introduced in Canyon to indicate an update to
+                // how receipt hashes should be computed when set. The state
+                // transition process ensures this is only set for
+                // post-Canyon deposit transactions.
+                deposit_receipt_version: None,
+            }),
+        };
+        receipt.into_with_bloom()
     }
 }
 
