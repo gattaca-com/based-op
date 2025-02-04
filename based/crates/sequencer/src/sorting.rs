@@ -91,8 +91,9 @@ impl<Db: BopDbRead> SortingData<Db> {
         let db = self.frag.state();
 
         if let Some(tx) = self.remaining_attributes_txs.pop_front() {
+            debug_assert_eq!(self.in_flight_sims, 0, "only one attributes tx can be in flight at a time");
             senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
-            self.in_flight_sims += 1;
+            self.in_flight_sims = 1;
         } else if self.can_add_txs {
             for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
                 debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
