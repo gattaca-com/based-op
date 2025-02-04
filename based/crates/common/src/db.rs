@@ -116,9 +116,24 @@ impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
 /// DB That adds chunks on top of last on chain block
 #[derive(Clone, Debug)]
 pub struct DBFrag<Db> {
-    db: Arc<RwLock<CacheDB<Db>>>,
-    unique_hash: B256,
+    pub db: Arc<RwLock<CacheDB<Db>>>,
+    pub unique_hash: B256,
 }
+
+impl<Db: BopDbRead> DBFrag<Db> {
+    pub fn commit(&mut self, db: Arc<DBSorting<Db>>) {
+        let guard = self.db.write();
+        todo!();
+        self.unique_hash = B256::random()
+    }
+
+    pub fn clear(&mut self) {
+        let guard = self.db.write();
+        todo!();
+        self.unique_hash = B256::random()
+    }
+}
+
 impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
@@ -187,8 +202,14 @@ impl<Db: BopDbRead> From<Db> for DBFrag<Db> {
 
 #[derive(Clone, Debug)]
 pub struct DBSorting<Db> {
-    db: CacheDB<DBFrag<Db>>,
-    unique_hash: B256,
+    pub db: CacheDB<DBFrag<Db>>,
+    pub unique_hash: B256,
+}
+
+impl<Db> DBSorting<Db> {
+    pub fn new(frag_db: DBFrag<Db>) -> Self {
+        Self { db: CacheDB::new(frag_db), unique_hash: B256::random() }
+    }
 }
 
 impl<Db> DBSorting<Db> {
@@ -198,11 +219,6 @@ impl<Db> DBSorting<Db> {
     }
 }
 
-impl<Db: BopDbRead> From<DBFrag<Db>> for DBSorting<Db> {
-    fn from(value: DBFrag<Db>) -> Self {
-        Self { db: CacheDB::new(value), unique_hash: B256::random() }
-    }
-}
 impl<Db> Deref for DBSorting<Db> {
     type Target = CacheDB<DBFrag<Db>>;
 
