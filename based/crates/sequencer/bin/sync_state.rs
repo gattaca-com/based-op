@@ -35,10 +35,11 @@ async fn main() -> eyre::Result<()> {
     let rpc_url = Url::parse(&args.rpc_url)?;
     let rpc_url_clone = rpc_url.clone();
 
-    let db = init_database(&args.db_path, 1000, 1000)?;
+    let db: bop_db::DB = init_database(&args.db_path, 1000, 1000)?;
     let db_head = db.readonly().unwrap().block_number()?;
+    let head_state_root = db.state_root()?;
 
-    tracing::info!("Starting sync. From block: {db_head} to block: {}", args.end_block);
+    tracing::info!("Starting sync. From block: {db_head} to block: {}. State root: {head_state_root:?}", args.end_block);
 
     let chain_spec = BASE_SEPOLIA.clone();
     let handle: RuntimeOrHandle = tokio::runtime::Handle::current().into();
@@ -62,6 +63,9 @@ async fn main() -> eyre::Result<()> {
         if head_state_root != rpc_head_block_state_root {
             panic!("Head state root does not match block state root. Head: {head_state_root:?}, Block: {rpc_head_block_state_root:?}");
         }
+        tracing::info!(
+            "Head state root matches block state root. Head: {head_state_root:?}, Block: {rpc_head_block_state_root:?}"
+        );
         rpc_head_block_state_root = block.header.state_root;
 
         block_sync.apply_and_commit_block(&block, &db, true).unwrap();
