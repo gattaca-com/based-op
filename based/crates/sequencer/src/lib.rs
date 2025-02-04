@@ -10,6 +10,7 @@ use bop_common::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{BopDB, DBFrag},
+    p2p::{SealV0, VersionedMessage},
     time::{Duration, Instant},
     transaction::Transaction,
 };
@@ -128,15 +129,17 @@ where
             }
 
             (GetPayloadV3 { res, .. }, Self::Sorting(sorting_data)) => {
-                let frag = data.frags.apply_sorted_frag(sorting_data.frag);
+                let mut frag = data.frags.apply_sorted_frag(sorting_data.frag);
+                frag.is_last = true;
+                let frag_msg = VersionedMessage::from(frag);
+                // gossip seal to p2p
+                let _ = senders.send(frag_msg);
 
-                let (frag_msg, sealed_msg, block) =
+                let (seal, block) =
                     data.frags.seal_block(&data.block_env, &data.config.evm_config.chain_spec(), data.parent_hash);
 
                 // gossip seal to p2p
-                let _ = senders.send(frag_msg);
-                // gossip seal to p2p
-                let _ = senders.send(sealed_msg);
+                let _ = senders.send(VersionedMessage::from(seal));
 
                 // send payload back to rpc
                 let _ = res.send(block);
@@ -243,7 +246,7 @@ where
             Sorting(sorting_data) if sorting_data.should_seal_frag() => {
                 let frag = data.frags.apply_sorted_frag(sorting_data.frag);
                 // broadcast to p2p
-                connections.send(frag);
+                connections.send(VersionedMessage::from(frag));
                 let sorting_data =
                     data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
                 Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))

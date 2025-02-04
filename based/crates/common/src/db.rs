@@ -61,9 +61,7 @@ impl From<Error> for ProviderError {
 
 /// Database trait for all DB operations.
 #[auto_impl(&, Arc)]
-pub trait BopDB:
-    Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug
-{
+pub trait BopDB: Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug {
     type ReadOnly: BopDbRead + Database<Error: Into<ProviderError> + Display>;
 
     /// Returns a read-only database.

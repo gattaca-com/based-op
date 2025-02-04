@@ -12,7 +12,7 @@ use alloy_rpc_types::{
 };
 use bop_common::{
     db::{flatten_state_changes, DBFrag, DBSorting},
-    p2p::{Frag, FragMessage, FragV0, VersionedMessage},
+    p2p::{FragV0, SealV0, VersionedMessage},
     transaction::SimulatedTx,
 };
 use bop_db::BopDbRead;
@@ -55,16 +55,11 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
     }
 
     /// Creates a new frag, all subsequent frags will be built on top of this one
-    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> VersionedMessage {
+    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragV0 {
         self.gas_remaining -= in_sort.gas_used;
         self.payment += in_sort.payment;
 
-        let msg = VersionedMessage::new_frag_v0(FragV0::new(
-            self.block_number,
-            self.next_seq,
-            in_sort.txs.iter().map(|tx| tx.tx.as_ref()),
-            false,
-        ));
+        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
 
         self.db.commit(in_sort.txs.iter());
         self.txs.extend(in_sort.txs);
@@ -83,7 +78,7 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
         block_env: &BlockEnv,
         chain_spec: impl reth_chainspec::Hardforks,
         parent_hash: B256,
-    ) -> (VersionedMessage, VersionedMessage, OpExecutionPayloadEnvelopeV3) {
+    ) -> (SealV0, OpExecutionPayloadEnvelopeV3) {
         let state_changes = flatten_state_changes(self.txs.iter().map(|t| t.result_and_state.state.clone()).collect());
         let state_root = self.db.state_root(state_changes);
 
@@ -129,33 +124,46 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
             requests_hash: None,
         };
 
-        let V1 = ExecutionPayloadV1 {
+        let v1 = ExecutionPayloadV1 {
             parent_hash,
             fee_recipient: block_env.coinbase,
             state_root,
             receipts_root,
             logs_bloom,
             prev_randao: block_env.prevrandao.unwrap_or_default(),
-            block_number: block_env.number.try_into().unwrap(),
-            gas_limit: block_env.gas_limit.try_into().unwrap(),
+            block_number: block_env.number.to(),
+            gas_limit: block_env.gas_limit.to(),
             gas_used,
-            timestamp: block_env.timestamp.try_into().unwrap(),
+            timestamp: block_env.timestamp.to(),
             extra_data: Bytes::default(),
             base_fee_per_gas: block_env.basefee,
             block_hash: header.hash_slow(),
             transactions,
         };
-        OpExecutionPayloadEnvelopeV3 {
-            execution_payload: ExecutionPayloadV3 {
-                payload_inner: ExecutionPayloadV2 { payload_inner: V1, withdrawals: vec![] },
-                blob_gas_used: 0,
-                excess_blob_gas: 0,
+        (
+            SealV0 {
+                total_frags: self.next_seq,
+                block_number: block_env.number.to(),
+                gas_used,
+                gas_limit: block_env.gas_limit.to(),
+                parent_hash,
+                transactions_root,
+                receipts_root,
+                state_root,
+                block_hash: v1.block_hash,
             },
-            block_value: self.payment,
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: B256::ZERO,
-        }
+            OpExecutionPayloadEnvelopeV3 {
+                execution_payload: ExecutionPayloadV3 {
+                    payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                    blob_gas_used: 0,
+                    excess_blob_gas: 0,
+                },
+                block_value: self.payment,
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: B256::ZERO,
+            },
+        )
     }
 
     pub fn is_valid(&self, unique_hash: B256) -> bool {
