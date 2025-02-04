@@ -10,6 +10,7 @@ use bop_common::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{BopDB, DBFrag},
+    p2p::{SealV0, VersionedMessage},
     time::{Duration, Instant},
     transaction::Transaction,
 };
@@ -18,9 +19,9 @@ use frag::FragSequence;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reqwest::Url;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
-use reth_optimism_chainspec::OpChainSpecBuilder;
+use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
 use reth_optimism_evm::OpEvmConfig;
-use revm_primitives::B256;
+use revm_primitives::{Address, BlockEnv, B256};
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, warn};
@@ -102,7 +103,7 @@ where
 
                 let next_attr = NextBlockEnvAttributes {
                     timestamp: attributes.payload_attributes.timestamp,
-                    suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
+                    suggested_fee_recipient: data.config.coinbase,
                     prev_randao: attributes.payload_attributes.prev_randao,
                     gas_limit: data.parent_header.gas_limit,
                 };
@@ -110,10 +111,13 @@ where
                 let block_env = data
                     .config
                     .evm_config
-                    .next_cfg_and_block_env(&data.parent_header, next_attr)
+                    .next_cfg_and_block_env(&data.parent_header, next_attr.clone())
                     .expect("couldn't create blockenv");
                 // should never fail as its a broadcast
-                senders.send_timeout(block_env.block_env, Duration::from_millis(10)).expect("couldn't send block env");
+                senders
+                    .send_timeout(block_env.block_env.clone(), Duration::from_millis(10))
+                    .expect("couldn't send block env");
+                data.block_env = block_env.block_env;
 
                 let txs = attributes
                     .transactions
@@ -124,13 +128,18 @@ where
                 Sorting(sorting_data)
             }
 
-            (GetPayloadV3 { payload_id, res }, Self::Sorting(sorting_data)) => {
-                let (frag_msg, sealed_msg, block) = data.frags.seal_block();
-
+            (GetPayloadV3 { res, .. }, Self::Sorting(sorting_data)) => {
+                let mut frag = data.frags.apply_sorted_frag(sorting_data.frag);
+                frag.is_last = true;
+                let frag_msg = VersionedMessage::from(frag);
                 // gossip seal to p2p
                 let _ = senders.send(frag_msg);
+
+                let (seal, block) =
+                    data.frags.seal_block(&data.block_env, &data.config.evm_config.chain_spec(), data.parent_hash);
+
                 // gossip seal to p2p
-                let _ = senders.send(sealed_msg);
+                let _ = senders.send(VersionedMessage::from(seal));
 
                 // send payload back to rpc
                 let _ = res.send(block);
@@ -237,7 +246,7 @@ where
             Sorting(sorting_data) if sorting_data.should_seal_frag() => {
                 let frag = data.frags.apply_sorted_frag(sorting_data.frag);
                 // broadcast to p2p
-                connections.send(frag);
+                connections.send(VersionedMessage::from(frag));
                 let sorting_data =
                     data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
                 Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))
@@ -269,12 +278,22 @@ where
 
 #[derive(Clone, Debug)]
 pub struct SequencerConfig {
-    frag_duration: Duration,
-    max_gas: u64,
-    n_per_loop: usize,
-    rpc_url: Url,
-    evm_config: OpEvmConfig,
+    pub frag_duration: Duration,
+    pub max_gas: u64,
+    pub n_per_loop: usize,
+    pub rpc_url: Url,
+    pub evm_config: OpEvmConfig,
+    pub coinbase: Address,
 }
+
+impl SequencerConfig {
+    pub fn with_chain_spec(chain_spec: OpChainSpec) -> Self {
+        let mut o: Self = Default::default();
+        o.evm_config = OpEvmConfig::new(Arc::new(chain_spec));
+        o
+    }
+}
+
 impl Default for SequencerConfig {
     fn default() -> Self {
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
@@ -286,6 +305,7 @@ impl Default for SequencerConfig {
             n_per_loop: 10,
             rpc_url: Url::parse("http://0.0.0.0:8003").unwrap(),
             evm_config,
+            coinbase: Address::random(),
         }
     }
 }
@@ -295,6 +315,7 @@ pub struct SequencerContext<Db: BopDB> {
     config: SequencerConfig,
     db: Db,
     tx_pool: TxPool,
+    block_env: BlockEnv,
     frags: FragSequence<Db::ReadOnly>,
     block_executor: BlockSync,
     parent_hash: B256,
@@ -333,7 +354,7 @@ impl<Db: BopDB> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, config.max_gas);
         let block_executor = BlockSync::new(
-            Arc::new(OpChainSpecBuilder::base_mainnet().build()),
+            config.evm_config.chain_spec().clone(),
             runtime.into(),
             config.rpc_url.clone(),
         );
@@ -352,6 +373,7 @@ impl<Db: BopDB> Sequencer<Db> {
                 base_fee: Default::default(),
                 parent_hash: Default::default(),
                 parent_header: Default::default(),
+                block_env: Default::default(),
             },
         }
     }
@@ -372,6 +394,7 @@ where
 
         // handle engine API messages from rpc
         connections.receive(|msg, senders| {
+            tracing::info!("got engine api msg {msg:?}");
             self.state =
                 std::mem::take(&mut self.state).update(SequencerEvent::EngineApi(msg), &mut self.data, senders);
         });

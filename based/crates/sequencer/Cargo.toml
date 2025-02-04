@@ -14,6 +14,7 @@ bop-db.workspace = true
 alloy-provider.workspace = true
 alloy-consensus.workspace = true
 alloy-primitives.workspace = true
+alloy-eips.workspace = true
 
 # op alloy
 op-alloy-consensus.workspace = true
@@ -24,6 +25,7 @@ reth-primitives.workspace = true
 reth-primitives-traits.workspace = true
 reth-consensus.workspace = true
 reth-db.workspace = true
+reth-chainspec.workspace = true
 reth-trie-common.workspace = true
 
 # reth op

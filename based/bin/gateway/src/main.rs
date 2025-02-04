@@ -1,17 +1,35 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use bop_common::{
     actor::{Actor, ActorConfig},
-    communication::Spine,
+    communication::{messages::EngineApi, Spine},
     config::Config,
     db::{BopDB, DBFrag},
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::init_database;
-use bop_rpc::{start_engine_rpc, start_eth_rpc};
+use bop_rpc::{start_engine_rpc, start_eth_rpc, start_mock_engine_rpc};
 use bop_sequencer::{Sequencer, SequencerConfig};
 use bop_simulator::Simulator;
+use clap::Parser;
+use reth_optimism_chainspec::OpChainSpecBuilder;
 use tokio::runtime::Runtime;
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to the database directory
+    #[arg(short, long)]
+    db_path: PathBuf,
+
+    /// Last block number to sync to, inclusive.
+    #[arg(short, long)]
+    end_block: u64,
+
+    /// RPC URL, used to fetch blocks.
+    #[arg(short, long)]
+    rpc_url: String,
+}
 
 fn main() {
     let _guards = init_tracing(Some("gateway"), 100, None);
@@ -20,12 +38,15 @@ fn main() {
     let spine_c = spine.clone();
 
     let rpc_config = Config::default();
+    let args = Args::parse();
+    let mut config = SequencerConfig::with_chain_spec(OpChainSpecBuilder::base_sepolia().build());
+    config.rpc_url = reqwest::Url::parse(&args.rpc_url).unwrap();
 
     // TODO values from config
     let max_cached_accounts = 10_000;
     let max_cached_storages = 100_000;
 
-    let db_bop = init_database("./", max_cached_accounts, max_cached_storages).expect("can't run");
+    let db_bop = init_database(&args.db_path, max_cached_accounts, max_cached_storages).expect("can't run");
     let db_frag: DBFrag<_> = db_bop.readonly().expect("Failed to create read-only DB").into();
 
     std::thread::scope(|s| {
@@ -49,7 +70,7 @@ fn main() {
         });
 
         s.spawn(|| {
-            let sequencer = Sequencer::new(db_bop, db_frag.clone(), rt_c, SequencerConfig::default());
+            let sequencer = Sequencer::new(db_bop, db_frag.clone(), rt_c, config);
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
@@ -63,5 +84,7 @@ fn main() {
                 }
             });
         }
+
+        start_mock_engine_rpc(&spine, args.end_block);
     });
 }

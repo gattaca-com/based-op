@@ -39,7 +39,10 @@ async fn main() -> eyre::Result<()> {
     let db_head = db.readonly().unwrap().block_number()?;
     let head_state_root = db.state_root()?;
 
-    tracing::info!("Starting sync. From block: {db_head} to block: {}. State root: {head_state_root:?}", args.end_block);
+    tracing::info!(
+        "Starting sync. From block: {db_head} to block: {}. State root: {head_state_root:?}",
+        args.end_block
+    );
 
     let chain_spec = BASE_SEPOLIA.clone();
     let handle: RuntimeOrHandle = tokio::runtime::Handle::current().into();

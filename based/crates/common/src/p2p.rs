@@ -10,16 +10,18 @@ use crate::transaction::Transaction as BuilderTransaction;
 #[non_exhaustive]
 pub enum VersionedMessage {
     FragV0(FragV0),
-    SealedV0(SealV0),
+    SealV0(SealV0),
 }
 
-impl VersionedMessage {
-    pub fn new_frag_v0(message: FragV0) -> Self {
-        Self::FragV0(message)
+impl From<FragV0> for VersionedMessage {
+    fn from(value: FragV0) -> Self {
+        Self::FragV0(value)
     }
+}
 
-    pub fn new_seal_v0(message: SealV0) -> Self {
-        Self::SealedV0(message)
+impl From<SealV0> for VersionedMessage {
+    fn from(value: SealV0) -> Self {
+        Self::SealV0(value)
     }
 }
 
@@ -37,7 +39,7 @@ pub struct FragV0 {
     /// Index of this frag. Frags need to be applied sequentially by index, up to [`SealV0::total_frags`]
     seq: u64,
     /// Whether this is the last frag in the sequence
-    is_last: bool,
+    pub is_last: bool,
     /// Ordered list of EIP-2718 encoded transactions
     txs: Transactions,
 }
