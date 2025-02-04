@@ -26,6 +26,7 @@ reth-primitives-traits.workspace = true
 reth-consensus.workspace = true
 reth-db.workspace = true
 reth-chainspec.workspace = true
+reth-trie-common.workspace = true
 
 # reth op
 reth-optimism-evm.workspace = true

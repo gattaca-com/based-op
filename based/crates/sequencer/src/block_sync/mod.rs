@@ -30,6 +30,7 @@ use reth_optimism_evm::OpExecutionStrategyFactory;
 use reth_optimism_primitives::{OpBlock, OpReceipt, OpTransactionSigned};
 use reth_primitives::{BlockWithSenders, GotExpected};
 use reth_primitives_traits::SignedTransaction;
+use reth_trie_common::updates::TrieUpdates;
 use revm::{db::DbAccount, Database, DatabaseRef};
 use tokio::runtime::Runtime;
 
@@ -142,9 +143,9 @@ impl BlockSync {
             }
         }
 
-        let execution_output = self.execute(block, &db_ro)?;
+        let (execution_output, trie_updates) = self.execute(block, &db_ro)?;
         if commit_block {
-            db.commit_block(block, execution_output)?;
+            db.commit_block_unchecked(block, execution_output, trie_updates)?;
         }
 
         Ok(())
@@ -156,7 +157,7 @@ impl BlockSync {
         &mut self,
         block: &BlockWithSenders<OpBlock>,
         db: &DB,
-    ) -> Result<BlockExecutionOutput<OpReceipt>, BlockExecutionError>
+    ) -> Result<(BlockExecutionOutput<OpReceipt>, TrieUpdates), BlockExecutionError>
     where
         DB: BopDbRead + Database<Error: Into<ProviderError> + Display>,
     {
@@ -171,12 +172,14 @@ impl BlockSync {
 
         // Validate receipts/ gas used
         reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &receipts)?;
+        let after_light_validation = Instant::now();
 
         // Merge transitions and take bundle state.
         let state = executor.finish();
+        let after_bundle_state_finish = Instant::now();
 
         // Validate state root
-        let (state_root, _) = db
+        let (state_root, trie_updates) = db
             .calculate_state_root(&state)
             .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::Other(e.into())))?;
         if state_root != block.header.state_root {
@@ -184,6 +187,7 @@ impl BlockSync {
                 GotExpected::new(state_root, block.header.state_root).into(),
             )));
         }
+        let after_state_root = Instant::now();
 
         tracing::info!(
             block_number = %block.header.number,
@@ -191,11 +195,13 @@ impl BlockSync {
             state_root = ?state_root,
             total_latency = ?start.elapsed(),
             block_apply_latency = ?after_block_apply.duration_since(start),
-            validation_and_finish_latency = ?after_block_apply.elapsed(),
+            light_validation_latency = ?after_light_validation.duration_since(after_block_apply),
+            bundle_state_finish_latency = ?after_bundle_state_finish.duration_since(after_light_validation),
+            state_root_latency = ?after_state_root.duration_since(after_bundle_state_finish),
             "BlockSync::execute finished"
         );
 
-        Ok(BlockExecutionOutput { state, receipts, requests, gas_used })
+        Ok((BlockExecutionOutput { state, receipts, requests, gas_used }, trie_updates))
     }
 }
 
