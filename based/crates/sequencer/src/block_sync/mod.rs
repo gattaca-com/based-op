@@ -35,6 +35,7 @@ use revm::{db::DbAccount, Database, DatabaseRef};
 use tokio::runtime::Runtime;
 
 pub mod fetch_blocks;
+pub mod pipelined;
 
 fn payload_to_block(payload: ExecutionPayload, sidecar: ExecutionPayloadSidecar) -> BlockSyncMessage {
     let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
