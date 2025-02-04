@@ -25,7 +25,7 @@ use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, warn};
 
-mod block_sync;
+pub mod block_sync;
 mod frag;
 mod sorting;
 
@@ -88,7 +88,7 @@ where
 
                 if let Some(last_block_number) = data
                     .block_executor
-                    .apply_new_payload(payload, sidecar, &data.db, senders)
+                    .apply_new_payload(payload, sidecar, &data.db, senders, true)
                     .expect("Issue with block sync")
                 {
                     Syncing { last_block_number }
@@ -152,7 +152,7 @@ where
 
         match self {
             Syncing { last_block_number } => {
-                data.block_executor.apply_and_commit_block(&block, &data.db).expect("issue syncing block");
+                data.block_executor.apply_and_commit_block(&block, &data.db, true).expect("issue syncing block");
 
                 if block.number != last_block_number {
                     Syncing { last_block_number }
@@ -329,8 +329,11 @@ pub struct Sequencer<Db: BopDB> {
 impl<Db: BopDB> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, config.max_gas);
-        let block_executor =
-            BlockSync::new(Arc::new(OpChainSpecBuilder::base_mainnet().build()), runtime, config.rpc_url.clone());
+        let block_executor = BlockSync::new(
+            Arc::new(OpChainSpecBuilder::base_mainnet().build()),
+            runtime.into(),
+            config.rpc_url.clone(),
+        );
 
         Self {
             state: SequencerState::default(),
