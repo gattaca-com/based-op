@@ -158,31 +158,27 @@ impl BopDB for DB {
         block_execution_output: BlockExecutionOutput<OpReceipt>,
         trie_updates: TrieUpdates,
     ) -> Result<(), Error> {
-        // Hashed state and trie changes
         let provider = self.factory.provider().map_err(Error::ProviderError)?;
-        let latest_state = LatestStateProviderRef::new(&provider);
-        let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
-
         let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
 
-        // Write state and reverts.
-        rw_provider
-            .write_state(
-                ExecutionOutcome {
-                    bundle: block_execution_output.state,
-                    receipts: Receipts::from(block_execution_output.receipts),
-                    first_block: block.block.header.number,
-                    requests: vec![block_execution_output.requests],
-                },
-                OriginalValuesKnown::Yes,
-                StorageLocation::Both,
-            )
-            .map_err(Error::ProviderError)?;
+        // Update the read caches.
+        self.caches.update(&block_execution_output.state);
 
+        let (plain_state, reverts) = block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
+
+        // Write state reverts
+        rw_provider.write_state_reverts(reverts, block.block.header.number)?;
+
+        // Write plain state
+        rw_provider.write_state_changes(plain_state)?;
+
+        // Write state trie updates
+        let latest_state = LatestStateProviderRef::new(&provider);
+        let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
         rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
         rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)?;
 
-        // Commit block number -> hash
+        // Write to header table
         rw_provider
             .tx_ref()
             .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
@@ -190,21 +186,9 @@ impl BopDB for DB {
 
         rw_provider.commit()?;
 
+        // Reset the read provider
+        *self.block.write() = None;
+
         Ok(())
-    }
-}
-
-impl DatabaseCommit for DB {
-    // TODO not the place to commit to DB - cannot return anything or errors here.
-    fn commit(&mut self, changes: HashMap<Address, Account>) {
-        let ro_db = self.readonly().expect("failed to create ro db");
-        let bundle_state =
-            util::state_changes_to_bundle_state(&ro_db, changes).expect("failed to convert to bundle state");
-        let (_root, _trie_updates) = ro_db.calculate_state_root(&bundle_state).expect("failed to calc state root");
-
-        // TODO write updates
-
-        // Update the read caches.
-        self.caches.update(&bundle_state);
     }
 }
