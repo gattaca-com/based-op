@@ -4,26 +4,22 @@ fn main() {}
 #[cfg(test)]
 mod db;
 #[cfg(test)]
+mod rpc;
+#[cfg(test)]
 mod bop_tests {
-    use std::sync::Arc;
 
-    use alloy_primitives::{
-        map::foldhash::{HashMap, HashMapExt},
-        Address, U256,
-    };
-    use bop
+    use std::process::Command;
+
+    use alloy_primitives::U256;
+    use bop_common::actor::{Actor, ActorConfig};
     use bop_db::BopDB;
     use bop_sequencer::SequencerConfig;
-    use revm::{
-        primitives::{AccountInfo, Bytecode, KECCAK_EMPTY},
-        DatabaseRef,
-    };
 
     #[test]
     fn db() {
         let db = super::db::GenesisDB::new_with_randoms(10);
         assert_eq!(db.len(), 10);
-        assert_eq!(db.balance(db.get_rand_addr()), Some(U256::from_limbs([123, 0, 0, 0])));
+        assert_eq!(db.balance(db.rand_addr()), Some(U256::from_limbs([123, 0, 0, 0])));
     }
 
     #[test]
@@ -38,8 +34,26 @@ mod bop_tests {
                 .build()
                 .expect("failed to create runtime")
                 .into();
-            let sequencer = bop_sequencer::Sequencer::new(db_bop, db_read, rt, SequencerConfig::default());
-            sequencer.run(
-        })
+
+            s.spawn(|| {
+                let sequencer = bop_sequencer::Sequencer::new(db_bop, db_read, rt, SequencerConfig::default());
+                let connections = spine.to_connections("sequencer");
+                sequencer.run(connections, ActorConfig::default())
+            });
+
+
+
+            std::thread::sleep(std::time::Duration::from_secs(10));
+
+            let mut kill = Command::new("kill")
+                .arg("-s")
+                .arg("SIGTERM")
+                .arg(std::process::id().to_string())
+                .spawn()
+                .expect("issue killing");
+
+            kill.wait().expect("couldn't kill bop_tests");
+        });
+
     }
 }

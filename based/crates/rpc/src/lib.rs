@@ -4,7 +4,6 @@ use bop_common::{
     db::{BopDbRead, DBFrag},
 };
 use engine::EngineRpcServer;
-use eth::EthRpcServer;
 use tokio::runtime::Runtime;
 
 mod engine;
@@ -19,3 +18,4 @@ pub fn start_eth_rpc<Db: BopDbRead>(config: &Config, spine: &Spine<Db>, db: DBFr
     let server = EthRpcServer::new(spine, db);
     rt.spawn(server.run(config.eth_api_addr));
 }
+pub use eth::EthRpcServer;

@@ -13,8 +13,11 @@ publish = false
 bop-db.workspace = true
 bop-common.workspace = true
 bop-sequencer.workspace = true
+bop-rpc.workspace = true
 
 alloy-primitives.workspace = true
+alloy-consensus.workspace = true
+op-alloy-consensus.workspace = true
 
 revm.workspace = true
 
