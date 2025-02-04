@@ -202,12 +202,13 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 
     #[inline]
-    pub fn send<T>(&mut self, data: T) -> Result<(), InternalMessage<T>>
+    pub fn send<T>(&mut self, data: T)
     where
         S: HasSender<T>,
+        T: std::fmt::Debug,
     {
         self.senders.set_ingestion_t(IngestionTime::now());
-        self.senders.send(data)
+        self.senders.send_timeout(data, Duration::from_millis(10)).expect("couldn't send");
     }
 
     pub fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
@@ -342,7 +343,6 @@ impl<Db: BopDbRead> AsMut<Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>
         &mut self.blockenv
     }
 }
-
 
 //TODO: remove allow dead code
 #[allow(dead_code)]

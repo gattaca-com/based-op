@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
 use alloy_consensus::Header;
 use alloy_rpc_types::engine::{CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ForkchoiceState};
@@ -9,11 +9,12 @@ use bop_common::{
         messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer},
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{BopDB, BopDbRead, DBFrag},
-    time::Duration,
+    db::{BopDB, DBFrag},
+    time::{Duration, Instant},
     transaction::Transaction,
 };
 use bop_pool::transaction::pool::TxPool;
+use frag::FragSequence;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reqwest::Url;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
@@ -24,10 +25,11 @@ use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, warn};
 
-pub(crate) mod block_sync;
-pub(crate) mod built_frag;
-pub(crate) mod sorting;
-use sorting::SortingData;
+mod block_sync;
+mod frag;
+mod sorting;
+
+use sorting::{ActiveOrders, SortingData};
 
 #[derive(Clone, Debug, Default, AsRefStr)]
 pub enum SequencerState<Db: BopDB> {
@@ -63,7 +65,7 @@ where
     fn handle_engine_api(
         self,
         msg: EngineApi,
-        data: &mut SharedData<Db>,
+        data: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> SequencerState<Db> {
         use EngineApi::*;
@@ -100,6 +102,9 @@ where
             ),
 
             (ForkChoiceUpdatedV3 { payload_attributes: None, .. }, WaitingForForkChoice(payload, sidecar)) => {
+                // clear all the temp state on the db
+                data.frags.clear_frags();
+
                 if let Some(last_block_number) = data
                     .block_executor
                     .apply_new_payload(payload, sidecar, &data.db, None, senders)
@@ -114,8 +119,6 @@ where
             (ForkChoiceUpdatedV3 { payload_attributes: Some(attributes), .. }, WaitingForAttributes) => {
                 // start building
 
-                // data.payload_attributes = attributes;
-                data.create_and_apply_first_frag();
                 let next_attr = NextBlockEnvAttributes {
                     timestamp: attributes.payload_attributes.timestamp,
                     suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
@@ -130,14 +133,25 @@ where
                     .expect("couldn't create blockenv");
                 // should never fail as its a broadcast
                 senders.send_timeout(block_env.block_env, Duration::from_millis(10)).expect("couldn't send block env");
-                Sorting(SortingData::from(&(*data)))
+
+                let txs = attributes
+                    .transactions
+                    .map(|txs| txs.into_iter().map(|bytes| Transaction::decode(bytes).unwrap().into()).collect())
+                    .unwrap_or_default();
+
+                let sorting_data = data.new_sorting_data(txs, !attributes.no_tx_pool.unwrap_or(false));
+                Sorting(sorting_data)
             }
 
             (GetPayloadV3 { payload_id, res }, Self::Sorting(sorting_data)) => {
-                todo!();
-                //sorting_data.commit_frag();
-                //res.send(data.build_block(payload_id))
-                // move to WaitingForNewPayload
+                let (frag, block) = data.frags.seal_block();
+
+                // gossip seal to p2p
+                let _ = senders.send(frag);
+                // send payload back to rpc
+                let _ = res.send(block);
+                // now we should our payload back from the node
+                WaitingForNewPayload
             }
 
             // fallback
@@ -148,14 +162,17 @@ where
         }
     }
 
-    fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SharedData<Db>) -> Self {
+    fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SequencerContext<Db>) -> Self {
+        use SequencerState::*;
+
         let Ok(block) = block else {
             todo!("handle block sync error");
         };
-        use SequencerState::*;
+
         match self {
             Syncing { last_block_number } => {
                 data.block_executor.apply_and_commit_block(&block, &data.db).expect("issue syncing block");
+
                 if block.number != last_block_number {
                     Syncing { last_block_number }
                 } else {
@@ -173,20 +190,21 @@ where
     fn handle_new_tx(
         self,
         tx: Arc<Transaction>,
-        data: &mut SharedData<Db>,
+        data: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
-        data.tx_pool.handle_new_tx(tx, &data.frag_db, data.base_fee, senders);
+        data.tx_pool.handle_new_tx(tx, data.frags.db_ref(), data.base_fee, senders);
         self
     }
 
     fn handle_sim_result(
         self,
         result: SimulatorToSequencer<Db::ReadOnly>,
-        data: &mut SharedData<Db>,
+        data: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
         use messages::SimulatorToSequencerMsg::*;
+
         let sender = *result.sender();
         match result.msg {
             Tx(simulated_tx) => {
@@ -203,16 +221,19 @@ where
                 sort_data.handle_sim(simulated_tx, sender, data.base_fee);
                 SequencerState::Sorting(sort_data)
             }
+
             TxTof(simulated_tx) => {
                 match simulated_tx {
-                    Ok(res) if result.unique_hash == data.frag_db.unique_hash() => data.tx_pool.handle_simulated(res),
+                    Ok(res) if data.frags.is_valid(result.unique_hash) => data.tx_pool.handle_simulated(res),
+
                     // resend because was on the wrong hash
                     Ok(res) => {
                         let _ = senders.send_timeout(
-                            SequencerToSimulator::SimulateTxTof(res.tx, data.frag_db.clone()),
+                            SequencerToSimulator::SimulateTxTof(res.tx, data.frags.db()),
                             Duration::from_millis(10),
                         );
                     }
+
                     Err(e) => {
                         error!("simming tx {e}");
                         data.tx_pool.remove(&sender)
@@ -223,18 +244,25 @@ where
         }
     }
 
-    fn tick(self, data: &mut SharedData<Db>, connections: &mut SpineConnections<Db::ReadOnly>) -> Self {
+    /// Checks at every loop:
+    /// - if enough time has passed, seal the current frag and go to the next one
+    /// - if all sims are done, send next batch of sims
+    fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db::ReadOnly>) -> Self {
         use SequencerState::*;
         match self {
-            Sorting(sorting_data) if sorting_data.should_frag() => {
-                let frag = sorting_data.get_frag();
-                let _ = connections.send(frag);
+            Sorting(sorting_data) if sorting_data.should_seal_frag() => {
+                let frag = data.frags.apply_sorted_frag(sorting_data.frag);
+                // broadcast to p2p
+                connections.send(frag);
+                let sorting_data =
+                    data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
+                Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))
+            }
 
+            Sorting(sorting_data) if sorting_data.should_send_next_sims() => {
                 Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))
             }
-            Sorting(sorting_data) if sorting_data.finished_iteration() => {
-                Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))
-            }
+
             _ => self,
         }
     }
@@ -242,7 +270,7 @@ where
     pub fn update(
         self,
         event: SequencerEvent<Db>,
-        data: &mut SharedData<Db>,
+        data: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db::ReadOnly>,
     ) -> Self {
         use SequencerEvent::*;
@@ -279,44 +307,57 @@ impl Default for SequencerConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct SharedData<Db: BopDB> {
-    tx_pool: TxPool,
-    db: Db,
-    /// DB with the frags applied on the last top of block
-    frag_db: DBFrag<Db::ReadOnly>,
-    block_executor: BlockSync,
+pub struct SequencerContext<Db: BopDB> {
     config: SequencerConfig,
+    db: Db,
+    tx_pool: TxPool,
+    frags: FragSequence<Db::ReadOnly>,
+    block_executor: BlockSync,
     parent_hash: B256,
     parent_header: Header,
     fork_choice_state: ForkchoiceState,
-
     payload_attributes: Box<OpPayloadAttributes>,
     //TODO: set from blocksync
     base_fee: u64,
 }
-impl<Db: BopDB> SharedData<Db> {
-    fn create_and_apply_first_frag(&self) {
-        todo!()
+
+impl<Db: BopDB> SequencerContext<Db> {
+    fn new_sorting_data(
+        &self,
+        remaining_attributes_txs: VecDeque<Arc<Transaction>>,
+        can_add_txs: bool,
+    ) -> SortingData<Db::ReadOnly> {
+        SortingData {
+            frag: self.frags.create_in_sort(),
+            until: Instant::now() + self.config.frag_duration,
+            in_flight_sims: 0,
+            next_to_be_applied: None,
+            tof_snapshot: ActiveOrders::new(self.tx_pool.clone_active()),
+            remaining_attributes_txs,
+            can_add_txs,
+        }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Sequencer<Db: BopDB> {
     state: SequencerState<Db>,
-    data: SharedData<Db>,
+    data: SequencerContext<Db>,
 }
 
 impl<Db: BopDB> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
+        let frags = FragSequence::new(frag_db, config.max_gas);
+        let block_executor =
+            BlockSync::new(Arc::new(OpChainSpecBuilder::base_mainnet().build()), runtime, config.rpc_url.clone());
+
         Self {
-            data: SharedData {
+            state: SequencerState::default(),
+
+            data: SequencerContext {
                 db,
-                frag_db,
-                block_executor: BlockSync::new(
-                    Arc::new(OpChainSpecBuilder::base_mainnet().build()),
-                    runtime,
-                    config.rpc_url.clone(),
-                ),
+                frags,
+                block_executor,
                 config,
                 tx_pool: Default::default(),
                 fork_choice_state: Default::default(),
@@ -325,7 +366,6 @@ impl<Db: BopDB> Sequencer<Db> {
                 parent_hash: Default::default(),
                 parent_header: Default::default(),
             },
-            state: Default::default(),
         }
     }
 }
@@ -360,7 +400,9 @@ where
                 std::mem::take(&mut self.state).update(SequencerEvent::BlockSync(msg), &mut self.data, senders);
         });
 
-        // tick checks on every loop
+        // checks on every loop:
+        // - seal current frag
+        // - send new batch of sims
         self.state = std::mem::take(&mut self.state).tick(&mut self.data, connections);
     }
 }

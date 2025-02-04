@@ -4,7 +4,7 @@ pub mod tx_list;
 use std::ops::Deref;
 
 use alloy_consensus::{SignableTransaction, Transaction as TransactionTrait, TxEip1559};
-use alloy_eips::eip2718::Decodable2718;
+use alloy_eips::eip2718::{Decodable2718, Encodable2718};
 use alloy_primitives::{Address, Bytes, B256, U256};
 use op_alloy_consensus::{DepositTransaction, OpTxEnvelope};
 use reth_optimism_primitives::OpTransactionSigned;
@@ -128,6 +128,10 @@ impl Transaction {
         };
 
         Ok(Self { sender, tx })
+    }
+
+    pub fn encode(&self) -> Bytes {
+        self.tx.encoded_2718().into()
     }
 }
 
