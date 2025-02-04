@@ -24,7 +24,7 @@ mod block;
 mod cache;
 mod init;
 
-pub use bop_common::db::{BopDB, BopDbRead, Error};
+pub use bop_common::db::{DatabaseWrite, DatabaseRead, Error};
 pub use init::init_database;
 
 use crate::{block::BlockDB, cache::ReadCaches};
@@ -54,7 +54,7 @@ impl Debug for DB {
 }
 
 impl DatabaseRef for DB {
-    type Error = <<DB as BopDB>::ReadOnly as DatabaseRef>::Error;
+    type Error = <<DB as DatabaseWrite>::ReadOnly as DatabaseRef>::Error;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         self.readonly()?.basic(address)
@@ -93,7 +93,7 @@ impl Database for DB {
     }
 }
 
-impl BopDbRead for DB {
+impl DatabaseRead for DB {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.readonly()?.calculate_state_root(bundle_state)
     }
@@ -103,7 +103,7 @@ impl BopDbRead for DB {
     }
 }
 
-impl BopDB for DB {
+impl DatabaseWrite for DB {
     type ReadOnly = BlockDB;
 
     fn readonly(&self) -> Result<Self::ReadOnly, Error> {

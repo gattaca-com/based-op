@@ -13,7 +13,7 @@ use bop_common::{
         messages::{BlockSyncError, BlockSyncMessage, EngineApi},
         SendersSpine,
     },
-    db::{BopDB, BopDbRead},
+    db::{DatabaseWrite, DatabaseRead},
     runtime::RuntimeOrHandle,
 };
 use crossbeam_channel::{Receiver, Sender};
@@ -79,7 +79,7 @@ impl BlockSync {
         commit_block: bool,
     ) -> Result<Option<u64>, BlockSyncError>
     where
-        DB: BopDB,
+        DB: DatabaseWrite,
     {
         let start = Instant::now();
 
@@ -122,7 +122,7 @@ impl BlockSync {
         commit_block: bool,
     ) -> Result<(), BlockSyncError>
     where
-        DB: BopDB,
+        DB: DatabaseWrite,
     {
         tracing::info!("Applying and committing block: {:?}", block.header.number);
 
@@ -159,7 +159,7 @@ impl BlockSync {
         db: &DB,
     ) -> Result<(BlockExecutionOutput<OpReceipt>, TrieUpdates), BlockExecutionError>
     where
-        DB: BopDbRead + Database<Error: Into<ProviderError> + Display>,
+        DB: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
         let mut start = Instant::now();
 

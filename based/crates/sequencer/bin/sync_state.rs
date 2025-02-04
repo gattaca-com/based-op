@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use bop_common::{runtime::RuntimeOrHandle, time::Duration, utils::initialize_test_tracing};
-use bop_db::{init_database, BopDB, BopDbRead};
+use bop_db::{init_database, DatabaseWrite, DatabaseRead};
 use bop_sequencer::block_sync::{
     fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block},
     BlockSync,

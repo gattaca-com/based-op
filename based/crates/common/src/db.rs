@@ -65,8 +65,8 @@ impl From<Error> for ProviderError {
 
 /// Database trait for all DB operations.
 #[auto_impl(&, Arc)]
-pub trait BopDB: Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug {
-    type ReadOnly: BopDbRead + Database<Error: Into<ProviderError> + Display>;
+pub trait DatabaseWrite: Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug {
+    type ReadOnly: DatabaseRead + Database<Error: Into<ProviderError> + Display>;
 
     /// Returns a read-only database.
     fn readonly(&self) -> Result<Self::ReadOnly, Error>;
@@ -87,7 +87,7 @@ pub trait BopDB: Database<Error: Into<ProviderError> + Display> + Send + Sync + 
 
 /// Database read functions
 #[auto_impl(&, Arc)]
-pub trait BopDbRead:
+pub trait DatabaseRead:
     DatabaseRef<Error: Debug + Display + Into<ProviderError>> + Send + Sync + 'static + Clone + Debug
 {
     /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
@@ -97,7 +97,7 @@ pub trait BopDbRead:
     fn head_block_number(&self) -> Result<u64, Error>;
 }
 
-impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
+impl<DbRead: DatabaseRead> DatabaseRead for CacheDB<DbRead> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.calculate_state_root(bundle_state)
     }
@@ -117,7 +117,7 @@ pub struct DBFrag<Db> {
     curr_block_number: u64,
 }
 
-impl<Db: BopDbRead> DBFrag<Db> {
+impl<Db: DatabaseRead> DBFrag<Db> {
     pub fn commit<'a>(&mut self, txs: impl Iterator<Item = &'a SimulatedTx>) {
         let mut guard = self.db.write();
 
@@ -200,7 +200,7 @@ impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
     }
 }
 
-impl<Db: BopDbRead> Database for DBFrag<Db> {
+impl<Db: DatabaseRead> Database for DBFrag<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
@@ -220,7 +220,7 @@ impl<Db: BopDbRead> Database for DBFrag<Db> {
     }
 }
 
-impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
+impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.read().calculate_state_root(bundle_state)
     }
@@ -230,7 +230,7 @@ impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
     }
 }
 
-impl<Db: BopDbRead> From<Db> for DBFrag<Db> {
+impl<Db: DatabaseRead> From<Db> for DBFrag<Db> {
     fn from(value: Db) -> Self {
         let curr_block_number = value.head_block_number().unwrap() + 1;
         Self { db: Arc::new(RwLock::new(CacheDB::new(value))), state_id: rand::random(), curr_block_number }
@@ -290,7 +290,7 @@ impl<DbRead: DatabaseRef> DatabaseRef for DBSorting<DbRead> {
     }
 }
 
-impl<Db: BopDbRead> Database for DBSorting<Db> {
+impl<Db: DatabaseRead> Database for DBSorting<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
@@ -310,7 +310,7 @@ impl<Db: BopDbRead> Database for DBSorting<Db> {
     }
 }
 
-impl<DbRead: BopDbRead> BopDbRead for DBSorting<DbRead> {
+impl<DbRead: DatabaseRead> DatabaseRead for DBSorting<DbRead> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.calculate_state_root(bundle_state)
     }

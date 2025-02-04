@@ -4,7 +4,7 @@ use bop_common::{
     actor::{Actor, ActorConfig},
     communication::Spine,
     config::Config,
-    db::{BopDB, DBFrag},
+    db::{DatabaseWrite, DBFrag},
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::init_database;
@@ -12,7 +12,6 @@ use bop_rpc::{start_engine_rpc, start_eth_rpc, start_mock_engine_rpc};
 use bop_sequencer::{Sequencer, SequencerConfig};
 use bop_simulator::Simulator;
 use clap::Parser;
-use reth_optimism_chainspec::OpChainSpecBuilder;
 use tokio::runtime::Runtime;
 
 #[derive(Parser)]
@@ -38,7 +37,7 @@ fn main() {
     let spine_c = spine.clone();
 
     let args = Args::parse();
-    let mut config = SequencerConfig::with_chain_spec(OpChainSpecBuilder::base_sepolia().build());
+    let mut config = SequencerConfig::default_base_sepolia();
     config.rpc_url = reqwest::Url::parse(&args.rpc_url).unwrap();
 
     let rpc_config = get_config();
