@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use bop_common::{runtime::RuntimeOrHandle, time::Duration, utils::initialize_test_tracing};
 use bop_db::{init_database, BopDB, BopDbRead};
