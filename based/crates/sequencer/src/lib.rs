@@ -10,7 +10,7 @@ use bop_common::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{BopDB, DBFrag},
-    p2p::{SealV0, VersionedMessage},
+    p2p::VersionedMessage,
     time::{Duration, Instant},
     transaction::Transaction,
 };
@@ -84,7 +84,6 @@ where
             ),
 
             (ForkChoiceUpdatedV3 { payload_attributes: None, .. }, WaitingForForkChoice(payload, sidecar)) => {
-
                 if let Some(last_block_number) = data
                     .block_executor
                     .apply_new_payload(payload, sidecar, &data.db, senders, true)
@@ -109,7 +108,7 @@ where
                 let block_env = data
                     .config
                     .evm_config
-                    .next_cfg_and_block_env(&data.parent_header, next_attr.clone())
+                    .next_cfg_and_block_env(&data.parent_header, next_attr)
                     .expect("couldn't create blockenv");
                 // should never fail as its a broadcast
                 senders
@@ -134,7 +133,7 @@ where
                 let _ = senders.send(frag_msg);
 
                 let (seal, block) =
-                    data.frags.seal_block(&data.block_env, &data.config.evm_config.chain_spec(), data.parent_hash);
+                    data.frags.seal_block(&data.block_env, data.config.evm_config.chain_spec(), data.parent_hash);
 
                 // gossip seal to p2p
                 let _ = senders.send(VersionedMessage::from(seal));
@@ -287,9 +286,7 @@ pub struct SequencerConfig {
 
 impl SequencerConfig {
     pub fn with_chain_spec(chain_spec: OpChainSpec) -> Self {
-        let mut o: Self = Default::default();
-        o.evm_config = OpEvmConfig::new(Arc::new(chain_spec));
-        o
+        Self { evm_config: OpEvmConfig::new(Arc::new(chain_spec)), ..Default::default() }
     }
 }
 
@@ -309,6 +306,7 @@ impl Default for SequencerConfig {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct SequencerContext<Db: BopDB> {
     config: SequencerConfig,
