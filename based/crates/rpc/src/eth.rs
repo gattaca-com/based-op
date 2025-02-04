@@ -64,8 +64,7 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
             Ok(receipt) => Some(receipt),
             Err(err) => {
                 warn!(%err, "failed db fetch");
-                let receipt = self.fallback.transaction_receipt(hash).await?;
-                receipt
+                self.fallback.transaction_receipt(hash).await?
             }
         };
 
@@ -112,8 +111,7 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
             Ok(block) => Some(convert_block(block, full)),
             Err(err) => {
                 warn!(%err, "failed db fetch");
-                let block = self.fallback.block_by_hash(hash, full).await?;
-                block
+                self.fallback.block_by_hash(hash, full).await?
             }
         };
 
@@ -130,8 +128,7 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
             Ok(bn) => U256::from(bn),
             Err(err) => {
                 warn!(%err, "failed db fetch");
-                let bn = self.fallback.block_number().await?;
-                bn
+                self.fallback.block_number().await?
             }
         };
 
@@ -147,13 +144,11 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
                 Ok(nonce) => U256::from(nonce),
                 Err(err) => {
                     warn!(%err, "failed db fetch");
-                    let nonce = self.fallback.transaction_count(address, block_number).await?;
-                    nonce
+                    self.fallback.transaction_count(address, block_number).await?
                 }
             }
         } else {
-            let nonce = self.fallback.transaction_count(address, block_number).await?;
-            nonce
+            self.fallback.transaction_count(address, block_number).await?
         };
 
         Ok(nonce)
@@ -169,13 +164,11 @@ impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
                 Ok(balance) => U256::from(balance),
                 Err(err) => {
                     warn!(%err, "failed db fetch");
-                    let balance = self.fallback.balance(address, block_number).await?;
-                    balance
+                    self.fallback.balance(address, block_number).await?
                 }
             }
         } else {
-            let balance = self.fallback.balance(address, block_number).await?;
-            balance
+            self.fallback.balance(address, block_number).await?
         };
 
         Ok(balance)

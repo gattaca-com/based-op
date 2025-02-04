@@ -1,25 +1,17 @@
 use std::sync::Arc;
 
-use alloy_consensus::{
-    proofs::{calculate_transaction_root, ordered_trie_root_with_encoder},
-    Header, EMPTY_OMMER_ROOT_HASH,
-};
+use alloy_consensus::{proofs::ordered_trie_root_with_encoder, Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
 use alloy_primitives::{Bloom, U256};
-use alloy_rpc_types::{
-    engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3},
-    logs_bloom,
-};
+use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
     db::{flatten_state_changes, DBFrag, DBSorting},
-    p2p::{FragV0, SealV0, VersionedMessage},
+    p2p::{FragV0, SealV0},
     transaction::SimulatedTx,
 };
 use bop_db::BopDbRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
-use reth_evm::NextBlockEnvAttributes;
-use reth_optimism_consensus::calculate_receipt_root_no_memo_optimism;
-use revm_primitives::{Address, BlockEnv, Bytes, B256};
+use revm_primitives::{BlockEnv, Bytes, B256};
 
 /// Sequence of frags applied on the last block
 #[derive(Clone, Debug)]
@@ -76,7 +68,7 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
     pub fn seal_block(
         &self,
         block_env: &BlockEnv,
-        chain_spec: impl reth_chainspec::Hardforks,
+        _chain_spec: impl reth_chainspec::Hardforks,
         parent_hash: B256,
     ) -> (SealV0, OpExecutionPayloadEnvelopeV3) {
         let state_changes = flatten_state_changes(self.txs.iter().map(|t| t.result_and_state.state.clone()).collect());
