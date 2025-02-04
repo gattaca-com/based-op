@@ -84,8 +84,6 @@ where
             ),
 
             (ForkChoiceUpdatedV3 { payload_attributes: None, .. }, WaitingForForkChoice(payload, sidecar)) => {
-                // clear all the temp state on the db
-                data.frags.clear_frags();
 
                 if let Some(last_block_number) = data
                     .block_executor
@@ -165,6 +163,7 @@ where
         match self {
             Syncing { last_block_number } => {
                 data.block_executor.apply_and_commit_block(&block, &data.db, true).expect("issue syncing block");
+                data.reset_fragdb();
 
                 if block.number != last_block_number {
                     Syncing { last_block_number }
@@ -207,7 +206,7 @@ where
                 };
 
                 // handle sim on wrong state
-                if sort_data.is_valid(result.unique_hash) {
+                if sort_data.is_valid(result.state_id) {
                     warn!("received sim result on wrong state, dropping");
                     return SequencerState::Sorting(sort_data);
                 }
@@ -217,7 +216,7 @@ where
 
             TxTof(simulated_tx) => {
                 match simulated_tx {
-                    Ok(res) if data.frags.is_valid(result.unique_hash) => data.tx_pool.handle_simulated(res),
+                    Ok(res) if data.frags.is_valid(result.state_id) => data.tx_pool.handle_simulated(res),
 
                     // resend because was on the wrong hash
                     Ok(res) => {
@@ -341,6 +340,11 @@ impl<Db: BopDB> SequencerContext<Db> {
             remaining_attributes_txs,
             can_add_txs,
         }
+    }
+
+    fn reset_fragdb(&mut self) {
+        let new_ro = self.db.readonly().expect("couldn't create readonly db");
+        self.frags.reset_fragdb(new_ro);
     }
 }
 

@@ -36,7 +36,7 @@ pub struct FragSequence<Db> {
 
 impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
     pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
-        let block_number = db.block_number().expect("can't get block number") + 1;
+        let block_number = db.head_block_number().expect("can't get block number") + 1;
         Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number }
     }
 
@@ -69,8 +69,8 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
     }
 
     /// When a new block is received, we clear all the temp state on the db
-    pub fn clear_frags(&mut self) {
-        self.db.reset();
+    pub fn reset_fragdb(&mut self, db: Db) {
+        self.db.reset(db);
     }
 
     pub fn seal_block(
@@ -166,8 +166,8 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
         )
     }
 
-    pub fn is_valid(&self, unique_hash: B256) -> bool {
-        unique_hash == self.db.unique_hash
+    pub fn is_valid(&self, state_id: u64) -> bool {
+        state_id == self.db.state_id()
     }
 }
 

@@ -92,7 +92,7 @@ mod tests {
         let txs = Transactions::from(vec![tx]);
 
         let frag = FragV0 { block_number: 1, seq: 0, is_last: true, txs };
-        let message = VersionedMessage::new_frag_v0(frag);
+        let message = VersionedMessage::from(frag);
 
         let hash = message.tree_hash_root();
 
@@ -112,7 +112,7 @@ mod tests {
             state_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             block_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
         };
-        let message = VersionedMessage::new_seal_v0(sealed);
+        let message = VersionedMessage::from(sealed);
 
         let hash = message.tree_hash_root();
 

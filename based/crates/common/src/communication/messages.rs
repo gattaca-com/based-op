@@ -198,6 +198,9 @@ pub enum RpcError {
 
     #[error("join error: {0}")]
     TokioJoin(#[from] tokio::task::JoinError),
+
+    #[error("db error: {0}")]
+    Db(#[from] crate::db::Error),
 }
 
 impl From<RpcError> for RpcErrorObject<'static> {
@@ -207,7 +210,8 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::Timeout(_) |
             RpcError::ChannelClosed(_) |
             RpcError::Jsonrpsee(_) |
-            RpcError::TokioJoin(_) => internal_error(),
+            RpcError::TokioJoin(_) |
+            RpcError::Db(_) => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
@@ -224,10 +228,6 @@ fn internal_error() -> RpcErrorObject<'static> {
 #[derive(Clone, Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SequencerToSimulator<Db> {
-    /// A signal for the simulators to reinitialize their
-    /// cached block dependent state
-    //TODO: Add if anything should be communicated here
-    NewBlock,
     /// Simulate Tx on top of a partially built frag
     SimulateTx(Arc<Transaction>, Arc<DBSorting<Db>>),
     /// Simulate Tx Top of frag
@@ -238,13 +238,13 @@ pub enum SequencerToSimulator<Db> {
 #[derive(Debug)]
 pub struct SimulatorToSequencer<Db: BopDbRead> {
     pub sender: Address,
-    pub unique_hash: B256,
+    pub state_id: u64,
     pub msg: SimulatorToSequencerMsg<Db>,
 }
 
 impl<Db: BopDbRead> SimulatorToSequencer<Db> {
-    pub fn new(sender: Address, unique_hash: B256, msg: SimulatorToSequencerMsg<Db>) -> Self {
-        Self { sender, unique_hash, msg }
+    pub fn new(sender: Address, state_id: u64, msg: SimulatorToSequencerMsg<Db>) -> Self {
+        Self { sender, state_id, msg }
     }
 
     pub fn sender(&self) -> &Address {

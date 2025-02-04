@@ -1,6 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use alloy_primitives::{Address, U256};
+use bop_common::db::state_changes_to_bundle_state;
 use bop_db::{BopDB, BopDbRead};
 use revm_primitives::{db::DatabaseRef, Account};
 
@@ -17,11 +18,11 @@ fn main() {
 
         let account = Account::from(info);
         let changes = HashMap::from_iter(vec![(addr, account)]);
-        let bundle_state = bop_db::state_changes_to_bundle_state(&db_ro, changes).unwrap();
+        let bundle_state = state_changes_to_bundle_state(&db_ro, changes).unwrap();
         let (root, updates) = db_ro.calculate_state_root(&bundle_state).unwrap();
         println!("Calculated state root: {root}, with updates {updates:?}");
     }
 
     // Block sync
-    let block_number = db_ro.block_number().unwrap();
+    let _block_number = db_ro.head_block_number().unwrap();
 }

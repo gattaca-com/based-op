@@ -36,7 +36,7 @@ async fn main() -> eyre::Result<()> {
     let rpc_url_clone = rpc_url.clone();
 
     let db: bop_db::DB = init_database(&args.db_path, 1000, 1000)?;
-    let db_head = db.readonly().unwrap().block_number()?;
+    let db_head = db.readonly().unwrap().head_block_number()?;
     let head_state_root = db.state_root()?;
 
     tracing::info!(

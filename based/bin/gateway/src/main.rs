@@ -1,4 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, net::Ipv4Addr, sync::Arc};
 
 use bop_common::{
     actor::{Actor, ActorConfig},
@@ -37,10 +38,11 @@ fn main() {
     let spine = Spine::default();
     let spine_c = spine.clone();
 
-    let rpc_config = Config::default();
     let args = Args::parse();
     let mut config = SequencerConfig::with_chain_spec(OpChainSpecBuilder::base_sepolia().build());
     config.rpc_url = reqwest::Url::parse(&args.rpc_url).unwrap();
+
+    let rpc_config = get_config();
 
     // TODO values from config
     let max_cached_accounts = 10_000;
@@ -87,4 +89,17 @@ fn main() {
 
         start_mock_engine_rpc(&spine, args.end_block);
     });
+}
+
+fn get_config() -> Config {
+    use std::net::SocketAddr;
+
+    use bop_common::time::Duration;
+
+    Config {
+        engine_api_addr: SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 8001),
+        eth_api_addr: SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 8002),
+        engine_api_timeout: Duration::from_secs(1),
+        eth_fallback_url: "http://todo.xyz".parse().unwrap(),
+    }
 }

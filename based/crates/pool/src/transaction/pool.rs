@@ -36,7 +36,7 @@ impl TxPool {
         base_fee: u64,
         sim_sender: &SendersSpine<Db>,
     ) {
-        let state_nonce = db.get_nonce(new_tx.sender());
+        let state_nonce = db.get_nonce(new_tx.sender()).expect("handle failed db");
         let nonce = new_tx.nonce();
         // check nonce is valid
         if nonce < state_nonce {
