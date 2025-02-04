@@ -14,6 +14,7 @@ use bop_common::{
         SendersSpine,
     },
     db::{BopDB, BopDbRead},
+    runtime::RuntimeOrHandle,
 };
 use crossbeam_channel::{Receiver, Sender};
 use fetch_blocks::async_fetch_blocks_and_send_sequentially;
@@ -50,7 +51,7 @@ fn payload_to_block(payload: ExecutionPayload, sidecar: ExecutionPayloadSidecar)
 pub struct BlockSync {
     chain_spec: Arc<OpChainSpec>,
     execution_factory: OpExecutionStrategyFactory,
-    runtime: Arc<Runtime>,
+    runtime: RuntimeOrHandle,
 
     /// Used to fetch blocks from an EL node.
     rpc_url: Url,
@@ -58,7 +59,7 @@ pub struct BlockSync {
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
-    pub fn new(chain_spec: Arc<OpChainSpec>, runtime: Arc<Runtime>, rpc_url: Url) -> Self {
+    pub fn new(chain_spec: Arc<OpChainSpec>, runtime: RuntimeOrHandle, rpc_url: Url) -> Self {
         let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
         Self { chain_spec, execution_factory, runtime, rpc_url }
     }
@@ -122,6 +123,8 @@ impl BlockSync {
     where
         DB: BopDB,
     {
+        tracing::info!("Applying and committing block: {:?}", block.header.number);
+
         let db_ro = db.readonly().unwrap();
         debug_assert!(block.header.number == db_ro.block_number()? + 1, "can only apply blocks sequentially");
 
@@ -208,6 +211,7 @@ mod tests {
     use reth_db::{tables, transaction::DbTx};
     use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
     use revm_primitives::address;
+    use tracing::level_filters::LevelFilter;
 
     use super::*;
     use crate::block_sync::fetch_blocks::{fetch_block, TEST_BASE_RPC_URL, TEST_BASE_SEPOLIA_RPC_URL};
@@ -225,7 +229,7 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
-        let mut block_sync = BlockSync::new(chain_spec, rt.clone(), rpc_url.clone());
+        let mut block_sync = BlockSync::new(chain_spec, RuntimeOrHandle::new_runtime(rt.clone()), rpc_url.clone());
 
         // Fetch the block from the RPC.
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
@@ -243,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_block_sync_with_on_disk_db() {
-        initialize_test_tracing(tracing::Level::INFO);
+        initialize_test_tracing(LevelFilter::INFO);
 
         // Initialise the on disk db.
         let db_location = std::env::var("DB_LOCATION").unwrap_or_else(|_| "/tmp/base_sepolia".to_string());
@@ -257,7 +261,7 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = BASE_SEPOLIA.clone();
-        let mut block_sync = BlockSync::new(chain_spec, rt.clone(), rpc_url.clone());
+        let mut block_sync = BlockSync::new(chain_spec, RuntimeOrHandle::new_runtime(rt.clone()), rpc_url.clone());
 
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
         let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &client, rpc_url).await.unwrap() });

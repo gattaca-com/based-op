@@ -1,4 +1,5 @@
 use tokio::signal::unix::{signal, SignalKind};
+use tracing::level_filters::LevelFilter;
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
@@ -75,13 +76,14 @@ pub fn init_tracing(
     (worker_guard, stdout_guard)
 }
 
-pub fn initialize_test_tracing(level: tracing::Level) {
-    let mut env_filter = tracing_subscriber::EnvFilter::builder().from_env_lossy();
-    for directive in DEFAULT_TRACING_ENV_FILTERS {
-        env_filter = env_filter.add_directive(directive.parse().unwrap());
-    }
-
-    tracing_subscriber::fmt().with_max_level(level).with_env_filter(env_filter).init();
+pub fn initialize_test_tracing(level: LevelFilter) {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_max_level(level)
+        .with_thread_names(true)
+        .with_file(true)
+        .with_line_number(true)
+        .init();
 }
 
 pub async fn wait_for_signal() -> eyre::Result<()> {
