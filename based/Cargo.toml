@@ -72,6 +72,8 @@ reth-storage-errors = { path = "../reth/crates/storage/errors" }
 reth-trie-common = { path = "../reth/crates/trie/common", features = [
     "test-utils",
 ] }
+reth-trie = { path = "../reth/crates/trie/trie" }
+reth-trie-db = { path = "../reth/crates/trie/db" }
 reth-provider = { path = "../reth/crates/storage/provider", features = [
     "test-utils",
 ] }
@@ -81,7 +83,7 @@ reth-node-types = { path = "../reth/crates/node/types" }
 reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
     "test-utils",
 ] }
-
+reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
 
 # reth-db
 reth-revm = { path = "../reth/crates/revm" }
