@@ -10,16 +10,18 @@ use crate::transaction::Transaction as BuilderTransaction;
 #[non_exhaustive]
 pub enum VersionedMessage {
     FragV0(FragV0),
-    SealedV0(SealV0),
+    SealV0(SealV0),
 }
 
-impl VersionedMessage {
-    pub fn new_frag_v0(message: FragV0) -> Self {
-        Self::FragV0(message)
+impl From<FragV0> for VersionedMessage {
+    fn from(value: FragV0) -> Self {
+        Self::FragV0(value)
     }
+}
 
-    pub fn new_seal_v0(message: SealV0) -> Self {
-        Self::SealedV0(message)
+impl From<SealV0> for VersionedMessage {
+    fn from(value: SealV0) -> Self {
+        Self::SealV0(value)
     }
 }
 
@@ -37,7 +39,7 @@ pub struct FragV0 {
     /// Index of this frag. Frags need to be applied sequentially by index, up to [`SealV0::total_frags`]
     seq: u64,
     /// Whether this is the last frag in the sequence
-    is_last: bool,
+    pub is_last: bool,
     /// Ordered list of EIP-2718 encoded transactions
     txs: Transactions,
 }
@@ -90,7 +92,7 @@ mod tests {
         let txs = Transactions::from(vec![tx]);
 
         let frag = FragV0 { block_number: 1, seq: 0, is_last: true, txs };
-        let message = VersionedMessage::new_frag_v0(frag);
+        let message = VersionedMessage::from(frag);
 
         let hash = message.tree_hash_root();
 
@@ -110,7 +112,7 @@ mod tests {
             state_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             block_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
         };
-        let message = VersionedMessage::new_seal_v0(sealed);
+        let message = VersionedMessage::from(sealed);
 
         let hash = message.tree_hash_root();
 

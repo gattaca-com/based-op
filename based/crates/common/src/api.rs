@@ -1,7 +1,7 @@
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types::{
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
-    Block, BlockId, BlockNumberOrTag,
+    BlockId, BlockNumberOrTag,
 };
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_rpc_types::OpTransactionReceipt;

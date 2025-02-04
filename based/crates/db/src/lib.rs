@@ -26,7 +26,6 @@ mod util;
 
 pub use bop_common::db::{BopDB, BopDbRead, Error};
 pub use init::init_database;
-pub use util::state_changes_to_bundle_state;
 
 use crate::{block::BlockDB, cache::ReadCaches};
 
