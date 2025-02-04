@@ -9,7 +9,7 @@ use bop_common::{
     time::Instant,
     transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
-use revm_primitives::{Address, B256};
+use revm_primitives::Address;
 use tracing::error;
 
 use crate::frag::InSortFrag;
@@ -106,8 +106,8 @@ impl<Db: BopDbRead> SortingData<Db> {
         self
     }
 
-    pub fn is_valid(&self, unique_hash: B256) -> bool {
-        unique_hash != self.frag.db.unique_hash()
+    pub fn is_valid(&self, state_id: u64) -> bool {
+        state_id == self.frag.db.state_id()
     }
 
     pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx, Db>, sender: Address, base_fee: u64) {
