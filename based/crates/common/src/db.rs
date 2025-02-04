@@ -44,6 +44,8 @@ pub enum Error {
     StateRootError(BlockNumber),
     #[error("Reth state root error: {0}")]
     RethStateRootError(#[from] reth_execution_errors::StateRootError),
+    #[error("Parallel state root error: {0}")]
+    ParallelStateRootError(#[from] reth_trie_parallel::root::ParallelStateRootError),
 }
 
 impl From<Error> for ProviderError {
@@ -57,6 +59,7 @@ impl From<Error> for ProviderError {
             Error::Other(e) => ProviderError::Database(DatabaseError::Other(e)),
             Error::StateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
             Error::RethStateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
+            Error::ParallelStateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
         }
     }
 }
@@ -100,6 +103,14 @@ impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
         self.db.calculate_state_root(bundle_state)
     }
 
+    fn unique_hash(&self) -> B256 {
+        self.db.unique_hash()
+    }
+
+    fn block_number(&self) -> Result<u64, Error> {
+        self.db.block_number()
+    }
+  
     fn head_block_number(&self) -> Result<u64, Error> {
         self.db.head_block_number()
     }
@@ -224,6 +235,14 @@ impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
         self.db.read().calculate_state_root(bundle_state)
     }
 
+    fn unique_hash(&self) -> B256 {
+        self.unique_hash
+    }
+
+    fn block_number(&self) -> Result<u64, Error> {
+        self.db.read().block_number()
+    }
+  
     fn head_block_number(&self) -> Result<u64, Error> {
         Ok(self.curr_block_number - 1)
     }

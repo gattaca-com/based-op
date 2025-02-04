@@ -29,6 +29,7 @@ pub use reth_storage_errors::provider::ConsistentViewError;
 pub struct ConsistentDbView<Factory> {
     factory: Factory,
     tip: Option<B256>,
+    ignore_tip_check: bool,
 }
 
 impl<Factory> ConsistentDbView<Factory>
@@ -38,7 +39,7 @@ where
 {
     /// Creates new consistent database view.
     pub const fn new(factory: Factory, tip: Option<B256>) -> Self {
-        Self { factory, tip }
+        Self { factory, tip, ignore_tip_check: false }
     }
 
     /// Creates new consistent database view with latest tip.
@@ -47,6 +48,12 @@ where
         let last_num = provider_ro.last_block_number()?;
         let tip = provider_ro.sealed_header(last_num)?.map(|h| h.hash());
         Ok(Self::new(provider, tip))
+    }
+
+    /// Creates new consistent database view with NO CHECKS.
+    /// This is essentially a Non-Consistent View.
+    pub fn new_unchecked(provider: Factory) -> ProviderResult<Self> {
+        Ok(Self { factory: provider, tip: None, ignore_tip_check: true })
     }
 
     /// Retrieve revert hashed state down to the given block hash.
@@ -70,6 +77,10 @@ where
     pub fn provider_ro(&self) -> ProviderResult<Factory::Provider> {
         // Create a new provider.
         let provider_ro = self.factory.database_provider_ro()?;
+
+        if self.ignore_tip_check {
+            return Ok(provider_ro);
+        }
 
         // Check that the latest stored header number matches the number
         // that consistent view was initialized with.
