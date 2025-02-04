@@ -70,26 +70,7 @@ where
         use SequencerState::*;
 
         match (msg, self) {
-            (
-                NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
-                Syncing { last_block_number },
-            ) => {
-                let last_block_number = data
-                    .block_executor
-                    .apply_new_payload(
-                        ExecutionPayload::V3(payload),
-                        ExecutionPayloadSidecar::v3(CancunPayloadFields::new(
-                            parent_beacon_block_root,
-                            versioned_hashes,
-                        )),
-                        &data.db,
-                        Some(last_block_number),
-                        senders,
-                    )
-                    .expect("Issue with block sync")
-                    .expect("should have gotten a next last block number");
-                Syncing { last_block_number }
-            }
+            (NewPayloadV3 { .. }, Syncing { last_block_number }) => Syncing { last_block_number },
 
             (
                 NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
@@ -102,7 +83,7 @@ where
             (ForkChoiceUpdatedV3 { payload_attributes: None, .. }, WaitingForForkChoice(payload, sidecar)) => {
                 if let Some(last_block_number) = data
                     .block_executor
-                    .apply_new_payload(payload, sidecar, &data.db, None, senders)
+                    .apply_new_payload(payload, sidecar, &data.db, senders)
                     .expect("Issue with block sync")
                 {
                     Syncing { last_block_number }

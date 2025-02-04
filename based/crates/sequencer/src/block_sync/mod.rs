@@ -73,7 +73,6 @@ impl BlockSync {
         payload: ExecutionPayload,
         sidecar: ExecutionPayloadSidecar,
         db: &DB,
-        start_block_number: Option<u64>,
         senders: &SendersSpine<DB::ReadOnly>,
     ) -> Result<Option<u64>, BlockSyncError>
     where
@@ -83,8 +82,7 @@ impl BlockSync {
 
         let payload_block_number = payload.block_number();
         let cur_block = payload_to_block(payload, sidecar);
-        let db_block_head =
-            if let Some(bn) = start_block_number { bn } else { db.readonly().unwrap().block_number()? };
+        let db_block_head = db.readonly().unwrap().block_number()?;
         tracing::info!("handling new payload for block number: {payload_block_number}, db_block_head: {db_block_head}");
 
         // This case occurs when the sequencer is behind the chain head.
