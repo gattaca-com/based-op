@@ -1,7 +1,6 @@
 use std::{ops::Deref, sync::Arc};
 
 use alloy_primitives::U256;
-use revm::DatabaseRef;
 use revm_primitives::{Address, EvmState, ResultAndState};
 
 use crate::{db::BopDbRead, transaction::Transaction};
