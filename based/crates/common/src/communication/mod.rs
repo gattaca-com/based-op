@@ -301,6 +301,12 @@ macro_rules! from_spine {
                 }
             }
 
+            impl<Db: BopDbRead> AsRef<Sender<$T>> for SpineConnections<Db> {
+                fn as_ref(&self) -> &Sender<$T> {
+                    self.senders.as_ref()
+                }
+            }
+
             impl<Db: BopDbRead> HasSender<$T> for SendersSpine<Db> {
                 type Sender = $S<$T>;
                 fn get_sender(&self) -> &Self::Sender {

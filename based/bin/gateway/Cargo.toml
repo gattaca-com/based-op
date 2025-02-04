@@ -11,9 +11,12 @@ bop-simulator.workspace = true
 bop-sequencer.workspace = true
 bop-db.workspace = true
 tokio.workspace = true
+clap.workspace = true
+reqwest.workspace = true
 
 tracing.workspace = true
 
 alloy-provider.workspace = true
 alloy-eips.workspace = true
 revm-primitives.workspace = true
+reth-optimism-chainspec.workspace = true

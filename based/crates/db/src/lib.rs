@@ -1,6 +1,7 @@
 use std::{
     fmt::{Debug, Formatter},
     sync::Arc,
+    time::Instant,
 };
 
 use parking_lot::RwLock;
@@ -22,7 +23,6 @@ pub mod alloy_db;
 mod block;
 mod cache;
 mod init;
-mod util;
 
 pub use bop_common::db::{BopDB, BopDbRead, Error};
 pub use init::init_database;
@@ -111,7 +111,7 @@ impl BopDB for DB {
             return Ok(block);
         }
 
-        let block = BlockDB::new(self.caches.clone(), self.factory.provider().map_err(Error::ProviderError)?);
+        let block = BlockDB::new(self.caches.clone(), self.factory.clone())?;
         self.block.write().replace(block.clone());
         Ok(block)
     }
@@ -145,22 +145,27 @@ impl BopDB for DB {
         let provider = self.factory.provider().map_err(Error::ProviderError)?;
         let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
 
+        let start = Instant::now();
+
         // Update the read caches.
         self.caches.update(&block_execution_output.state);
+        let after_caches_update = Instant::now();
 
         let (plain_state, reverts) = block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
 
         // Write state reverts
         rw_provider.write_state_reverts(reverts, block.block.header.number)?;
-
+        let after_state_reverts = Instant::now();
         // Write plain state
         rw_provider.write_state_changes(plain_state)?;
+        let after_state_changes = Instant::now();
 
         // Write state trie updates
         let latest_state = LatestStateProviderRef::new(&provider);
         let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
         rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
         rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)?;
+        let after_trie_updates = Instant::now();
 
         // Write to header table
         rw_provider
@@ -168,10 +173,25 @@ impl BopDB for DB {
             .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
             .unwrap();
 
+        let after_header_write = Instant::now();
+
         rw_provider.commit()?;
+
+        let after_commit = Instant::now();
 
         // Reset the read provider
         *self.block.write() = None;
+
+        tracing::info!(
+            "Commit block took: {:?} (caches: {:?}, state_reverts: {:?}, state_changes: {:?}, trie_updates: {:?}, header_write: {:?}, commit: {:?})",
+            start.elapsed(),
+            after_caches_update.duration_since(start),
+            after_state_reverts.duration_since(after_caches_update),
+            after_state_changes.duration_since(after_state_reverts),
+            after_trie_updates.duration_since(after_state_changes),
+            after_header_write.duration_since(after_trie_updates),
+            after_commit.duration_since(after_header_write),
+        );
 
         Ok(())
     }
