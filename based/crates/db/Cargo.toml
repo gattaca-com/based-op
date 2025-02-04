@@ -41,5 +41,8 @@ reth-provider.workspace = true
 reth-chainspec.workspace = true
 reth-db-api.workspace = true
 reth-node-types.workspace = true
+reth-trie.workspace = true
+reth-trie-db.workspace = true
 
+# Networking
 reqwest.workspace = true
