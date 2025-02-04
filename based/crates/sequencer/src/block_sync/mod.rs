@@ -84,7 +84,7 @@ impl BlockSync {
 
         let payload_block_number = payload.block_number();
         let cur_block = payload_to_block(payload, sidecar);
-        let db_block_head = db.readonly().unwrap().block_number()?;
+        let db_block_head = db.readonly().unwrap().head_block_number()?;
         tracing::info!("handling new payload for block number: {payload_block_number}, db_block_head: {db_block_head}");
 
         // This case occurs when the sequencer is behind the chain head.
@@ -126,7 +126,7 @@ impl BlockSync {
         tracing::info!("Applying and committing block: {:?}", block.header.number);
 
         let db_ro = db.readonly().unwrap();
-        debug_assert!(block.header.number == db_ro.block_number()? + 1, "can only apply blocks sequentially");
+        debug_assert!(block.header.number == db_ro.head_block_number()? + 1, "can only apply blocks sequentially");
 
         // Reorg check
         if let Ok(db_parent_hash) = db_ro.block_hash_ref(block.header.number.saturating_sub(1)) {
@@ -252,7 +252,7 @@ mod tests {
         // Initialise the on disk db.
         let db_location = std::env::var("DB_LOCATION").unwrap_or_else(|_| "/tmp/base_sepolia".to_string());
         let db: bop_db::DB = init_database(&db_location, 1000, 1000).unwrap();
-        let db_head_block_number = db.readonly().unwrap().block_number().unwrap();
+        let db_head_block_number = db.readonly().unwrap().head_block_number().unwrap();
         println!("DB Head Block Number: {:?}", db_head_block_number);
 
         // initialise block sync and fetch block

@@ -16,6 +16,6 @@ pub fn start_engine_rpc<Db: BopDbRead>(config: &Config, spine: &Spine<Db>, rt: &
 }
 
 pub fn start_eth_rpc<Db: BopDbRead>(config: &Config, spine: &Spine<Db>, db: DBFrag<Db>, rt: &Runtime) {
-    let server = EthRpcServer::new(spine, db);
+    let server = EthRpcServer::new(spine, db, config.eth_fallback_url.clone());
     rt.spawn(server.run(config.eth_api_addr));
 }

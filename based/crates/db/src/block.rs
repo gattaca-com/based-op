@@ -100,10 +100,6 @@ impl Database for BlockDB {
 }
 
 impl BopDbRead for BlockDB {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.basic_ref(address).ok().flatten().map(|acc| acc.nonce).unwrap_or_default()
-    }
-
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         let latest_state = LatestStateProviderRef::new(self.provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(bundle_state);
@@ -112,11 +108,7 @@ impl BopDbRead for BlockDB {
 
     /// Returns the highest block number in the canonical chain.
     /// Returns 0 if the database is empty.
-    fn block_number(&self) -> Result<u64, Error> {
+    fn head_block_number(&self) -> Result<u64, Error> {
         self.provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
-    }
-
-    fn unique_hash(&self) -> B256 {
-        todo!()
     }
 }

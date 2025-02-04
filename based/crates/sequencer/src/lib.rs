@@ -207,7 +207,7 @@ where
                 };
 
                 // handle sim on wrong state
-                if sort_data.is_valid(result.unique_hash) {
+                if sort_data.is_valid(result.state_id) {
                     warn!("received sim result on wrong state, dropping");
                     return SequencerState::Sorting(sort_data);
                 }
@@ -217,7 +217,7 @@ where
 
             TxTof(simulated_tx) => {
                 match simulated_tx {
-                    Ok(res) if data.frags.is_valid(result.unique_hash) => data.tx_pool.handle_simulated(res),
+                    Ok(res) if data.frags.is_valid(result.state_id) => data.tx_pool.handle_simulated(res),
 
                     // resend because was on the wrong hash
                     Ok(res) => {

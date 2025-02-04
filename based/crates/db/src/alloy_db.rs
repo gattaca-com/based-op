@@ -133,10 +133,6 @@ impl DatabaseCommit for AlloyDB {
 }
 
 impl BopDbRead for AlloyDB {
-    fn get_nonce(&self, address: Address) -> u64 {
-        self.basic_ref(address).ok().flatten().map_or(0, |acc| acc.nonce)
-    }
-
     /// Fetches the state
     fn calculate_state_root(&self, _: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
@@ -155,13 +151,9 @@ impl BopDbRead for AlloyDB {
     }
 
     /// Returns the current block head number.
-    fn block_number(&self) -> Result<u64, Error> {
+    fn head_block_number(&self) -> Result<u64, Error> {
         debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
         Ok(self.block_number.as_u64().unwrap())
-    }
-
-    fn unique_hash(&self) -> B256 {
-        todo!()
     }
 }
 
