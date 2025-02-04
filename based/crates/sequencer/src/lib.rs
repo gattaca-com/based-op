@@ -125,10 +125,13 @@ where
             }
 
             (GetPayloadV3 { payload_id, res }, Self::Sorting(sorting_data)) => {
-                let (frag, block) = data.frags.seal_block();
+                let (frag_msg, sealed_msg, block) = data.frags.seal_block();
 
                 // gossip seal to p2p
-                let _ = senders.send(frag);
+                let _ = senders.send(frag_msg);
+                // gossip seal to p2p
+                let _ = senders.send(sealed_msg);
+
                 // send payload back to rpc
                 let _ = res.send(block);
                 // now we should our payload back from the node

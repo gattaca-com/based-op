@@ -3,7 +3,7 @@ use std::sync::Arc;
 use alloy_primitives::U256;
 use bop_common::{
     db::{DBFrag, DBSorting},
-    p2p::{Frag, FragMessage},
+    p2p::{FragV0, VersionedMessage},
     transaction::SimulatedTx,
 };
 use bop_db::BopDbRead;
@@ -44,15 +44,16 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
     }
 
     /// Creates a new frag, all subsequent frags will be built on top of this one
-    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragMessage {
+    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> VersionedMessage {
         self.gas_remaining -= in_sort.gas_used;
         self.payment += in_sort.payment;
 
-        let msg = FragMessage::Frag(Frag {
-            block_number: self.block_number,
-            seq: self.next_seq,
-            txs: in_sort.txs.iter().map(|tx| tx.tx.encode()).collect(),
-        });
+        let msg = VersionedMessage::new_frag_v0(FragV0::new(
+            self.block_number,
+            self.next_seq,
+            in_sort.txs.iter().map(|tx| tx.tx.as_ref()),
+            false,
+        ));
 
         self.db.commit(in_sort.db);
         self.txs.extend(in_sort.txs);
@@ -66,7 +67,9 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
         self.db.clear();
     }
 
-    pub fn seal_block(&self) -> (FragMessage, OpExecutionPayloadEnvelopeV3) {
+    // TODO: return the fragV0 BEFORE sealing
+    pub fn seal_block(&self) -> (VersionedMessage, VersionedMessage, OpExecutionPayloadEnvelopeV3) {
+        // apply sorted and create a new FragV0 (is_last = true) and a SealedV0
         // clear all
         todo!()
     }
