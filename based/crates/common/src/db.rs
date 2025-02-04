@@ -114,7 +114,7 @@ impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
     }
 
     fn block_number(&self) -> Result<u64, Error> {
-        todo!()
+        self.db.block_number()
     }
 }
 
@@ -206,7 +206,7 @@ impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
     }
 
     fn block_number(&self) -> Result<u64, Error> {
-        todo!()
+        self.db.read().block_number()
     }
 }
 

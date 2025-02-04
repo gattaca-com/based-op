@@ -47,8 +47,9 @@ pub async fn async_fetch_blocks_and_send_sequentially(
 
         // If any fail, send them first so block sync can handle errors.
         blocks.sort_unstable_by_key(|res| res.as_ref().map_or(0, |block| block.header.number));
-        for block in blocks {
-            block_sender.send(block.map_err(|e| e.into()).into()).expect("couldn't send block sync");
+        for mut block in blocks {
+            while let Err(b) = block_sender.send(block.map_err(|e| e.into()).into())
+            .expect("couldn't send block sync");
         }
 
         curr_block = batch_end + 1;
