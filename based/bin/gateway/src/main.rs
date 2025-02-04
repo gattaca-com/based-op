@@ -47,7 +47,7 @@ fn main() {
     let max_cached_storages = 100_000;
 
     let db_bop = init_database(&args.db_path, max_cached_accounts, max_cached_storages).expect("can't run");
-    let db_frag: DBFrag<_> = db_bop.readonly().expect("Failed to create read-only DB").into();
+    let db_frag: DBFrag<_> = db_bop.clone().into();
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
