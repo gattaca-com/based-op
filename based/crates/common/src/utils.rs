@@ -1,3 +1,4 @@
+use revm_primitives::U256;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
@@ -145,4 +146,8 @@ pub fn strip_namespace(s: &str) -> &str {
 
 pub fn last_part_of_typename<T>() -> &'static str {
     strip_namespace(std::any::type_name::<T>())
+}
+
+pub const fn u256(t: u64) -> U256 {
+    U256::from_limbs([t, 0, 0, 0])
 }

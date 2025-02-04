@@ -1,0 +1,36 @@
+[package]
+name = "bop-tests"
+
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish = false
+
+[dev-dependencies]
+
+[dependencies]
+bop-db.workspace = true
+bop-common.workspace = true
+bop-sequencer.workspace = true
+bop-rpc.workspace = true
+
+alloy-primitives.workspace = true
+alloy-consensus.workspace = true
+op-alloy-consensus.workspace = true
+
+revm.workspace = true
+
+reth-storage-errors.workspace = true
+reth-primitives.workspace = true
+reth-optimism-primitives.workspace = true
+reth-provider.workspace = true
+reth-trie-common.workspace = true
+
+rand.workspace = true
+
+tokio.workspace = true
+
+[[test]]
+name = "main"
+path = "src/main.rs"
