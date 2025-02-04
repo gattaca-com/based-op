@@ -32,7 +32,7 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
 
         let cache_tof = CacheDB::new(db.clone());
         let evm_tof: Evm<'_, (), _> = evmconfig.evm(cache_tof);
-        let cache = CacheDB::new(Arc::new(DBSorting::from(db)));
+        let cache = CacheDB::new(Arc::new(DBSorting::new(db)));
         let evm: Evm<'_, (), _> = evmconfig.evm(cache);
         Simulator::new(evm_tof, evm).run(connections, actor_config);
     }

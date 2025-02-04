@@ -26,8 +26,7 @@ fn main() {
     let max_cached_storages = 100_000;
 
     let db_bop = init_database("./", max_cached_accounts, max_cached_storages).expect("can't run");
-    let db_read: DBFrag<_> = db_bop.readonly().expect("Failed to create read-only DB").into();
-    let db_c = db_read.clone();
+    let db_frag: DBFrag<_> = db_bop.readonly().expect("Failed to create read-only DB").into();
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -38,22 +37,30 @@ fn main() {
             .into();
         let rt_c = rt.clone();
 
-        s.spawn(move || {
-            start_engine_rpc(&rpc_config, &spine_c, &rt);
-            start_eth_rpc(&rpc_config, &spine_c, db_c, &rt);
+        s.spawn({
+            let db_frag = db_frag.clone();
 
-            rt.block_on(wait_for_signal())
+            move || {
+                start_engine_rpc(&rpc_config, &spine_c, &rt);
+                start_eth_rpc(&rpc_config, &spine_c, db_frag, &rt);
+
+                rt.block_on(wait_for_signal())
+            }
         });
-        let db_s = db_read.clone();
+
         s.spawn(|| {
-            let sequencer = Sequencer::new(db_bop, db_s, rt_c, SequencerConfig::default());
+            let sequencer = Sequencer::new(db_bop, db_frag.clone(), rt_c, SequencerConfig::default());
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
-        for (i, core) in (1..4).enumerate() {
-            let db_sim = db_read.clone();
+
+        for (_, core) in (1..4).enumerate() {
             let connections = spine.to_connections(format!("Simulator-{core}"));
-            s.spawn(move || {
-                Simulator::create_and_run(connections, db_sim, ActorConfig::default());
+            s.spawn({
+                let db_frag = db_frag.clone();
+
+                move || {
+                    Simulator::create_and_run(connections, db_frag, ActorConfig::default());
+                }
             });
         }
     });
