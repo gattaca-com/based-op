@@ -11,6 +11,7 @@ use alloy_primitives::{map::HashMap, BlockNumber, B256};
 use auto_impl::auto_impl;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use parking_lot::RwLock;
+use rand::RngCore;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
 use reth_provider::BlockExecutionOutput;
@@ -125,14 +126,6 @@ impl<Db: BopDbRead> DBFrag<Db> {
         self.state_id = rand::random()
     }
 
-    pub fn reset(&mut self) {
-        let mut guard = self.db.write();
-        guard.accounts.clear();
-        guard.contracts.clear();
-        guard.logs.clear();
-        guard.block_hashes.clear();
-        self.state_id = rand::random()
-    }
 
     pub fn get_nonce(&self, address: Address) -> Result<u64, Error> {
         self.basic_ref(address)
@@ -172,6 +165,11 @@ impl<Db: BopDbRead> DBFrag<Db> {
 
     pub fn get_transaction_receipt(&self, _hash: B256) -> Result<OpTransactionReceipt, Error> {
         todo!()
+    }
+
+    pub fn reset(&mut self, db: Db) {
+        *self.db.write() = CacheDB::new(db);
+        self.state_id = rand::rng().next_u64();
     }
 
     pub fn state_root(&self, state_changes: HashMap<Address, Account>) -> B256 {
