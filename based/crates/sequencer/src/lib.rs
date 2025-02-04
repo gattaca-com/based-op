@@ -19,7 +19,7 @@ use frag::FragSequence;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reqwest::Url;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
-use reth_optimism_chainspec::OpChainSpecBuilder;
+use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
 use reth_optimism_evm::OpEvmConfig;
 use revm_primitives::{Address, BlockEnv, B256};
 use strum_macros::AsRefStr;
@@ -277,13 +277,22 @@ where
 
 #[derive(Clone, Debug)]
 pub struct SequencerConfig {
-    frag_duration: Duration,
-    max_gas: u64,
-    n_per_loop: usize,
-    rpc_url: Url,
-    evm_config: OpEvmConfig,
-    coinbase: Address,
+    pub frag_duration: Duration,
+    pub max_gas: u64,
+    pub n_per_loop: usize,
+    pub rpc_url: Url,
+    pub evm_config: OpEvmConfig,
+    pub coinbase: Address,
 }
+
+impl SequencerConfig {
+    pub fn with_chain_spec(chain_spec: OpChainSpec) -> Self {
+        let mut o: Self = Default::default();
+        o.evm_config = OpEvmConfig::new(Arc::new(chain_spec));
+        o
+    }
+}
+
 impl Default for SequencerConfig {
     fn default() -> Self {
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
@@ -348,11 +357,8 @@ pub struct Sequencer<Db: BopDB> {
 impl<Db: BopDB> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, config.max_gas);
-        let block_executor = BlockSync::new(
-            Arc::new(OpChainSpecBuilder::base_mainnet().build()),
-            runtime.into(),
-            config.rpc_url.clone(),
-        );
+        let block_executor =
+            BlockSync::new(config.evm_config.chain_spec().clone(), runtime.into(), config.rpc_url.clone());
 
         Self {
             state: SequencerState::default(),
@@ -389,6 +395,7 @@ where
 
         // handle engine API messages from rpc
         connections.receive(|msg, senders| {
+            tracing::info!("got engine api msg {msg:?}");
             self.state =
                 std::mem::take(&mut self.state).update(SequencerEvent::EngineApi(msg), &mut self.data, senders);
         });
