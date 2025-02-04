@@ -1,9 +1,8 @@
-use std::{path::PathBuf, sync::Arc};
-use std::{path::PathBuf, net::Ipv4Addr, sync::Arc};
+use std::{net::Ipv4Addr, path::PathBuf, sync::Arc};
 
 use bop_common::{
     actor::{Actor, ActorConfig},
-    communication::{messages::EngineApi, Spine},
+    communication::Spine,
     config::Config,
     db::{BopDB, DBFrag},
     utils::{init_tracing, wait_for_signal},
@@ -76,7 +75,7 @@ fn main() {
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
-        for (_, core) in (1..4).enumerate() {
+        for core in 1..4 {
             let connections = spine.to_connections(format!("Simulator-{core}"));
             s.spawn({
                 let db_frag = db_frag.clone();

@@ -58,6 +58,7 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
         *self.evm_tof.block_mut() = env;
     }
 
+    #[allow(dead_code)]
     fn set_spec_id(&mut self, spec_id: SpecId) {
         self.evm.modify_spec_id(spec_id);
     }

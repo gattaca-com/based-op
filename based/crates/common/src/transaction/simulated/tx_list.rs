@@ -51,6 +51,10 @@ impl SimulatedTxList {
         self.pending.len() + self.current.is_some() as usize
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn hash(&self) -> B256 {
         self.current.as_ref().map(|t| t.tx_hash()).unwrap_or_else(|| self.pending.tx_hash())
     }

@@ -1,9 +1,7 @@
-use alloy_rpc_types::engine::{
-    ExecutionPayloadEnvelopeV2, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, PayloadStatus,
-};
+use alloy_rpc_types::engine::{ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
     actor::Actor,
-    communication::{messages::EngineApi, Sender, SpineConnections},
+    communication::{messages::EngineApi, SpineConnections},
     db::BopDbRead,
 };
 use tokio::sync::oneshot;
@@ -20,7 +18,7 @@ impl MockEngineRpcServer {
 
 impl<Db: BopDbRead> Actor<Db> for MockEngineRpcServer {
     fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
-        let (tx, rx) = oneshot::channel();
+        let (tx, _rx) = oneshot::channel();
         let payload = ExecutionPayloadV3 {
             payload_inner: ExecutionPayloadV2 {
                 payload_inner: ExecutionPayloadV1 {
@@ -50,7 +48,7 @@ impl<Db: BopDbRead> Actor<Db> for MockEngineRpcServer {
             parent_beacon_block_root: Default::default(),
             res_tx: tx,
         });
-        let (tx, rx) = oneshot::channel();
+        let (tx, _rx) = oneshot::channel();
         connections.send(EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: Default::default(),
             payload_attributes: Default::default(),

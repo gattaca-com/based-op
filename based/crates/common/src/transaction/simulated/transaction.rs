@@ -3,9 +3,8 @@ use std::{ops::Deref, sync::Arc};
 use alloy_consensus::{Receipt, TxReceipt};
 use alloy_primitives::U256;
 use op_alloy_consensus::{OpDepositReceipt, OpTxType};
-use reth_optimism_consensus::calculate_receipt_root_no_memo_optimism;
 use reth_optimism_primitives::OpReceipt;
-use reth_primitives::{ReceiptWithBloom, TxType};
+use reth_primitives::ReceiptWithBloom;
 use revm_primitives::{Address, EvmState, ResultAndState};
 
 use crate::{db::BopDbRead, transaction::Transaction};

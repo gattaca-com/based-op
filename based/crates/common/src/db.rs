@@ -6,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{map::HashMap, BlockNumber, B256};
 use auto_impl::auto_impl;
 use op_alloy_rpc_types::OpTransactionReceipt;
@@ -20,7 +19,7 @@ use reth_trie_common::updates::TrieUpdates;
 use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
-    keccak256, Account, AccountInfo, AccountStatus, Address, Bytecode, EvmState, U256,
+    Account, AccountInfo, Address, Bytecode, EvmState, U256,
 };
 use thiserror::Error;
 
@@ -103,14 +102,6 @@ impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
         self.db.calculate_state_root(bundle_state)
     }
 
-    fn unique_hash(&self) -> B256 {
-        self.db.unique_hash()
-    }
-
-    fn block_number(&self) -> Result<u64, Error> {
-        self.db.block_number()
-    }
-  
     fn head_block_number(&self) -> Result<u64, Error> {
         self.db.head_block_number()
     }
@@ -136,7 +127,6 @@ impl<Db: BopDbRead> DBFrag<Db> {
 
         self.state_id = rand::random()
     }
-
 
     pub fn get_nonce(&self, address: Address) -> Result<u64, Error> {
         self.basic_ref(address)
@@ -235,14 +225,6 @@ impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
         self.db.read().calculate_state_root(bundle_state)
     }
 
-    fn unique_hash(&self) -> B256 {
-        self.unique_hash
-    }
-
-    fn block_number(&self) -> Result<u64, Error> {
-        self.db.read().block_number()
-    }
-  
     fn head_block_number(&self) -> Result<u64, Error> {
         Ok(self.curr_block_number - 1)
     }
