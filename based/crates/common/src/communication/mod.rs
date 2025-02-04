@@ -14,7 +14,7 @@ pub use messages::InternalMessage;
 
 use crate::{
     db::BopDbRead,
-    p2p::FragMessage,
+    p2p::VersionedMessage,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
     utils::last_part_of_typename,
@@ -236,8 +236,8 @@ pub struct Spine<Db: BopDbRead> {
     sender_blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     receiver_blockfetch_to_sequencer: CrossBeamReceiver<BlockSyncMessage>,
 
-    sender_sequencer_frag_broadcast: Sender<FragMessage>,
-    receiver_sequencer_frag_broadcast: CrossBeamReceiver<FragMessage>,
+    sender_sequencer_frag_broadcast: Sender<VersionedMessage>,
+    receiver_sequencer_frag_broadcast: CrossBeamReceiver<VersionedMessage>,
 
     blockenv: Queue<InternalMessage<BlockEnv>>,
 }
@@ -322,7 +322,7 @@ macro_rules! from_spine {
     };
 }
 
-from_spine!(FragMessage, sequencer_frag_broadcast, Sender);
+from_spine!(VersionedMessage, sequencer_frag_broadcast, Sender);
 from_spine!(SimulatorToSequencer<Db>, simulator_to_sequencer, Sender);
 from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator, Sender);
 from_spine!(SequencerToExternal, sequencer_to_rpc, Sender);
@@ -354,7 +354,7 @@ pub struct SendersSpine<Db: BopDbRead> {
     engine_rpc_to_sequencer: Sender<messages::EngineApi>,
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
-    sequencer_frag_broadcast: Sender<FragMessage>,
+    sequencer_frag_broadcast: Sender<VersionedMessage>,
     blockenv: Producer<InternalMessage<BlockEnv>>,
     timestamp: IngestionTime,
 }
@@ -393,7 +393,7 @@ pub struct ReceiversSpine<Db: BopDbRead> {
     engine_rpc_to_sequencer: Receiver<messages::EngineApi>,
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
-    sequencer_frag_broadcast: Receiver<FragMessage>,
+    sequencer_frag_broadcast: Receiver<VersionedMessage>,
     blockenv: Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>,
 }
 
