@@ -1,65 +1,119 @@
-use alloy_primitives::{Bytes, B256};
-use alloy_signer::{Signature, SignerSync};
-use alloy_signer_local::PrivateKeySigner;
+use alloy_primitives::B256;
+use alloy_signer::Signature as ECDSASignature;
+use ssz_types::{typenum, VariableList};
+use tree_hash_derive::TreeHash;
 
-pub struct Signed<T> {
-    pub signature: Signature,
-    pub inner: T,
+use crate::transaction::Transaction as BuilderTransaction;
+
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
+#[tree_hash(enum_behaviour = "union")]
+#[non_exhaustive]
+pub enum VersionedMessage {
+    FragV0(FragV0),
+    SealedV0(SealV0),
 }
+
+impl VersionedMessage {
+    pub fn new_frag_v0(message: FragV0) -> Self {
+        Self::FragV0(message)
+    }
+
+    pub fn new_seal_v0(message: SealV0) -> Self {
+        Self::SealedV0(message)
+    }
+}
+
+pub type MaxBytesPerTransaction = typenum::U1073741824;
+pub type MaxTransactionsPerPayload = typenum::U1048576;
+pub type Transaction = VariableList<u8, MaxBytesPerTransaction>;
+pub type Transactions = VariableList<Transaction, MaxTransactionsPerPayload>;
 
 /// A _fragment_ of a block, containing a sequenced set of transactions that will be eventually included in the next
 /// block in this order
-#[derive(Debug, Clone)]
-pub struct Frag {
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
+pub struct FragV0 {
     /// Block in which this frag will be included
+    block_number: u64,
+    /// Index of this frag. Frags need to be applied sequentially by index, up to [`SealV0::total_frags`]
+    seq: u64,
+    /// Whether this is the last frag in the sequence
+    is_last: bool,
+    /// Ordered list of EIP-2718 encoded transactions
+    txs: Transactions,
+}
+
+impl FragV0 {
+    pub fn new<'a>(
+        block_number: u64,
+        seq: u64,
+        builder_txs: impl Iterator<Item = &'a BuilderTransaction>,
+        is_last: bool,
+    ) -> Self {
+        let txs = builder_txs.map(|tx| tx.encode().to_vec()).map(Transaction::from).collect::<Vec<_>>();
+        Self { block_number, seq, txs: Transactions::from(txs), is_last }
+    }
+}
+
+/// A message sealing a sequence of frags, with fields from the block header
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
+pub struct SealV0 {
+    /// How many frags for this block were in this sequence
+    pub total_frags: u64,
+
+    // Header fields
     pub block_number: u64,
-    /// Index of this frag. Frags need to be applied sequentially by index from 0 to the end of sequence index
-    pub seq: u64,
-    /// Ordered list of RLP encoded transactions
-    pub txs: Vec<Bytes>,
+    pub gas_used: u64,
+    pub gas_limit: u64,
+    pub parent_hash: B256,
+    pub transactions_root: B256,
+    pub receipts_root: B256,
+    pub state_root: B256,
+    pub block_hash: B256,
 }
 
-/// A message sealing a sequence of frags
-#[derive(Debug, Clone)]
-pub struct Sealed {
-    /// The hash of the block being sequence
-    pub hash: B256,
-    /// Block number common to all frags
-    pub block_number: u64,
-    /// Last frag index
-    pub seal_seq: u64,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedMessage {
+    pub signature: ECDSASignature,
+    pub message: VersionedMessage,
 }
 
-#[derive(Debug, Clone)]
-pub enum FragMessage {
-    Frag(Frag),
-    Sealed(Sealed),
-}
+#[cfg(test)]
+mod tests {
+    use revm_primitives::b256;
+    use tree_hash::TreeHash;
 
-/// TODO: import crate
-pub trait TreeHash {
-    fn tree_hash_root(&self) -> B256;
-    fn do_sign(self, signer: &PrivateKeySigner) -> alloy_signer::Result<Signed<Self>>
-    where
-        Self: Sized, // Ensure that Self has a known size at compile time
-    {
-        let hash = self.tree_hash_root();
-        let sig = signer.sign_hash_sync(&hash)?;
-        Ok(Signed { signature: sig, inner: self })
+    use super::*;
+
+    #[test]
+    fn test_frag_v0() {
+        let tx = Transaction::from(vec![1, 2, 3]);
+        let txs = Transactions::from(vec![tx]);
+
+        let frag = FragV0 { block_number: 1, seq: 0, is_last: true, txs };
+        let message = VersionedMessage::new_frag_v0(frag);
+
+        let hash = message.tree_hash_root();
+
+        assert_eq!(hash, b256!("2a5ebad20a81878e5f229928e5c2043580051673b89a7a286008d30f62b10963"));
+    }
+
+    #[test]
+    fn test_seal_v0() {
+        let sealed = SealV0 {
+            total_frags: 8,
+            block_number: 123,
+            gas_used: 25_000,
+            gas_limit: 1_000_000,
+            parent_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+            transactions_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+            receipts_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+            state_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+            block_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+        };
+        let message = VersionedMessage::new_seal_v0(sealed);
+
+        let hash = message.tree_hash_root();
+
+        assert_eq!(hash, b256!("e86afda21ddc7338c7e84561681fde45e2ab55cce8cde3163e0ae5f1c378439e"));
     }
 }
-
-impl TreeHash for Frag {
-    fn tree_hash_root(&self) -> B256 {
-        todo!()
-    }
-}
-
-impl TreeHash for Sealed {
-    fn tree_hash_root(&self) -> B256 {
-        todo!()
-    }
-}
-
-pub type SignedFrag = Signed<Frag>;
-pub type SignedSealed = Signed<Sealed>;

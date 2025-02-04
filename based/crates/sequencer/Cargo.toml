@@ -52,6 +52,3 @@ thiserror.workspace = true
 
 # tmp here so that the the compiler picks up the reth op crates
 strum_macros.workspace = true
-# tmp
-reth-optimism-node.workspace = true
-reth-optimism-cli.workspace = true
