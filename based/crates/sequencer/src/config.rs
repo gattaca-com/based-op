@@ -11,6 +11,8 @@ pub struct SequencerConfig {
     pub n_per_loop: usize,
     pub rpc_url: Url,
     pub evm_config: OpEvmConfig,
+    /// If true, we will simulate txs at the top of each frag in the pools.
+    pub simulate_tof_in_pools: bool,
 }
 
 impl SequencerConfig {
@@ -22,6 +24,7 @@ impl SequencerConfig {
             frag_duration: Duration::from_millis(200),
             n_per_loop: 10,
             rpc_url: Url::parse(TEST_BASE_RPC_URL).unwrap(),
+            simulate_tof_in_pools: false,
             evm_config,
         }
     }
@@ -34,6 +37,7 @@ impl SequencerConfig {
             frag_duration: Duration::from_millis(200),
             n_per_loop: 10,
             rpc_url: Url::parse(TEST_BASE_SEPOLIA_RPC_URL).unwrap(),
+            simulate_tof_in_pools: false,
             evm_config,
         }
     }
@@ -45,6 +49,7 @@ impl From<&GatewayArgs> for SequencerConfig {
             frag_duration: Duration::from_millis(args.frag_duration_ms),
             n_per_loop: args.sim_per_loop,
             rpc_url: args.rpc_fallback_url.clone(),
+            simulate_tof_in_pools: false,
             evm_config: OpEvmConfig::new(args.chain_spec.clone()),
         }
     }

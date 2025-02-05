@@ -1,5 +1,6 @@
 use std::{cmp, sync::Arc};
 
+use alloy_consensus::Block;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
@@ -108,9 +109,9 @@ where
         });
 
         // handle block sync
-        connections.receive(|msg, _| {
+        connections.receive(|msg, senders| {
             let state = std::mem::take(&mut self.state);
-            self.state = state.handle_block_sync(msg, &mut self.data);
+            self.state = state.handle_block_sync(msg, &mut self.data, senders);
         });
 
         // Check for passive state changes. e.g., sealing frags, sending sims, etc.
@@ -270,10 +271,7 @@ where
                     // Confirm that the FCU payload is the same as the buffered payload.
                     if payload.block_hash() == fork_choice_state.head_block_hash {
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
-                        let _ = data.block_executor.apply_and_commit_block(&block, &data.db, true);
-                        data.reset_fragdb();
-                        data.parent_header = block.header.clone();
-                        data.parent_hash = fork_choice_state.head_block_hash;
+                        SequencerState::commit_block(&block, data, senders, false);
                         WaitingForForkChoiceWithAttributes
                     } else {
                         // We have received the wrong ExecutionPayload. Need to re-sync with the new head.
@@ -386,13 +384,17 @@ where
     ///
     /// When we are syncing we fetch blocks asynchronously from the rpc and send them back through a channel that gets
     /// picked up and processed here.
-    fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SequencerContext<Db>) -> Self {
+    fn handle_block_sync(
+        self,
+        block: BlockSyncMessage,
+        data: &mut SequencerContext<Db>,
+        senders: &SendersSpine<Db>,
+    ) -> Self {
         use SequencerState::*;
 
         match self {
             Syncing { last_block_number } => {
-                data.block_executor.apply_and_commit_block(&block, &data.db, true).expect("issue syncing block");
-                data.reset_fragdb();
+                SequencerState::commit_block(&block, data, senders, self.syncing());
 
                 if block.number != last_block_number {
                     Syncing { last_block_number }
@@ -411,8 +413,8 @@ where
     /// Sends a new transaction to the tx pool.
     /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
     fn handle_new_tx(&mut self, msg: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
-        let senders = matches!(self, SequencerState::Sorting(_)).then_some(senders);
-        data.tx_pool.handle_new_tx(msg, data.frags.db_ref(), data.base_fee, senders);
+        let senders = data.config.simulate_tof_in_pools.then_some(senders);
+        data.tx_pool.handle_new_tx(msg, data.frags.db_ref(), data.base_fee, self.syncing(), senders);
     }
 
     /// Processes transaction simulation results from the simulator actor.
@@ -473,5 +475,35 @@ where
 
             _ => self,
         }
+    }
+
+    fn syncing(&self) -> bool {
+        matches!(self, SequencerState::Syncing { .. })
+    }
+
+    /// Helper function for committing a block.
+    /// - Commits to the db.
+    /// - Resets the fragdb.
+    /// - Resets the tx pool.
+    fn commit_block(
+        block: &BlockWithSenders<Block<OpTransactionSigned>>,
+        data: &mut SequencerContext<Db>,
+        senders: &SendersSpine<Db>,
+        syncing: bool,
+    ) {
+        let _ = data.block_executor.apply_and_commit_block(block, &data.db, true);
+
+        data.reset_fragdb();
+        data.parent_header = block.header.clone();
+        data.parent_hash = fork_choice_state.head_block_hash;
+
+        let sender = data.config.simulate_tof_in_pools.then_some(senders);
+        data.tx_pool.handle_new_mined_txs(
+            block.body.transactions.iter(),
+            data.base_fee,
+            data.frags.db_ref(),
+            syncing,
+            sender,
+        );
     }
 }

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use alloy_consensus::transaction::Transaction as TransactionTrait;
 use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{
@@ -16,7 +17,6 @@ use reth_optimism_evm::OpEvmConfig;
 use revm::{db::CacheDB, DatabaseRef, Evm};
 use revm_primitives::{BlockEnv, SpecId};
 use tracing::info;
-use alloy_consensus::transaction::Transaction as TransactionTrait;
 
 pub struct Simulator<'a, Db: DatabaseRef> {
     /// Top of frag evm
