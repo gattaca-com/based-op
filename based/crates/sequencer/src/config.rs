@@ -1,4 +1,3 @@
-use alloy_primitives::Address;
 use bop_common::{config::GatewayArgs, time::Duration};
 use reqwest::Url;
 use reth_optimism_chainspec::{BASE_MAINNET, BASE_SEPOLIA};
@@ -12,7 +11,6 @@ pub struct SequencerConfig {
     pub n_per_loop: usize,
     pub rpc_url: Url,
     pub evm_config: OpEvmConfig,
-    pub coinbase: Address,
 }
 
 impl SequencerConfig {
@@ -25,7 +23,6 @@ impl SequencerConfig {
             n_per_loop: 10,
             rpc_url: Url::parse(TEST_BASE_RPC_URL).unwrap(),
             evm_config,
-            coinbase: Address::random(),
         }
     }
 
@@ -38,7 +35,6 @@ impl SequencerConfig {
             n_per_loop: 10,
             rpc_url: Url::parse(TEST_BASE_SEPOLIA_RPC_URL).unwrap(),
             evm_config,
-            coinbase: Address::random(),
         }
     }
 }
@@ -50,7 +46,6 @@ impl From<&GatewayArgs> for SequencerConfig {
             n_per_loop: args.sim_per_loop,
             rpc_url: args.rpc_fallback_url.clone(),
             evm_config: OpEvmConfig::new(args.chain_spec.clone()),
-            coinbase: args.coinbase,
         }
     }
 }
