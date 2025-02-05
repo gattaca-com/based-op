@@ -19,7 +19,7 @@ use revm_primitives::{
     AccountInfo, Address, Bytecode, B256, U256,
 };
 
-use crate::{cache::ReadCaches, BopDbRead, Error};
+use crate::{cache::ReadCaches, DatabaseRead, Error};
 
 pub type ProviderReadOnly = DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>;
 
@@ -102,7 +102,7 @@ impl Database for BlockDB {
     }
 }
 
-impl BopDbRead for BlockDB {
+impl DatabaseRead for BlockDB {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         let latest_state = LatestStateProviderRef::new(self.provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(bundle_state);

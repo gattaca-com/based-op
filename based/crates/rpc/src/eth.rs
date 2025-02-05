@@ -5,7 +5,7 @@ use alloy_rpc_types::{BlockId, BlockNumberOrTag};
 use bop_common::{
     api::{EthApiClient, EthApiServer, OpRpcBlock},
     communication::{messages::RpcResult, Sender, Spine},
-    db::{BopDbRead, DBFrag},
+    db::{DatabaseRead, DBFrag},
     transaction::Transaction,
 };
 use jsonrpsee::{
@@ -23,7 +23,7 @@ pub struct EthRpcServer<Db> {
     fallback: RpcClient,
 }
 
-impl<Db: BopDbRead> EthRpcServer<Db> {
+impl<Db: DatabaseRead> EthRpcServer<Db> {
     pub fn new(spine: &Spine<Db>, db: DBFrag<Db>, fallback_url: Url) -> Self {
         let fallback = RpcClient::builder().build(fallback_url).expect("failed building fallback rpc client");
         Self { new_order_tx: spine.into(), db, fallback }
@@ -42,7 +42,7 @@ impl<Db: BopDbRead> EthRpcServer<Db> {
 }
 
 #[async_trait]
-impl<D: BopDbRead> EthApiServer for EthRpcServer<D> {
+impl<D: DatabaseRead> EthApiServer for EthRpcServer<D> {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         trace!(?bytes, "new request");

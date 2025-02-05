@@ -8,7 +8,7 @@ use tracing::{info, span, warn, Level};
 
 use crate::{
     communication::SpineConnections,
-    db::BopDbRead,
+    db::DatabaseRead,
     time::{vsync, Duration, Timer},
     utils::last_part_of_typename,
 };
@@ -43,7 +43,7 @@ impl ActorConfig {
     }
 }
 
-pub trait Actor<Db: BopDbRead>: Sized {
+pub trait Actor<Db: DatabaseRead>: Sized {
     const CORE_AFFINITY: Option<usize> = None;
     fn loop_body(&mut self, _connections: &mut SpineConnections<Db>) {}
     fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {}
