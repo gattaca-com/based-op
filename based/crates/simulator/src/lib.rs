@@ -4,7 +4,7 @@ use alloy_consensus::{transaction::Transaction as TransactionTrait, Header};
 use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{
-        messages::{SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
+        messages::{EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
         SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DBSorting, DatabaseRead},
@@ -67,8 +67,9 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         Ok(simtx)
     }
 
-    fn set_evm_for_new_block(&mut self, parent: &Header, next_attributes: NextBlockEnvAttributes) {
-
+    fn set_evm_for_new_block(&mut self, evm_block_params: EvmBlockParams) {
+        let parents = evm_block_params.header;
+        let next_attributes = evm_block_params.attributes;
         let evm_env = self.evm_config.next_cfg_and_block_env(parent, next_attributes).unwrap();
         let EvmEnv { cfg_env_with_handler_cfg, block_env } = evm_env;
         let env_with_handler_cfg = EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
@@ -113,7 +114,7 @@ impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
                 }
             }
         });
-        connections.receive(|msg, _| {
+        connections.receive(|msg: EvmBlockParams, _| {
             self.set_evm_for_new_block(msg);
         });
     }
