@@ -3,7 +3,7 @@ use std::{collections::VecDeque, sync::Arc};
 use alloy_consensus::Header;
 use alloy_rpc_types::engine::ForkchoiceState;
 use bop_common::{time::Instant, transaction::Transaction};
-use bop_db::DatabaseWrite;
+use bop_db::DatabaseRead;
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use revm_primitives::{BlockEnv, B256};
@@ -16,12 +16,12 @@ use crate::{
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct SequencerContext<Db: DatabaseWrite> {
+pub struct SequencerContext<Db: DatabaseRead> {
     pub config: SequencerConfig,
     pub db: Db,
     pub tx_pool: TxPool,
     pub block_env: BlockEnv,
-    pub frags: FragSequence<Db::ReadOnly>,
+    pub frags: FragSequence<Db>,
     pub block_executor: BlockSync,
     pub parent_hash: B256,
     pub parent_header: Header,
@@ -31,12 +31,12 @@ pub struct SequencerContext<Db: DatabaseWrite> {
     pub base_fee: u64,
 }
 
-impl<Db: DatabaseWrite> SequencerContext<Db> {
+impl<Db: DatabaseRead> SequencerContext<Db> {
     pub fn new_sorting_data(
         &self,
         remaining_attributes_txs: VecDeque<Arc<Transaction>>,
         can_add_txs: bool,
-    ) -> SortingData<Db::ReadOnly> {
+    ) -> SortingData<Db> {
         SortingData {
             frag: self.frags.create_in_sort(),
             until: Instant::now() + self.config.frag_duration,
@@ -49,7 +49,6 @@ impl<Db: DatabaseWrite> SequencerContext<Db> {
     }
 
     pub fn reset_fragdb(&mut self) {
-        let new_ro = self.db.readonly().expect("couldn't create readonly db");
-        self.frags.reset_fragdb(new_ro);
+        self.frags.reset_fragdb(self.db.clone());
     }
 }

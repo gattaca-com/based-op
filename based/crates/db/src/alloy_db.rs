@@ -158,12 +158,6 @@ impl DatabaseRead for AlloyDB {
 }
 
 impl DatabaseWrite for AlloyDB {
-    type ReadOnly = Self;
-
-    fn readonly(&self) -> Result<Self::ReadOnly, Error> {
-        Ok(self.clone())
-    }
-
     fn commit_block(
         &self,
         _block: &BlockWithSenders<OpBlock>,
