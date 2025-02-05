@@ -30,10 +30,10 @@ use revm::{
 };
 use revm_primitives::{AccountInfo, Address, Bytecode, B256, U256};
 
-pub mod alloy_db;
+mod alloy_db;
 mod cache;
 mod init;
-
+pub use alloy_db::AlloyDB;
 pub use bop_common::db::{DatabaseRead, DatabaseWrite, Error};
 pub use init::init_database;
 
