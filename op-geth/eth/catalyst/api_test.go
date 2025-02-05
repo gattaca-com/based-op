@@ -1852,3 +1852,44 @@ func TestGetClientVersion(t *testing.T) {
 		t.Fatalf("client info does match expected, got %s", info.String())
 	}
 }
+
+func TestNewFragV0(t *testing.T) {
+	genesis, preMergeBlocks := generateMergeChain(10, false)
+	n, ethservice := startEthService(t, genesis, preMergeBlocks)
+	defer n.Close()
+
+	api := NewConsensusAPI(ethservice)
+	info := engine.FragV0{
+		BlockNumber: 10,
+		Seq:         0,
+		IsLast:      true,
+		Txs:         make([]string, 0),
+	}
+	err := api.NewFragV0(info)
+	if err != nil {
+		t.Fatalf("error creating new frag: %v", err)
+	}
+}
+
+func TestSealFragV0(t *testing.T) {
+	genesis, preMergeBlocks := generateMergeChain(10, false)
+	n, ethservice := startEthService(t, genesis, preMergeBlocks)
+	defer n.Close()
+
+	api := NewConsensusAPI(ethservice)
+	info := engine.SealV0{
+		TotalFrags:       1,
+		BlockNumber:      1,
+		GasUsed:          0,
+		GasLimit:         0,
+		ParentHash:       common.Hash{},
+		TransactionsRoot: common.Hash{},
+		ReceiptsRoot:     common.Hash{},
+		StateRoot:        common.Hash{},
+		BlockHash:        common.Hash{},
+	}
+	err := api.SealFragV0(info)
+	if err != nil {
+		t.Fatalf("error sealing frag: %v", err)
+	}
+}
