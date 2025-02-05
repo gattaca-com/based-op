@@ -59,6 +59,8 @@ type EngineVersionProvider interface {
 	ForkchoiceUpdatedVersion(attr *eth.PayloadAttributes) eth.EngineAPIMethod
 	NewPayloadVersion(timestamp uint64) eth.EngineAPIMethod
 	GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod
+	NewFragVersion(timestamp uint64) eth.EngineAPIMethod
+	SealFragVersion(timestamp uint64) eth.EngineAPIMethod
 }
 
 func NewEngineAPIClient(rpc client.RPC, l log.Logger, evp EngineVersionProvider) *EngineAPIClient {
@@ -158,4 +160,32 @@ func (s *EngineAPIClient) SignalSuperchainV1(ctx context.Context, recommended, r
 		Required:    required,
 	})
 	return result, err
+}
+
+func (s *EngineAPIClient) NewFrag(ctx context.Context, frag *eth.FragV0) (*string, error) {
+	e := s.log.New("new_frag", frag)
+	e.Trace("sending new frag")
+	var result string
+	method := s.evp.NewFragVersion(0)
+	err := s.RPC.CallContext(ctx, &result, string(method), frag)
+	if err != nil {
+		e.Warn("Failed to send new frag", "new_frag", frag, "err", err)
+		return nil, err
+	}
+	e.Trace("Sent frag")
+	return &result, nil
+}
+
+func (s *EngineAPIClient) SealFrag(ctx context.Context, seal *eth.SealV0) (*string, error) {
+	e := s.log.New("seal_frag", seal)
+	e.Trace("sending seal frag")
+	var result string
+	method := s.evp.SealFragVersion(0)
+	err := s.RPC.CallContext(ctx, &result, string(method), seal)
+	if err != nil {
+		e.Warn("Failed to send seal frag", "seal_frag", seal, "err", err)
+		return nil, err
+	}
+	e.Trace("Sent seal frag")
+	return &result, nil
 }
