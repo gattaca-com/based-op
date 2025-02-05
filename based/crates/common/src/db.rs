@@ -6,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{map::HashMap, BlockNumber, B256};
 use auto_impl::auto_impl;
 use op_alloy_rpc_types::OpTransactionReceipt;
@@ -19,7 +18,7 @@ use reth_trie_common::updates::TrieUpdates;
 use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
-    keccak256, Account, AccountInfo, AccountStatus, Address, Bytecode, EvmState, U256,
+    Account, AccountInfo, Address, Bytecode, EvmState, U256,
 };
 use thiserror::Error;
 

@@ -10,7 +10,7 @@ use bop_common::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{BopDB, DBFrag},
-    p2p::{SealV0, VersionedMessage},
+    p2p::VersionedMessage,
     time::{Duration, Instant},
     transaction::Transaction,
 };
@@ -311,8 +311,8 @@ pub struct SequencerContext<Db: BopDB> {
     block_executor: BlockSync,
     parent_hash: B256,
     parent_header: Header,
-    fork_choice_state: ForkchoiceState,
-    payload_attributes: Box<OpPayloadAttributes>,
+    _fork_choice_state: ForkchoiceState,
+    _payload_attributes: Box<OpPayloadAttributes>,
     //TODO: set from blocksync
     base_fee: u64,
 }
@@ -359,8 +359,8 @@ impl<Db: BopDB> Sequencer<Db> {
                 block_executor,
                 config,
                 tx_pool: Default::default(),
-                fork_choice_state: Default::default(),
-                payload_attributes: Default::default(),
+                _fork_choice_state: Default::default(),
+                _payload_attributes: Default::default(),
                 base_fee: Default::default(),
                 parent_hash: Default::default(),
                 parent_header: Default::default(),
