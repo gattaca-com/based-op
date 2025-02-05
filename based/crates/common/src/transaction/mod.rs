@@ -1,7 +1,7 @@
 pub mod simulated;
 pub mod tx_list;
 
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
 
 use alloy_consensus::{SignableTransaction, Transaction as TransactionTrait, TxEip1559};
 use alloy_eips::eip2718::{Decodable2718, Encodable2718};
@@ -13,7 +13,7 @@ use revm_primitives::{OptimismFields, TxEnv, TxKind};
 pub use simulated::{SimulatedTx, SimulatedTxList};
 pub use tx_list::TxList;
 
-use crate::signing::ECDSASigner;
+use crate::{communication::messages::BlockSyncMessage, signing::ECDSASigner};
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
@@ -132,6 +132,10 @@ impl Transaction {
 
     pub fn encode(&self) -> Bytes {
         self.tx.encoded_2718().into()
+    }
+
+    pub fn from_block(block: &BlockSyncMessage) -> Vec<Arc<Transaction>> {
+        block.body.transactions.iter().map(|t| Arc::new(Transaction::from(t.clone()))).collect()
     }
 }
 
