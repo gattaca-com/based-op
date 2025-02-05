@@ -5,7 +5,7 @@ use eyre::bail;
 use reqwest::Url;
 use reth_rpc_layer::JwtSecret;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, name = "mux")]
 pub struct MuxArgs {
     /// The host to run mux on
