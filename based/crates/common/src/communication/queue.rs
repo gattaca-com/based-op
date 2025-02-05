@@ -1,7 +1,7 @@
 use std::{
     alloc::Layout,
     borrow::Borrow,
-    mem::{size_of, MaybeUninit},
+    mem::{forget, size_of, ManuallyDrop, MaybeUninit},
     ops::Deref,
     path::Path,
     sync::atomic::{AtomicUsize, Ordering},
@@ -174,6 +174,10 @@ impl<T: Clone> InnerQueue<T> {
 
     fn consume(&self, el: &mut T, ri: usize, ri_ver: u32) -> Result<(), ReadError> {
         self.load(ri).read_with_version(el, ri_ver)
+    }
+
+    fn consume_clone(&self, ri: usize, ri_ver: u32) -> Result<T, ReadError> {
+        self.load(ri).read_with_version_clone(ri_ver)
     }
 
     #[allow(dead_code)]
@@ -384,6 +388,13 @@ impl<T: Clone> ConsumerBare<T> {
         Ok(())
     }
 
+    #[inline]
+    pub fn try_consume_clone(&mut self) -> Result<T, ReadError> {
+        let t = self.queue.consume_clone(self.pos, self.expected_version)?;
+        self.update_pos();
+        Ok(t)
+    }
+
     /// Blocking consume
     #[inline]
     pub fn blocking_consume(&mut self, el: &mut T) {
@@ -443,7 +454,7 @@ pub struct Consumer<T: 'static> {
     should_log: bool,
 }
 
-impl<T: 'static + Clone> Consumer<T> {
+impl<T: 'static + Copy> Consumer<T> {
     /// Maybe consume one message in a queue with error recovery and logging,
     /// and return whether one was read
     #[inline]
@@ -463,11 +474,13 @@ impl<T: 'static + Clone> Consumer<T> {
             Err(ReadError::Empty) => false,
         }
     }
+}
 
+impl<T: 'static + Clone> Consumer<T> {
     #[inline]
     pub fn try_consume(&mut self) -> Option<T> {
-        match self.consumer.try_consume(&mut self.message) {
-            Ok(()) => Some(self.message.clone()),
+        match self.consumer.try_consume_clone() {
+            Ok(t) => Some(t),
             Err(ReadError::SpedPast) => {
                 self.log_and_recover();
                 self.try_consume()

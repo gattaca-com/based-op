@@ -137,8 +137,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             block_hash: header.hash_slow(),
             transactions,
         };
-        (
-            SealV0 {
+        let seal =SealV0 {
                 total_frags: self.next_seq,
                 block_number: block_env.number.to(),
                 gas_used,
@@ -148,7 +147,10 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
                 receipts_root,
                 state_root,
                 block_hash: v1.block_hash,
-            },
+            };
+        tracing::info!("seal: {seal:#?}");
+        (
+            seal,
             OpExecutionPayloadEnvelopeV3 {
                 execution_payload: ExecutionPayloadV3 {
                     payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
@@ -187,9 +189,11 @@ mod tests {
     use bop_simulator::Simulator;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use reqwest::{Client, Url};
-    use reth_optimism_chainspec::OpChainSpecBuilder;
+    use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
     use reth_primitives_traits::{Block, SignedTransaction};
     use revm_primitives::{BlobExcessGasAndPrice, BlockEnv};
+    use reth_optimism_evm::OpEvmConfig;
+    use bop_common::actor::Actor;
 
     use crate::{block_sync::fetch_blocks::fetch_block, sorting::FragSequence};
 
@@ -229,6 +233,7 @@ mod tests {
         // Create the alloydb.
         let client = ProviderBuilder::new().network().on_http(rpc_url);
         let alloy_db = AlloyDB::new(client, block.block.header.number, rt);
+        let evm_config = OpEvmConfig::new(BASE_SEPOLIA.clone());
 
         // Simulate the txs in the block and add to a frag.
         let db_frag: DBFrag<_> = alloy_db.clone().into();
@@ -239,7 +244,10 @@ mod tests {
 
         // Simulator
         let _sim_handle =
-            std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default()));
+            std::thread::spawn(move || {
+                let simulator = Simulator::new(sim_db, &evm_config);
+                simulator.run(sim_connections, ActorConfig::default())
+            });
         let mut seq = FragSequence::new(db_frag, 300_000_000);
         let mut sorting_db = seq.create_in_sort();
 

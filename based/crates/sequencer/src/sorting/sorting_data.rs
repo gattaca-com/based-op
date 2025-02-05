@@ -40,10 +40,7 @@ impl<Db: DatabaseRead> SortingData<Db> {
         senders: &mut SpineConnections<Db>,
         base_fee: u64,
     ) -> Self {
-        if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
-            self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
-            self.frag.apply_tx(tx_to_apply);
-        }
+        self.maybe_apply(base_fee);
 
         let db = self.frag.state();
 
@@ -59,8 +56,14 @@ impl<Db: DatabaseRead> SortingData<Db> {
                 self.in_flight_sims += 1;
             }
         }
-
         self
+    }
+
+    pub fn maybe_apply(&mut self, base_fee: u64) {
+        if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
+            self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
+            self.frag.apply_tx(tx_to_apply);
+        }
     }
 
     pub fn is_valid(&self, state_id: u64) -> bool {
@@ -88,10 +91,21 @@ impl<Db: DatabaseRead> SortingData<Db> {
     }
 
     pub fn should_seal_frag(&self) -> bool {
-        self.until < Instant::now()
+        // for now this is to get around the fact that if the initialy opattrs contains a list of txs to be included and
+        // we sent off the last one to be included while the self.until runs out, it would return true. What we
+        // should do is keep track whether we're the first frag and not return ever until remaining attributes
+        // txs == 0 and num in flights == 0
+        if self.in_flight_sims != 0 {
+            return false;
+        }
+        self.remaining_attributes_txs.is_empty() && (self.tof_snapshot.is_empty() || self.until < Instant::now())
     }
 
     pub fn should_send_next_sims(&self) -> bool {
         self.in_flight_sims == 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.frag.is_empty()
     }
 }

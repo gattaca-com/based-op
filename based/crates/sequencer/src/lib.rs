@@ -1,6 +1,6 @@
 use std::{cmp, sync::Arc};
 
-use alloy_consensus::Block;
+use alloy_consensus::{Block, Header};
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
@@ -10,8 +10,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
-            SimulatorToSequencerMsg,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, EvmBlockParams, SimulatorToSequencer, SimulatorToSequencerMsg
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -26,6 +25,7 @@ use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
+use revm_primitives::Bytes;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
@@ -169,6 +169,8 @@ where
     ) -> SequencerState<Db> {
         use EngineApi::*;
 
+        tracing::info!("NewEngineApi: {:?}", msg.as_ref());
+
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
                 self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
@@ -299,17 +301,21 @@ where
                             prev_randao: attributes.payload_attributes.prev_randao,
                             gas_limit,
                         };
+                        tracing::info!("Sorting start with attributes: {:?}", next_attr);
 
-                        let block_env = data
+                        let evm_block_params = EvmBlockParams {
+                            parent_header: data.parent_header.clone(),
+                            attributes: next_attr.clone(),
+                        };
+                        // should never fail as its a broadcast
+                        senders
+                            .send_timeout(evm_block_params, Duration::from_millis(10))
+                            .expect("couldn't send block env");
+                        data.block_env = data
                             .config
                             .evm_config
                             .next_cfg_and_block_env(&data.parent_header, next_attr)
-                            .expect("couldn't create blockenv");
-                        // should never fail as its a broadcast
-                        senders
-                            .send_timeout(block_env.block_env.clone(), Duration::from_millis(10))
-                            .expect("couldn't send block env");
-                        data.block_env = block_env.block_env;
+                            .expect("couldn't create blockenv").block_env;
 
                         let txs = attributes
                             .transactions
@@ -433,8 +439,12 @@ where
                 };
 
                 // handle sim on wrong state
-                if sort_data.is_valid(result.state_id) {
-                    warn!("received sim result on wrong state, dropping");
+                if !sort_data.is_valid(result.state_id) {
+                    warn!(
+                        "received sim result on wrong state: {} vs {}, dropping",
+                        result.state_id,
+                        sort_data.frag.db.state_id()
+                    );
                     return;
                 }
                 sort_data.handle_sim(simulated_tx, &sender, data.base_fee);
@@ -463,16 +473,18 @@ where
     fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db>) -> Self {
         use SequencerState::*;
         match self {
-            Sorting(sorting_data) if sorting_data.should_seal_frag() => {
+            Sorting(mut sorting_data) if sorting_data.should_seal_frag() => {
+                sorting_data.maybe_apply(data.base_fee);
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
                 let txs: Vec<Arc<Transaction>> = sorting_data.frag.txs.iter().map(|tx| tx.tx.clone()).collect();
 
-                let frag = data.frags.apply_sorted_frag(sorting_data.frag);
+                if !sorting_data.is_empty() {
+                    let frag = data.frags.apply_sorted_frag(sorting_data.frag);
 
-                // broadcast to p2p
-                connections.send(VersionedMessage::from(frag));
-                let sorting_data =
-                    data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
+                    // broadcast to p2p
+                    connections.send(VersionedMessage::from(frag));
+                }
+                let sorting_data = data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
 
                 // Reset the tx pool
                 let sender = data.config.simulate_tof_in_pools.then_some(connections.senders());

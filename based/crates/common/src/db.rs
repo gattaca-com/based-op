@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
     io,
     ops::Deref,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use alloy_primitives::{map::HashMap, BlockNumber, B256};

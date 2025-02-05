@@ -63,26 +63,29 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
         if self.next_block < self.sync_until {
             let block = self.executor.block_on(fetch_block(self.next_block, &self.client, self.rpc_url.clone()));
 
-            let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, fcu) =
-                messages::EngineApi::messages_from_block(&block, false, None);
+            let (new_payload_status_rx, new_payload, fcu_status_rx, fcu_1, fcu) =
+                messages::EngineApi::messages_from_block(&block, true, None);
 
-            let txs = Transaction::from_block(&block);
-            for t in txs {
-                connections.send(t);
-            }
-            Duration::from_millis(100).sleep();
+            // let txs = Transaction::from_block(&block);
+            // for t in txs {
+            //     connections.send(t);
+            // }
+            // Duration::from_millis(100).sleep();
 
             connections.send(fcu);
             Duration::from_secs(1).sleep();
             let (block_tx, block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 
-            let Ok(block) = block_rx.blocking_recv() else {
+            let Ok(sealed_block) = block_rx.blocking_recv()  else {
                 warn!("issue getting block");
                 return;
             };
 
-            info!("got sealed block {block:?}");
+            // info!("got sealed block");
+            
+            assert_eq!(sealed_block.execution_payload.payload_inner.payload_inner.block_hash, block.hash_slow(), "{block:#?} vs {sealed_block:#?}" );
+
 
             connections.send(new_payload);
             connections.send(fcu_1);

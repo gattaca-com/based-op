@@ -17,5 +17,5 @@ thiserror.workspace = true
 reth-optimism-evm.workspace = true
 reth-optimism-chainspec.workspace = true
 reth-evm.workspace = true
-
-
+reth-optimism-forks.workspace = true
+reth-chainspec.workspace = true

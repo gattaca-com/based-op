@@ -3,7 +3,8 @@ use std::{
     sync::Arc,
 };
 
-use alloy_eips::eip2718::Encodable2718;
+use alloy_consensus::Header;
+use alloy_eips::eip2718::{Decodable2718, Encodable2718};
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes,
@@ -11,8 +12,8 @@ use alloy_rpc_types::engine::{
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::execute::BlockExecutionError;
-use reth_optimism_primitives::OpBlock;
+use reth_evm::{execute::BlockExecutionError};
+use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
 use revm::DatabaseRef;
 use revm_primitives::{Address, EVMError, U256};
@@ -357,7 +358,7 @@ pub enum SimulatorToSequencerMsg<Db: DatabaseRead> {
 #[derive(Clone, Debug, Error, AsRefStr)]
 #[repr(u8)]
 pub enum SimulationError<DbError> {
-    #[error("Evm error")]
+    #[error("Evm error: {0}")]
     EvmError(#[from] EVMError<DbError>),
     #[error("Order pays nothing")]
     ZeroPayment,
@@ -386,3 +387,28 @@ pub type BlockSyncMessage = BlockWithSenders<OpBlock>;
 pub enum BlockFetch {
     FromTo(u64, u64),
 }
+
+/// Represents the parameters required to configure the next block.
+#[derive(Clone, Debug)]
+pub struct EvmBlockParams {
+    pub parent_header: Header,
+    pub attributes: NextBlockAttributes
+}
+
+#[derive(Debug, Clone)]
+pub struct NextBlockAttributes {
+    /// The timestamp of the next block.
+    pub timestamp: u64,
+    /// The suggested fee recipient for the next block.
+    pub suggested_fee_recipient: Address,
+    /// The randomness value for the next block.
+    pub prev_randao: B256,
+    /// Block gas limit.
+    pub gas_limit: u64,
+    /// Txs to add top of block.
+    pub forced_inclusion_txs: Vec<Arc<Transaction>>,
+    /// Parent block beacon root.
+    pub parent_beacon_block_root: Option<B256>,
+}
+
+

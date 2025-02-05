@@ -9,8 +9,11 @@ use bop_common::{
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{init_database, DatabaseRead};
-use bop_rpc::start_rpc;
-use bop_sequencer::{block_sync::mock_fetcher::MockFetcher, Sequencer};
+use bop_rpc::{start_mock_engine_rpc, start_rpc};
+use bop_sequencer::{
+    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
+    Sequencer, SequencerConfig,
+};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
@@ -51,8 +54,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         args.chain_spec.clone(),
     )?;
     let db_frag: DBFrag<_> = db_bop.clone().into();
-    let start_fetch = db_bop.head_block_number().expect("couldn't get head block number");
+    let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
     let fetch_until = args.tmp_end_block;
+    let sequencer_config: SequencerConfig =(&args).into();
+    let evm_config = sequencer_config.evm_config.clone();
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -69,7 +74,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             move || rt.block_on(wait_for_signal())
         });
 
-        let sequencer = Sequencer::new(db_bop, db_frag.clone(), (&args).into());
+        let sequencer = Sequencer::new(db_bop, db_frag.clone(), sequencer_config);
         s.spawn(|| {
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
@@ -85,8 +90,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             let connections = spine.to_connections(format!("Simulator-{core}"));
             s.spawn({
                 let db_frag = db_frag.clone();
+                let evm_config_c = evm_config.clone();
                 move || {
-                    Simulator::create_and_run(connections, db_frag, ActorConfig::default().with_core(core));
+                    let simulator = Simulator::new(db_frag, &evm_config_c);
+                    simulator.run(connections, ActorConfig::default().with_core(core));
                 }
             });
         }
