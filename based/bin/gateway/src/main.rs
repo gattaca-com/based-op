@@ -4,7 +4,7 @@ use bop_common::{
     actor::{Actor, ActorConfig},
     communication::Spine,
     config::Config,
-    db::{DatabaseWrite, DBFrag},
+    db::{DBFrag, DatabaseWrite},
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };

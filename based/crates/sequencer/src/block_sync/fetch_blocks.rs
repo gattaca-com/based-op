@@ -47,11 +47,7 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
     tracing::info!("Fetching and sending blocks done. Last fetched block: {}", curr_block - 1);
 }
 
-pub async fn fetch_block(
-    block_number: u64,
-    client: &Client,
-    url: Url,
-) -> BlockSyncMessage {
+pub async fn fetch_block(block_number: u64, client: &Client, url: Url) -> BlockSyncMessage {
     let r = RpcRequest {
         jsonrpc: "2.0",
         method: "eth_getBlockByNumber",

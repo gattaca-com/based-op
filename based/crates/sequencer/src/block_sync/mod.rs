@@ -15,7 +15,7 @@ use bop_common::{
         messages::{BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi},
         SendersSpine, SpineConnections,
     },
-    db::{DatabaseWrite, DatabaseRead},
+    db::{DatabaseRead, DatabaseWrite},
     runtime::RuntimeOrHandle,
 };
 use crossbeam_channel::{Receiver, Sender};
@@ -79,10 +79,12 @@ impl BlockFetcher {
             }
             BlockFetch::FromPayload(execution_payload, execution_payload_sidecar) => {
                 let bn = execution_payload.block_number();
-                self.blocks_from_payloads.push_back(payload_to_block(execution_payload, execution_payload_sidecar).unwrap_or_else(|e| {
-                    tracing::error!("coulnd't convert payload into a block for block number {bn}: {e}");
-                    self.executor.block_on(fetch_block(bn, &self.client, self.rpc_url.clone()))
-                }));
+                self.blocks_from_payloads.push_back(
+                    payload_to_block(execution_payload, execution_payload_sidecar).unwrap_or_else(|e| {
+                        tracing::error!("coulnd't convert payload into a block for block number {bn}: {e}");
+                        self.executor.block_on(fetch_block(bn, &self.client, self.rpc_url.clone()))
+                    }),
+                );
             }
         }
     }

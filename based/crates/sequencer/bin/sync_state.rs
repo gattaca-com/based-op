@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use bop_common::{runtime::RuntimeOrHandle, time::Duration, utils::initialize_test_tracing};
-use bop_db::{init_database, DatabaseWrite, DatabaseRead};
+use bop_db::{init_database, DatabaseRead, DatabaseWrite};
 use bop_sequencer::block_sync::{
     fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block},
     BlockSync,
@@ -55,8 +55,9 @@ async fn main() -> eyre::Result<()> {
     // });
 
     // // Fetch prev state root for checks
-    // let client = Client::builder().timeout(Duration::from_secs(5).into()).build().expect("Failed to build HTTP client");
-    // let mut rpc_head_block_state_root = fetch_block(db_head, &client, rpc_url_clone).await.unwrap().header.state_root;
+    // let client = Client::builder().timeout(Duration::from_secs(5).into()).build().expect("Failed to build HTTP
+    // client"); let mut rpc_head_block_state_root = fetch_block(db_head, &client,
+    // rpc_url_clone).await.unwrap().header.state_root;
 
     // while let Ok(block) = block_receiver.recv() {
     //     let block = block.into_data().expect("issue receiving block");
@@ -64,11 +65,11 @@ async fn main() -> eyre::Result<()> {
     //     // Check head state root matches block state root.
     //     let head_state_root = db.state_root()?;
     //     if head_state_root != rpc_head_block_state_root {
-    //         panic!("Head state root does not match block state root. Head: {head_state_root:?}, Block: {rpc_head_block_state_root:?}");
-    //     }
+    //         panic!("Head state root does not match block state root. Head: {head_state_root:?}, Block:
+    // {rpc_head_block_state_root:?}");     }
     //     tracing::info!(
-    //         "Head state root matches block state root. Head: {head_state_root:?}, Block: {rpc_head_block_state_root:?}"
-    //     );
+    //         "Head state root matches block state root. Head: {head_state_root:?}, Block:
+    // {rpc_head_block_state_root:?}"     );
     //     rpc_head_block_state_root = block.header.state_root;
 
     //     block_sync.apply_and_commit_block(&block, &db, true).unwrap();

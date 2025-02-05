@@ -5,10 +5,12 @@ use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer},
+        messages::{
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer,
+        },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{DatabaseWrite, DBFrag},
+    db::{DBFrag, DatabaseWrite},
     p2p::VersionedMessage,
     time::Duration,
     transaction::Transaction,
@@ -37,7 +39,10 @@ pub use config::SequencerConfig;
 use context::SequencerContext;
 use sorting::SortingData;
 
-pub fn payload_to_block(payload: ExecutionPayload, sidecar: ExecutionPayloadSidecar) -> Result<BlockSyncMessage, BlockSyncError> {
+pub fn payload_to_block(
+    payload: ExecutionPayload,
+    sidecar: ExecutionPayloadSidecar,
+) -> Result<BlockSyncMessage, BlockSyncError> {
     let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
     let block_senders = block
         .body
@@ -63,7 +68,8 @@ pub enum SequencerState<Db: DatabaseWrite + DatabaseRead> {
     /// Waiting for block sync
     Syncing {
         /// When the stage reaches this syncing is done
-        /// TODO: not always true as we may have fallen behind the head - we should cache all payloads that come in while syncing
+        /// TODO: not always true as we may have fallen behind the head - we should cache all payloads that come in
+        /// while syncing
         last_block_number: u64,
     },
 }
@@ -82,12 +88,11 @@ where
     Db: DatabaseWrite + DatabaseRead,
 {
     /// Engine API messages signify a change in the Sequencer's state.
-    /// 
+    ///
     /// The only case where we don't change state is if we are in the Syncing state.
     /// While syncing, we cache all payloads that come in.
-    /// 
+    ///
     /// Once synced we trigger sync through
-    /// 
     fn handle_engine_api(
         self,
         msg: EngineApi,
@@ -211,12 +216,7 @@ where
         }
     }
 
-    fn handle_new_tx(
-        self,
-        tx: Arc<Transaction>,
-        data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db>,
-    ) -> Self {
+    fn handle_new_tx(self, tx: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) -> Self {
         data.tx_pool.handle_new_tx(tx, data.frags.db_ref(), data.base_fee, senders);
         self
     }
@@ -316,8 +316,7 @@ pub struct Sequencer<Db: DatabaseWrite + DatabaseRead> {
 impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, config.max_gas);
-        let block_executor =
-            BlockSync::new(config.evm_config.chain_spec().clone(), config.rpc_url.clone());
+        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone(), config.rpc_url.clone());
 
         Self {
             state: SequencerState::default(),
