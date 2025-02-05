@@ -2,44 +2,56 @@
 
 ## Local Development
 
-### Prerequisites
+> [!IMPORTANT]
+>
+> **Prerequisites**
+>
+> Before you start, make sure you have the following installed on your machine:
+>
+> - [Go](https://golang.org/dl/)
+> - [Rust](https://www.rust-lang.org/tools/install)
+> - [Docker](https://docs.docker.com/get-docker/)
+> - [Make](https://www.gnu.org/software/make/)
+> - [Kurtosis CLI](https://docs.kurtosis.com/install/) (installed later in the setup process)
 
-Before you start, make sure you have the following installed on your machine:
+### Quick Start
 
-- [Go](https://golang.org/dl/)
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Docker](https://docs.docker.com/get-docker/)
-- [Make](https://www.gnu.org/software/make/)
-- [Kurtosis CLI](https://docs.kurtosis.com/install/) (installed later in the setup process)
-
-### Install Dependencies
-
-Running the following will install the necessary dependencies for the project. For now it only installs the Kurtosis CLI, and Rust since Go needs to be installed manually, and Docker could need to be installed manually depending on your OS.
+Run the following to download the dependencies, build, and run the project:
 
 ```Shell
-make deps
+make deps build run
 ```
 
-### Secrets
+### Available Commands
 
-If you do not have a secrets file, running the following will crate one in `$HOME/secrets/jwt.hex`.
+Run `make` to see the available commands:
 
 ```Shell
-make secrets
+$ make
+build                          🏗️ Build
+clean                          🧹 Clean
+deps                           🚀 Install all dependencies
+help                           📚 Show help for each of the Makefile recipes
+logs                           📜 Show logs
+restart                        🔄 Restart
+run                            🚀 Run
 ```
 
-### Build the Project
+### Restart
 
-Running the following will build the project binaries.
+> [!WARNING]
+> This will remove the based-op enclave.
 
-```Shell
-make build
+Run the following to restart the project:
+
+```
+make restart
 ```
 
-### Run the Project
+### Logging
 
-```Shell
-make op-node
-make op-geth
-make mux
+To view the logs, run the following:
+
+```
+make logs
 ```
