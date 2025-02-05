@@ -16,17 +16,12 @@ use bop_common::{
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
-use bop_pool::transaction::pool::TxPool;
 use frag::FragSequence;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
-use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
-use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
-use revm_primitives::{Address, BlockEnv, B256};
 use strum_macros::AsRefStr;
-use tokio::runtime::Runtime;
 use tracing::{error, warn};
 
 pub mod block_sync;
@@ -117,11 +112,11 @@ where
                 let head_bn = data.db.head_block_number().expect("couldn't get db");
                 if payload.block_number() > head_bn + 1 {
                     let last_block_number = payload.block_number() - 1;
-                    senders.send(BlockFetch::FromTo(head_bn + 1, last_block_number));
+                    let _ = senders.send(BlockFetch::FromTo(head_bn + 1, last_block_number));
                     Syncing { last_block_number }
                 } else {
                     let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
-                    data.block_executor.apply_and_commit_block(&block, &data.db, true);
+                    let _ = data.block_executor.apply_and_commit_block(&block, &data.db, true);
                     WaitingForAttributes
                 }
             }

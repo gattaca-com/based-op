@@ -5,8 +5,7 @@ use std::{
 
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
-    ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadError,
-    PayloadId, PayloadStatus,
+    ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadError, PayloadId, PayloadStatus,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
@@ -283,7 +282,7 @@ pub enum BlockSyncError {
     #[error("Block execution failed: {0}")]
     Execution(#[from] BlockExecutionError),
     #[error("DB error: {0}")]
-    BopDb(#[from] crate::db::Error),
+    Database(#[from] crate::db::Error),
     #[error("Payload error: {0}")]
     Payload(#[from] PayloadError),
     #[error("Failed to recover transaction signer")]

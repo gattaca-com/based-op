@@ -89,6 +89,7 @@ reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
 # reth-db
 reth-revm = { path = "../reth/crates/revm" }
 reth-chain-state = { path = "../reth/crates/chain-state" }
+reth-cli = { path = "../reth/crates/cli/cli" }
 
 # reth op
 reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }

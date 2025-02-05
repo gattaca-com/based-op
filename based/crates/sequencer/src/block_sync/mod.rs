@@ -59,14 +59,7 @@ impl BlockFetcher {
             .build()
             .expect("couldn't build local tokio runtime");
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        Self {
-            rpc_url,
-            executor,
-            next_block: 0,
-            sync_until: 0,
-            batch_size: 20,
-            client,
-        }
+        Self { rpc_url, executor, next_block: 0, sync_until: 0, batch_size: 20, client }
     }
 
     pub fn handle_fetch<Db: DatabaseRead>(&mut self, msg: BlockFetch, senders: &SendersSpine<Db>) {
@@ -94,7 +87,7 @@ impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
                 &self.client,
             ));
             self.next_block = stop + 1;
-        } 
+        }
     }
 }
 
@@ -231,12 +224,12 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
-        let mut block_sync = BlockSync::new(chain_spec, RuntimeOrHandle::new_runtime(rt.clone()), rpc_url.clone());
+        let mut block_sync = BlockSync::new(chain_spec, rpc_url.clone());
 
         // Fetch the block from the RPC.
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
         let url = rpc_url.clone();
-        let block = rt.block_on(async { fetch_block(25771900, &client, url).await.unwrap() });
+        let block = rt.block_on(async { fetch_block(25771900, &client, url).await });
 
         // Create the alloydb.
         let client = ProviderBuilder::new().network().on_http(rpc_url);
@@ -253,7 +246,7 @@ mod tests {
 
         // Initialise the on disk db.
         let db_location = std::env::var("DB_LOCATION").unwrap_or_else(|_| "/tmp/base_sepolia".to_string());
-        let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000).unwrap();
+        let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000, BASE_SEPOLIA.clone()).unwrap();
         let db_head_block_number = db.head_block_number().unwrap();
         println!("DB Head Block Number: {:?}", db_head_block_number);
 
@@ -263,10 +256,10 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = BASE_SEPOLIA.clone();
-        let mut block_sync = BlockSync::new(chain_spec, RuntimeOrHandle::new_runtime(rt.clone()), rpc_url.clone());
+        let mut block_sync = BlockSync::new(chain_spec, rpc_url.clone());
 
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &client, rpc_url).await.unwrap() });
+        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &client, rpc_url).await });
 
         // Execute the block.
         assert!(block_sync.execute(&block, &db).is_ok());
