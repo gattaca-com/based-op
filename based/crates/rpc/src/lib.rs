@@ -2,7 +2,7 @@ use bop_common::{
     actor::{Actor, ActorConfig},
     communication::Spine,
     config::Config,
-    db::{DatabaseRead, DBFrag},
+    db::{DBFrag, DatabaseRead},
 };
 use engine::EngineRpcServer;
 use engine_mock::MockEngineRpcServer;

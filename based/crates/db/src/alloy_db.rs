@@ -19,7 +19,7 @@ use revm::{db::BundleState, DatabaseCommit, DatabaseRef};
 use revm_primitives::{db::Database, Account, AccountInfo, Bytecode, HashMap};
 use tokio::runtime::Runtime;
 
-use crate::{DatabaseWrite, DatabaseRead, Error};
+use crate::{DatabaseRead, DatabaseWrite, Error};
 
 type AlloyProvider = RootProvider<Http<reqwest::Client>, Optimism>;
 

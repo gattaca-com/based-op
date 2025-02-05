@@ -6,7 +6,7 @@ use alloy_consensus::Transaction as TransactionTrait;
 use alloy_primitives::Address;
 use bop_common::{
     communication::{messages::SequencerToSimulator, Sender, SendersSpine, TrackedSenders},
-    db::{DatabaseRead, DBFrag},
+    db::{DBFrag, DatabaseRead},
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
 };
@@ -132,7 +132,11 @@ impl TxPool {
     }
 
     /// If this is called with `None` the assumption is that we are not yet ready to send top-of-block sims.
-    fn send_sim_requests_for_tx<Db: DatabaseRead>(tx: &Arc<Transaction>, db: &DBFrag<Db>, sim_sender: &SendersSpine<Db>) {
+    fn send_sim_requests_for_tx<Db: DatabaseRead>(
+        tx: &Arc<Transaction>,
+        db: &DBFrag<Db>,
+        sim_sender: &SendersSpine<Db>,
+    ) {
         if let Err(error) = sim_sender
             .send_timeout(SequencerToSimulator::SimulateTxTof(tx.clone(), db.clone()), Duration::from_millis(10))
         {
