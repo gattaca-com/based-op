@@ -220,7 +220,7 @@ mod tests {
         },
         db::DBFrag,
     };
-    use bop_db::alloy_db::AlloyDB;
+    use bop_db::AlloyDB;
     use bop_simulator::Simulator;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use reqwest::{Client, Url};
@@ -248,7 +248,7 @@ mod tests {
         // Fetch the block from the RPC.
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
         let url = rpc_url.clone();
-        let block = rt.block_on(async { fetch_block(25771900, &client, url).await.unwrap() });
+        let block = rt.block_on(async { fetch_block(25771900, &client, url).await });
 
         let header = block.block.header();
 
