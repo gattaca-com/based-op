@@ -167,7 +167,6 @@ where
     ) -> SequencerState<Db> {
         use EngineApi::*;
 
-        tracing::info!("got engine api msg {msg:?}");
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
                 self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
