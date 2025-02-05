@@ -58,6 +58,9 @@ eyre.workspace = true
 
 strum_macros.workspace = true
 
+[dev-dependencies]
+bop-simulator.workspace = true
+
 [[bin]]
 name = "bulk-insert-headers"
 path = "bin/bulk_insert_headers.rs"
