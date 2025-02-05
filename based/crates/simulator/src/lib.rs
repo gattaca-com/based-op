@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_consensus::transaction::Transaction as TransactionTrait;
+use alloy_consensus::{transaction::Transaction as TransactionTrait, Header};
 use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{
@@ -11,11 +11,11 @@ use bop_common::{
     time::Duration,
     transaction::{SimulatedTx, Transaction},
 };
-use reth_evm::{system_calls::SystemCaller, ConfigureEvm, ConfigureEvmEnv};
+use reth_evm::{env::EvmEnv, system_calls::SystemCaller, ConfigureEvm, ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
 use reth_optimism_evm::OpEvmConfig;
 use revm::{db::CacheDB, DatabaseRef, Evm};
-use revm_primitives::{BlockEnv, SpecId};
+use revm_primitives::{BlockEnv, EnvWithHandlerCfg, SpecId};
 use tracing::{info, instrument::WithSubscriber};
 
 pub struct Simulator<'a, Db: DatabaseRef> {
@@ -67,10 +67,11 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         Ok(simtx)
     }
 
-    fn set_evm_for_new_block(&mut self, parent: &BlockEnv, next_attributes: &BlockAttributes) {
+    fn set_evm_for_new_block(&mut self, parent: &Header, next_attributes: NextBlockEnvAttributes) {
 
-        let evm_env = self.evm_config.next_cfg_and_block_env(parent, next_attributes);
-
+        let evm_env = self.evm_config.next_cfg_and_block_env(parent, next_attributes).unwrap();
+        let EvmEnv { cfg_env_with_handler_cfg, block_env } = evm_env;
+        let env_with_handler_cfg = EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
         // *self.evm.block_mut() = env.clone();
         // *self.evm_tof.block_mut() = env;
     }
