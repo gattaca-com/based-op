@@ -14,16 +14,32 @@ use bop_sequencer::{block_sync::BlockFetcher, Sequencer, SequencerConfig};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
+use tracing::{error, info};
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
+
     let args = GatewayArgs::parse();
     verify_or_remove_queue_files();
 
     let _guards = init_tracing(None, 100, None);
 
+    match run(args) {
+        Ok(_) => {
+            info!("gateway stopped");
+        }
+
+        Err(e) => {
+            error!("{}", e);
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run(args: GatewayArgs) -> eyre::Result<()> {
     let spine = Spine::default();
 
     let db_bop = init_database(
@@ -31,8 +47,7 @@ fn main() {
         args.max_cached_accounts,
         args.max_cached_storages,
         args.chain_spec.clone(),
-    )
-    .expect("can't run");
+    )?;
     let db_frag: DBFrag<_> = db_bop.clone().into();
 
     std::thread::scope(|s| {
@@ -47,7 +62,6 @@ fn main() {
             let db_frag = db_frag.clone();
             let rt = rt.clone();
             start_rpc(&args, &spine, db_frag, &rt);
-
             move || rt.block_on(wait_for_signal())
         });
 
@@ -55,6 +69,7 @@ fn main() {
             let sequencer = Sequencer::new(db_bop, db_frag.clone(), SequencerConfig::default_base_sepolia());
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
+
         s.spawn(|| {
             BlockFetcher::new(args.rpc_fallback_url).run(
                 spine.to_connections("BlockFetch"),
@@ -74,4 +89,6 @@ fn main() {
 
         start_mock_engine_rpc(&spine, args.tmp_end_block);
     });
+
+    Ok(())
 }
