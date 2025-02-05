@@ -32,7 +32,6 @@ use tracing::warn;
 pub mod block_sync;
 pub mod config;
 mod context;
-mod frag;
 pub(crate) mod sorting;
 
 pub use config::SequencerConfig;
