@@ -1,6 +1,7 @@
 #![allow(unused)] // TODO: remove
 
 use std::{
+    collections::VecDeque,
     fmt::Display,
     sync::Arc,
     time::{Duration, Instant},
@@ -9,15 +10,17 @@ use std::{
 use alloy_consensus::Block;
 use alloy_rpc_types::engine::{ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, PayloadError};
 use bop_common::{
+    actor::Actor,
     communication::{
-        messages::{BlockSyncError, BlockSyncMessage, EngineApi},
-        SendersSpine,
+        messages::{BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi},
+        SendersSpine, SpineConnections,
     },
-    db::{DatabaseWrite, DatabaseRead},
+    db::{DatabaseRead, DatabaseWrite},
     runtime::RuntimeOrHandle,
 };
 use crossbeam_channel::{Receiver, Sender};
-use fetch_blocks::async_fetch_blocks_and_send_sequentially;
+use fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block};
+use futures::executor::{LocalPool, LocalSpawner};
 use op_alloy_consensus::OpTxEnvelope;
 use reqwest::{Client, Url};
 use reth_consensus::ConsensusError;
@@ -34,83 +37,78 @@ use reth_trie_common::updates::TrieUpdates;
 use revm::{db::DbAccount, Database, DatabaseRef};
 use tokio::runtime::Runtime;
 
+use crate::payload_to_block;
+
 pub mod fetch_blocks;
 
-fn payload_to_block(payload: ExecutionPayload, sidecar: ExecutionPayloadSidecar) -> BlockSyncMessage {
-    let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
-    let block_senders = block
-        .body
-        .transactions
-        .iter()
-        .map(|tx| tx.recover_signer_unchecked())
-        .collect::<Option<Vec<_>>>()
-        .ok_or(BlockSyncError::SignerRecovery)?;
-    Ok(BlockWithSenders { block, senders: block_senders })
+#[derive(Debug)]
+pub struct BlockFetcher {
+    /// Used to fetch blocks from an EL node.
+    rpc_url: Url,
+    executor: Runtime,
+    next_block: u64,
+    sync_until: u64,
+    batch_size: u64,
+    client: reqwest::Client,
+}
+impl BlockFetcher {
+    pub fn new(rpc_url: Url) -> Self {
+        let executor = tokio::runtime::Builder::new_current_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .expect("couldn't build local tokio runtime");
+        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
+        Self {
+            rpc_url,
+            executor,
+            next_block: 0,
+            sync_until: 0,
+            batch_size: 20,
+            client,
+        }
+    }
+
+    pub fn handle_fetch<Db: DatabaseRead>(&mut self, msg: BlockFetch, senders: &SendersSpine<Db>) {
+        match msg {
+            BlockFetch::FromTo(start, stop) => {
+                self.next_block = start;
+                self.sync_until = stop;
+            }
+        }
+    }
+}
+
+impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
+    fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
+        connections.receive(|msg, senders| {
+            self.handle_fetch(msg, senders);
+        });
+        if self.next_block < self.sync_until {
+            let stop = (self.next_block + self.batch_size).min(self.sync_until);
+            self.executor.block_on(async_fetch_blocks_and_send_sequentially(
+                self.next_block,
+                stop,
+                self.rpc_url.clone(),
+                connections.senders(),
+                &self.client,
+            ));
+            self.next_block = stop + 1;
+        } 
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct BlockSync {
     chain_spec: Arc<OpChainSpec>,
     execution_factory: OpExecutionStrategyFactory,
-    runtime: RuntimeOrHandle,
-
-    /// Used to fetch blocks from an EL node.
-    rpc_url: Url,
 }
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
-    pub fn new(chain_spec: Arc<OpChainSpec>, runtime: RuntimeOrHandle, rpc_url: Url) -> Self {
+    pub fn new(chain_spec: Arc<OpChainSpec>, rpc_url: Url) -> Self {
         let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
-        Self { chain_spec, execution_factory, runtime, rpc_url }
-    }
-
-    /// Processes a new execution payload from the engine API.
-    /// Commits changes to the database.
-    ///
-    /// Fetches blocks from the RPC if the sequencer is behind the chain head,
-    /// and in that case returns what the head block will be.
-    pub fn apply_new_payload<DB>(
-        &mut self,
-        payload: ExecutionPayload,
-        sidecar: ExecutionPayloadSidecar,
-        db: &DB,
-        senders: &SendersSpine<DB>,
-        commit_block: bool,
-    ) -> Result<Option<u64>, BlockSyncError>
-    where
-        DB: DatabaseWrite + DatabaseRead,
-    {
-        let start = Instant::now();
-
-        let payload_block_number = payload.block_number();
-        let cur_block = payload_to_block(payload, sidecar);
-        let db_block_head = db.head_block_number()?;
-        tracing::info!("handling new payload for block number: {payload_block_number}, db_block_head: {db_block_head}");
-
-        // This case occurs when the sequencer is behind the chain head.
-        // This will always happen when the sequencer starts up.
-        // We fetch the blocks from the RPC and apply them sequentially.
-        if payload_block_number > db_block_head + 1 {
-            tracing::info!(
-                start_block = db_block_head + 1,
-                end_block = payload_block_number - 1,
-                "sequencer is behind, fetching blocks"
-            );
-
-            self.runtime.spawn(async_fetch_blocks_and_send_sequentially(
-                db_block_head + 1,
-                payload_block_number - 1,
-                self.rpc_url.clone(),
-                senders.into(),
-                Some(cur_block),
-            ));
-            Ok(Some(payload_block_number))
-        } else {
-            // Apply and commit the payload block.
-            self.apply_and_commit_block(&cur_block?, db, commit_block)?;
-            Ok(None)
-        }
+        Self { chain_spec, execution_factory }
     }
 
     /// Executes and validates a block at the current state, committing changes to the database.

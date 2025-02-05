@@ -236,6 +236,9 @@ pub struct Spine<Db: DatabaseRead> {
     sender_blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     receiver_blockfetch_to_sequencer: CrossBeamReceiver<BlockSyncMessage>,
 
+    sender_sequencer_to_blockfetch: Sender<messages::BlockFetch>,
+    receiver_sequencer_to_blockfetch: CrossBeamReceiver<messages::BlockFetch>,
+
     sender_sequencer_frag_broadcast: Sender<VersionedMessage>,
     receiver_sequencer_frag_broadcast: CrossBeamReceiver<VersionedMessage>,
 
@@ -251,6 +254,7 @@ impl<Db: DatabaseRead> Default for Spine<Db> {
         let (sender_eth_rpc_to_sequencer, receiver_eth_rpc_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_blockfetch_to_sequencer, receiver_blockfetch_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_sequencer_frag_broadcast, receiver_sequencer_frag_broadcast) = crossbeam_channel::bounded(4096);
+        let (sender_sequencer_to_blockfetch, receiver_sequencer_to_blockfetch) = crossbeam_channel::bounded(4096);
 
         // MPMC to be safe, should only be produced to by the sequencer but
         let blockenv = Queue::new(4096, queue::QueueType::MPMC).expect("couldn't initialize queue");
@@ -269,6 +273,8 @@ impl<Db: DatabaseRead> Default for Spine<Db> {
             receiver_blockfetch_to_sequencer,
             sender_sequencer_frag_broadcast,
             receiver_sequencer_frag_broadcast,
+            sender_sequencer_to_blockfetch,
+            receiver_sequencer_to_blockfetch,
             blockenv,
         }
     }
@@ -335,6 +341,7 @@ from_spine!(SequencerToExternal, sequencer_to_rpc, Sender);
 from_spine!(messages::EngineApi, engine_rpc_to_sequencer, Sender);
 from_spine!(Arc<Transaction>, eth_rpc_to_sequencer, Sender);
 from_spine!(BlockSyncMessage, blockfetch_to_sequencer, Sender);
+from_spine!(messages::BlockFetch, sequencer_to_blockfetch, Sender);
 
 impl<Db: DatabaseRead> HasSender<BlockEnv> for SendersSpine<Db> {
     type Sender = Producer<InternalMessage<BlockEnv>>;
@@ -362,6 +369,7 @@ pub struct SendersSpine<Db: DatabaseRead> {
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     sequencer_frag_broadcast: Sender<VersionedMessage>,
     blockenv: Producer<InternalMessage<BlockEnv>>,
+    sequencer_to_blockfetch: Sender<messages::BlockFetch>,
     timestamp: IngestionTime,
 }
 
@@ -375,6 +383,7 @@ impl<Db: DatabaseRead> From<&Spine<Db>> for SendersSpine<Db> {
             eth_rpc_to_sequencer: value.sender_eth_rpc_to_sequencer.clone(),
             blockfetch_to_sequencer: value.sender_blockfetch_to_sequencer.clone(),
             sequencer_frag_broadcast: value.sender_sequencer_frag_broadcast.clone(),
+            sequencer_to_blockfetch: value.sender_sequencer_to_blockfetch.clone(),
             blockenv: value.blockenv.clone().into(),
             timestamp: Default::default(),
         }
@@ -401,6 +410,7 @@ pub struct ReceiversSpine<Db: DatabaseRead> {
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
     sequencer_frag_broadcast: Receiver<VersionedMessage>,
     blockenv: Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>,
+    sequencer_to_blockfetch: Receiver<messages::BlockFetch>,
 }
 
 impl<Db: DatabaseRead> ReceiversSpine<Db> {
@@ -414,6 +424,7 @@ impl<Db: DatabaseRead> ReceiversSpine<Db> {
             blockfetch_to_sequencer: Receiver::new(system_name.as_ref(), spine.into()),
             sequencer_frag_broadcast: Receiver::new(system_name.as_ref(), spine.into()),
             blockenv: Receiver::new(system_name.as_ref(), spine.blockenv.clone().into()),
+            sequencer_to_blockfetch: Receiver::new(system_name.as_ref(), spine.into()),
         }
     }
 }
