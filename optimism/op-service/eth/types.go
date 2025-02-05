@@ -208,6 +208,14 @@ type ExecutionPayloadEnvelope struct {
 	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
 }
 
+type NewFrag struct {
+	BlockNumber uint64
+	Seq         uint64
+	IsLast      bool
+	Txs         []Data
+	Version     uint64
+}
+
 type ExecutionPayload struct {
 	ParentHash    common.Hash     `json:"parentHash"`
 	FeeRecipient  common.Address  `json:"feeRecipient"`

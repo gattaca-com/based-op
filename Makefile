@@ -22,6 +22,14 @@ deps: ## 🚀 Install all dependencies
 build: ## 🏗️ Build
 	docker build  -t bop-mux --build-context reth=./reth ./based
 
+build-op-node: ## 🏗️ Build OP node from optimistic directory
+	cd optimism && \
+	IMAGE_TAGS=develop \
+	PLATFORMS="linux/arm64" \
+	docker buildx bake \
+	-f docker-bake.hcl \
+	op-node
+
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op
 

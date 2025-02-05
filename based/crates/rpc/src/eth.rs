@@ -1,48 +1,22 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types::{BlockId, BlockNumberOrTag};
 use bop_common::{
     api::{EthApiClient, EthApiServer, OpRpcBlock},
-    communication::{messages::RpcResult, Sender, Spine},
-    db::{DatabaseRead, DBFrag},
+    communication::messages::RpcResult,
+    db::DatabaseRead,
     transaction::Transaction,
 };
-use jsonrpsee::{
-    client_transport::ws::Url, core::async_trait, http_client::HttpClient as RpcClient, server::ServerBuilder,
-};
+use jsonrpsee::core::async_trait;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use reth_optimism_primitives::OpBlock;
-use tracing::{error, info, trace, warn, Level};
+use tracing::{trace, warn, Level};
 
-pub struct EthRpcServer<Db> {
-    new_order_tx: Sender<Arc<Transaction>>,
-    db: DBFrag<Db>,
-    // TODO: this is a temporary fallback while we dont have a gossip to share state, in practice we should not serve
-    // state directly from the gateway, and should only receive transactions
-    fallback: RpcClient,
-}
-
-impl<Db: DatabaseRead> EthRpcServer<Db> {
-    pub fn new(spine: &Spine<Db>, db: DBFrag<Db>, fallback_url: Url) -> Self {
-        let fallback = RpcClient::builder().build(fallback_url).expect("failed building fallback rpc client");
-        Self { new_order_tx: spine.into(), db, fallback }
-    }
-
-    #[tracing::instrument(skip_all, name = "rpc_eth")]
-    pub async fn run(self, addr: SocketAddr) {
-        info!(%addr, "starting RPC server");
-
-        let server = ServerBuilder::default().build(addr).await.expect("failed to create eth RPC server");
-        let module = EthApiServer::into_rpc(self);
-        let server_handle = server.start(module);
-        server_handle.stopped().await;
-        error!("server stopped");
-    }
-}
+use crate::RpcServer;
 
 #[async_trait]
-impl<D: DatabaseRead> EthApiServer for EthRpcServer<D> {
+impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         trace!(?bytes, "new request");

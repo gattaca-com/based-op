@@ -13,9 +13,8 @@ bop-db.workspace = true
 tokio.workspace = true
 clap.workspace = true
 reqwest.workspace = true
-
+eyre.workspace = true
 tracing.workspace = true
-
 alloy-provider.workspace = true
 alloy-eips.workspace = true
 revm-primitives.workspace = true

@@ -21,3 +21,5 @@ target/
 **/Cargo.lock
 
 /based/base_sepolia/
+
+.DS_Store

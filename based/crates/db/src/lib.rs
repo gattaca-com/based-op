@@ -5,12 +5,20 @@ use std::{
 };
 
 use parking_lot::RwLock;
-use reth_db::{tables, transaction::DbTxMut, Bytecodes, CanonicalHeaders, DatabaseEnv};
+use reth_db::{
+    cursor::DbCursorRO,
+    tables,
+    transaction::{DbTx, DbTxMut},
+    Bytecodes, CanonicalHeaders, DatabaseEnv,
+};
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
-use reth_provider::{providers::ConsistentDbView, BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter};
+use reth_provider::{
+    providers::ConsistentDbView, BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory,
+    StateWriter, TrieWriter,
+};
 use reth_storage_api::HashedPostStateProvider;
 use reth_trie::{StateRoot, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
@@ -21,14 +29,12 @@ use revm::{
     Database, DatabaseRef,
 };
 use revm_primitives::{AccountInfo, Address, Bytecode, B256, U256};
-use reth_db::transaction::DbTx;
-use reth_db::cursor::DbCursorRO;
 
-pub mod alloy_db;
+mod alloy_db;
 mod cache;
 mod init;
-
-pub use bop_common::db::{DatabaseWrite, DatabaseRead, Error};
+pub use alloy_db::AlloyDB;
+pub use bop_common::db::{DatabaseRead, DatabaseWrite, Error};
 pub use init::init_database;
 
 use crate::cache::ReadCaches;
@@ -43,7 +49,11 @@ pub struct SequencerDB {
 }
 
 impl SequencerDB {
-    pub fn new(factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>, max_cached_accounts: u64, max_cached_storages: u64) -> Self {
+    pub fn new(
+        factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
+        max_cached_accounts: u64,
+        max_cached_storages: u64,
+    ) -> Self {
         let caches = ReadCaches::new(max_cached_accounts, max_cached_storages);
         Self { factory, caches, provider: Arc::new(RwLock::new(None)) }
     }

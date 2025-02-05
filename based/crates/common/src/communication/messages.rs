@@ -20,7 +20,7 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 
 use crate::{
-    db::{DatabaseRead, DBFrag, DBSorting},
+    db::{DBFrag, DBSorting, DatabaseRead},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
 };
@@ -282,11 +282,16 @@ pub enum BlockSyncError {
     #[error("Block execution failed: {0}")]
     Execution(#[from] BlockExecutionError),
     #[error("DB error: {0}")]
-    BopDb(#[from] crate::db::Error),
+    Database(#[from] crate::db::Error),
     #[error("Payload error: {0}")]
     Payload(#[from] PayloadError),
     #[error("Failed to recover transaction signer")]
     SignerRecovery,
 }
 
-pub type BlockSyncMessage = Result<BlockWithSenders<OpBlock>, BlockSyncError>;
+pub type BlockSyncMessage = BlockWithSenders<OpBlock>;
+
+#[derive(Clone, Debug, AsRefStr)]
+pub enum BlockFetch {
+    FromTo(u64, u64),
+}
