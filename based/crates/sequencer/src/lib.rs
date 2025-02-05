@@ -461,11 +461,20 @@ where
         use SequencerState::*;
         match self {
             Sorting(sorting_data) if sorting_data.should_seal_frag() => {
+                // Collect all transactions from the frag so we can use them to reset the tx pool.
+                let txs: Vec<Arc<Transaction>> = sorting_data.frag.txs.iter().map(|tx| tx.tx.clone()).collect();
+
                 let frag = data.frags.apply_sorted_frag(sorting_data.frag);
+
                 // broadcast to p2p
                 connections.send(VersionedMessage::from(frag));
                 let sorting_data =
                     data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
+
+                // Reset the tx pool
+                let sender = data.config.simulate_tof_in_pools.then_some(connections.senders());
+                data.tx_pool.handle_new_mined_txs(txs.iter(), data.base_fee, data.frags.db_ref(), false, sender);
+
                 Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))
             }
 

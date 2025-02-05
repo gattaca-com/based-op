@@ -10,7 +10,7 @@ use bop_common::{
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
 };
-use reth_optimism_primitives::OpTransactionSigned;
+use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpTransactionSigned};
 use reth_primitives_traits::transaction::signed::SignedTransaction;
 use revm::db::CacheDB;
 
@@ -125,7 +125,7 @@ impl TxPool {
     /// This gets called in two places:
     /// 1) When we sync a new block.
     /// 2) When we commit a new Frag.
-    pub fn handle_new_mined_txs<'a, Db: DatabaseRead, I>(
+    pub fn handle_new_mined_txs<'a, Db: DatabaseRead, I, T: TransactionSenderInfo + 'a>(
         &mut self,
         mined_txs: I,
         base_fee: u64,
@@ -133,13 +133,12 @@ impl TxPool {
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
     ) where
-        I: IntoIterator<Item = &'a OpTransactionSigned>,
+        I: IntoIterator<Item = &'a T>,
         I::IntoIter: DoubleEndedIterator,
     {
         // Clear all mined nonces from the pool
         for tx in mined_txs.into_iter().rev() {
-            // SAFETY: block is coming from consensus, so we assume signers are pre-validated.
-            let sender = tx.recover_signer_unchecked().unwrap();
+            let sender = tx.sender();
             if let Some(sender_tx_list) = self.pool_data.get_mut(&sender) {
                 if sender_tx_list.forward(&tx.nonce()) {
                     self.pool_data.remove(&sender);
