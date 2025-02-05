@@ -6,7 +6,7 @@ use bop_common::{
     communication::{messages::BlockSyncMessage, Sender, SendersSpine, TrackedSenders},
     rpc::{RpcParam, RpcRequest, RpcResponse},
 };
-use bop_db::BopDbRead;
+use bop_db::DatabaseRead;
 use futures::future::join_all;
 use op_alloy_consensus::OpTxEnvelope;
 use reqwest::{Client, Url};
@@ -28,7 +28,7 @@ pub(crate) const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.pub
 /// curr_block/end_block are inclusive
 ///
 /// We first send all the previous blocks, then we send the last one if last_block is Some
-pub async fn async_fetch_blocks_and_send_sequentially<Db: BopDbRead>(
+pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
     mut curr_block: u64,
     end_block: u64,
     url: Url,

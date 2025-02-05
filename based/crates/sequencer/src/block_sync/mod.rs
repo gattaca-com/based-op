@@ -71,7 +71,7 @@ impl BlockFetcher {
         }
     }
 
-    pub fn handle_fetch<Db: BopDbRead>(&mut self, msg: BlockFetch, senders: &SendersSpine<Db>) {
+    pub fn handle_fetch<Db: DatabaseRead>(&mut self, msg: BlockFetch, senders: &SendersSpine<Db>) {
         match msg {
             BlockFetch::FromTo(start, stop) => {
                 self.next_block = start;
@@ -88,7 +88,7 @@ impl BlockFetcher {
     }
 }
 
-impl<Db: BopDbRead> Actor<Db> for BlockFetcher {
+impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         connections.receive(|msg, senders| {
             self.handle_fetch(msg, senders);

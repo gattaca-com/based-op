@@ -119,7 +119,7 @@ where
             ),
 
             (ForkChoiceUpdatedV3 { payload_attributes: None, .. }, WaitingForForkChoice(payload, sidecar)) => {
-                let head_bn = data.db.readonly().and_then(|db| db.head_block_number()).expect("couldn't get db");
+                let head_bn = data.db.head_block_number().expect("couldn't get db");
                 if payload.block_number() > head_bn + 1 {
                     let last_block_number = payload.block_number() - 1;
                     senders.send(BlockFetch::FromTo(head_bn + 1, last_block_number));
