@@ -1,28 +1,11 @@
-#![allow(unused)] // TODO: remove
+// #![allow(unused)] // TODO: remove
 
-use std::{
-    collections::VecDeque,
-    fmt::Display,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{fmt::Display, sync::Arc, time::Instant};
 
-use alloy_consensus::Block;
-use alloy_rpc_types::engine::{ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, PayloadError};
 use bop_common::{
-    actor::Actor,
-    communication::{
-        messages::{BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi},
-        SendersSpine, SpineConnections,
-    },
+    communication::messages::BlockSyncError,
     db::{DatabaseRead, DatabaseWrite},
-    runtime::RuntimeOrHandle,
 };
-use crossbeam_channel::{Receiver, Sender};
-use fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block};
-use futures::executor::{LocalPool, LocalSpawner};
-use op_alloy_consensus::OpTxEnvelope;
-use reqwest::{Client, Url};
 use reth_consensus::ConsensusError;
 use reth_evm::execute::{
     BlockExecutionError, BlockExecutionOutput, BlockExecutionStrategy, BlockExecutionStrategyFactory, ExecuteOutput,
@@ -30,66 +13,14 @@ use reth_evm::execute::{
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::OpExecutionStrategyFactory;
-use reth_optimism_primitives::{OpBlock, OpReceipt, OpTransactionSigned};
+use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::{BlockWithSenders, GotExpected};
-use reth_primitives_traits::SignedTransaction;
 use reth_trie_common::updates::TrieUpdates;
-use revm::{db::DbAccount, Database, DatabaseRef};
-use tokio::runtime::Runtime;
+use revm::Database;
 
-use crate::payload_to_block;
-
+pub mod block_fetcher;
 pub mod fetch_blocks;
-
-#[derive(Debug)]
-pub struct BlockFetcher {
-    /// Used to fetch blocks from an EL node.
-    rpc_url: Url,
-    executor: Runtime,
-    next_block: u64,
-    sync_until: u64,
-    batch_size: u64,
-    client: reqwest::Client,
-}
-impl BlockFetcher {
-    pub fn new(rpc_url: Url) -> Self {
-        let executor = tokio::runtime::Builder::new_current_thread()
-            .worker_threads(1)
-            .enable_all()
-            .build()
-            .expect("couldn't build local tokio runtime");
-        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        Self { rpc_url, executor, next_block: 0, sync_until: 0, batch_size: 20, client }
-    }
-
-    pub fn handle_fetch<Db: DatabaseRead>(&mut self, msg: BlockFetch, senders: &SendersSpine<Db>) {
-        match msg {
-            BlockFetch::FromTo(start, stop) => {
-                self.next_block = start;
-                self.sync_until = stop;
-            }
-        }
-    }
-}
-
-impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
-    fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
-        connections.receive(|msg, senders| {
-            self.handle_fetch(msg, senders);
-        });
-        if self.next_block < self.sync_until {
-            let stop = (self.next_block + self.batch_size).min(self.sync_until);
-            self.executor.block_on(async_fetch_blocks_and_send_sequentially(
-                self.next_block,
-                stop,
-                self.rpc_url.clone(),
-                connections.senders(),
-                &self.client,
-            ));
-            self.next_block = stop + 1;
-        }
-    }
-}
+pub mod mock_fetcher;
 
 #[derive(Debug, Clone)]
 pub struct BlockSync {
@@ -99,7 +30,7 @@ pub struct BlockSync {
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
-    pub fn new(chain_spec: Arc<OpChainSpec>, rpc_url: Url) -> Self {
+    pub fn new(chain_spec: Arc<OpChainSpec>) -> Self {
         let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
         Self { chain_spec, execution_factory }
     }
@@ -150,7 +81,7 @@ impl BlockSync {
     where
         DB: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
-        let mut start = Instant::now();
+        let start = Instant::now();
 
         // Apply the block.
         let mut executor = self.execution_factory.create_strategy(db.clone());
@@ -201,8 +132,8 @@ mod tests {
     use alloy_consensus::TxReceipt;
     use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
-    use bop_db::{init_database, AlloyDB};
-    use reqwest::Client;
+    use bop_db::{alloy_db::AlloyDB, init_database};
+    use reqwest::{Client, Url};
     use reth_db::{tables, transaction::DbTx};
     use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
     use revm_primitives::address;
@@ -224,12 +155,12 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
-        let mut block_sync = BlockSync::new(chain_spec, rpc_url.clone());
+        let mut block_sync = BlockSync::new(chain_spec);
 
         // Fetch the block from the RPC.
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
         let url = rpc_url.clone();
-        let block = rt.block_on(async { fetch_block(25771900, &client, url).await });
+        let block = rt.block_on(async { fetch_block(25771900, &client, url).await.unwrap() });
 
         // Create the alloydb.
         let client = ProviderBuilder::new().network().on_http(rpc_url);
@@ -246,7 +177,7 @@ mod tests {
 
         // Initialise the on disk db.
         let db_location = std::env::var("DB_LOCATION").unwrap_or_else(|_| "/tmp/base_sepolia".to_string());
-        let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000, BASE_SEPOLIA.clone()).unwrap();
+        let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000).unwrap();
         let db_head_block_number = db.head_block_number().unwrap();
         println!("DB Head Block Number: {:?}", db_head_block_number);
 
@@ -256,10 +187,10 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = BASE_SEPOLIA.clone();
-        let mut block_sync = BlockSync::new(chain_spec, rpc_url.clone());
+        let mut block_sync = BlockSync::new(chain_spec, RuntimeOrHandle::new_runtime(rt.clone()), rpc_url.clone());
 
         let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &client, rpc_url).await });
+        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &client, rpc_url).await.unwrap() });
 
         // Execute the block.
         assert!(block_sync.execute(&block, &db).is_ok());

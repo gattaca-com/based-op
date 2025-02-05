@@ -92,6 +92,9 @@ pub trait DatabaseRead:
 
     /// Returns the head block number, ie. the highest block number on the chain
     fn head_block_number(&self) -> Result<u64, Error>;
+
+    /// Returns the head block hash, ie. the hash of the highest block on the chain
+    fn head_block_hash(&self) -> Result<B256, Error>;
 }
 
 impl<DbRead: DatabaseRead> DatabaseRead for CacheDB<DbRead> {
@@ -101,6 +104,10 @@ impl<DbRead: DatabaseRead> DatabaseRead for CacheDB<DbRead> {
 
     fn head_block_number(&self) -> Result<u64, Error> {
         self.db.head_block_number()
+    }
+
+    fn head_block_hash(&self) -> Result<B256, Error> {
+        self.db.head_block_hash()
     }
 }
 
@@ -225,6 +232,10 @@ impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     fn head_block_number(&self) -> Result<u64, Error> {
         Ok(self.curr_block_number - 1)
     }
+
+    fn head_block_hash(&self) -> Result<B256, Error> {
+        self.db.read().head_block_hash()
+    }
 }
 
 impl<Db: DatabaseRead> From<Db> for DBFrag<Db> {
@@ -314,6 +325,10 @@ impl<DbRead: DatabaseRead> DatabaseRead for DBSorting<DbRead> {
 
     fn head_block_number(&self) -> Result<u64, Error> {
         self.db.head_block_number()
+    }
+
+    fn head_block_hash(&self) -> Result<B256, Error> {
+        self.db.head_block_hash()
     }
 }
 

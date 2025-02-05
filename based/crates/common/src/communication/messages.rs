@@ -3,21 +3,24 @@ use std::{
     sync::Arc,
 };
 
+use alloy_eips::eip2718::{Decodable2718, Encodable2718};
 use alloy_primitives::B256;
+use alloy_rlp::{Bytes, Encodable};
 use alloy_rpc_types::engine::{
-    ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadError, PayloadId, PayloadStatus,
+    ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes,
+    PayloadError, PayloadId, PayloadStatus,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::execute::BlockExecutionError;
-use reth_optimism_primitives::OpBlock;
+use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
 use revm::DatabaseRef;
-use revm_primitives::{Address, EVMError};
+use revm_primitives::{Address, EVMError, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
-use tokio::sync::oneshot;
+use tokio::sync::oneshot::{self, Receiver};
 
 use crate::{
     db::{DBFrag, DBSorting, DatabaseRead},
@@ -175,6 +178,90 @@ pub enum EngineApi {
         payload_id: PayloadId,
         res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
     },
+}
+impl EngineApi {
+    pub fn messages_from_block(
+        block: &BlockSyncMessage,
+        txs_in_attributes: bool,
+        no_tx_pool: Option<bool>,
+    ) -> (Receiver<PayloadStatus>, EngineApi, Receiver<ForkchoiceUpdated>, EngineApi, EngineApi) {
+        let (new_payload_tx, new_payload_rx) = oneshot::channel();
+        let block_hash = block.hash_slow();
+        let transactions = block
+            .body
+            .transactions
+            .iter()
+            .map(|t| {
+                let mut buf = vec![];
+                t.encode_2718(&mut buf);
+                buf.into()
+            })
+            .collect::<Vec<_>>();
+        let payload_attributes = PayloadAttributes {
+            timestamp: block.timestamp,
+            prev_randao: block.mix_hash,
+            suggested_fee_recipient: block.beneficiary,
+            withdrawals: Default::default(),
+            parent_beacon_block_root: Default::default(),
+        };
+        let op_payload_attributes = Some(Box::new(OpPayloadAttributes {
+            payload_attributes,
+            transactions: txs_in_attributes.then(|| transactions.clone()),
+            no_tx_pool,
+            gas_limit: Some(block.gas_limit),
+            eip_1559_params: None,
+        }));
+        let v1 = ExecutionPayloadV1 {
+            parent_hash: block.parent_hash,
+            fee_recipient: block.beneficiary,
+            state_root: block.state_root,
+            receipts_root: block.receipts_root,
+            logs_bloom: block.logs_bloom,
+            prev_randao: block.mix_hash,
+            block_number: block.number,
+            gas_limit: block.gas_limit,
+            gas_used: block.gas_used,
+            timestamp: block.timestamp,
+            extra_data: block.extra_data.clone(),
+            base_fee_per_gas: U256::from(block.base_fee_per_gas.unwrap_or_default()),
+            block_hash,
+            transactions,
+        };
+        let v2 = ExecutionPayloadV2 { payload_inner: v1, withdrawals: Default::default() };
+        let v3 = ExecutionPayloadV3 {
+            payload_inner: v2,
+            blob_gas_used: Default::default(),
+            excess_blob_gas: Default::default(),
+        };
+        let new_payload = EngineApi::NewPayloadV3 {
+            payload: v3,
+            versioned_hashes: Default::default(),
+            parent_beacon_block_root: B256::ZERO,
+            res_tx: new_payload_tx,
+        };
+        let (fcu_tx, fcu_rx) = oneshot::channel();
+
+        let fcu_1 = EngineApi::ForkChoiceUpdatedV3 {
+            fork_choice_state: ForkchoiceState {
+                head_block_hash: block_hash,
+                safe_block_hash: Default::default(),
+                finalized_block_hash: Default::default(),
+            },
+            payload_attributes: None,
+            res_tx: fcu_tx,
+        };
+        let (fcu_tx, fcu_rx) = oneshot::channel();
+        let fcu = EngineApi::ForkChoiceUpdatedV3 {
+            fork_choice_state: ForkchoiceState {
+                head_block_hash: block_hash,
+                safe_block_hash: Default::default(),
+                finalized_block_hash: Default::default(),
+            },
+            payload_attributes: op_payload_attributes,
+            res_tx: fcu_tx,
+        };
+        (new_payload_rx, new_payload, fcu_rx, fcu_1, fcu)
+    }
 }
 
 pub type RpcResult<T> = Result<T, RpcError>;
