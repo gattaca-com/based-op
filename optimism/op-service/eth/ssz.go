@@ -553,6 +553,72 @@ func (newFrag *NewFrag) MarshalSSZ(w io.Writer) (n int, err error) {
 	return w.Write(buf)
 }
 
+// #frags, block num, gas used, gas limit, parent hash, tx root, receipt root, st root, block hash.
+const SealFixedSize = 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32
+
+func (seal *Seal) UnmarshalSSZ(scope uint32, r io.Reader) error {
+	offset := uint32(0)
+
+	buf := *payloadBufPool.Get().(*[]byte)
+	if uint32(cap(buf)) < scope {
+		buf = make([]byte, scope)
+	} else {
+		buf = buf[:scope]
+	}
+	defer payloadBufPool.Put(&buf)
+
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return fmt.Errorf("failed to read fixed-size part of Seal: %w", err)
+	}
+
+	seal.TotalFrags = binary.LittleEndian.Uint64(buf[offset : offset+8])
+	offset += 8
+	seal.BlockNumber = binary.LittleEndian.Uint64(buf[offset : offset+8])
+	offset += 8
+	seal.GasUsed = binary.LittleEndian.Uint64(buf[offset : offset+8])
+	offset += 8
+	seal.GasLimit = binary.LittleEndian.Uint64(buf[offset : offset+8])
+	offset += 8
+	copy(seal.ParentHash[:], buf[offset:offset+32])
+	offset += 32
+	copy(seal.TransactionsRoot[:], buf[offset:offset+32])
+	offset += 32
+	copy(seal.ReceiptsRoot[:], buf[offset:offset+32])
+	offset += 32
+	copy(seal.StateRoot[:], buf[offset:offset+32])
+	offset += 32
+	copy(seal.BlockHash[:], buf[offset:offset+32])
+	offset += 32
+
+	return nil
+}
+
+func (seal *Seal) MarshalSSZ(w io.Writer) (n int, err error) {
+	offset := uint32(0)
+	buf := make([]byte, SealFixedSize)
+
+	binary.LittleEndian.PutUint64(buf[offset:offset+8], seal.TotalFrags)
+	offset += 8
+	binary.LittleEndian.PutUint64(buf[offset:offset+8], seal.BlockNumber)
+	offset += 8
+	binary.LittleEndian.PutUint64(buf[offset:offset+8], seal.GasUsed)
+	offset += 8
+	binary.LittleEndian.PutUint64(buf[offset:offset+8], seal.GasLimit)
+	offset += 8
+	copy(buf[offset:offset+32], seal.ParentHash[:])
+	offset += 32
+	copy(buf[offset:offset+32], seal.TransactionsRoot[:])
+	offset += 32
+	copy(buf[offset:offset+32], seal.ReceiptsRoot[:])
+	offset += 32
+	copy(buf[offset:offset+32], seal.StateRoot[:])
+	offset += 32
+	copy(buf[offset:offset+32], seal.BlockHash[:])
+	offset += 32
+
+	return w.Write(buf)
+}
+
 func marshalBool(b bool) byte {
 	if b {
 		return 0x01
