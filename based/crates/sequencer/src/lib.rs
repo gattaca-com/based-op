@@ -1,7 +1,6 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::sync::Arc;
 
-use alloy_consensus::Header;
-use alloy_rpc_types::engine::{CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ForkchoiceState};
+use alloy_rpc_types::engine::{CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar};
 use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
@@ -9,31 +8,29 @@ use bop_common::{
         messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer},
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{BopDB, DBFrag},
+    db::{DatabaseWrite, DBFrag},
     p2p::VersionedMessage,
-    time::{Duration, Instant},
+    time::Duration,
     transaction::Transaction,
 };
-use bop_pool::transaction::pool::TxPool;
 use frag::FragSequence;
-use op_alloy_rpc_types_engine::OpPayloadAttributes;
-use reqwest::Url;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
-use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
-use reth_optimism_evm::OpEvmConfig;
-use revm_primitives::{Address, BlockEnv, B256};
 use strum_macros::AsRefStr;
 use tokio::runtime::Runtime;
 use tracing::{error, warn};
 
 pub mod block_sync;
+pub mod config;
+mod context;
 mod frag;
 mod sorting;
 
-use sorting::{ActiveOrders, SortingData};
+pub use config::SequencerConfig;
+use context::SequencerContext;
+use sorting::SortingData;
 
 #[derive(Clone, Debug, Default, AsRefStr)]
-pub enum SequencerState<Db: BopDB> {
+pub enum SequencerState<Db: DatabaseWrite> {
     /// Synced and waiting for the next new payload message
     #[default]
     WaitingForNewPayload,
@@ -52,7 +49,7 @@ pub enum SequencerState<Db: BopDB> {
 
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
-pub enum SequencerEvent<Db: BopDB> {
+pub enum SequencerEvent<Db: DatabaseWrite> {
     BlockSync(BlockSyncMessage),
     NewTx(Arc<Transaction>),
     SimResult(SimulatorToSequencer<Db::ReadOnly>),
@@ -61,7 +58,7 @@ pub enum SequencerEvent<Db: BopDB> {
 
 impl<Db> SequencerState<Db>
 where
-    Db: BopDB,
+    Db: DatabaseWrite,
 {
     fn handle_engine_api(
         self,
@@ -275,84 +272,12 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct SequencerConfig {
-    pub frag_duration: Duration,
-    pub max_gas: u64,
-    pub n_per_loop: usize,
-    pub rpc_url: Url,
-    pub evm_config: OpEvmConfig,
-    pub coinbase: Address,
-}
-
-impl SequencerConfig {
-    pub fn with_chain_spec(chain_spec: OpChainSpec) -> Self {
-        Self { evm_config: OpEvmConfig::new(Arc::new(chain_spec)), ..Default::default() }
-    }
-}
-
-impl Default for SequencerConfig {
-    fn default() -> Self {
-        let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
-        let evm_config = OpEvmConfig::new(chainspec);
-
-        Self {
-            frag_duration: Duration::from_millis(200),
-            max_gas: 300_000_000,
-            n_per_loop: 10,
-            rpc_url: Url::parse("http://0.0.0.0:8003").unwrap(),
-            evm_config,
-            coinbase: Address::random(),
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug)]
-pub struct SequencerContext<Db: BopDB> {
-    config: SequencerConfig,
-    db: Db,
-    tx_pool: TxPool,
-    block_env: BlockEnv,
-    frags: FragSequence<Db::ReadOnly>,
-    block_executor: BlockSync,
-    parent_hash: B256,
-    parent_header: Header,
-    fork_choice_state: ForkchoiceState,
-    payload_attributes: Box<OpPayloadAttributes>,
-    //TODO: set from blocksync
-    base_fee: u64,
-}
-
-impl<Db: BopDB> SequencerContext<Db> {
-    fn new_sorting_data(
-        &self,
-        remaining_attributes_txs: VecDeque<Arc<Transaction>>,
-        can_add_txs: bool,
-    ) -> SortingData<Db::ReadOnly> {
-        SortingData {
-            frag: self.frags.create_in_sort(),
-            until: Instant::now() + self.config.frag_duration,
-            in_flight_sims: 0,
-            next_to_be_applied: None,
-            tof_snapshot: ActiveOrders::new(self.tx_pool.clone_active()),
-            remaining_attributes_txs,
-            can_add_txs,
-        }
-    }
-
-    fn reset_fragdb(&mut self) {
-        let new_ro = self.db.readonly().expect("couldn't create readonly db");
-        self.frags.reset_fragdb(new_ro);
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Sequencer<Db: BopDB> {
+pub struct Sequencer<Db: DatabaseWrite> {
     state: SequencerState<Db>,
     data: SequencerContext<Db>,
 }
 
-impl<Db: BopDB> Sequencer<Db> {
+impl<Db: DatabaseWrite> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, config.max_gas);
         let block_executor =
@@ -380,7 +305,7 @@ impl<Db: BopDB> Sequencer<Db> {
 
 impl<Db> Actor<Db::ReadOnly> for Sequencer<Db>
 where
-    Db: BopDB,
+    Db: DatabaseWrite,
 {
     const CORE_AFFINITY: Option<usize> = Some(0);
 

@@ -8,7 +8,7 @@ use bop_common::{
         messages::{self, EngineApi, RpcResult},
         Sender, Spine,
     },
-    db::BopDbRead,
+    db::DatabaseRead,
     time::Duration,
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
@@ -24,7 +24,7 @@ pub struct EngineRpcServer {
 }
 
 impl EngineRpcServer {
-    pub fn new<Db: BopDbRead>(spine: &Spine<Db>, timeout: Duration) -> Self {
+    pub fn new<Db: DatabaseRead>(spine: &Spine<Db>, timeout: Duration) -> Self {
         Self { engine_rpc_tx: spine.into(), timeout }
     }
 

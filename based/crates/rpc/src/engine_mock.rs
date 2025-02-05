@@ -2,7 +2,7 @@ use alloy_rpc_types::engine::{ExecutionPayloadV1, ExecutionPayloadV2, ExecutionP
 use bop_common::{
     actor::Actor,
     communication::{messages::EngineApi, SpineConnections},
-    db::BopDbRead,
+    db::DatabaseRead,
 };
 use tokio::sync::oneshot;
 
@@ -16,7 +16,7 @@ impl MockEngineRpcServer {
     }
 }
 
-impl<Db: BopDbRead> Actor<Db> for MockEngineRpcServer {
+impl<Db: DatabaseRead> Actor<Db> for MockEngineRpcServer {
     fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
         let (tx, _rx) = oneshot::channel();
         let payload = ExecutionPayloadV3 {
