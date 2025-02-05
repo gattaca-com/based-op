@@ -605,7 +605,7 @@ func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.Executio
 }
 
 func (p *publisher) PublishNewFrag(ctx context.Context, frag eth.NewFrag) error {
-	// TODO: Remove this
+	// TODO: Send the new frag instead of the block number
 	data := make([]byte, 64)
 	binary.BigEndian.PutUint64(data, frag.BlockNumber)
 
@@ -746,7 +746,7 @@ type TopicSubscriber func(ctx context.Context, sub *pubsub.Subscription)
 type MessageHandler func(ctx context.Context, from peer.ID, msg any) error
 
 func NewFragHandler(ctx context.Context, from peer.ID, msg any) error {
-	// TODO: Remove this
+	// TODO: This won't be needed when NewFrag is parsed
 	blockNumber := binary.BigEndian.Uint64(msg.([]byte)[:8])
 
 	log.Info("NewFrag received", "block_number", blockNumber)
