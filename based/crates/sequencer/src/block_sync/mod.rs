@@ -65,7 +65,7 @@ impl BlockFetcher {
             executor,
             next_block: 0,
             sync_until: 0,
-            batch_size: 10,
+            batch_size: 20,
             client,
             blocks_from_payloads: VecDeque::new(),
         }
