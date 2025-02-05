@@ -1,7 +1,5 @@
 use std::{
-    cell::UnsafeCell,
-    fmt,
-    sync::atomic::{compiler_fence, AtomicU32, Ordering},
+    cell::UnsafeCell, fmt, mem::MaybeUninit, sync::atomic::{compiler_fence, AtomicU32, Ordering}
 };
 
 use super::ReadError;
@@ -52,6 +50,23 @@ impl<T: Clone> Seqlock<T> {
     }
 
     #[inline(never)]
+    pub fn read_with_version_clone(&self, expected_version: u32) -> Result<T, ReadError> {
+        let v1 = self.version.load(Ordering::Acquire);
+        if v1 < expected_version {
+            return Err(ReadError::Empty);
+        }
+
+        compiler_fence(Ordering::AcqRel);
+        let result = unsafe { MaybeUninit::new((*self.data.get()).clone()) };
+        compiler_fence(Ordering::AcqRel);
+        let v2 = self.version.load(Ordering::Acquire);
+        if v2 == expected_version {
+            Ok(unsafe{result.assume_init()})
+        } else { Err(ReadError::SpedPast)
+        }
+    }
+
+    #[inline(never)]
     pub fn read(&self, result: &mut T) {
         loop {
             let v1 = self.version.load(Ordering::Acquire);
@@ -78,29 +93,23 @@ impl<T: Clone> Seqlock<T> {
     }
 
     #[inline(never)]
-    pub fn write_lock<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut T) -> R,
-    {
+    pub fn write(&self, val: &T) {
         // Increment the sequence number. At this point, the number will be odd,
         // which will force readers to spin until we finish writing.
         let v = self.version.fetch_add(1, Ordering::Release);
         compiler_fence(Ordering::AcqRel);
+        if v != 0 {
+            unsafe { *self.data.get() = val.clone() };
+        } else {
+            // first time we write, shouldn't drop this value
+            unsafe { std::ptr::write(self.data.get(), val.clone()) };
+        }
         // Make sure any writes to the data happen after incrementing the
         // sequence number. What we ideally want is a store(Acquire), but the
         // Acquire ordering is not available on stores.
-        let o = f(unsafe { &mut *self.data.get() });
         compiler_fence(Ordering::AcqRel);
         // unsafe {asm!("sti");}
         self.version.store(v.wrapping_add(2), Ordering::Release);
-        o
-    }
-
-    #[inline]
-    pub fn write(&self, val: &T) {
-        self.write_lock(|data| {
-            *data = val.clone();
-        });
     }
 
     #[inline(never)]
