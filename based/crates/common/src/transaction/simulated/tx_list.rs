@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
-use revm_primitives::{Address, B256};
+use revm_primitives::{Address, B256, U256};
 
 use crate::transaction::{simulated::transaction::SimulatedTx, Transaction, TxList};
 
@@ -90,5 +90,16 @@ impl SimulatedTxList {
 
     pub fn push(&mut self, tx: Arc<Transaction>) {
         self.pending.push(tx);
+    }
+
+    #[inline]
+    pub fn weight(&self) -> U256 {
+        if let Some(tx) = &self.current {
+            return tx.payment;
+        }
+        if let Some(tx) = self.pending.peek() {
+            return U256::from(tx.priority_fee_or_price());
+        }
+        U256::ZERO
     }
 }

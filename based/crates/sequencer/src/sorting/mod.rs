@@ -17,7 +17,8 @@ pub struct ActiveOrders {
 }
 
 impl ActiveOrders {
-    pub fn new(orders: Vec<SimulatedTxList>) -> Self {
+    pub fn new(mut orders: Vec<SimulatedTxList>) -> Self {
+        orders.sort_unstable_by_key(|t| t.weight());
         Self { orders }
     }
 
