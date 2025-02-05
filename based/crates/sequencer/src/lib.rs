@@ -147,6 +147,13 @@ where
                     .map(|txs| txs.into_iter().map(|bytes| Transaction::decode(bytes).unwrap().into()).collect())
                     .unwrap_or_default();
 
+                // From: https://specs.optimism.io/protocol/exec-engine.html#extended-payloadattributesv2
+                // The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup. This field
+                // overrides the gas limit used during block-building. If not specified as rollup, a STATUS_INVALID is
+                // returned.
+                let gas_limit = attributes.gas_limit.unwrap();
+                data.frags.set_gas_limit(gas_limit);
+
                 let sorting_data = data.new_sorting_data(txs, !attributes.no_tx_pool.unwrap_or(false));
                 Sorting(sorting_data)
             }
@@ -299,7 +306,7 @@ pub struct Sequencer<Db: DatabaseWrite + DatabaseRead> {
 
 impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db>, config: SequencerConfig) -> Self {
-        let frags = FragSequence::new(frag_db, config.max_gas);
+        let frags = FragSequence::new(frag_db, 0); // TODO: move to shared state
         let block_executor = BlockSync::new(config.evm_config.chain_spec().clone(), config.rpc_url.clone());
 
         Self {

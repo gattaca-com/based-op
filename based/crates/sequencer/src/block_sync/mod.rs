@@ -201,7 +201,7 @@ mod tests {
     use alloy_consensus::TxReceipt;
     use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
-    use bop_db::{alloy_db::AlloyDB, init_database};
+    use bop_db::{init_database, AlloyDB};
     use reqwest::Client;
     use reth_db::{tables, transaction::DbTx};
     use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};

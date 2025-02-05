@@ -36,7 +36,7 @@ impl<Db: DatabaseRead> EngineApiServer for RpcServer<Db> {
         });
 
         // wait with timeout
-        let res = tokio::time::timeout(self.timeout.into(), rx).await??;
+        let res = tokio::time::timeout(self.engine_timeout.into(), rx).await??;
 
         Ok(res)
     }
@@ -59,7 +59,7 @@ impl<Db: DatabaseRead> EngineApiServer for RpcServer<Db> {
         });
 
         // wait with timeout
-        let res = tokio::time::timeout(self.timeout.into(), rx).await??;
+        let res = tokio::time::timeout(self.engine_timeout.into(), rx).await??;
 
         Ok(res)
     }
@@ -72,7 +72,7 @@ impl<Db: DatabaseRead> EngineApiServer for RpcServer<Db> {
         self.send(messages::EngineApi::GetPayloadV3 { payload_id, res: tx });
 
         // wait with timeout
-        let res = tokio::time::timeout(self.timeout.into(), rx).await??;
+        let res = tokio::time::timeout(self.engine_timeout.into(), rx).await??;
 
         Ok(res)
     }

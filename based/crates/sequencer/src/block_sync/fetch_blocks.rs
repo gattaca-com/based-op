@@ -117,7 +117,7 @@ pub fn convert_block(block: RpcBlock<OpTxEnvelope>) -> BlockWithSenders<OpBlock>
 mod tests {
     use alloy_primitives::b256;
     use bop_common::communication::Spine;
-    use bop_db::alloy_db::AlloyDB;
+    use bop_db::AlloyDB;
     use crossbeam_channel::bounded;
 
     use super::*;
