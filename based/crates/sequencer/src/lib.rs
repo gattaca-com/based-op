@@ -210,12 +210,10 @@ where
             WaitingForForkChoice(ref buffered_payload, _) => {
                 match payload.payload_inner.payload_inner.block_number.cmp(&buffered_payload.block_number()) {
                     cmp::Ordering::Less => {
-                        // New Payload for an old block. Ignore.
                         tracing::debug!("New Payload for an old block. Ignoring.");
                         self
                     }
                     cmp::Ordering::Equal => {
-                        // Check for duplicates.
                         if buffered_payload.block_hash() == payload.payload_inner.payload_inner.block_hash {
                             tracing::debug!("Received 2 payloads with the same block hash. Ignoring latest.");
                             self
@@ -357,23 +355,19 @@ where
 
         match self {
             Sorting(sorting_data) => {
-                // Apply final frag to db and send to p2p
+                // Apply final frag to db and send frag to p2p
                 let mut frag = data.frags.apply_sorted_frag(sorting_data.frag);
                 frag.is_last = true;
                 let frag_msg = VersionedMessage::from(frag);
                 let _ = senders.send(frag_msg);
 
-                // Seal block
                 let (seal, block) =
                     data.frags.seal_block(&data.block_env, data.config.evm_config.chain_spec(), data.parent_hash);
 
-                // Gossip seal to p2p
+                // Gossip seal to p2p and return payload to rpc
                 let _ = senders.send(VersionedMessage::from(seal));
-
-                // Send payload back to rpc
                 let _ = res.send(block);
 
-                // Wait for new payload
                 WaitingForNewPayload
             }
             _ => {
@@ -425,7 +419,6 @@ where
         let sender = *result.sender();
         match result.msg {
             Tx(simulated_tx) => {
-                // make sure we are actually sorting
                 let SequencerState::Sorting(sort_data) = self else {
                     return;
                 };
