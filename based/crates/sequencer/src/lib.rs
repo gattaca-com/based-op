@@ -169,6 +169,8 @@ where
     ) -> SequencerState<Db> {
         use EngineApi::*;
 
+        tracing::info!("NewEngineApi: {:?}", msg.as_ref());
+
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
                 self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
@@ -299,6 +301,7 @@ where
                             prev_randao: attributes.payload_attributes.prev_randao,
                             gas_limit,
                         };
+                        tracing::info!("Sorting start with attributes: {:?}", next_attr);
 
                         let block_env = data
                             .config
@@ -477,6 +480,7 @@ where
                     // broadcast to p2p
                     connections.send(VersionedMessage::from(frag));
                 }
+                let sorting_data = data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
 
                 // Reset the tx pool
                 let sender = data.config.simulate_tof_in_pools.then_some(connections.senders());

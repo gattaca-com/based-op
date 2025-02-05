@@ -44,7 +44,7 @@ pub trait TrackedSenders {
     where
         Self: HasSender<T>,
     {
-        tracing::info!("sending {:.40}", format!("{data:?}"));
+        tracing::debug!("sending {:.40}", format!("{data:?}"));
         let msg = self.ingestion_t().to_msg(data);
         self.get_sender().try_send(msg)
     }
@@ -132,7 +132,7 @@ impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T,
         F: FnMut(T, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
-            tracing::info!("received {:.40}", format!("{:?}", m.data()));
+            tracing::debug!("received {:.40}", format!("{:?}", m.data()));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);

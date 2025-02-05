@@ -11,24 +11,30 @@ use bop_common::{
     time::Duration,
     transaction::{SimulatedTx, Transaction},
 };
-use reth_evm::ConfigureEvm;
-use reth_optimism_chainspec::OpChainSpecBuilder;
+use reth_evm::{system_calls::SystemCaller, ConfigureEvm, ConfigureEvmEnv};
+use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
 use reth_optimism_evm::OpEvmConfig;
 use revm::{db::CacheDB, DatabaseRef, Evm};
 use revm_primitives::{BlockEnv, SpecId};
 use tracing::{info, instrument::WithSubscriber};
-use alloy_consensus::transaction::Transaction as TransactionTrait;
 
 pub struct Simulator<'a, Db: DatabaseRef> {
     /// Top of frag evm
     evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>,
     /// Evm on top of partially built frag
     evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
+    
+    /// Utility to call system smart contracts.
+    system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
+    /// How to create an EVM.
+    evm_config: OpEvmConfig,
 }
 
 impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
     pub fn create_and_run(connections: SpineConnections<Db>, db: DBFrag<Db>, actor_config: ActorConfig, evmconfig: OpEvmConfig) {
         
+        let evm_config_c = evmconfig.clone();
+
         tracing::error!("{:?}", evmconfig.chain_spec().chain());
         let cache_tof = CacheDB::new(db.clone());
         let mut evm_tof: Evm<'_, (), _> = evmconfig.evm(cache_tof);
@@ -36,11 +42,13 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         let cache = CacheDB::new(Arc::new(DBSorting::new(db)));
         let mut evm: Evm<'_, (), _> = evmconfig.evm(cache);
         evm.context.evm.env.cfg.chain_id = evmconfig.chain_spec().chain.id();
-        Simulator::new(evm_tof, evm).run(connections, actor_config);
+        Simulator::new(evm_tof, evm, evm_config_c).run(connections, actor_config);
     }
 
-    pub fn new(evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>, evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>) -> Self {
-        Self { evm, evm_tof }
+    pub fn new(evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>, evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>, evm_config: OpEvmConfig) -> Self {
+        let chain_spec = evm_config.chain_spec().clone();
+        let system_caller = SystemCaller::new(evm_config, chain_spec);
+        Self { evm, evm_tof, system_caller }
     }
 
     fn simulate_tx<DbRef: DatabaseRead>(
@@ -48,10 +56,10 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         db: DbRef,
         evm: &mut Evm<'a, (), CacheDB<DbRef>>,
     ) -> Result<SimulatedTx, SimulationError<<DbRef as DatabaseRef>::Error>> {
-        info!("simming tx for {:?}", tx.chain_id());
+        tracing::debug!("simming tx for {:?}", tx.chain_id());
         let old_db = std::mem::replace(evm.db_mut(),CacheDB::new(db));
         tx.fill_tx_env(evm.tx_mut());
-        info!("simming tx on evm {:?}", evm.context.evm.env.cfg.chain_id);
+        tracing::debug!("simming tx on evm {:?}", evm.context.evm.env.cfg.chain_id);
         let res = evm.transact()?;
         let simtx = SimulatedTx::new(tx, res, evm.db(), evm.block().coinbase);
         // This dance is needed to drop the arc ref
@@ -59,9 +67,12 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         Ok(simtx)
     }
 
-    fn set_blockenv(&mut self, env: BlockEnv) {
-        *self.evm.block_mut() = env.clone();
-        *self.evm_tof.block_mut() = env;
+    fn set_evm_for_new_block(&mut self, parent: &BlockEnv, next_attributes: &BlockAttributes) {
+
+        let evm_env = self.evm_config.next_cfg_and_block_env(parent, next_attributes);
+
+        // *self.evm.block_mut() = env.clone();
+        // *self.evm_tof.block_mut() = env;
     }
 
     #[allow(dead_code)]
@@ -102,7 +113,7 @@ impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
             }
         });
         connections.receive(|msg, _| {
-            self.set_blockenv(msg);
+            self.set_evm_for_new_block(msg);
         });
     }
 }
