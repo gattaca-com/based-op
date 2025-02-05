@@ -7,7 +7,7 @@ use reth_optimism_primitives::OpReceipt;
 use reth_primitives::ReceiptWithBloom;
 use revm_primitives::{Address, EvmState, ResultAndState};
 
-use crate::{db::BopDbRead, transaction::Transaction};
+use crate::{db::DatabaseRead, transaction::Transaction};
 
 #[derive(Clone, Debug)]
 pub struct SimulatedTx {
@@ -22,7 +22,7 @@ pub struct SimulatedTx {
 impl SimulatedTx {
     pub fn new<Db>(tx: Arc<Transaction>, result_and_state: ResultAndState, orig_state: &Db, coinbase: Address) -> Self
     where
-        Db: BopDbRead,
+        Db: DatabaseRead,
     {
         let start_balance = orig_state
             .basic_ref(coinbase)

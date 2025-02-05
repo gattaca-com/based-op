@@ -2,7 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use alloy_primitives::{Address, U256};
 use bop_common::db::state_changes_to_bundle_state;
-use bop_db::{BopDB, BopDbRead};
+use bop_db::{DatabaseWrite, DatabaseRead};
 use revm_primitives::{db::DatabaseRef, Account};
 
 fn main() {

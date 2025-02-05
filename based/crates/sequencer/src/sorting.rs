@@ -5,7 +5,7 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationResult},
         SpineConnections,
     },
-    db::BopDbRead,
+    db::DatabaseRead,
     time::Instant,
     transaction::{SimulatedTx, SimulatedTxList, Transaction},
 };
@@ -59,7 +59,7 @@ impl Deref for ActiveOrders {
 
 /// State of the sequencer while sorting frags
 #[derive(Clone, Debug)]
-pub struct SortingData<Db: BopDbRead> {
+pub struct SortingData<Db: DatabaseRead> {
     /// Current frag being sorted
     pub frag: InSortFrag<Db>,
     /// Deadline when to seal the current frag
@@ -76,7 +76,7 @@ pub struct SortingData<Db: BopDbRead> {
     pub can_add_txs: bool,
 }
 
-impl<Db: BopDbRead> SortingData<Db> {
+impl<Db: DatabaseRead> SortingData<Db> {
     pub fn apply_and_send_next(
         mut self,
         n_sims_per_loop: usize,
