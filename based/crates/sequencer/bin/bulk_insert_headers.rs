@@ -52,7 +52,6 @@ async fn main() -> eyre::Result<()> {
     let mut blocks = futures::future::join_all(batch_futures)
         .await
         .into_iter()
-        .map(|r| r.expect("Failed to fetch block"))
         .collect::<Vec<_>>();
 
     // Bulk insert the batch

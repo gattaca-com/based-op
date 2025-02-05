@@ -29,50 +29,50 @@ struct Args {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> eyre::Result<()> {
-    initialize_test_tracing(LevelFilter::INFO);
+    // initialize_test_tracing(LevelFilter::INFO);
 
-    let args = Args::parse();
-    let rpc_url = Url::parse(&args.rpc_url)?;
-    let rpc_url_clone = rpc_url.clone();
+    // let args = Args::parse();
+    // let rpc_url = Url::parse(&args.rpc_url)?;
+    // let rpc_url_clone = rpc_url.clone();
 
-    let db: bop_db::SequencerDB = init_database(&args.db_path, 1000, 1000)?;
-    let db_head = db.head_block_number()?;
-    let head_state_root = db.state_root()?;
+    // let db: bop_db::DB = init_database(&args.db_path, 1000, 1000)?;
+    // let db_head = db.readonly().unwrap().head_block_number()?;
+    // let head_state_root = db.state_root()?;
 
-    tracing::info!(
-        "Starting sync. From block: {db_head} to block: {}. State root: {head_state_root:?}",
-        args.end_block
-    );
+    // tracing::info!(
+    //     "Starting sync. From block: {db_head} to block: {}. State root: {head_state_root:?}",
+    //     args.end_block
+    // );
 
-    let chain_spec = BASE_SEPOLIA.clone();
-    let handle: RuntimeOrHandle = tokio::runtime::Handle::current().into();
-    let mut block_sync = BlockSync::new(chain_spec, handle, rpc_url.clone());
+    // let chain_spec = BASE_SEPOLIA.clone();
+    // let handle: RuntimeOrHandle = tokio::runtime::Handle::current().into();
+    // let mut block_sync = BlockSync::new(chain_spec, rpc_url.clone());
 
-    // Start block fetching task.
-    let (sender, block_receiver) = crossbeam_channel::unbounded();
-    tokio::spawn(async move {
-        async_fetch_blocks_and_send_sequentially(db_head + 1, args.end_block, rpc_url, sender, None).await;
-    });
+    // // Start block fetching task.
+    // let (sender, block_receiver) = crossbeam_channel::unbounded();
+    // tokio::spawn(async move {
+    //     async_fetch_blocks_and_send_sequentially(db_head + 1, args.end_block, rpc_url, sender).await;
+    // });
 
-    // Fetch prev state root for checks
-    let client = Client::builder().timeout(Duration::from_secs(5).into()).build().expect("Failed to build HTTP client");
-    let mut rpc_head_block_state_root = fetch_block(db_head, &client, rpc_url_clone).await.unwrap().header.state_root;
+    // // Fetch prev state root for checks
+    // let client = Client::builder().timeout(Duration::from_secs(5).into()).build().expect("Failed to build HTTP client");
+    // let mut rpc_head_block_state_root = fetch_block(db_head, &client, rpc_url_clone).await.unwrap().header.state_root;
 
-    while let Ok(block) = block_receiver.recv() {
-        let block = block.into_data().expect("issue receiving block");
+    // while let Ok(block) = block_receiver.recv() {
+    //     let block = block.into_data().expect("issue receiving block");
 
-        // Check head state root matches block state root.
-        let head_state_root = db.state_root()?;
-        if head_state_root != rpc_head_block_state_root {
-            panic!("Head state root does not match block state root. Head: {head_state_root:?}, Block: {rpc_head_block_state_root:?}");
-        }
-        tracing::info!(
-            "Head state root matches block state root. Head: {head_state_root:?}, Block: {rpc_head_block_state_root:?}"
-        );
-        rpc_head_block_state_root = block.header.state_root;
+    //     // Check head state root matches block state root.
+    //     let head_state_root = db.state_root()?;
+    //     if head_state_root != rpc_head_block_state_root {
+    //         panic!("Head state root does not match block state root. Head: {head_state_root:?}, Block: {rpc_head_block_state_root:?}");
+    //     }
+    //     tracing::info!(
+    //         "Head state root matches block state root. Head: {head_state_root:?}, Block: {rpc_head_block_state_root:?}"
+    //     );
+    //     rpc_head_block_state_root = block.header.state_root;
 
-        block_sync.apply_and_commit_block(&block, &db, true).unwrap();
-    }
+    //     block_sync.apply_and_commit_block(&block, &db, true).unwrap();
+    // }
 
     Ok(())
 }
