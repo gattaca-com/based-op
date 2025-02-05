@@ -1,4 +1,4 @@
-use std::cmp;
+use std::{cmp, sync::Arc};
 
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
@@ -93,7 +93,7 @@ where
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle new transaction
         connections.receive(|msg, senders| {
-            self.data.tx_pool.handle_new_tx(msg, self.data.frags.db_ref(), self.data.base_fee, senders);
+            self.state.handle_new_tx(msg, &mut self.data, senders);
         });
 
         // handle sim results
@@ -408,11 +408,19 @@ where
         }
     }
 
+    /// Sends a new transaction to the tx pool.
+    /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
+    fn handle_new_tx(&mut self, msg: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+        let senders = matches!(self, SequencerState::Sorting(_)).then_some(senders);
+        data.tx_pool.handle_new_tx(msg, data.frags.db_ref(), data.base_fee, senders);
+    }
+
     /// Processes transaction simulation results from the simulator actor.
     ///
     /// Handles both block transaction simulations during sorting and
     /// transaction pool simulations for future inclusion.
     fn handle_sim_result(&mut self, result: SimulatorToSequencer<Db>, data: &mut SequencerContext<Db>) {
+        let (sender, nonce) = result.sender_info;
         match result.msg {
             SimulatorToSequencerMsg::Tx(simulated_tx) => {
                 let SequencerState::Sorting(sort_data) = self else {
@@ -424,7 +432,7 @@ where
                     warn!("received sim result on wrong state, dropping");
                     return;
                 }
-                sort_data.handle_sim(simulated_tx, result.sender, data.base_fee);
+                sort_data.handle_sim(simulated_tx, &sender, data.base_fee);
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
@@ -435,7 +443,7 @@ where
                     }
                     Err(e) => {
                         tracing::debug!("simulation error for transaction pool tx {e}");
-                        data.tx_pool.remove(&result.sender)
+                        data.tx_pool.remove(&sender, nonce);
                     }
                 }
             }

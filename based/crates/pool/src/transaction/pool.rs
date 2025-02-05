@@ -28,13 +28,13 @@ impl TxPool {
     }
 
     /// Handles an incoming transaction. If the sim_sender is None, the assumption is that we are not yet
-    /// ready to send simulation for top of block simulation
+    /// ready to send simulation for top of block simulation or add to active.
     pub fn handle_new_tx<Db: DatabaseRead>(
         &mut self,
         new_tx: Arc<Transaction>,
         db: &DBFrag<Db>,
         base_fee: u64,
-        sim_sender: &SendersSpine<Db>,
+        sim_sender: Option<&SendersSpine<Db>>,
     ) {
         let state_nonce = db.get_nonce(new_tx.sender()).expect("handle failed db");
         let nonce = new_tx.nonce();
@@ -55,30 +55,36 @@ impl TxPool {
                 {
                     return;
                 }
-
                 tx_list.put(new_tx.clone());
 
-                let valid_for_block = new_tx.valid_for_block(base_fee);
-                if is_next_nonce && valid_for_block {
-                    // If this is the first tx for a sender, and it can be processed, simulate it
-                    TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
-                } else if valid_for_block {
-                    // If we already have the first tx for this sender and it's in active we might be able to
-                    // add this tx to its pending list.
-                    if let Some(simulated_tx_list) = self.active_txs.tx_list_mut(new_tx.sender_ref()) {
-                        if tx_list.nonce_ready(state_nonce, base_fee, nonce) {
-                            simulated_tx_list.new_pending(tx_list.ready(state_nonce, base_fee).unwrap());
+                if let Some(sim_sender) = sim_sender {
+                    let valid_for_block = new_tx.valid_for_block(base_fee);
+                    if is_next_nonce && valid_for_block {
+                        // If this is the first tx for a sender, and it can be processed, simulate it and add to active.
+                        TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
+                        self.active_txs.put(SimulatedTxList::new(None, tx_list));
+                    } else if valid_for_block {
+                        // If we already have the first tx for this sender and it's in active we might be able to
+                        // add this tx to its pending list.
+                        if let Some(simulated_tx_list) = self.active_txs.tx_list_mut(new_tx.sender_ref()) {
+                            if tx_list.nonce_ready(state_nonce, base_fee, nonce) {
+                                simulated_tx_list.new_pending(tx_list.ready(state_nonce, base_fee).unwrap());
+                            }
                         }
                     }
                 }
             }
             None => {
-                // If this is the first tx for a sender, and it can be processed, simulate it
-                if is_next_nonce && new_tx.valid_for_block(base_fee) {
-                    TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
+                let tx_list = TxList::from(new_tx.clone());
+
+                if let Some(sim_sender) = sim_sender {
+                    // If this is the first tx for a sender, and it can be processed, simulate it and add to active.
+                    if is_next_nonce && new_tx.valid_for_block(base_fee) {
+                        TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
+                        self.active_txs.put(SimulatedTxList::new(None, &tx_list));
+                    }
                 }
 
-                let tx_list = TxList::from(new_tx);
                 self.pool_data.insert(tx_list.sender(), tx_list);
             }
         }
@@ -86,30 +92,37 @@ impl TxPool {
 
     /// Validates simualted tx. If valid, fetch its TxList and save the new [SimulatedTxList] to `active_txs`.
     pub fn handle_simulated(&mut self, simulated_tx: SimulatedTx) {
-        if !simulated_tx.result_and_state.result.is_success() {
-            //TODO: @Guys is it correct that we should remove all the txs if tof fails?
-            // or should we just wait till maybe a later stage
-            self.remove(simulated_tx.sender_ref())
-        }
-
         let Some(tx_list) = self.pool_data.get(simulated_tx.sender_ref()) else {
             tracing::warn!(sender = ?simulated_tx.sender(), "Couldn't find tx list for valid simulated tx");
             return;
         };
 
-        let simulated_tx_list = SimulatedTxList::new(simulated_tx, tx_list);
+        // Refresh active txs with the latest tx_list and simulated tx.
+        // TODO: probably unecassary to copy the tx_list here.
+        let simulated_tx_list = SimulatedTxList::new(Some(simulated_tx), tx_list);
         self.active_txs.put(simulated_tx_list);
     }
 
-    pub fn remove(&mut self, sender: &Address) {
-        let _ = self.pool_data.remove(sender);
+    /// Removes a transaction with sender and nonce from the pool.
+    pub fn remove(&mut self, sender: &Address, nonce: u64) {
+        if let Some(tx_list) = self.pool_data.get_mut(sender) {
+            if tx_list.forward(&nonce) {
+                self.pool_data.remove(sender);
+            }
+        }
+
+        self.active_txs.forward(sender, nonce);
     }
 
-    pub fn handle_new_block(&mut self, mined_txs: &[Arc<Transaction>], base_fee: u64) {
-        // Remove all mined txs from tx pool
-        // We loop through backwards for a small efficiency boost here,
-        // forward removes all nonces for sender lower than start so if a sender
-        // has multiple txs in the block we only need to remove once.
+    /// Sim sender will be None if we are still syncing.
+    pub fn handle_new_block<Db: DatabaseRead>(
+        &mut self, 
+        mined_txs: &[Arc<Transaction>], 
+        base_fee: u64, 
+        db: &DBFrag<Db>,
+        sim_sender: Option<&SendersSpine<Db>>,
+    ) {
+        // Clear all mined nonces from the pool
         for tx in mined_txs.iter().rev() {
             if let Some(sender_tx_list) = self.pool_data.get_mut(tx.sender_ref()) {
                 if sender_tx_list.forward(tx.nonce_ref()) {
@@ -118,20 +131,21 @@ impl TxPool {
             }
         }
 
-        // Clear the active list. This will get refreshed after the sim results sent below come back.
+        // Completely wipe active txs as they may contain valid nonces with out of date sim results.
         self.active_txs.clear();
 
-        // Send next nonce for each active sender to simulator
-        // TODO: this should only be done when the sort starts
-        // for (sender, sender_txs) in self.pool_data.iter() {
-        //     let db_nonce = db.get_nonce(*sender);
-        //     if let Some(first_tx) = sender_txs.first_ready(db_nonce, base_fee) {
-        //         TxPool::send_sim_requests_for_tx(first_tx, db, sim_sender);
-        //     }
-        // }
+        // If enabled, fill the active list with non-simulated txs and send off the first tx for each sender to simulator.
+        if let Some(sim_sender) = sim_sender {
+            for (sender, tx_list) in self.pool_data.iter() {
+                let db_nonce = db.get_nonce(*sender).unwrap();
+                if let Some(ready) = tx_list.ready(db_nonce, base_fee) {
+                    TxPool::send_sim_requests_for_tx(&ready.peek().unwrap(), db, sim_sender);
+                    self.active_txs.put(SimulatedTxList::new(None, tx_list));
+                }
+            }
+        }
     }
 
-    /// If this is called with `None` the assumption is that we are not yet ready to send top-of-block sims.
     fn send_sim_requests_for_tx<Db: DatabaseRead>(
         tx: &Arc<Transaction>,
         db: &DBFrag<Db>,

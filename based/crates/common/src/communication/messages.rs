@@ -324,18 +324,23 @@ pub enum SequencerToSimulator<Db> {
 
 #[derive(Debug)]
 pub struct SimulatorToSequencer<Db: DatabaseRead> {
-    pub sender: Address,
+    /// Sender address and nonce
+    pub sender_info: (Address, u64),
     pub state_id: u64,
     pub msg: SimulatorToSequencerMsg<Db>,
 }
 
 impl<Db: DatabaseRead> SimulatorToSequencer<Db> {
-    pub fn new(sender: Address, state_id: u64, msg: SimulatorToSequencerMsg<Db>) -> Self {
-        Self { sender, state_id, msg }
+    pub fn new(sender_info: (Address, u64), state_id: u64, msg: SimulatorToSequencerMsg<Db>) -> Self {
+        Self { sender_info, state_id, msg }
     }
 
     pub fn sender(&self) -> &Address {
-        &self.sender
+        &self.sender_info.0
+    }
+
+    pub fn nonce(&self) -> u64 {
+        self.sender_info.1
     }
 }
 

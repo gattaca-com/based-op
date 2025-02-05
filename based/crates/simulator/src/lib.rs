@@ -16,6 +16,7 @@ use reth_optimism_evm::OpEvmConfig;
 use revm::{db::CacheDB, DatabaseRef, Evm};
 use revm_primitives::{BlockEnv, SpecId};
 use tracing::info;
+use alloy_consensus::transaction::Transaction as TransactionTrait;
 
 pub struct Simulator<'a, Db: DatabaseRef> {
     /// Top of frag evm
@@ -73,10 +74,9 @@ impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
             match msg {
                 // TODO: Cleanup: merge both functions?
                 SequencerToSimulator::SimulateTx(tx, db) => {
-                    let sender = tx.sender();
                     let _ = senders.send_timeout(
                         SimulatorToSequencer::new(
-                            sender,
+                            (tx.sender(), tx.nonce()),
                             db.state_id(),
                             SimulatorToSequencerMsg::Tx(Self::simulate_tx(tx, db, &mut self.evm)),
                         ),
@@ -84,10 +84,9 @@ impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
                     );
                 }
                 SequencerToSimulator::SimulateTxTof(tx, db) => {
-                    let sender = tx.sender();
                     let _ = senders.send_timeout(
                         SimulatorToSequencer::new(
-                            sender,
+                            (tx.sender(), tx.nonce()),
                             db.state_id(),
                             SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_tx(tx, db, &mut self.evm_tof)),
                         ),
