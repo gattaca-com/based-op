@@ -15,7 +15,6 @@ clap.workspace = true
 reqwest.workspace = true
 
 tracing.workspace = true
-
 alloy-provider.workspace = true
 alloy-eips.workspace = true
 revm-primitives.workspace = true
