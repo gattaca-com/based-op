@@ -685,7 +685,7 @@ func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log
 		return nil, fmt.Errorf("failed to subscribe to new frags gossip topic: %w", err)
 	}
 
-	subscriber := MakeSubscriber(log, newFragHandler)
+	subscriber := MakeSubscriber(log, NewFragHandler)
 	go subscriber(ctx, subscription)
 
 	return &newFragTopic{
@@ -752,13 +752,6 @@ func BlocksHandler(onBlock func(ctx context.Context, from peer.ID, msg *eth.Exec
 		}
 		return onBlock(ctx, from, payload)
 	}
-}
-
-type NewFrag struct {
-	blockNumber uint64
-	seq         uint64
-	IsLast      bool
-	txs         []string
 }
 
 func MakeSubscriber(log log.Logger, msgHandler MessageHandler) TopicSubscriber {
