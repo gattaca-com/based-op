@@ -6,7 +6,7 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
         SpineConnections, TrackedSenders,
     },
-    db::{DatabaseRead, DBFrag, DBSorting},
+    db::{DBFrag, DBSorting, DatabaseRead},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
 };

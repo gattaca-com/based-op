@@ -5,7 +5,8 @@ use std::{
 
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
-    ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadError, PayloadId, PayloadStatus,
+    ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadError,
+    PayloadId, PayloadStatus,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
@@ -20,7 +21,7 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 
 use crate::{
-    db::{DatabaseRead, DBFrag, DBSorting},
+    db::{DBFrag, DBSorting, DatabaseRead},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
 };
@@ -289,4 +290,8 @@ pub enum BlockSyncError {
     SignerRecovery,
 }
 
-pub type BlockSyncMessage = Result<BlockWithSenders<OpBlock>, BlockSyncError>;
+pub type BlockSyncMessage = BlockWithSenders<OpBlock>;
+#[derive(Clone, Debug, AsRefStr)]
+pub enum BlockFetch {
+    FromTo(u64, u64),
+}
