@@ -19,3 +19,4 @@ alloy-provider.workspace = true
 alloy-eips.workspace = true
 revm-primitives.workspace = true
 reth-optimism-chainspec.workspace = true
+eyre.workspace = true
