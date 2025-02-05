@@ -9,7 +9,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer,
+            BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -19,21 +19,20 @@ use bop_common::{
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
-use frag::FragSequence;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
+use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
-use tracing::{error, warn};
+use tracing::warn;
 
 pub mod block_sync;
 pub mod config;
 mod context;
-mod frag;
-mod sorting;
+pub(crate) mod sorting;
 
 pub use config::SequencerConfig;
 use context::SequencerContext;
@@ -98,13 +97,12 @@ where
         });
 
         // handle sim results
-        connections.receive(|msg, senders| {
-            self.state.handle_sim_result(msg, &mut self.data, senders);
+        connections.receive(|msg, _| {
+            self.state.handle_sim_result(msg, &mut self.data);
         });
 
         // handle engine API messages from rpc
         connections.receive(|msg, senders| {
-            tracing::info!("got engine api msg {msg:?}");
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
         });
@@ -169,6 +167,7 @@ where
     ) -> SequencerState<Db> {
         use EngineApi::*;
 
+        tracing::info!("got engine api msg {msg:?}");
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
                 self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
@@ -273,6 +272,7 @@ where
                     if payload.block_hash() == fork_choice_state.head_block_hash {
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
                         let _ = data.block_executor.apply_and_commit_block(&block, &data.db, true);
+                        data.reset_fragdb();
                         WaitingForForkChoiceWithAttributes
                     } else {
                         // We have received the wrong ExecutionPayload. Need to re-sync with the new head.
@@ -382,6 +382,9 @@ where
     ///
     /// Applies blocks sequentially until reaching target height,
     /// then transitions back to normal operation.
+    ///
+    /// When we are syncing we fetch blocks asynchronously from the rpc and send them back through a channel that gets
+    /// picked up and processed here.
     fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SequencerContext<Db>) -> Self {
         use SequencerState::*;
 
@@ -408,17 +411,9 @@ where
     ///
     /// Handles both block transaction simulations during sorting and
     /// transaction pool simulations for future inclusion.
-    fn handle_sim_result(
-        &mut self,
-        result: SimulatorToSequencer<Db>,
-        data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db>,
-    ) {
-        use messages::SimulatorToSequencerMsg::*;
-
-        let sender = *result.sender();
+    fn handle_sim_result(&mut self, result: SimulatorToSequencer<Db>, data: &mut SequencerContext<Db>) {
         match result.msg {
-            Tx(simulated_tx) => {
+            SimulatorToSequencerMsg::Tx(simulated_tx) => {
                 let SequencerState::Sorting(sort_data) = self else {
                     return;
                 };
@@ -428,25 +423,18 @@ where
                     warn!("received sim result on wrong state, dropping");
                     return;
                 }
-                sort_data.handle_sim(simulated_tx, sender, data.base_fee);
+                sort_data.handle_sim(simulated_tx, result.sender, data.base_fee);
             }
-
-            TxTof(simulated_tx) => {
+            SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
                     Ok(res) if data.frags.is_valid(result.state_id) => data.tx_pool.handle_simulated(res),
-
-                    // resend because was on the wrong hash
-                    // TODO: this should be handled anyway i think?
-                    Ok(res) => {
-                        let _ = senders.send_timeout(
-                            SequencerToSimulator::SimulateTxTof(res.tx, data.frags.db()),
-                            Duration::from_millis(10),
-                        );
+                    Ok(_) => {
+                        // No-op if the simulation is on a different fragment.
+                        // We would have already re-sent the tx for sim on the correct fragment.
                     }
-
                     Err(e) => {
-                        error!("simming tx {e}");
-                        data.tx_pool.remove(&sender)
+                        tracing::debug!("simulation error for transaction pool tx {e}");
+                        data.tx_pool.remove(&result.sender)
                     }
                 }
             }
