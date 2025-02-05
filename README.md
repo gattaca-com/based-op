@@ -29,6 +29,7 @@ Run `make` to see the available commands:
 ```Shell
 $ make
 build                          🏗️ Build
+build-op-node                  🏗️ Build OP node from optimistic directory
 clean                          🧹 Clean
 deps                           🚀 Install all dependencies
 help                           📚 Show help for each of the Makefile recipes
@@ -54,4 +55,23 @@ To view the logs, run the following:
 
 ```
 make logs
+```
+
+### Running multiple OP nodes
+
+To run multiple OP nodes with kurtosis, edit the `config.yml` file adding more items to the `participants` vector. For example, you can run one OP node with reth and two with geth with the following config:
+
+```yaml
+optimism_package:
+  chains:
+    - participants:
+        - el_type: op-reth
+          cl_type: op-node
+        - el_type: op-geth
+          cl_type: op-node
+        - el_type: op-geth
+          cl_type: op-node
+      additional_services:
+        - blockscout
+        - rollup-boost
 ```
