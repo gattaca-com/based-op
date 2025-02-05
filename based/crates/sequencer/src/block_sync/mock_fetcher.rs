@@ -63,14 +63,14 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
         if self.next_block < self.sync_until {
             let block = self.executor.block_on(fetch_block(self.next_block, &self.client, self.rpc_url.clone()));
 
-            let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, fcu) =
-                messages::EngineApi::messages_from_block(&block, false, None);
+            let (new_payload_status_rx, new_payload, fcu_status_rx, fcu_1, fcu) =
+                messages::EngineApi::messages_from_block(&block, true, None);
 
-            let txs = Transaction::from_block(&block);
-            for t in txs {
-                connections.send(t);
-            }
-            Duration::from_millis(100).sleep();
+            // let txs = Transaction::from_block(&block);
+            // for t in txs {
+            //     connections.send(t);
+            // }
+            // Duration::from_millis(100).sleep();
 
             connections.send(fcu);
             Duration::from_secs(1).sleep();

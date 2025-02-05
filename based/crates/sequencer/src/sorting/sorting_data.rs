@@ -88,10 +88,14 @@ impl<Db: DatabaseRead> SortingData<Db> {
     }
 
     pub fn should_seal_frag(&self) -> bool {
-        self.until < Instant::now()
+        (self.tof_snapshot.is_empty() && self.remaining_attributes_txs.is_empty()) || self.until < Instant::now()
     }
 
     pub fn should_send_next_sims(&self) -> bool {
         self.in_flight_sims == 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.frag.is_empty()
     }
 }

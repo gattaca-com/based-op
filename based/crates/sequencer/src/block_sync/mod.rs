@@ -47,7 +47,7 @@ impl BlockSync {
         DB: DatabaseWrite + DatabaseRead,
     {
         tracing::info!("Applying and committing block: {:?}", block.header.number);
-        debug_assert!(block.header.number == db.head_block_number()? + 1, "can only apply blocks sequentially");
+        debug_assert_eq!(block.header.number, db.head_block_number()? + 1, "can only apply blocks sequentially ");
 
         // Reorg check
         if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {

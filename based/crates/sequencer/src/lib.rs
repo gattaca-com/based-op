@@ -433,8 +433,12 @@ where
                 };
 
                 // handle sim on wrong state
-                if sort_data.is_valid(result.state_id) {
-                    warn!("received sim result on wrong state, dropping");
+                if !sort_data.is_valid(result.state_id) {
+                    warn!(
+                        "received sim result on wrong state: {} vs {}, dropping",
+                        result.state_id,
+                        sort_data.frag.db.state_id()
+                    );
                     return;
                 }
                 sort_data.handle_sim(simulated_tx, &sender, data.base_fee);
@@ -467,12 +471,12 @@ where
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
                 let txs: Vec<Arc<Transaction>> = sorting_data.frag.txs.iter().map(|tx| tx.tx.clone()).collect();
 
-                let frag = data.frags.apply_sorted_frag(sorting_data.frag);
+                if !sorting_data.is_empty() {
+                    let frag = data.frags.apply_sorted_frag(sorting_data.frag);
 
-                // broadcast to p2p
-                connections.send(VersionedMessage::from(frag));
-                let sorting_data =
-                    data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
+                    // broadcast to p2p
+                    connections.send(VersionedMessage::from(frag));
+                }
 
                 // Reset the tx pool
                 let sender = data.config.simulate_tof_in_pools.then_some(connections.senders());

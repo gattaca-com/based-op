@@ -357,7 +357,7 @@ pub enum SimulatorToSequencerMsg<Db: DatabaseRead> {
 #[derive(Clone, Debug, Error, AsRefStr)]
 #[repr(u8)]
 pub enum SimulationError<DbError> {
-    #[error("Evm error")]
+    #[error("Evm error: {0}")]
     EvmError(#[from] EVMError<DbError>),
     #[error("Order pays nothing")]
     ZeroPayment,
