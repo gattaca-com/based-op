@@ -9,7 +9,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -62,7 +62,7 @@ pub struct Sequencer<Db: DatabaseWrite + DatabaseRead> {
 impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, 0); // TODO: move to shared state
-        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone(), config.rpc_url.clone());
+        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
 
         Self {
             state: SequencerState::default(),
@@ -102,7 +102,7 @@ where
         });
 
         // handle engine API messages from rpc
-        connections.receive(|msg, senders| {
+        connections.receive(|msg: messages::EngineApi, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
         });
@@ -273,6 +273,8 @@ where
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
                         let _ = data.block_executor.apply_and_commit_block(&block, &data.db, true);
                         data.reset_fragdb();
+                        data.parent_header = block.header.clone();
+                        data.parent_hash = fork_choice_state.head_block_hash;
                         WaitingForForkChoiceWithAttributes
                     } else {
                         // We have received the wrong ExecutionPayload. Need to re-sync with the new head.
@@ -330,7 +332,7 @@ where
                     }
                 }
             }
-            Syncing { .. } | Sorting(_) | WaitingForNewPayload => {
+            Syncing { .. } | Sorting(_) |  WaitingForNewPayload => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self

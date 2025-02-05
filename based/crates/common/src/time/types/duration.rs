@@ -67,6 +67,10 @@ impl Duration {
     pub fn as_micros_u128(&self) -> u128 {
         (self.0 * nanos_for_100()) as u128 / 100_000
     }
+
+    pub fn sleep(&self) {
+        std::thread::sleep((*self).into())
+    }
 }
 
 impl std::fmt::Display for Duration {
