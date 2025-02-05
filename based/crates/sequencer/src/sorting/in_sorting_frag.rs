@@ -19,6 +19,9 @@ impl<Db: std::fmt::Debug + Clone> InSortFrag<Db> {
     }
 
     pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
+        debug_assert!(Arc::strong_count(&self.db) == 1, "InSortFrag::apply_tx: cannot make arc mut as we are not the only owner");
+
+        // SAFETY: we know we are the only owner of the db
         let db = Arc::make_mut(&mut self.db);
         db.commit(tx.take_state());
         self.payment += tx.payment;

@@ -79,8 +79,8 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         let state_changes = flatten_state_changes(self.txs.iter().map(|t| t.result_and_state.state.clone()).collect());
         let state_root = self.db.state_root(state_changes);
 
-        let mut receipts = vec![];
-        let mut transactions = vec![];
+        let mut receipts = Vec::with_capacity(self.txs.len());
+        let mut transactions = Vec::with_capacity(self.txs.len());
         let mut logs_bloom = Bloom::ZERO;
         let mut gas_used = 0;
 
