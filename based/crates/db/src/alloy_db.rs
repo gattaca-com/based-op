@@ -19,7 +19,7 @@ use revm::{db::BundleState, DatabaseCommit, DatabaseRef};
 use revm_primitives::{db::Database, Account, AccountInfo, Bytecode, HashMap};
 use tokio::runtime::Runtime;
 
-use crate::{BopDB, BopDbRead, Error};
+use crate::{DatabaseWrite, DatabaseRead, Error};
 
 type AlloyProvider = RootProvider<Http<reqwest::Client>, Optimism>;
 
@@ -132,7 +132,7 @@ impl DatabaseCommit for AlloyDB {
     }
 }
 
-impl BopDbRead for AlloyDB {
+impl DatabaseRead for AlloyDB {
     /// Fetches the state
     fn calculate_state_root(&self, _: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
@@ -157,13 +157,7 @@ impl BopDbRead for AlloyDB {
     }
 }
 
-impl BopDB for AlloyDB {
-    type ReadOnly = Self;
-
-    fn readonly(&self) -> Result<Self::ReadOnly, Error> {
-        Ok(self.clone())
-    }
-
+impl DatabaseWrite for AlloyDB {
     fn commit_block(
         &self,
         _block: &BlockWithSenders<OpBlock>,

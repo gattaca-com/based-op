@@ -6,7 +6,7 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
         SpineConnections, TrackedSenders,
     },
-    db::{BopDbRead, DBFrag, DBSorting},
+    db::{DatabaseRead, DBFrag, DBSorting},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
 };
@@ -24,7 +24,7 @@ pub struct Simulator<'a, Db: DatabaseRef> {
     evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
 }
 
-impl<'a, Db: BopDbRead> Simulator<'a, Db> {
+impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
     pub fn create_and_run(connections: SpineConnections<Db>, db: DBFrag<Db>, actor_config: ActorConfig) {
         //TODO: Is this fine?
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
@@ -41,7 +41,7 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
         Self { evm, evm_tof }
     }
 
-    fn simulate_tx<DbRef: BopDbRead>(
+    fn simulate_tx<DbRef: DatabaseRead>(
         tx: Arc<Transaction>,
         db: DbRef,
         evm: &mut Evm<'a, (), CacheDB<DbRef>>,
@@ -64,7 +64,7 @@ impl<'a, Db: BopDbRead> Simulator<'a, Db> {
     }
 }
 
-impl<Db: BopDbRead> Actor<Db> for Simulator<'_, Db> {
+impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
     const CORE_AFFINITY: Option<usize> = None;
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {

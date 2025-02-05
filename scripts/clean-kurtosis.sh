@@ -1,1 +1,0 @@
-kurtosis enclave rm  based-op --force

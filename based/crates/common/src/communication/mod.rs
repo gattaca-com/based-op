@@ -13,7 +13,7 @@ pub mod messages;
 pub use messages::InternalMessage;
 
 use crate::{
-    db::BopDbRead,
+    db::DatabaseRead,
     p2p::VersionedMessage,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
@@ -217,7 +217,7 @@ impl<S: TrackedSenders, R> Connections<S, R> {
 }
 
 #[derive(Clone)]
-pub struct Spine<Db: BopDbRead> {
+pub struct Spine<Db: DatabaseRead> {
     sender_simulator_to_sequencer: Sender<SimulatorToSequencer<Db>>,
     receiver_simulator_to_sequencer: CrossBeamReceiver<SimulatorToSequencer<Db>>,
 
@@ -242,7 +242,7 @@ pub struct Spine<Db: BopDbRead> {
     blockenv: Queue<InternalMessage<BlockEnv>>,
 }
 
-impl<Db: BopDbRead> Default for Spine<Db> {
+impl<Db: DatabaseRead> Default for Spine<Db> {
     fn default() -> Self {
         let (sender_simulator_to_sequencer, receiver_simulator_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_sequencer_to_simulator, receiver_sequencer_to_simulator) = crossbeam_channel::bounded(4096);
@@ -274,7 +274,7 @@ impl<Db: BopDbRead> Default for Spine<Db> {
     }
 }
 
-impl<Db: BopDbRead> Spine<Db> {
+impl<Db: DatabaseRead> Spine<Db> {
     pub fn to_connections<S: AsRef<str>>(&self, name: S) -> SpineConnections<Db> {
         SpineConnections::new(self.into(), ReceiversSpine::attach(name, self))
     }
@@ -283,43 +283,43 @@ impl<Db: BopDbRead> Spine<Db> {
 macro_rules! from_spine {
     ($T:ty, $v:ident, $S: tt) => {
         paste::item! {
-            impl<Db: BopDbRead> From<&Spine<Db>> for Sender<$T> {
+            impl<Db: DatabaseRead> From<&Spine<Db>> for Sender<$T> {
                 fn from(spine: &Spine<Db>) -> Self {
                     spine.[<sender_ $v>].clone()
                 }
             }
 
-            impl<Db: BopDbRead> From<&Spine<Db>> for CrossBeamReceiver<$T> {
+            impl<Db: DatabaseRead> From<&Spine<Db>> for CrossBeamReceiver<$T> {
                 fn from(spine: &Spine<Db>) -> Self {
                     spine.[<receiver_ $v>].clone()
                 }
             }
 
-            impl<Db: BopDbRead> AsRef<Sender<$T>> for SendersSpine<Db> {
+            impl<Db: DatabaseRead> AsRef<Sender<$T>> for SendersSpine<Db> {
                 fn as_ref(&self) -> &Sender<$T> {
                     &self.$v
                 }
             }
 
-            impl<Db: BopDbRead> AsRef<Sender<$T>> for SpineConnections<Db> {
+            impl<Db: DatabaseRead> AsRef<Sender<$T>> for SpineConnections<Db> {
                 fn as_ref(&self) -> &Sender<$T> {
                     self.senders.as_ref()
                 }
             }
 
-            impl<Db: BopDbRead> HasSender<$T> for SendersSpine<Db> {
+            impl<Db: DatabaseRead> HasSender<$T> for SendersSpine<Db> {
                 type Sender = $S<$T>;
                 fn get_sender(&self) -> &Self::Sender {
                     &self.$v
                 }
             }
 
-            impl<Db: BopDbRead> From<&'_ SendersSpine<Db>> for Sender<$T> {
+            impl<Db: DatabaseRead> From<&'_ SendersSpine<Db>> for Sender<$T> {
                 fn from(value: &'_ SendersSpine<Db>) -> Self {
                     value.$v.clone()
                 }
             }
-            impl<Db: BopDbRead> AsMut<Receiver<$T>> for ReceiversSpine<Db> {
+            impl<Db: DatabaseRead> AsMut<Receiver<$T>> for ReceiversSpine<Db> {
                 fn as_mut(&mut self) -> &mut Receiver<$T> {
                     &mut self.$v
                 }
@@ -336,7 +336,7 @@ from_spine!(messages::EngineApi, engine_rpc_to_sequencer, Sender);
 from_spine!(Arc<Transaction>, eth_rpc_to_sequencer, Sender);
 from_spine!(BlockSyncMessage, blockfetch_to_sequencer, Sender);
 
-impl<Db: BopDbRead> HasSender<BlockEnv> for SendersSpine<Db> {
+impl<Db: DatabaseRead> HasSender<BlockEnv> for SendersSpine<Db> {
     type Sender = Producer<InternalMessage<BlockEnv>>;
 
     fn get_sender(&self) -> &Self::Sender {
@@ -344,7 +344,7 @@ impl<Db: BopDbRead> HasSender<BlockEnv> for SendersSpine<Db> {
     }
 }
 
-impl<Db: BopDbRead> AsMut<Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>> for ReceiversSpine<Db> {
+impl<Db: DatabaseRead> AsMut<Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>> for ReceiversSpine<Db> {
     fn as_mut(&mut self) -> &mut Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>> {
         &mut self.blockenv
     }
@@ -353,7 +353,7 @@ impl<Db: BopDbRead> AsMut<Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>
 //TODO: remove allow dead code
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct SendersSpine<Db: BopDbRead> {
+pub struct SendersSpine<Db: DatabaseRead> {
     sequencer_to_simulator: Sender<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Sender<SequencerToExternal>,
     simulator_to_sequencer: Sender<SimulatorToSequencer<Db>>,
@@ -365,7 +365,7 @@ pub struct SendersSpine<Db: BopDbRead> {
     timestamp: IngestionTime,
 }
 
-impl<Db: BopDbRead> From<&Spine<Db>> for SendersSpine<Db> {
+impl<Db: DatabaseRead> From<&Spine<Db>> for SendersSpine<Db> {
     fn from(value: &Spine<Db>) -> Self {
         Self {
             sequencer_to_simulator: value.sender_sequencer_to_simulator.clone(),
@@ -381,7 +381,7 @@ impl<Db: BopDbRead> From<&Spine<Db>> for SendersSpine<Db> {
     }
 }
 
-impl<Db: BopDbRead> TrackedSenders for SendersSpine<Db> {
+impl<Db: DatabaseRead> TrackedSenders for SendersSpine<Db> {
     fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
         self.timestamp = ingestion_t;
     }
@@ -392,7 +392,7 @@ impl<Db: BopDbRead> TrackedSenders for SendersSpine<Db> {
 }
 
 #[derive(Debug)]
-pub struct ReceiversSpine<Db: BopDbRead> {
+pub struct ReceiversSpine<Db: DatabaseRead> {
     simulator_to_sequencer: Receiver<SimulatorToSequencer<Db>>,
     sequencer_to_simulator: Receiver<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Receiver<SequencerToExternal>,
@@ -403,7 +403,7 @@ pub struct ReceiversSpine<Db: BopDbRead> {
     blockenv: Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>,
 }
 
-impl<Db: BopDbRead> ReceiversSpine<Db> {
+impl<Db: DatabaseRead> ReceiversSpine<Db> {
     pub fn attach<S: AsRef<str>>(system_name: S, spine: &Spine<Db>) -> Self {
         Self {
             simulator_to_sequencer: Receiver::new(system_name.as_ref(), spine.into()),
