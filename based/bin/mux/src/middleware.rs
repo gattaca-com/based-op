@@ -9,6 +9,7 @@ use jsonrpsee::{
     MethodResponse,
 };
 use serde_json::value::RawValue;
+use tracing::debug;
 
 use crate::server::HttpClient;
 
@@ -31,6 +32,7 @@ where
 {
     type Future = BoxFuture<'a, MethodResponse>;
 
+    #[tracing::instrument(skip_all, name = "middleware")]
     fn call(&self, req: Request<'a>) -> Self::Future {
         let inner = self.inner.clone();
         let fallback_client = self.fallback_client.clone();
@@ -38,8 +40,12 @@ where
 
         async move {
             if mux_methods.contains(&req.method_name()) {
+                debug!(method = %req.method_name(), "handling request");
+
                 inner.call(req).await
             } else {
+                debug!(method = %req.method_name(), "forwarding request to fallback");
+
                 let params = WrapParams(req.params());
 
                 let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =

@@ -101,7 +101,7 @@ def get_config(
         "--fallback.jwt_path=" + constants.JWT_MOUNT_PATH_ON_CONTAINER,
         "--gateway.url={0}".format(BUILDER_EXECUTION_ENGINE_ENDPOINT),
         "--gateway.jwt_path=" + constants.JWT_MOUNT_PATH_ON_CONTAINER,
-        "--trace",
+        "--debug",
     ]
 
     files = {
