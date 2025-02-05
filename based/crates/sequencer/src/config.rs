@@ -1,5 +1,5 @@
 use alloy_primitives::Address;
-use bop_common::time::Duration;
+use bop_common::{config::GatewayArgs, time::Duration};
 use reqwest::Url;
 use reth_optimism_chainspec::{BASE_MAINNET, BASE_SEPOLIA};
 use reth_optimism_evm::OpEvmConfig;
@@ -9,7 +9,6 @@ use crate::block_sync::fetch_blocks::{TEST_BASE_RPC_URL, TEST_BASE_SEPOLIA_RPC_U
 #[derive(Clone, Debug)]
 pub struct SequencerConfig {
     pub frag_duration: Duration,
-    pub max_gas: u64,
     pub n_per_loop: usize,
     pub rpc_url: Url,
     pub evm_config: OpEvmConfig,
@@ -23,7 +22,6 @@ impl SequencerConfig {
 
         Self {
             frag_duration: Duration::from_millis(200),
-            max_gas: 300_000_000,
             n_per_loop: 10,
             rpc_url: Url::parse(TEST_BASE_RPC_URL).unwrap(),
             evm_config,
@@ -37,11 +35,22 @@ impl SequencerConfig {
 
         Self {
             frag_duration: Duration::from_millis(200),
-            max_gas: 300_000_000,
             n_per_loop: 10,
             rpc_url: Url::parse(TEST_BASE_SEPOLIA_RPC_URL).unwrap(),
             evm_config,
             coinbase: Address::random(),
+        }
+    }
+}
+
+impl From<&GatewayArgs> for SequencerConfig {
+    fn from(args: &GatewayArgs) -> Self {
+        Self {
+            frag_duration: Duration::from_millis(args.frag_duration_ms),
+            n_per_loop: args.sim_per_loop,
+            rpc_url: args.rpc_fallback_url.clone(),
+            evm_config: OpEvmConfig::new(args.chain_spec.clone()),
+            coinbase: args.coinbase,
         }
     }
 }

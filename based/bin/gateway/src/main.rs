@@ -10,10 +10,11 @@ use bop_common::{
 };
 use bop_db::init_database;
 use bop_rpc::{start_mock_engine_rpc, start_rpc};
-use bop_sequencer::{block_sync::BlockFetcher, Sequencer, SequencerConfig};
+use bop_sequencer::{block_sync::BlockFetcher, Sequencer};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
+use tracing::{error, info};
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
@@ -23,6 +24,22 @@ fn main() {
     verify_or_remove_queue_files();
 
     let _guards = init_tracing(None, 100, None);
+
+    match run(args) {
+        Ok(_) => {
+            info!("gateway stopped");
+        }
+
+        Err(e) => {
+            error!("{}", e);
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run(args: GatewayArgs) -> eyre::Result<()> {
+    info!("starting gateway");
 
     let spine = Spine::default();
 
@@ -51,8 +68,8 @@ fn main() {
             move || rt.block_on(wait_for_signal())
         });
 
+        let sequencer = Sequencer::new(db_bop, db_frag.clone(), (&args).into());
         s.spawn(|| {
-            let sequencer = Sequencer::new(db_bop, db_frag.clone(), SequencerConfig::default_base_sepolia());
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
         s.spawn(|| {
@@ -74,4 +91,6 @@ fn main() {
 
         start_mock_engine_rpc(&spine, args.tmp_end_block);
     });
+
+    Ok(())
 }

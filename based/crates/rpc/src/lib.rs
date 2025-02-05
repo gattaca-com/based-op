@@ -33,14 +33,20 @@ struct RpcServer<Db> {
     // TODO: this is a temporary fallback while we dont have a gossip to share state, in practice we should not serve
     // state directly from the gateway, and should only receive transactions
     fallback: RpcClient,
-    timeout: Duration,
+    engine_timeout: Duration,
     engine_rpc_tx: Sender<EngineApi>,
 }
 
 impl<Db: DatabaseRead> RpcServer<Db> {
     pub fn new(spine: &Spine<Db>, db: DBFrag<Db>, fallback_url: Url) -> Self {
         let fallback = RpcClient::builder().build(fallback_url).expect("failed building fallback rpc client");
-        Self { new_order_tx: spine.into(), db, fallback, engine_rpc_tx: spine.into(), timeout: Duration::from_secs(1) }
+        Self {
+            new_order_tx: spine.into(),
+            db,
+            fallback,
+            engine_rpc_tx: spine.into(),
+            engine_timeout: Duration::from_secs(1),
+        }
     }
 
     #[tracing::instrument(skip_all, name = "rpc_eth")]
