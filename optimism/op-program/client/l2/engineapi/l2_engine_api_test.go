@@ -121,3 +121,22 @@ func (s *stubCachingBackend) AssembleAndInsertBlockWithoutSetHead(processor *Blo
 }
 
 var _ CachingEngineBackend = (*stubCachingBackend)(nil)
+
+func TestNewFragV0(t *testing.T) {
+	logger, _ := testlog.CaptureLogger(t, log.LvlInfo)
+
+	backend := newStubBackend(t)
+	engineAPI := NewL2EngineAPI(logger, backend, nil)
+
+	frag := &eth.FragV0{
+		BlockNumber: 1,
+		Seq:         1,
+		IsLast:      true,
+		Txs:         []string{},
+	}
+
+	res, err := engineAPI.NewFragV0(context.Background(), frag)
+
+	require.EqualValues(t, engine.VALID, res)
+	require.NoError(t, err)
+}

@@ -557,3 +557,25 @@ func (ea *L2EngineAPI) invalid(err error, latestValid *types.Header) *eth.Payloa
 	errorMsg := err.Error()
 	return &eth.PayloadStatusV1{Status: eth.ExecutionInvalid, LatestValidHash: &currentHash, ValidationError: &errorMsg}
 }
+
+// TODO: Define responses for the following methods
+
+func (ea *L2EngineAPI) NewFragV0(ctx context.Context, frag *eth.FragV0) (*string, error) {
+	fmt.Println("NewFragV0")
+	return ea.newFragV0(ctx, frag)
+}
+
+func (ea *L2EngineAPI) newFragV0(_ context.Context, _ *eth.FragV0) (*string, error) {
+	fmt.Println("newFragV0")
+	return &engine.VALID, nil
+}
+
+func (ea *L2EngineAPI) SealFragV0(ctx context.Context, frag *eth.SealV0) (*string, error) {
+	fmt.Println("SealFragV0")
+	return ea.sealFragV0(ctx, frag)
+}
+
+func (ea *L2EngineAPI) sealFragV0(_ context.Context, _ *eth.SealV0) (*string, error) {
+	fmt.Println("sealFragV0")
+	return &engine.VALID, nil
+}
