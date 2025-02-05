@@ -262,6 +262,8 @@ const (
 
 func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
+		// TODO: use unmarshalling here
+		message.ValidatorData = string(message.GetData())
 		return pubsub.ValidationAccept
 	}
 }
@@ -499,6 +501,12 @@ func (bt *blockTopic) Close() error {
 	return bt.topic.Close()
 }
 
+func (nft *newFragTopic) Close() error {
+	nft.events.Cancel()
+	nft.sub.Cancel()
+	return nft.topic.Close()
+}
+
 type publisher struct {
 	log log.Logger
 	cfg *rollup.Config
@@ -631,7 +639,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 
 	newFragV0Logger := log.New("topic", "newFragV0")
 	newFragV0Validator := guardGossipValidator(log, logValidationResult(self, "validated newFragV0", newFragV0Logger, BuildNewFragValidator(newFragV0Logger, cfg, runCfg, NewFragV0)))
-	newFragV0, err := newNewFragTopic(p2pCtx, newFragV0(cfg), ps, newFragV0Logger, gossipIn, newFragV0Validator)
+	newFragV0, err := newNewFragTopic(p2pCtx, newFragV0(cfg), ps, newFragV0Logger, newFragV0Validator)
 	if err != nil {
 		p2pCancel()
 		return nil, fmt.Errorf("failed to setup newFragV0 p2p: %w", err)
@@ -649,7 +657,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 	}, nil
 }
 
-func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log log.Logger, gossipIn GossipIn, validator pubsub.ValidatorEx) (*newFragTopic, error) {
+func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log log.Logger, validator pubsub.ValidatorEx) (*newFragTopic, error) {
 	err := ps.RegisterTopicValidator(topicId,
 		validator,
 		pubsub.WithValidatorTimeout(3*time.Second),
@@ -677,7 +685,7 @@ func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log
 		return nil, fmt.Errorf("failed to subscribe to new frags gossip topic: %w", err)
 	}
 
-	subscriber := MakeSubscriber(log, BlocksHandler(gossipIn.OnUnsafeL2Payload))
+	subscriber := MakeSubscriber(log, newFragHandler)
 	go subscriber(ctx, subscription)
 
 	return &newFragTopic{
@@ -728,6 +736,14 @@ func newBlockTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log l
 type TopicSubscriber func(ctx context.Context, sub *pubsub.Subscription)
 type MessageHandler func(ctx context.Context, from peer.ID, msg any) error
 
+func NewFragHandler(ctx context.Context, from peer.ID, msg any) error {
+	log.Info("NewFrag received")
+
+	// TODO: Call EngineAPI and pass the message to the EL
+
+	return nil
+}
+
 func BlocksHandler(onBlock func(ctx context.Context, from peer.ID, msg *eth.ExecutionPayloadEnvelope) error) MessageHandler {
 	return func(ctx context.Context, from peer.ID, msg any) error {
 		payload, ok := msg.(*eth.ExecutionPayloadEnvelope)
@@ -743,16 +759,6 @@ type NewFrag struct {
 	seq         uint64
 	IsLast      bool
 	txs         []string
-}
-
-func NewFragHandler(onNewFrag func(ctx context.Context, from peer.ID, msg *NewFrag) error) MessageHandler {
-	return func(ctx context.Context, from peer.ID, msg any) error {
-		payload, ok := msg.(*NewFrag)
-		if !ok {
-			return fmt.Errorf("expected topic validator to parse and validate data into new fragments, but got %T", msg)
-		}
-		return onNewFrag(ctx, from, payload)
-	}
 }
 
 func MakeSubscriber(log log.Logger, msgHandler MessageHandler) TopicSubscriber {
