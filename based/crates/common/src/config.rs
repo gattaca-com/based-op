@@ -16,7 +16,6 @@ pub struct GatewayArgs {
         long_help = OpChainSpecParser::help_message(),
         default_value = OpChainSpecParser::SUPPORTED_CHAINS[6],
         value_parser = OpChainSpecParser::parser(),
-        
     )]
     pub chain_spec: Arc<OpChainSpec>,
     /// The host to run the engine_ and eth_ RPC
