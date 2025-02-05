@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use alloy_consensus::{proofs::ordered_trie_root_with_encoder, Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
 use alloy_primitives::{Bloom, U256};
@@ -12,6 +10,8 @@ use bop_common::{
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
 use revm_primitives::{BlockEnv, Bytes, B256};
+
+use crate::sorting::InSortFrag;
 
 /// Sequence of frags applied on the last block
 #[derive(Clone, Debug)]
@@ -168,43 +168,6 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
     }
 }
 
-/// Fragment of a block being sorted and built
-#[derive(Clone, Debug)]
-pub struct InSortFrag<Db> {
-    pub db: Arc<DBSorting<Db>>,
-    pub gas_remaining: u64,
-    pub gas_used: u64,
-    pub payment: U256,
-    pub txs: Vec<SimulatedTx>,
-}
-
-impl<Db: std::fmt::Debug + Clone> InSortFrag<Db> {
-    pub fn new(db: DBSorting<Db>, max_gas: u64) -> Self {
-        Self { db: Arc::new(db), gas_remaining: max_gas, gas_used: 0, payment: U256::ZERO, txs: vec![] }
-    }
-
-    pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
-        let db = Arc::make_mut(&mut self.db);
-        db.commit(tx.take_state());
-        self.payment += tx.payment;
-
-        // TODO: check gas usage
-        let gas_used = tx.as_ref().result.gas_used();
-        debug_assert!(
-            self.gas_remaining > gas_used,
-            "had too little gas remaining on block {self:#?} to apply tx {tx:#?}"
-        );
-
-        self.gas_remaining -= gas_used;
-        self.gas_used += gas_used;
-        self.txs.push(tx);
-    }
-
-    pub fn state(&self) -> Arc<DBSorting<Db>> {
-        self.db.clone()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{sync::Arc, time::Duration};
@@ -228,7 +191,7 @@ mod tests {
     use reth_primitives_traits::{Block, SignedTransaction};
     use revm_primitives::{BlobExcessGasAndPrice, BlockEnv};
 
-    use crate::{block_sync::fetch_blocks::fetch_block, frag::FragSequence};
+    use crate::{block_sync::fetch_blocks::fetch_block, sorting::FragSequence};
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";
     const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
