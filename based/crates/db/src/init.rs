@@ -6,7 +6,7 @@ use reth_optimism_chainspec::BASE_SEPOLIA;
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
 
-use super::{Error, DB};
+use super::{Error, SequencerDB};
 use crate::cache::ReadCaches;
 
 /// Initialise the database.
@@ -21,7 +21,7 @@ pub fn init_database<P: AsRef<Path>>(
     db_location: P,
     max_cached_accounts: u64,
     max_cached_storages: u64,
-) -> Result<DB, Error> {
+) -> Result<SequencerDB, Error> {
     // Check the specified path is accessible, creating directories if necessary.
     let db_dir = db_location.as_ref().join("db");
     let static_files_dir = db_location.as_ref().join("static_files");
@@ -41,8 +41,7 @@ pub fn init_database<P: AsRef<Path>>(
     let chain_spec = BASE_SEPOLIA.clone();
 
     let factory = ProviderFactory::new(db, chain_spec, StaticFileProvider::read_write(static_files_dir)?);
-    let caches = ReadCaches::new(max_cached_accounts, max_cached_storages);
-    Ok(DB { factory, caches, block: RwLock::new(None) })
+    Ok(SequencerDB::new(factory, max_cached_accounts, max_cached_storages))
 }
 
 fn create_or_check_dir<P: AsRef<Path>>(dir: &P) -> Result<(), Error> {
