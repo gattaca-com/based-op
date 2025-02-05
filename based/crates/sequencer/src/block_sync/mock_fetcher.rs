@@ -43,6 +43,15 @@ impl MockFetcher {
 }
 
 impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
+
+    fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
+            let block = self.executor.block_on(fetch_block(self.next_block, &self.client, self.rpc_url.clone()));
+            let (new_payload_status_rx, new_payload, fcu_status_rx, fcu_1, fcu) =
+                messages::EngineApi::messages_from_block(&block, false, None);
+            connections.send(new_payload);
+            connections.send(fcu_1);
+            self.next_block += 1;
+    }
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         connections.receive(|msg, _| {
             self.handle_fetch(msg);

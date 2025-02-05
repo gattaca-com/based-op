@@ -18,6 +18,9 @@ pub struct ActiveOrders {
 
 impl ActiveOrders {
     pub fn new(mut orders: Vec<SimulatedTxList>) -> Self {
+        // WARNING: this might lead to apples to oranges comparison if we haven't
+        // re-simulated all forwarded txlists top of last applied frag in the pool Activelist.
+        // This is currently the situation
         orders.sort_unstable_by_key(|t| t.weight());
         Self { orders }
     }
