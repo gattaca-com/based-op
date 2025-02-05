@@ -1,6 +1,5 @@
 use std::{net::Ipv4Addr, path::PathBuf, sync::Arc};
 
-use alloy_primitives::Address;
 use clap::Parser;
 use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
@@ -33,9 +32,6 @@ pub struct GatewayArgs {
     /// Number of sims per loop
     #[arg(long = "sequencer.sim_per_loop", default_value_t = 10)]
     pub sim_per_loop: usize,
-    /// Coinbase address
-    #[arg(long = "sequencer.coinbase")]
-    pub coinbase: Address,
     /// Database location
     #[arg(long = "db.datadir")]
     pub db_datadir: PathBuf,

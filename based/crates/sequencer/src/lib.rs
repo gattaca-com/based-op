@@ -124,11 +124,16 @@ where
             (ForkChoiceUpdatedV3 { payload_attributes: Some(attributes), .. }, WaitingForAttributes) => {
                 // start building
 
+                // From: https://specs.optimism.io/protocol/exec-engine.html#extended-payloadattributesv2
+                // The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup. This field
+                // overrides the gas limit used during block-building. If not specified as rollup, a STATUS_INVALID is
+                // returned.
+                let gas_limit = attributes.gas_limit.unwrap();
                 let next_attr = NextBlockEnvAttributes {
                     timestamp: attributes.payload_attributes.timestamp,
-                    suggested_fee_recipient: data.config.coinbase,
+                    suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
                     prev_randao: attributes.payload_attributes.prev_randao,
-                    gas_limit: data.parent_header.gas_limit,
+                    gas_limit,
                 };
 
                 let block_env = data
@@ -147,11 +152,7 @@ where
                     .map(|txs| txs.into_iter().map(|bytes| Transaction::decode(bytes).unwrap().into()).collect())
                     .unwrap_or_default();
 
-                // From: https://specs.optimism.io/protocol/exec-engine.html#extended-payloadattributesv2
-                // The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup. This field
-                // overrides the gas limit used during block-building. If not specified as rollup, a STATUS_INVALID is
-                // returned.
-                let gas_limit = attributes.gas_limit.unwrap();
+                // TODO: remove gas limit from frags
                 data.frags.set_gas_limit(gas_limit);
 
                 let sorting_data = data.new_sorting_data(txs, !attributes.no_tx_pool.unwrap_or(false));
