@@ -90,9 +90,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             let connections = spine.to_connections(format!("Simulator-{core}"));
             s.spawn({
                 let db_frag = db_frag.clone();
-                let evmc = evm_config.clone();
+                let evm_config_c = evm_config.clone();
                 move || {
-                    Simulator::create_and_run(connections, db_frag, ActorConfig::default().with_core(core), evmc);
+                    let simulator = Simulator::new(db_frag, &evm_config_c);
+                    simulator.run(connections, ActorConfig::default().with_core(core));
                 }
             });
         }

@@ -1,6 +1,6 @@
 use std::{cmp, sync::Arc};
 
-use alloy_consensus::Block;
+use alloy_consensus::{Block, Header};
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
@@ -10,8 +10,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
-            SimulatorToSequencerMsg,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, EvmBlockParams, SimulatorToSequencer, SimulatorToSequencerMsg
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -26,6 +25,7 @@ use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
+use revm_primitives::Bytes;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
@@ -303,16 +303,19 @@ where
                         };
                         tracing::info!("Sorting start with attributes: {:?}", next_attr);
 
-                        let block_env = data
+                        let evm_block_params = EvmBlockParams {
+                            header: data.parent_header.clone(),
+                            attributes: next_attr.clone(),
+                        };
+                        // should never fail as its a broadcast
+                        senders
+                            .send_timeout(evm_block_params, Duration::from_millis(10))
+                            .expect("couldn't send block env");
+                        data.block_env = data
                             .config
                             .evm_config
                             .next_cfg_and_block_env(&data.parent_header, next_attr)
-                            .expect("couldn't create blockenv");
-                        // should never fail as its a broadcast
-                        senders
-                            .send_timeout(block_env.block_env.clone(), Duration::from_millis(10))
-                            .expect("couldn't send block env");
-                        data.block_env = block_env.block_env;
+                            .expect("couldn't create blockenv").block_env;
 
                         let txs = attributes
                             .transactions

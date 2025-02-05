@@ -187,9 +187,11 @@ mod tests {
     use bop_simulator::Simulator;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use reqwest::{Client, Url};
-    use reth_optimism_chainspec::OpChainSpecBuilder;
+    use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
     use reth_primitives_traits::{Block, SignedTransaction};
     use revm_primitives::{BlobExcessGasAndPrice, BlockEnv};
+    use reth_optimism_evm::OpEvmConfig;
+    use bop_common::actor::Actor;
 
     use crate::{block_sync::fetch_blocks::fetch_block, sorting::FragSequence};
 
@@ -229,6 +231,7 @@ mod tests {
         // Create the alloydb.
         let client = ProviderBuilder::new().network().on_http(rpc_url);
         let alloy_db = AlloyDB::new(client, block.block.header.number, rt);
+        let evm_config = OpEvmConfig::new(BASE_SEPOLIA.clone());
 
         // Simulate the txs in the block and add to a frag.
         let db_frag: DBFrag<_> = alloy_db.clone().into();
@@ -239,7 +242,10 @@ mod tests {
 
         // Simulator
         let _sim_handle =
-            std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default()));
+            std::thread::spawn(move || {
+                let simulator = Simulator::new(sim_db, &evm_config);
+                simulator.run(sim_connections, ActorConfig::default())
+            });
         let mut seq = FragSequence::new(db_frag, 300_000_000);
         let mut sorting_db = seq.create_in_sort();
 

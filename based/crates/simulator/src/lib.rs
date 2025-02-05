@@ -18,11 +18,15 @@ use revm::{db::CacheDB, DatabaseRef, Evm};
 use revm_primitives::{BlockEnv, EnvWithHandlerCfg, SpecId};
 use tracing::{info, instrument::WithSubscriber};
 
+/// Simulator thread.
+/// 
+/// TODO: need to impl fn to use system caller and return changes for that.
 pub struct Simulator<'a, Db: DatabaseRef> {
-    /// Top of frag evm
+    /// Top of frag evm.
     evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>,
+
     /// Evm on top of partially built frag
-    evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
+    evm_sorting: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
     
     /// Utility to call system smart contracts.
     system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
@@ -31,24 +35,17 @@ pub struct Simulator<'a, Db: DatabaseRef> {
 }
 
 impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
-    pub fn create_and_run(connections: SpineConnections<Db>, db: DBFrag<Db>, actor_config: ActorConfig, evmconfig: OpEvmConfig) {
-        
-        let evm_config_c = evmconfig.clone();
+    pub fn new(db: DBFrag<Db>, evm_config: &'a OpEvmConfig) -> Self {
+        let system_caller = SystemCaller::new(evm_config.clone(), evm_config.chain_spec().clone());
 
-        tracing::error!("{:?}", evmconfig.chain_spec().chain());
-        let cache_tof = CacheDB::new(db.clone());
-        let mut evm_tof: Evm<'_, (), _> = evmconfig.evm(cache_tof);
-        evm_tof.context.evm.env.cfg.chain_id = evmconfig.chain_spec().chain.id();
-        let cache = CacheDB::new(Arc::new(DBSorting::new(db)));
-        let mut evm: Evm<'_, (), _> = evmconfig.evm(cache);
-        evm.context.evm.env.cfg.chain_id = evmconfig.chain_spec().chain.id();
-        Simulator::new(evm_tof, evm, evm_config_c).run(connections, actor_config);
-    }
+        // Initialise with default evms. These will be overridden before the first sim by
+        // `set_evm_for_new_block`.
+        let db_tof = CacheDB::new(db.clone());
+        let evm_tof: Evm<'_, (), _> = evm_config.evm(db_tof);
+        let db_sorting = CacheDB::new(Arc::new(DBSorting::new(db)));
+        let evm_sorting: Evm<'_, (), _> = evm_config.evm(db_sorting);
 
-    pub fn new(evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>, evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>, evm_config: OpEvmConfig) -> Self {
-        let chain_spec = evm_config.chain_spec().clone();
-        let system_caller = SystemCaller::new(evm_config, chain_spec);
-        Self { evm, evm_tof, system_caller }
+        Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone() }
     }
 
     fn simulate_tx<DbRef: DatabaseRead>(
@@ -68,25 +65,32 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
     }
 
     fn set_evm_for_new_block(&mut self, evm_block_params: EvmBlockParams) {
-        let parents = evm_block_params.header;
+        let parent = &evm_block_params.header;
         let next_attributes = evm_block_params.attributes;
+
+        // Initialise evm cfg and block env for the next block.
         let evm_env = self.evm_config.next_cfg_and_block_env(parent, next_attributes).unwrap();
         let EvmEnv { cfg_env_with_handler_cfg, block_env } = evm_env;
         let env_with_handler_cfg = EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
-        // *self.evm.block_mut() = env.clone();
-        // *self.evm_tof.block_mut() = env;
-    }
 
-    #[allow(dead_code)]
-    fn set_spec_id(&mut self, spec_id: SpecId) {
-        self.evm.modify_spec_id(spec_id);
+        // Update evms with the new env.
+        self.evm_tof.modify_spec_id(env_with_handler_cfg.spec_id());
+        self.evm_tof.context.evm.env = env_with_handler_cfg.env.clone();
+
+        self.evm_sorting.modify_spec_id(env_with_handler_cfg.spec_id());
+        self.evm_sorting.context.evm.env = env_with_handler_cfg.env;
     }
 }
 
-impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
+impl<'a, Db: DatabaseRead> Actor<Db> for Simulator<'a, Db> {
     const CORE_AFFINITY: Option<usize> = None;
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
+        // Received each new block from the sequencer.
+        connections.receive(|msg: EvmBlockParams, _| {
+            self.set_evm_for_new_block(msg);
+        });
+
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
             match msg {
                 // TODO: Cleanup: merge both functions?
@@ -96,7 +100,7 @@ impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
                         SimulatorToSequencer::new(
                             (tx.sender(), tx.nonce()),
                             db.state_id(),
-                            SimulatorToSequencerMsg::Tx(Self::simulate_tx(tx, db, &mut self.evm)),
+                            SimulatorToSequencerMsg::Tx(Self::simulate_tx(tx, db, &mut self.evm_sorting)),
                         ),
                         Duration::from_millis(10),
                     );
@@ -113,9 +117,6 @@ impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
                     );
                 }
             }
-        });
-        connections.receive(|msg: EvmBlockParams, _| {
-            self.set_evm_for_new_block(msg);
         });
     }
 }
