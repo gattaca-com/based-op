@@ -32,6 +32,11 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number }
     }
 
+    // TODO: remove this and move to sortign data
+    pub fn set_gas_limit(&mut self, gas_limit: u64) {
+        self.gas_remaining = gas_limit;
+    }
+
     pub fn db(&self) -> DBFrag<Db> {
         self.db.clone()
     }

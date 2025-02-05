@@ -10,7 +10,7 @@ use bop_common::{
 };
 use bop_db::init_database;
 use bop_rpc::{start_mock_engine_rpc, start_rpc};
-use bop_sequencer::{block_sync::BlockFetcher, Sequencer, SequencerConfig};
+use bop_sequencer::{block_sync::BlockFetcher, Sequencer};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
@@ -40,6 +40,8 @@ fn main() {
 }
 
 fn run(args: GatewayArgs) -> eyre::Result<()> {
+    info!("starting gateway");
+
     let spine = Spine::default();
 
     let db_bop = init_database(
@@ -65,8 +67,8 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             move || rt.block_on(wait_for_signal())
         });
 
+        let sequencer = Sequencer::new(db_bop, db_frag.clone(), (&args).into());
         s.spawn(|| {
-            let sequencer = Sequencer::new(db_bop, db_frag.clone(), SequencerConfig::default_base_sepolia());
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
