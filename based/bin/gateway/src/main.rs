@@ -9,8 +9,8 @@ use bop_common::{
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{init_database, DatabaseRead};
-use bop_rpc::{start_rpc,  start_mock_engine_rpc};
-use bop_sequencer::{block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher}, Sequencer, SequencerConfig};
+use bop_rpc::start_rpc;
+use bop_sequencer::{block_sync::mock_fetcher::MockFetcher, Sequencer};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
@@ -52,7 +52,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     )?;
     let db_frag: DBFrag<_> = db_bop.clone().into();
     let start_fetch = db_bop.head_block_number().expect("couldn't get head block number");
-    let fetch_until =args.tmp_end_block;
+    let fetch_until = args.tmp_end_block;
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()

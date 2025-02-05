@@ -10,7 +10,8 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
+            SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -272,6 +273,8 @@ where
                     if payload.block_hash() == fork_choice_state.head_block_hash {
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
                         SequencerState::commit_block(&block, data, senders, false);
+                        data.parent_header = block.header.clone();
+                        data.parent_hash = fork_choice_state.head_block_hash;
                         WaitingForForkChoiceWithAttributes
                     } else {
                         // We have received the wrong ExecutionPayload. Need to re-sync with the new head.
@@ -329,7 +332,7 @@ where
                     }
                 }
             }
-            Syncing { .. } | Sorting(_) |  WaitingForNewPayload => {
+            Syncing { .. } | Sorting(_) | WaitingForNewPayload => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -501,10 +504,7 @@ where
         syncing: bool,
     ) {
         let _ = data.block_executor.apply_and_commit_block(block, &data.db, true);
-
         data.reset_fragdb();
-        data.parent_header = block.header.clone();
-        data.parent_hash = fork_choice_state.head_block_hash;
 
         let sender = data.config.simulate_tof_in_pools.then_some(senders);
         data.tx_pool.handle_new_mined_txs(

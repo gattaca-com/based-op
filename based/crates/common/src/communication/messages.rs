@@ -3,9 +3,8 @@ use std::{
     sync::Arc,
 };
 
-use alloy_eips::eip2718::{Decodable2718, Encodable2718};
+use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
-use alloy_rlp::{Bytes, Encodable};
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes,
     PayloadError, PayloadId, PayloadStatus,
@@ -13,7 +12,7 @@ use alloy_rpc_types::engine::{
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::execute::BlockExecutionError;
-use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
+use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
 use revm::DatabaseRef;
 use revm_primitives::{Address, EVMError, U256};
@@ -239,7 +238,7 @@ impl EngineApi {
             parent_beacon_block_root: B256::ZERO,
             res_tx: new_payload_tx,
         };
-        let (fcu_tx, fcu_rx) = oneshot::channel();
+        let (fcu_tx, _fcu_rx) = oneshot::channel();
 
         let fcu_1 = EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: ForkchoiceState {
