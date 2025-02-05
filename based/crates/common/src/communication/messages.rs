@@ -257,10 +257,10 @@ pub type SimulationResult<T, Db> = Result<T, SimulationError<<Db as DatabaseRef>
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SimulatorToSequencerMsg<Db: DatabaseRead> {
-    /// During sorting/on top of any state
+    /// Simulation on top of any state.
     Tx(SimulationResult<SimulatedTx, Db>),
-    /// Specifically on top of top of fragment
-    TxTof(SimulationResult<SimulatedTx, Db>),
+    /// Simulation on top of a fragment. Used by the transaction pool.
+    TxPoolTopOfFrag(SimulationResult<SimulatedTx, Db>),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]

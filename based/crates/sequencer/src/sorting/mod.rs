@@ -1,0 +1,55 @@
+use std::ops::Deref;
+
+use bop_common::transaction::{SimulatedTx, SimulatedTxList};
+use revm_primitives::Address;
+
+pub(crate) mod sorting_data;
+pub(crate) use sorting_data::SortingData;
+pub(crate) mod frag_sequence;
+pub(crate) mod in_sort_frag;
+
+pub(crate) use frag_sequence::FragSequence;
+pub(crate) use in_sort_frag::InSortFrag;
+
+#[derive(Clone, Debug, Default)]
+pub struct ActiveOrders {
+    orders: Vec<SimulatedTxList>,
+}
+
+impl ActiveOrders {
+    pub fn new(orders: Vec<SimulatedTxList>) -> Self {
+        Self { orders }
+    }
+
+    fn len(&self) -> usize {
+        self.orders.len()
+    }
+
+    pub fn remove_from_sender(&mut self, sender: &Address, base_fee: u64) {
+        for i in (0..self.len() - 1).rev() {
+            let order = &mut self.orders[i];
+            if &order.sender() == sender && order.pop(base_fee) {
+                self.orders.swap_remove(i);
+                return;
+            }
+        }
+    }
+
+    pub fn put(&mut self, tx: SimulatedTx) {
+        let sender = tx.sender();
+        for order in self.orders.iter_mut().rev() {
+            if order.sender() == sender {
+                order.put(tx);
+                return;
+            }
+        }
+    }
+}
+
+impl Deref for ActiveOrders {
+    type Target = Vec<SimulatedTxList>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.orders
+    }
+}
