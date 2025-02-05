@@ -6,10 +6,10 @@ use revm_primitives::Address;
 pub(crate) mod sorting_data;
 pub(crate) use sorting_data::SortingData;
 pub(crate) mod frag_sequence;
-pub(crate) mod in_sorting_frag;
+pub(crate) mod in_sort_frag;
 
 pub(crate) use frag_sequence::FragSequence;
-pub(crate) use in_sorting_frag::InSortFrag;
+pub(crate) use in_sort_frag::InSortFrag;
 
 #[derive(Clone, Debug, Default)]
 pub struct ActiveOrders {
