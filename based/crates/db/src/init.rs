@@ -1,13 +1,11 @@
 use std::{fs, path::Path, sync::Arc};
 
-use parking_lot::RwLock;
 use reth_db::{init_db, ClientVersion};
-use reth_optimism_chainspec::BASE_SEPOLIA;
+use reth_optimism_chainspec::OpChainSpec;
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
 
-use super::{Error, DB};
-use crate::cache::ReadCaches;
+use super::{Error, SequencerDB};
 
 /// Initialise the database.
 /// # Params
@@ -16,12 +14,13 @@ use crate::cache::ReadCaches;
 /// * `max_cached_accounts` - maximum number of `AccountInfo` structs to cache in database read caches.
 /// * `max_cached_storages` - maximum number of individual storage slots to cache in database read caches.
 ///
-/// Returns the initialised [`BopDB`] implementation, or [`Error`] if there is a problem.
+/// Returns the initialised [`SequencerDB`] implementation, or [`Error`] if there is a problem.
 pub fn init_database<P: AsRef<Path>>(
     db_location: P,
     max_cached_accounts: u64,
     max_cached_storages: u64,
-) -> Result<DB, Error> {
+    chain_spec: Arc<OpChainSpec>,
+) -> Result<SequencerDB, Error> {
     // Check the specified path is accessible, creating directories if necessary.
     let db_dir = db_location.as_ref().join("db");
     let static_files_dir = db_location.as_ref().join("static_files");
@@ -37,12 +36,8 @@ pub fn init_database<P: AsRef<Path>>(
         .with_exclusive(Some(false));
     let db = Arc::new(init_db(db_dir, db_args).map_err(|e| Error::DatabaseInitialisationError(e.to_string()))?);
 
-    // TODO set from config
-    let chain_spec = BASE_SEPOLIA.clone();
-
     let factory = ProviderFactory::new(db, chain_spec, StaticFileProvider::read_write(static_files_dir)?);
-    let caches = ReadCaches::new(max_cached_accounts, max_cached_storages);
-    Ok(DB { factory, caches, block: RwLock::new(None) })
+    Ok(SequencerDB::new(factory, max_cached_accounts, max_cached_storages))
 }
 
 fn create_or_check_dir<P: AsRef<Path>>(dir: &P) -> Result<(), Error> {

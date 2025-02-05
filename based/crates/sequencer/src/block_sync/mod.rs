@@ -13,7 +13,7 @@ use bop_common::{
         messages::{BlockSyncError, BlockSyncMessage, EngineApi},
         SendersSpine,
     },
-    db::{BopDB, BopDbRead},
+    db::{DatabaseRead, DatabaseWrite},
     runtime::RuntimeOrHandle,
 };
 use crossbeam_channel::{Receiver, Sender};
@@ -30,6 +30,7 @@ use reth_optimism_evm::OpExecutionStrategyFactory;
 use reth_optimism_primitives::{OpBlock, OpReceipt, OpTransactionSigned};
 use reth_primitives::{BlockWithSenders, GotExpected};
 use reth_primitives_traits::SignedTransaction;
+use reth_trie_common::updates::TrieUpdates;
 use revm::{db::DbAccount, Database, DatabaseRef};
 use tokio::runtime::Runtime;
 
@@ -74,17 +75,17 @@ impl BlockSync {
         payload: ExecutionPayload,
         sidecar: ExecutionPayloadSidecar,
         db: &DB,
-        senders: &SendersSpine<DB::ReadOnly>,
+        senders: &SendersSpine<DB>,
         commit_block: bool,
     ) -> Result<Option<u64>, BlockSyncError>
     where
-        DB: BopDB,
+        DB: DatabaseWrite + DatabaseRead,
     {
         let start = Instant::now();
 
         let payload_block_number = payload.block_number();
         let cur_block = payload_to_block(payload, sidecar);
-        let db_block_head = db.readonly().unwrap().head_block_number()?;
+        let db_block_head = db.head_block_number()?;
         tracing::info!("handling new payload for block number: {payload_block_number}, db_block_head: {db_block_head}");
 
         // This case occurs when the sequencer is behind the chain head.
@@ -121,15 +122,13 @@ impl BlockSync {
         commit_block: bool,
     ) -> Result<(), BlockSyncError>
     where
-        DB: BopDB,
+        DB: DatabaseWrite + DatabaseRead,
     {
         tracing::info!("Applying and committing block: {:?}", block.header.number);
-
-        let db_ro = db.readonly().unwrap();
-        debug_assert!(block.header.number == db_ro.head_block_number()? + 1, "can only apply blocks sequentially");
+        debug_assert!(block.header.number == db.head_block_number()? + 1, "can only apply blocks sequentially");
 
         // Reorg check
-        if let Ok(db_parent_hash) = db_ro.block_hash_ref(block.header.number.saturating_sub(1)) {
+        if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {
             if db_parent_hash != block.header.parent_hash {
                 tracing::warn!(
                     "reorg detected at: {}. db_parent_hash: {db_parent_hash:?}, block_hash: {:?}",
@@ -142,9 +141,9 @@ impl BlockSync {
             }
         }
 
-        let execution_output = self.execute(block, &db_ro)?;
+        let (execution_output, trie_updates) = self.execute(block, db)?;
         if commit_block {
-            db.commit_block(block, execution_output)?;
+            db.commit_block_unchecked(block, execution_output, trie_updates)?;
         }
 
         Ok(())
@@ -156,9 +155,9 @@ impl BlockSync {
         &mut self,
         block: &BlockWithSenders<OpBlock>,
         db: &DB,
-    ) -> Result<BlockExecutionOutput<OpReceipt>, BlockExecutionError>
+    ) -> Result<(BlockExecutionOutput<OpReceipt>, TrieUpdates), BlockExecutionError>
     where
-        DB: BopDbRead + Database<Error: Into<ProviderError> + Display>,
+        DB: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
         let mut start = Instant::now();
 
@@ -171,12 +170,14 @@ impl BlockSync {
 
         // Validate receipts/ gas used
         reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &receipts)?;
+        let after_light_validation = Instant::now();
 
         // Merge transitions and take bundle state.
         let state = executor.finish();
+        let after_bundle_state_finish = Instant::now();
 
         // Validate state root
-        let (state_root, _) = db
+        let (state_root, trie_updates) = db
             .calculate_state_root(&state)
             .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::Other(e.into())))?;
         if state_root != block.header.state_root {
@@ -184,6 +185,7 @@ impl BlockSync {
                 GotExpected::new(state_root, block.header.state_root).into(),
             )));
         }
+        let after_state_root = Instant::now();
 
         tracing::info!(
             block_number = %block.header.number,
@@ -191,11 +193,13 @@ impl BlockSync {
             state_root = ?state_root,
             total_latency = ?start.elapsed(),
             block_apply_latency = ?after_block_apply.duration_since(start),
-            validation_and_finish_latency = ?after_block_apply.elapsed(),
+            light_validation_latency = ?after_light_validation.duration_since(after_block_apply),
+            bundle_state_finish_latency = ?after_bundle_state_finish.duration_since(after_light_validation),
+            state_root_latency = ?after_state_root.duration_since(after_bundle_state_finish),
             "BlockSync::execute finished"
         );
 
-        Ok(BlockExecutionOutput { state, receipts, requests, gas_used })
+        Ok((BlockExecutionOutput { state, receipts, requests, gas_used }, trie_updates))
     }
 }
 
@@ -251,8 +255,8 @@ mod tests {
 
         // Initialise the on disk db.
         let db_location = std::env::var("DB_LOCATION").unwrap_or_else(|_| "/tmp/base_sepolia".to_string());
-        let db: bop_db::DB = init_database(&db_location, 1000, 1000).unwrap();
-        let db_head_block_number = db.readonly().unwrap().head_block_number().unwrap();
+        let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000, BASE_SEPOLIA.clone()).unwrap();
+        let db_head_block_number = db.head_block_number().unwrap();
         println!("DB Head Block Number: {:?}", db_head_block_number);
 
         // initialise block sync and fetch block

@@ -8,6 +8,7 @@ use reth_db::{
     tables,
     transaction::{DbTx, DbTxMut},
 };
+use reth_optimism_chainspec::BASE_SEPOLIA;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -37,7 +38,7 @@ async fn main() -> eyre::Result<()> {
     let args = Args::parse();
 
     // Initialize DB
-    let db = init_database(&args.db_path, 0, 0)?;
+    let db = init_database(&args.db_path, 0, 0, BASE_SEPOLIA.clone())?;
 
     // Initialize HTTP client with reasonable timeouts
     let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()?;

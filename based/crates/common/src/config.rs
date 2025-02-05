@@ -18,7 +18,7 @@ pub struct GatewayArgs {
         value_parser = OpChainSpecParser::parser(),
         
     )]
-    chain: Arc<OpChainSpec>,
+    pub chain_spec: Arc<OpChainSpec>,
     /// The host to run the engine_ and eth_ RPC
     #[arg(long = "rpc.host", default_value_t = Ipv4Addr::UNSPECIFIED)]
     pub rpc_host: Ipv4Addr,
@@ -46,4 +46,7 @@ pub struct GatewayArgs {
     /// Maximum number of cached storages
     #[arg(long = "db.max_cached_storages", default_value_t = 100_000)]
     pub max_cached_storages: u64,
+    /// TMP END BLOCK
+    #[arg(long = "tmp.end_block")]
+    pub tmp_end_block: u64,
 }

@@ -19,3 +19,7 @@ target/
 /target
 .vscode
 **/Cargo.lock
+
+/based/base_sepolia/
+
+.DS_Store

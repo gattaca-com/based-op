@@ -3,12 +3,11 @@ use std::{ops::Deref, sync::Arc};
 use alloy_consensus::{Receipt, TxReceipt};
 use alloy_primitives::U256;
 use op_alloy_consensus::{OpDepositReceipt, OpTxType};
-use reth_optimism_consensus::calculate_receipt_root_no_memo_optimism;
 use reth_optimism_primitives::OpReceipt;
-use reth_primitives::{ReceiptWithBloom, TxType};
+use reth_primitives::ReceiptWithBloom;
 use revm_primitives::{Address, EvmState, ResultAndState};
 
-use crate::{db::BopDbRead, transaction::Transaction};
+use crate::{db::DatabaseRead, transaction::Transaction};
 
 #[derive(Clone, Debug)]
 pub struct SimulatedTx {
@@ -23,7 +22,7 @@ pub struct SimulatedTx {
 impl SimulatedTx {
     pub fn new<Db>(tx: Arc<Transaction>, result_and_state: ResultAndState, orig_state: &Db, coinbase: Address) -> Self
     where
-        Db: BopDbRead,
+        Db: DatabaseRead,
     {
         let start_balance = orig_state
             .basic_ref(coinbase)

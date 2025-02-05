@@ -8,7 +8,7 @@ use tracing::{info, span, warn, Level};
 
 use crate::{
     communication::SpineConnections,
-    db::BopDbRead,
+    db::DatabaseRead,
     time::{vsync, Duration, Timer},
     utils::last_part_of_typename,
 };
@@ -33,37 +33,52 @@ impl ActorConfig {
         self.min_loop_duration = Some(min_loop_duration);
         self
     }
-}
 
-pub trait Actor<Db: BopDbRead>: Sized {
-    const CORE_AFFINITY: Option<usize> = None;
-
-    fn loop_body(&mut self, _connections: &mut SpineConnections<Db>) {}
-    fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {}
-    fn on_exit(self, _connections: &mut SpineConnections<Db>) {}
-
-    fn run(mut self, mut connections: SpineConnections<Db>, actor_config: ActorConfig) {
-        let name = last_part_of_typename::<Self>();
-        let _s = span!(Level::INFO, "", system = last_part_of_typename::<Self>()).entered();
-        //TODO: Verify that this doesn't add too much time to the loop
-        let term = Arc::new(AtomicBool::new(false));
-        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
-            .expect("Couldn't register signal hook for some reason");
-
-        if let Some(id) = actor_config.core.or(Self::CORE_AFFINITY) {
+    pub fn maybe_bind_to_core(&self, fallback: Option<usize>) {
+        if let Some(id) = self.core.or(fallback) {
             if !core_affinity::set_for_current(CoreId { id }) {
                 warn!("Couldn't set core_affinity");
             };
         }
+    }
+}
+
+pub trait Actor<Db: DatabaseRead>: Sized {
+    const CORE_AFFINITY: Option<usize> = None;
+    fn loop_body(&mut self, _connections: &mut SpineConnections<Db>) {}
+    fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {}
+
+    fn _on_init(&mut self, connections: &mut SpineConnections<Db>) {
         info!("Initializing...");
-        self.on_init(&mut connections);
+        self.on_init(connections);
         info!("Initialized...");
+    }
+
+    fn on_exit(self, _connections: &mut SpineConnections<Db>) {}
+    fn _on_exit(self, connections: &mut SpineConnections<Db>) {
+        info!("Running final tasks before stopping...");
+        self.on_exit(connections);
+        info!("Finalized");
+    }
+
+    fn run(mut self, mut connections: SpineConnections<Db>, actor_config: ActorConfig) {
+        let name = last_part_of_typename::<Self>();
+
+        let _s = span!(Level::INFO, "", system = name).entered();
+
+        actor_config.maybe_bind_to_core(Self::CORE_AFFINITY);
+
+        self._on_init(&mut connections);
 
         let mut loop_timer = Timer::new(format!("{}-loop", name));
-        let min_loop_duration = actor_config.min_loop_duration;
+
+        let term = Arc::new(AtomicBool::new(false));
+        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
+            .expect("Couldn't register signal hook for some reason");
+
         loop {
             loop_timer.start();
-            if vsync(min_loop_duration, || {
+            if vsync(actor_config.min_loop_duration, || {
                 self.loop_body(&mut connections);
                 loop_timer.stop();
                 term.load(Ordering::Relaxed)
@@ -71,8 +86,7 @@ pub trait Actor<Db: BopDbRead>: Sized {
                 break;
             }
         }
-        info!("Running final tasks before stopping...");
-        self.on_exit(&mut connections);
-        info!("Finalized");
+
+        self._on_exit(&mut connections)
     }
 }

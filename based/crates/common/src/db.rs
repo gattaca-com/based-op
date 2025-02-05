@@ -10,6 +10,7 @@ use alloy_primitives::{map::HashMap, BlockNumber, B256};
 use auto_impl::auto_impl;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use parking_lot::RwLock;
+use rand::RngCore;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
 use reth_provider::BlockExecutionOutput;
@@ -42,6 +43,8 @@ pub enum Error {
     StateRootError(BlockNumber),
     #[error("Reth state root error: {0}")]
     RethStateRootError(#[from] reth_execution_errors::StateRootError),
+    #[error("Parallel state root error: {0}")]
+    ParallelStateRootError(#[from] reth_trie_parallel::root::ParallelStateRootError),
 }
 
 impl From<Error> for ProviderError {
@@ -55,17 +58,14 @@ impl From<Error> for ProviderError {
             Error::Other(e) => ProviderError::Database(DatabaseError::Other(e)),
             Error::StateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
             Error::RethStateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
+            Error::ParallelStateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
         }
     }
 }
 
 /// Database trait for all DB operations.
 #[auto_impl(&, Arc)]
-pub trait BopDB: Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug {
-    type ReadOnly: BopDbRead + Database<Error: Into<ProviderError> + Display>;
-
-    /// Returns a read-only database.
-    fn readonly(&self) -> Result<Self::ReadOnly, Error>;
+pub trait DatabaseWrite: Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug {
 
     fn commit_block(
         &self,
@@ -83,7 +83,7 @@ pub trait BopDB: Database<Error: Into<ProviderError> + Display> + Send + Sync + 
 
 /// Database read functions
 #[auto_impl(&, Arc)]
-pub trait BopDbRead:
+pub trait DatabaseRead:
     DatabaseRef<Error: Debug + Display + Into<ProviderError>> + Send + Sync + 'static + Clone + Debug
 {
     /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
@@ -93,7 +93,7 @@ pub trait BopDbRead:
     fn head_block_number(&self) -> Result<u64, Error>;
 }
 
-impl<DbRead: BopDbRead> BopDbRead for CacheDB<DbRead> {
+impl<DbRead: DatabaseRead> DatabaseRead for CacheDB<DbRead> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.calculate_state_root(bundle_state)
     }
@@ -113,7 +113,7 @@ pub struct DBFrag<Db> {
     curr_block_number: u64,
 }
 
-impl<Db: BopDbRead> DBFrag<Db> {
+impl<Db: DatabaseRead> DBFrag<Db> {
     pub fn commit<'a>(&mut self, txs: impl Iterator<Item = &'a SimulatedTx>) {
         let mut guard = self.db.write();
 
@@ -121,15 +121,6 @@ impl<Db: BopDbRead> DBFrag<Db> {
             guard.commit(t.clone_state())
         }
 
-        self.state_id = rand::random()
-    }
-
-    pub fn reset(&mut self) {
-        let mut guard = self.db.write();
-        guard.accounts.clear();
-        guard.contracts.clear();
-        guard.logs.clear();
-        guard.block_hashes.clear();
         self.state_id = rand::random()
     }
 
@@ -173,6 +164,11 @@ impl<Db: BopDbRead> DBFrag<Db> {
         todo!()
     }
 
+    pub fn reset(&mut self, db: Db) {
+        *self.db.write() = CacheDB::new(db);
+        self.state_id = rand::rng().next_u64();
+    }
+
     pub fn state_root(&self, state_changes: HashMap<Address, Account>) -> B256 {
         let r = self.db.read();
         let bundle_state = state_changes_to_bundle_state(&r.db, state_changes).expect("couldn't create bundle state");
@@ -200,7 +196,7 @@ impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
     }
 }
 
-impl<Db: BopDbRead> Database for DBFrag<Db> {
+impl<Db: DatabaseRead> Database for DBFrag<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
@@ -220,7 +216,7 @@ impl<Db: BopDbRead> Database for DBFrag<Db> {
     }
 }
 
-impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
+impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.read().calculate_state_root(bundle_state)
     }
@@ -230,7 +226,7 @@ impl<Db: BopDbRead> BopDbRead for DBFrag<Db> {
     }
 }
 
-impl<Db: BopDbRead> From<Db> for DBFrag<Db> {
+impl<Db: DatabaseRead> From<Db> for DBFrag<Db> {
     fn from(value: Db) -> Self {
         let curr_block_number = value.head_block_number().unwrap() + 1;
         Self { db: Arc::new(RwLock::new(CacheDB::new(value))), state_id: rand::random(), curr_block_number }
@@ -290,7 +286,7 @@ impl<DbRead: DatabaseRef> DatabaseRef for DBSorting<DbRead> {
     }
 }
 
-impl<Db: BopDbRead> Database for DBSorting<Db> {
+impl<Db: DatabaseRead> Database for DBSorting<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
@@ -310,7 +306,7 @@ impl<Db: BopDbRead> Database for DBSorting<Db> {
     }
 }
 
-impl<DbRead: BopDbRead> BopDbRead for DBSorting<DbRead> {
+impl<DbRead: DatabaseRead> DatabaseRead for DBSorting<DbRead> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         self.db.calculate_state_root(bundle_state)
     }

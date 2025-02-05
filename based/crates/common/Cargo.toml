@@ -29,7 +29,11 @@ op-alloy-network.workspace = true
 revm-primitives.workspace = true
 revm.workspace = true
 
-reth-optimism-evm.workspace = true
+
+reth-cli.workspace = true
+
+
+# networkingreth-optimism-evm.workspace = true
 reth-optimism-chainspec.workspace = true
 reth-evm.workspace = true
 reth-primitives.workspace = true
@@ -53,9 +57,7 @@ reth-optimism-node.workspace = true
 reth-optimism-cli.workspace = true
 reth-execution-errors.workspace = true
 reth-optimism-consensus.workspace = true
-reth-cli.workspace = true
-
-# networking
+reth-trie-parallel.workspace = true
 reqwest.workspace = true
 # serde
 serde.workspace = true

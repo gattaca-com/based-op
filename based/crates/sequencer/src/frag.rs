@@ -9,7 +9,7 @@ use bop_common::{
     p2p::{FragV0, SealV0},
     transaction::SimulatedTx,
 };
-use bop_db::BopDbRead;
+use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
 use revm_primitives::{BlockEnv, Bytes, B256};
 
@@ -26,7 +26,7 @@ pub struct FragSequence<Db> {
     block_number: u64,
 }
 
-impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
+impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
     pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
         let block_number = db.head_block_number().expect("can't get block number") + 1;
         Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number }
@@ -61,8 +61,8 @@ impl<Db: BopDbRead + Clone + std::fmt::Debug> FragSequence<Db> {
     }
 
     /// When a new block is received, we clear all the temp state on the db
-    pub fn clear_frags(&mut self) {
-        self.db.reset();
+    pub fn reset_fragdb(&mut self, db: Db) {
+        self.db.reset(db);
     }
 
     pub fn seal_block(

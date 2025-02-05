@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use bop_common::{runtime::RuntimeOrHandle, time::Duration, utils::initialize_test_tracing};
-use bop_db::{init_database, BopDB, BopDbRead};
+use bop_db::{init_database, DatabaseRead};
 use bop_sequencer::block_sync::{
     fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block},
     BlockSync,
@@ -35,8 +35,8 @@ async fn main() -> eyre::Result<()> {
     let rpc_url = Url::parse(&args.rpc_url)?;
     let rpc_url_clone = rpc_url.clone();
 
-    let db: bop_db::DB = init_database(&args.db_path, 1000, 1000)?;
-    let db_head = db.readonly().unwrap().head_block_number()?;
+    let db: bop_db::SequencerDB = init_database(&args.db_path, 1000, 1000, BASE_SEPOLIA.clone())?;
+    let db_head = db.head_block_number()?;
     let head_state_root = db.state_root()?;
 
     tracing::info!(

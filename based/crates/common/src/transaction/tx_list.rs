@@ -92,9 +92,7 @@ impl TxList {
     /// 2. gas_price >= base_fee
     #[inline]
     pub fn first_ready(&self, curr_nonce: u64, base_fee: u64) -> Option<&Arc<Transaction>> {
-        let Some(next_tx) = self.peek() else {
-            return None;
-        };
+        let next_tx = self.peek()?;
 
         if next_tx.nonce() != curr_nonce || !next_tx.valid_for_block(base_fee) {
             return None;

@@ -5,7 +5,7 @@ use alloy_rpc_types::{BlockId, BlockNumberOrTag};
 use bop_common::{
     api::{EthApiClient, EthApiServer, OpRpcBlock},
     communication::messages::RpcResult,
-    db::BopDbRead,
+    db::DatabaseRead,
     transaction::Transaction,
 };
 use jsonrpsee::core::async_trait;
@@ -16,7 +16,7 @@ use tracing::{trace, warn, Level};
 use crate::RpcServer;
 
 #[async_trait]
-impl<D: BopDbRead> EthApiServer for RpcServer<D> {
+impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         trace!(?bytes, "new request");
@@ -38,8 +38,7 @@ impl<D: BopDbRead> EthApiServer for RpcServer<D> {
             Ok(receipt) => Some(receipt),
             Err(err) => {
                 warn!(%err, "failed db fetch");
-                let receipt = self.fallback.transaction_receipt(hash).await?;
-                receipt
+                self.fallback.transaction_receipt(hash).await?
             }
         };
 
@@ -86,8 +85,7 @@ impl<D: BopDbRead> EthApiServer for RpcServer<D> {
             Ok(block) => Some(convert_block(block, full)),
             Err(err) => {
                 warn!(%err, "failed db fetch");
-                let block = self.fallback.block_by_hash(hash, full).await?;
-                block
+                self.fallback.block_by_hash(hash, full).await?
             }
         };
 
@@ -104,8 +102,7 @@ impl<D: BopDbRead> EthApiServer for RpcServer<D> {
             Ok(bn) => U256::from(bn),
             Err(err) => {
                 warn!(%err, "failed db fetch");
-                let bn = self.fallback.block_number().await?;
-                bn
+                self.fallback.block_number().await?
             }
         };
 
@@ -121,13 +118,11 @@ impl<D: BopDbRead> EthApiServer for RpcServer<D> {
                 Ok(nonce) => U256::from(nonce),
                 Err(err) => {
                     warn!(%err, "failed db fetch");
-                    let nonce = self.fallback.transaction_count(address, block_number).await?;
-                    nonce
+                    self.fallback.transaction_count(address, block_number).await?
                 }
             }
         } else {
-            let nonce = self.fallback.transaction_count(address, block_number).await?;
-            nonce
+            self.fallback.transaction_count(address, block_number).await?
         };
 
         Ok(nonce)
@@ -143,13 +138,11 @@ impl<D: BopDbRead> EthApiServer for RpcServer<D> {
                 Ok(balance) => U256::from(balance),
                 Err(err) => {
                     warn!(%err, "failed db fetch");
-                    let balance = self.fallback.balance(address, block_number).await?;
-                    balance
+                    self.fallback.balance(address, block_number).await?
                 }
             }
         } else {
-            let balance = self.fallback.balance(address, block_number).await?;
-            balance
+            self.fallback.balance(address, block_number).await?
         };
 
         Ok(balance)

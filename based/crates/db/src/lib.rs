@@ -1,121 +1,102 @@
 use std::{
     fmt::{Debug, Formatter},
     sync::Arc,
+    time::Instant,
 };
 
 use parking_lot::RwLock;
-use reth_db::{tables, transaction::DbTxMut, DatabaseEnv};
+use reth_db::{tables, transaction::DbTxMut, Bytecodes, CanonicalHeaders, DatabaseEnv};
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
-use reth_provider::{BlockExecutionOutput, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter};
+use reth_provider::{providers::ConsistentDbView, BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter};
 use reth_storage_api::HashedPostStateProvider;
+use reth_trie::{StateRoot, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
+use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
+use reth_trie_parallel::root::ParallelStateRoot;
 use revm::{
     db::{BundleState, OriginalValuesKnown},
     Database, DatabaseRef,
 };
 use revm_primitives::{AccountInfo, Address, Bytecode, B256, U256};
+use reth_db::transaction::DbTx;
+use reth_db::cursor::DbCursorRO;
 
 pub mod alloy_db;
-mod block;
 mod cache;
 mod init;
-mod util;
 
-pub use bop_common::db::{BopDB, BopDbRead, Error};
+pub use bop_common::db::{DatabaseWrite, DatabaseRead, Error};
 pub use init::init_database;
 
-use crate::{block::BlockDB, cache::ReadCaches};
+use crate::cache::ReadCaches;
 
-pub struct DB {
+pub type ProviderReadOnly = DatabaseProviderRO<Arc<DatabaseEnv>, NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>;
+
+#[derive(Clone)]
+pub struct SequencerDB {
     pub factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>,
     caches: ReadCaches,
-    block: RwLock<Option<BlockDB>>,
+    provider: Arc<RwLock<Option<Arc<ProviderReadOnly>>>>,
 }
 
-impl DB {
+impl SequencerDB {
+    pub fn new(factory: ProviderFactory<NodeTypesWithDBAdapter<OpNode, Arc<DatabaseEnv>>>, max_cached_accounts: u64, max_cached_storages: u64) -> Self {
+        let caches = ReadCaches::new(max_cached_accounts, max_cached_storages);
+        Self { factory, caches, provider: Arc::new(RwLock::new(None)) }
+    }
+
+    pub fn provider(&self) -> Result<Arc<ProviderReadOnly>, Error> {
+        if let Some(provider) = self.provider.read().as_ref().cloned() {
+            return Ok(provider);
+        }
+
+        let provider = Arc::new(self.factory.provider().map_err(Error::ProviderError)?);
+        self.provider.write().replace(provider.clone());
+        Ok(provider)
+    }
+
     pub fn state_root(&self) -> Result<B256, Error> {
-        self.readonly()?.state_root()
+        let provider = self.provider()?;
+        let tx = provider.tx_ref();
+        StateRoot::new(DatabaseTrieCursorFactory::new(tx), DatabaseHashedCursorFactory::new(tx))
+            .root()
+            .map_err(Error::RethStateRootError)
+    }
+
+    /// Reset the read db provider. Will be lazily re-created on next access.
+    /// Should be called when a new block is committed.
+    pub fn reset_provider(&self) {
+        *self.provider.write() = None;
     }
 }
 
-impl Clone for DB {
-    fn clone(&self) -> Self {
-        Self { factory: self.factory.clone(), caches: self.caches.clone(), block: RwLock::new(None) }
-    }
-}
-
-impl Debug for DB {
+impl Debug for SequencerDB {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("DB")
     }
 }
 
-impl DatabaseRef for DB {
-    type Error = <<DB as BopDB>::ReadOnly as DatabaseRef>::Error;
-
-    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        self.readonly()?.basic(address)
-    }
-
-    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        self.readonly()?.code_by_hash(code_hash)
-    }
-
-    fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        self.readonly()?.storage(address, index)
-    }
-
-    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
-        self.readonly()?.block_hash(number)
-    }
-}
-
-impl Database for DB {
-    type Error = bop_common::db::Error;
-
-    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        self.readonly()?.basic(address)
-    }
-
-    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        self.readonly()?.code_by_hash(code_hash)
-    }
-
-    fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        self.readonly()?.storage(address, index)
-    }
-
-    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
-        self.readonly()?.block_hash(number)
-    }
-}
-
-impl BopDbRead for DB {
+impl DatabaseRead for SequencerDB {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
-        self.readonly()?.calculate_state_root(bundle_state)
+        let provider = self.provider()?;
+        let latest_state = LatestStateProviderRef::new(provider.as_ref());
+        let hashed_state = latest_state.hashed_post_state(bundle_state);
+
+        let consistent_view = ConsistentDbView::new_unchecked(self.factory.clone())?;
+        let parallel_state_root = ParallelStateRoot::new(consistent_view, TrieInput::from_state(hashed_state));
+        parallel_state_root.incremental_root_with_updates().map_err(Error::ParallelStateRootError)
     }
 
     fn head_block_number(&self) -> Result<u64, Error> {
-        self.readonly()?.head_block_number()
+        let provider = self.provider()?;
+        provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
     }
 }
 
-impl BopDB for DB {
-    type ReadOnly = BlockDB;
-
-    fn readonly(&self) -> Result<Self::ReadOnly, Error> {
-        if let Some(block) = self.block.read().as_ref().cloned() {
-            return Ok(block);
-        }
-
-        let block = BlockDB::new(self.caches.clone(), self.factory.provider().map_err(Error::ProviderError)?);
-        self.block.write().replace(block.clone());
-        Ok(block)
-    }
-
+impl DatabaseWrite for SequencerDB {
     /// Commit a new block to the database.
     fn commit_block(
         &self,
@@ -123,8 +104,7 @@ impl BopDB for DB {
         block_execution_output: BlockExecutionOutput<OpReceipt>,
     ) -> Result<(), Error> {
         // Calculate state root and get trie updates.
-        let db_ro = self.readonly()?;
-        let (state_root, trie_updates) = db_ro.calculate_state_root(&block_execution_output.state)?;
+        let (state_root, trie_updates) = self.calculate_state_root(&block_execution_output.state)?;
 
         if state_root != block.block.header.state_root {
             tracing::error!("State root mismatch: {state_root}, block: {:?}", block.block.header);
@@ -145,34 +125,97 @@ impl BopDB for DB {
         let provider = self.factory.provider().map_err(Error::ProviderError)?;
         let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
 
+        let start = Instant::now();
+
         // Update the read caches.
         self.caches.update(&block_execution_output.state);
+        let after_caches_update = Instant::now();
 
         let (plain_state, reverts) = block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
 
         // Write state reverts
         rw_provider.write_state_reverts(reverts, block.block.header.number)?;
-
+        let after_state_reverts = Instant::now();
         // Write plain state
         rw_provider.write_state_changes(plain_state)?;
+        let after_state_changes = Instant::now();
 
         // Write state trie updates
         let latest_state = LatestStateProviderRef::new(&provider);
         let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
         rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
         rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)?;
+        let after_trie_updates = Instant::now();
 
         // Write to header table
         rw_provider
             .tx_ref()
             .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
             .unwrap();
+        let after_header_write = Instant::now();
 
         rw_provider.commit()?;
+        let after_commit = Instant::now();
 
-        // Reset the read provider
-        *self.block.write() = None;
+        self.reset_provider();
+
+        tracing::info!(
+            "Commit block took: {:?} (caches: {:?}, state_reverts: {:?}, state_changes: {:?}, trie_updates: {:?}, header_write: {:?}, commit: {:?})",
+            start.elapsed(),
+            after_caches_update.duration_since(start),
+            after_state_reverts.duration_since(after_caches_update),
+            after_state_changes.duration_since(after_state_reverts),
+            after_trie_updates.duration_since(after_state_changes),
+            after_header_write.duration_since(after_trie_updates),
+            after_commit.duration_since(after_header_write),
+        );
 
         Ok(())
+    }
+}
+
+impl DatabaseRef for SequencerDB {
+    type Error = Error;
+
+    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        self.caches.account_info(&address, self.provider()?.tx_ref())
+    }
+
+    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        let code = self.provider()?.tx_ref().get::<Bytecodes>(code_hash).map_err(Error::ReadTransactionError)?;
+        Ok(code.unwrap_or_default().0)
+    }
+
+    fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        self.caches.storage(&(address, index), self.provider()?.tx_ref())
+    }
+
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        let hash = self.provider()?.tx_ref().get::<CanonicalHeaders>(number).map_err(Error::ReadTransactionError)?;
+        Ok(hash.unwrap_or_default())
+    }
+}
+
+impl Database for SequencerDB {
+    type Error = Error;
+
+    #[inline]
+    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        self.basic_ref(address)
+    }
+
+    #[inline]
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        self.code_by_hash_ref(code_hash)
+    }
+
+    #[inline]
+    fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        self.storage_ref(address, index)
+    }
+
+    #[inline]
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
+        self.block_hash_ref(number)
     }
 }

@@ -20,7 +20,7 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 
 use crate::{
-    db::{BopDbRead, DBFrag, DBSorting},
+    db::{DBFrag, DBSorting, DatabaseRead},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
 };
@@ -236,13 +236,13 @@ pub enum SequencerToSimulator<Db> {
 }
 
 #[derive(Debug)]
-pub struct SimulatorToSequencer<Db: BopDbRead> {
+pub struct SimulatorToSequencer<Db: DatabaseRead> {
     pub sender: Address,
     pub state_id: u64,
     pub msg: SimulatorToSequencerMsg<Db>,
 }
 
-impl<Db: BopDbRead> SimulatorToSequencer<Db> {
+impl<Db: DatabaseRead> SimulatorToSequencer<Db> {
     pub fn new(sender: Address, state_id: u64, msg: SimulatorToSequencerMsg<Db>) -> Self {
         Self { sender, state_id, msg }
     }
@@ -256,7 +256,7 @@ pub type SimulationResult<T, Db> = Result<T, SimulationError<<Db as DatabaseRef>
 
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
-pub enum SimulatorToSequencerMsg<Db: BopDbRead> {
+pub enum SimulatorToSequencerMsg<Db: DatabaseRead> {
     /// During sorting/on top of any state
     Tx(SimulationResult<SimulatedTx, Db>),
     /// Specifically on top of top of fragment
@@ -282,7 +282,7 @@ pub enum BlockSyncError {
     #[error("Block execution failed: {0}")]
     Execution(#[from] BlockExecutionError),
     #[error("DB error: {0}")]
-    BopDb(#[from] crate::db::Error),
+    Database(#[from] crate::db::Error),
     #[error("Payload error: {0}")]
     Payload(#[from] PayloadError),
     #[error("Failed to recover transaction signer")]
