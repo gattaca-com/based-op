@@ -89,7 +89,7 @@ impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
                         SimulatorToSequencer::new(
                             sender,
                             db.state_id(),
-                            SimulatorToSequencerMsg::TxTof(Self::simulate_tx(tx, db, &mut self.evm_tof)),
+                            SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_tx(tx, db, &mut self.evm_tof)),
                         ),
                         Duration::from_millis(10),
                     );
