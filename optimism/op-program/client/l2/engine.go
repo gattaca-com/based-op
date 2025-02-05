@@ -154,3 +154,24 @@ func (o *OracleEngine) SystemConfigByL2Hash(ctx context.Context, hash common.Has
 	}
 	return derive.PayloadToSystemConfig(o.rollupCfg, payload.ExecutionPayload)
 }
+
+// TODO: Define response for the following methods
+// TODO: Do we want a timestamp field in the request?
+
+func (o *OracleEngine) NewFrag(ctx context.Context, frag *eth.FragV0) (*string, error) {
+	switch method := o.rollupCfg.NewFragVersion(uint64(0)); method {
+	case eth.NewFragV0:
+		return o.api.NewFragV0(ctx, frag)
+	default:
+		return nil, fmt.Errorf("unsupported NewFrag version: %s", method)
+	}
+}
+
+func (o *OracleEngine) SealFrag(ctx context.Context, frag *eth.SealV0) (*string, error) {
+	switch method := o.rollupCfg.NewFragVersion(uint64(0)); method {
+	case eth.NewFragV0:
+		return o.api.SealFragV0(ctx, frag)
+	default:
+		return nil, fmt.Errorf("unsupported SealFrag version: %s", method)
+	}
+}
