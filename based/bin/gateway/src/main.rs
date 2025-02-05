@@ -20,6 +20,7 @@ fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
+
     let args = GatewayArgs::parse();
     verify_or_remove_queue_files();
 
@@ -48,8 +49,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         args.max_cached_accounts,
         args.max_cached_storages,
         args.chain_spec.clone(),
-    )
-    .expect("can't run");
+    )?;
     let db_frag: DBFrag<_> = db_bop.clone().into();
 
     std::thread::scope(|s| {
@@ -64,7 +64,6 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             let db_frag = db_frag.clone();
             let rt = rt.clone();
             start_rpc(&args, &spine, db_frag, &rt);
-
             move || rt.block_on(wait_for_signal())
         });
 
@@ -72,6 +71,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         s.spawn(|| {
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
+
         s.spawn(|| {
             BlockFetcher::new(args.rpc_fallback_url).run(
                 spine.to_connections("BlockFetch"),
