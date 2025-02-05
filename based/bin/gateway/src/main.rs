@@ -2,7 +2,7 @@ use std::{net::Ipv4Addr, path::PathBuf, sync::Arc};
 
 use bop_common::{
     actor::{Actor, ActorConfig},
-    communication::Spine,
+    communication::{verify_or_remove_queue_files, Spine},
     config::Config,
     db::{DBFrag, DatabaseWrite},
     time::Duration,
@@ -33,6 +33,7 @@ struct Args {
 
 fn main() {
     let _guards = init_tracing(Some("gateway"), 100, None);
+    verify_or_remove_queue_files();
 
     let spine = Spine::default();
     let spine_c = spine.clone();
