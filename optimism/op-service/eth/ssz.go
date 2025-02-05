@@ -108,12 +108,18 @@ func (payload *ExecutionPayload) withdrawalSize() uint32 {
 }
 
 func (payload *ExecutionPayload) transactionSize() uint32 {
+	return TransactionsSize(payload.Transactions)
+}
+
+func TransactionsSize(transactions []Data) uint32 {
 	// One offset to each transaction
-	result := uint32(len(payload.Transactions)) * 4
+	result := uint32(len(transactions)) * 4
+
 	// Each transaction
-	for _, tx := range payload.Transactions {
+	for _, tx := range transactions {
 		result += uint32(len(tx))
 	}
+
 	return result
 }
 
@@ -477,4 +483,88 @@ func (envelope *ExecutionPayloadEnvelope) MarshalSSZ(w io.Writer) (n int, err er
 	}
 
 	return hashSize + payloadSize, nil
+}
+
+// block number, squence number, is_last, txs offset, version.
+const NewFragFixedSize = 8 + 8 + 1 + 4 + 8
+
+// UnmarshalSSZ decodes the NewFrag as SSZ type
+func (newFrag *NewFrag) UnmarshalSSZ(scope uint32, r io.Reader) error {
+	offset := uint32(0)
+
+	buf := *payloadBufPool.Get().(*[]byte)
+	if uint32(cap(buf)) < scope {
+		buf = make([]byte, scope)
+	} else {
+		buf = buf[:scope]
+	}
+	defer payloadBufPool.Put(&buf)
+
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return fmt.Errorf("failed to read fixed-size part of NewFrag: %w", err)
+	}
+
+	newFrag.BlockNumber = binary.LittleEndian.Uint64(buf[offset : offset+8])
+	offset += 8
+	newFrag.Seq = binary.LittleEndian.Uint64(buf[offset : offset+8])
+	offset += 8
+	isLast, err := unmarshalBool(buf[offset])
+	if err != nil {
+		return err
+	}
+	newFrag.IsLast = isLast
+	offset += 1
+	txsOffset := binary.LittleEndian.Uint32(buf[offset : offset+4])
+	if txsOffset != NewFragFixedSize {
+		return fmt.Errorf("unexpected txs offset in NewFrag message: %d <> %d", txsOffset, NewFragFixedSize)
+	}
+	offset += 4
+	newFrag.Version = binary.LittleEndian.Uint64(buf[offset : offset+8])
+	offset += 8
+
+	txs, err := unmarshalTransactions(buf[offset:])
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal transactions list: %w", err)
+	}
+	newFrag.Txs = txs
+
+	return nil
+}
+
+// MarshalSSZ encodes the newFrag as SSZ type
+func (newFrag *NewFrag) MarshalSSZ(w io.Writer) (n int, err error) {
+	offset := uint32(0)
+	txSize := TransactionsSize(newFrag.Txs)
+	size := NewFragFixedSize + txSize
+	buf := make([]byte, size)
+
+	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.BlockNumber)
+	offset += 8
+	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.Seq)
+	offset += 8
+	buf[offset] = marshalBool(newFrag.IsLast)
+	offset += 1
+	binary.LittleEndian.PutUint32(buf[offset:offset+4], NewFragFixedSize)
+	offset += 4
+	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.Version)
+	offset += 8
+	marshalTransactions(buf[offset:offset+txSize], newFrag.Txs)
+
+	return w.Write(buf)
+}
+
+func marshalBool(b bool) byte {
+	if b {
+		return 0x01
+	}
+	return 0x00
+}
+
+func unmarshalBool(b byte) (bool, error) {
+	if b == 0x1 {
+		return true, nil
+	} else if b == 0x0 {
+		return false, nil
+	}
+	return false, fmt.Errorf("invalid bool byte: %x", b)
 }
