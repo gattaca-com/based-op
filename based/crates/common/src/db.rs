@@ -65,8 +65,9 @@ impl From<Error> for ProviderError {
 
 /// Database trait for all DB operations.
 #[auto_impl(&, Arc)]
-pub trait DatabaseWrite: Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug {
-
+pub trait DatabaseWrite:
+    Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug
+{
     fn commit_block(
         &self,
         block: &BlockWithSenders<OpBlock>,

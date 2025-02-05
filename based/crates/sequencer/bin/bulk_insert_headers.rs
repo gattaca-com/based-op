@@ -50,11 +50,7 @@ async fn main() -> eyre::Result<()> {
     for block_num in args.start_block..=args.end_block {
         batch_futures.push(fetch_block(block_num, &client, rpc_url.clone()));
     }
-    let mut blocks = futures::future::join_all(batch_futures)
-        .await
-        .into_iter()
-        .map(|r| r.expect("Failed to fetch block"))
-        .collect::<Vec<_>>();
+    let mut blocks = futures::future::join_all(batch_futures).await.into_iter().collect::<Vec<_>>();
 
     // Bulk insert the batch
     if blocks.is_empty() {

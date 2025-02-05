@@ -5,7 +5,9 @@ use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer},
+        messages::{
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer,
+        },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DatabaseWrite},
@@ -16,8 +18,10 @@ use bop_common::{
 use bop_db::DatabaseRead;
 use frag::FragSequence;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives::BlockWithSenders;
+use reth_primitives_traits::SignedTransaction;
 use strum_macros::AsRefStr;
-use tokio::runtime::Runtime;
 use tracing::{error, warn};
 
 pub mod block_sync;
@@ -29,6 +33,21 @@ mod sorting;
 pub use config::SequencerConfig;
 use context::SequencerContext;
 use sorting::SortingData;
+
+pub fn payload_to_block(
+    payload: ExecutionPayload,
+    sidecar: ExecutionPayloadSidecar,
+) -> Result<BlockSyncMessage, BlockSyncError> {
+    let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
+    let block_senders = block
+        .body
+        .transactions
+        .iter()
+        .map(|tx| tx.recover_signer_unchecked())
+        .collect::<Option<Vec<_>>>()
+        .ok_or(BlockSyncError::SignerRecovery)?;
+    Ok(BlockWithSenders { block, senders: block_senders })
+}
 
 #[derive(Clone, Debug, Default, AsRefStr)]
 pub enum SequencerState<Db: DatabaseWrite + DatabaseRead> {
@@ -90,13 +109,14 @@ where
             ),
 
             (ForkChoiceUpdatedV3 { payload_attributes: None, .. }, WaitingForForkChoice(payload, sidecar)) => {
-                if let Some(last_block_number) = data
-                    .block_executor
-                    .apply_new_payload(payload, sidecar, &data.db, senders, true)
-                    .expect("Issue with block sync")
-                {
+                let head_bn = data.db.head_block_number().expect("couldn't get db");
+                if payload.block_number() > head_bn + 1 {
+                    let last_block_number = payload.block_number() - 1;
+                    let _ = senders.send(BlockFetch::FromTo(head_bn + 1, last_block_number));
                     Syncing { last_block_number }
                 } else {
+                    let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
+                    let _ = data.block_executor.apply_and_commit_block(&block, &data.db, true);
                     WaitingForAttributes
                 }
             }
@@ -160,10 +180,6 @@ where
 
     fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SequencerContext<Db>) -> Self {
         use SequencerState::*;
-
-        let Ok(block) = block else {
-            todo!("handle block sync error");
-        };
 
         match self {
             Syncing { last_block_number } => {
@@ -282,10 +298,9 @@ pub struct Sequencer<Db: DatabaseWrite + DatabaseRead> {
 }
 
 impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
-    pub fn new(db: Db, frag_db: DBFrag<Db>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
+    pub fn new(db: Db, frag_db: DBFrag<Db>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, config.max_gas);
-        let block_executor =
-            BlockSync::new(config.evm_config.chain_spec().clone(), runtime.into(), config.rpc_url.clone());
+        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone(), config.rpc_url.clone());
 
         Self {
             state: SequencerState::default(),

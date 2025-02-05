@@ -2,14 +2,15 @@ use std::sync::Arc;
 
 use bop_common::{
     actor::{Actor, ActorConfig},
-    communication::Spine,
+    communication::{verify_or_remove_queue_files, Spine},
     config::GatewayArgs,
     db::DBFrag,
+    time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::init_database;
 use bop_rpc::{start_mock_engine_rpc, start_rpc};
-use bop_sequencer::{Sequencer, SequencerConfig};
+use bop_sequencer::{block_sync::BlockFetcher, Sequencer, SequencerConfig};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
@@ -19,6 +20,8 @@ fn main() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
     let args = GatewayArgs::parse();
+    verify_or_remove_queue_files();
+
     let _guards = init_tracing(None, 100, None);
 
     let spine = Spine::default();
@@ -49,16 +52,22 @@ fn main() {
         });
 
         s.spawn(|| {
-            let sequencer = Sequencer::new(db_bop, db_frag.clone(), rt, SequencerConfig::default_base_sepolia());
+            let sequencer = Sequencer::new(db_bop, db_frag.clone(), SequencerConfig::default_base_sepolia());
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
+        s.spawn(|| {
+            BlockFetcher::new(args.rpc_fallback_url).run(
+                spine.to_connections("BlockFetch"),
+                ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
+            );
+        });
 
-        for core in 1..4 {
+        for core in 2..5 {
             let connections = spine.to_connections(format!("Simulator-{core}"));
             s.spawn({
                 let db_frag = db_frag.clone();
                 move || {
-                    Simulator::create_and_run(connections, db_frag, ActorConfig::default());
+                    Simulator::create_and_run(connections, db_frag, ActorConfig::default().with_core(core));
                 }
             });
         }

@@ -289,4 +289,8 @@ pub enum BlockSyncError {
     SignerRecovery,
 }
 
-pub type BlockSyncMessage = Result<BlockWithSenders<OpBlock>, BlockSyncError>;
+pub type BlockSyncMessage = BlockWithSenders<OpBlock>;
+#[derive(Clone, Debug, AsRefStr)]
+pub enum BlockFetch {
+    FromTo(u64, u64),
+}
