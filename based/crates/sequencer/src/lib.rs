@@ -103,17 +103,7 @@ where
         use SequencerState::*;
 
         match (msg, self) {
-            (
-                NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
-                Syncing { last_block_number },
-            ) => {
-                let payload = ExecutionPayload::V3(payload);
-                let bn = payload.block_number();
-                let sidecar =
-                    ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes));
-                senders.send(BlockFetch::FromPayload(payload, sidecar));
-                Syncing { last_block_number: bn }
-            }
+            (NewPayloadV3 { .. }, Syncing { last_block_number }) => Syncing { last_block_number },
 
             (
                 NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. },
@@ -128,7 +118,6 @@ where
                 if payload.block_number() > head_bn + 1 {
                     let last_block_number = payload.block_number() - 1;
                     senders.send(BlockFetch::FromTo(head_bn + 1, last_block_number));
-                    senders.send(BlockFetch::FromPayload(payload, sidecar));
                     Syncing { last_block_number }
                 } else {
                     let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");

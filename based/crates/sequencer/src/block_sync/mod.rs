@@ -50,7 +50,6 @@ pub struct BlockFetcher {
     sync_until: u64,
     batch_size: u64,
     client: reqwest::Client,
-    blocks_from_payloads: VecDeque<BlockSyncMessage>,
 }
 impl BlockFetcher {
     pub fn new(rpc_url: Url) -> Self {
@@ -67,7 +66,6 @@ impl BlockFetcher {
             sync_until: 0,
             batch_size: 20,
             client,
-            blocks_from_payloads: VecDeque::new(),
         }
     }
 
@@ -76,15 +74,6 @@ impl BlockFetcher {
             BlockFetch::FromTo(start, stop) => {
                 self.next_block = start;
                 self.sync_until = stop;
-            }
-            BlockFetch::FromPayload(execution_payload, execution_payload_sidecar) => {
-                let bn = execution_payload.block_number();
-                self.blocks_from_payloads.push_back(
-                    payload_to_block(execution_payload, execution_payload_sidecar).unwrap_or_else(|e| {
-                        tracing::error!("coulnd't convert payload into a block for block number {bn}: {e}");
-                        self.executor.block_on(fetch_block(bn, &self.client, self.rpc_url.clone()))
-                    }),
-                );
             }
         }
     }
@@ -105,11 +94,7 @@ impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
                 &self.client,
             ));
             self.next_block = stop + 1;
-        } else {
-            while let Some(block) = self.blocks_from_payloads.pop_front() {
-                connections.send(block);
-            }
-        }
+        } 
     }
 }
 
