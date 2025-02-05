@@ -209,11 +209,11 @@ type ExecutionPayloadEnvelope struct {
 }
 
 type NewFrag struct {
-	BlockNumber uint64
-	Seq         uint64
-	IsLast      bool
-	Txs         []Data
-	Version     uint64
+	BlockNumber uint64	`json:"blockNumber"`
+	Seq         uint64	`json:"seq"`
+	IsLast      bool	`json:"isLast"`
+	Txs         []Data	`json:"txs"`
+	Version     uint64	`json:"version"`
 }
 
 // Total frags in the block + block header fields
