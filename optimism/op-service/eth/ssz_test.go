@@ -520,3 +520,32 @@ func TestMarshalUnmarshalNewFrag(t *testing.T) {
 		t.Fatalf("The data did not round trip correctly:\n%s", diff)
 	}
 }
+
+func TestMarshalUnmarshalSeal(t *testing.T) {
+	s := Seal{
+		TotalFrags:       10,
+		BlockNumber:      256,
+		GasUsed:          30000,
+		GasLimit:         60000,
+		ParentHash:       Bytes32{0x01, 0x03, 0x05},
+		TransactionsRoot: Bytes32{0x02, 0x03, 0x04, 0x7},
+		ReceiptsRoot:     Bytes32{0x00, 0x08},
+		StateRoot:        Bytes32{0xff, 0xfe, 0xfa},
+		BlockHash:        Bytes32{0xaa, 0xbb, 0xcc, 0xdd, 0xee},
+	}
+
+	var buf bytes.Buffer
+
+	_, err := s.MarshalSSZ(&buf)
+	require.NoError(t, err)
+
+	data := buf.Bytes()
+
+	unmarshalled := &Seal{}
+	err = unmarshalled.UnmarshalSSZ(uint32(len(data)), bytes.NewBuffer(data))
+	require.NoError(t, err)
+
+	if diff := cmp.Diff(s, *unmarshalled); diff != "" {
+		t.Fatalf("The data did not round trip correctly:\n%s", diff)
+	}
+}

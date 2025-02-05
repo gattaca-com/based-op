@@ -216,6 +216,19 @@ type NewFrag struct {
 	Version     uint64
 }
 
+// Total frags in the block + block header fields
+type Seal struct {
+	TotalFrags       uint64
+	BlockNumber      uint64
+	GasUsed          uint64
+	GasLimit         uint64
+	ParentHash       Bytes32
+	TransactionsRoot Bytes32
+	ReceiptsRoot     Bytes32
+	StateRoot        Bytes32
+	BlockHash        Bytes32
+}
+
 type ExecutionPayload struct {
 	ParentHash    common.Hash     `json:"parentHash"`
 	FeeRecipient  common.Address  `json:"feeRecipient"`
