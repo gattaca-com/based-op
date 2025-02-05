@@ -13,6 +13,7 @@ use bop_common::{
     time::Duration,
     transaction::Transaction,
 };
+use bop_db::DatabaseRead;
 use frag::FragSequence;
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use strum_macros::AsRefStr;
@@ -30,7 +31,7 @@ use context::SequencerContext;
 use sorting::SortingData;
 
 #[derive(Clone, Debug, Default, AsRefStr)]
-pub enum SequencerState<Db: DatabaseWrite> {
+pub enum SequencerState<Db: DatabaseWrite + DatabaseRead> {
     /// Synced and waiting for the next new payload message
     #[default]
     WaitingForNewPayload,
@@ -39,32 +40,40 @@ pub enum SequencerState<Db: DatabaseWrite> {
     /// Waiting for fork choice with attributes
     WaitingForAttributes,
     /// Building frags and blocks
-    Sorting(SortingData<Db::ReadOnly>),
+    Sorting(SortingData<Db>),
     /// Waiting for block sync
     Syncing {
         /// When the stage reaches this syncing is done
+        /// TODO: not always true as we may have fallen behind the head - we should cache all payloads that come in while syncing
         last_block_number: u64,
     },
 }
 
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
-pub enum SequencerEvent<Db: DatabaseWrite> {
+pub enum SequencerEvent<Db: DatabaseWrite + DatabaseRead> {
     BlockSync(BlockSyncMessage),
     NewTx(Arc<Transaction>),
-    SimResult(SimulatorToSequencer<Db::ReadOnly>),
+    SimResult(SimulatorToSequencer<Db>),
     EngineApi(EngineApi),
 }
 
 impl<Db> SequencerState<Db>
 where
-    Db: DatabaseWrite,
+    Db: DatabaseWrite + DatabaseRead,
 {
+    /// Engine API messages signify a change in the Sequencer's state.
+    /// 
+    /// The only case where we don't change state is if we are in the Syncing state.
+    /// While syncing, we cache all payloads that come in.
+    /// 
+    /// Once synced we trigger sync through
+    /// 
     fn handle_engine_api(
         self,
         msg: EngineApi,
         data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db::ReadOnly>,
+        senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use EngineApi::*;
         use SequencerState::*;
@@ -179,7 +188,7 @@ where
         self,
         tx: Arc<Transaction>,
         data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db::ReadOnly>,
+        senders: &SendersSpine<Db>,
     ) -> Self {
         data.tx_pool.handle_new_tx(tx, data.frags.db_ref(), data.base_fee, senders);
         self
@@ -187,9 +196,9 @@ where
 
     fn handle_sim_result(
         self,
-        result: SimulatorToSequencer<Db::ReadOnly>,
+        result: SimulatorToSequencer<Db>,
         data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db::ReadOnly>,
+        senders: &SendersSpine<Db>,
     ) -> Self {
         use messages::SimulatorToSequencerMsg::*;
 
@@ -235,7 +244,7 @@ where
     /// Checks at every loop:
     /// - if enough time has passed, seal the current frag and go to the next one
     /// - if all sims are done, send next batch of sims
-    fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db::ReadOnly>) -> Self {
+    fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db>) -> Self {
         use SequencerState::*;
         match self {
             Sorting(sorting_data) if sorting_data.should_seal_frag() => {
@@ -259,7 +268,7 @@ where
         self,
         event: SequencerEvent<Db>,
         data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db::ReadOnly>,
+        senders: &SendersSpine<Db>,
     ) -> Self {
         use SequencerEvent::*;
         match event {
@@ -272,13 +281,13 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct Sequencer<Db: DatabaseWrite> {
+pub struct Sequencer<Db: DatabaseWrite + DatabaseRead> {
     state: SequencerState<Db>,
     data: SequencerContext<Db>,
 }
 
-impl<Db: DatabaseWrite> Sequencer<Db> {
-    pub fn new(db: Db, frag_db: DBFrag<Db::ReadOnly>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
+impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
+    pub fn new(db: Db, frag_db: DBFrag<Db>, runtime: Arc<Runtime>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, config.max_gas);
         let block_executor =
             BlockSync::new(config.evm_config.chain_spec().clone(), runtime.into(), config.rpc_url.clone());
@@ -303,13 +312,13 @@ impl<Db: DatabaseWrite> Sequencer<Db> {
     }
 }
 
-impl<Db> Actor<Db::ReadOnly> for Sequencer<Db>
+impl<Db> Actor<Db> for Sequencer<Db>
 where
-    Db: DatabaseWrite,
+    Db: DatabaseWrite + DatabaseRead,
 {
     const CORE_AFFINITY: Option<usize> = Some(0);
 
-    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db::ReadOnly>, ReceiversSpine<Db::ReadOnly>>) {
+    fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle sim results
         connections.receive(|msg, senders| {
             self.state =

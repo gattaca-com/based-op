@@ -66,10 +66,6 @@ impl From<Error> for ProviderError {
 /// Database trait for all DB operations.
 #[auto_impl(&, Arc)]
 pub trait DatabaseWrite: Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug {
-    type ReadOnly: DatabaseRead + Database<Error: Into<ProviderError> + Display>;
-
-    /// Returns a read-only database.
-    fn readonly(&self) -> Result<Self::ReadOnly, Error>;
 
     fn commit_block(
         &self,
