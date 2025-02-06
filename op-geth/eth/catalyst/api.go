@@ -1342,23 +1342,23 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 
 func (api *ConsensusAPI) NewFragV0(frag engine.FragV0) error {
 	// TODO: Perform validations
-	fmt.Println("NewFragV0")
+	log.Info("(api *ConsensusAPI) NewFragV0")
 	return api.newFragV0(frag)
 }
 
 func (api *ConsensusAPI) newFragV0(frag engine.FragV0) error {
 	// TODO: Implement
-	fmt.Println(frag)
+	log.Info("(api *ConsensusAPI) newFragV0", frag)
 	return nil
 }
 
 func (api *ConsensusAPI) SealFragV0(frag engine.SealV0) error {
-	fmt.Println("SealFragV0")
+	log.Info("(api *ConsensusAPI) SealFragV0")
 	return api.sealFragV0(frag)
 }
 
 func (api *ConsensusAPI) sealFragV0(frag engine.SealV0) error {
 	// TODO: Implement
-	fmt.Println(frag)
+	log.Info("(api *ConsensusAPI) sealFragV0", frag)
 	return nil
 }
