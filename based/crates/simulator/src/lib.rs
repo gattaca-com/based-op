@@ -91,12 +91,12 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         self.set_env_for_new_block(evm_block_params);
 
         // Get start state for sorting.
-        self.apply_pre_execution_changes(&mut self.evm_sorting)?;
+        self.apply_pre_execution_changes(&evm_block_params.&mut self.evm_sorting)?;
     }
     
-    fn set_env_for_new_block(&mut self, evm_block_params: EvmBlockParams) {
+    fn set_env_for_new_block(&mut self, evm_block_params: &EvmBlockParams) {
         let parent = &evm_block_params.parent_header;
-        let next_attributes = evm_block_params.attributes;
+        let next_attributes = evm_block_params.attributes.clone();
 
         // Initialise evm cfg and block env for the next block.
         let evm_env = self.evm_config.next_cfg_and_block_env(parent, next_attributes).unwrap();

@@ -12,11 +12,11 @@ use alloy_rpc_types::engine::{
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::{execute::BlockExecutionError};
+use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
 use revm::DatabaseRef;
-use revm_primitives::{Address, EVMError, U256};
+use revm_primitives::{Address, EVMError, EvmState, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
@@ -346,6 +346,12 @@ impl<Db: DatabaseRead> SimulatorToSequencer<Db> {
 
 pub type SimulationResult<T, Db> = Result<T, SimulationError<<Db as DatabaseRef>::Error>>;
 
+#[derive(Clone, Debug)]
+pub struct TopOfBlockResult {
+    pub flat_state_changes: EvmState,
+    pub forced_inclusion_txs: Vec<SimulatedTx>,
+}
+
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SimulatorToSequencerMsg<Db: DatabaseRead> {
@@ -353,6 +359,8 @@ pub enum SimulatorToSequencerMsg<Db: DatabaseRead> {
     Tx(SimulationResult<SimulatedTx, Db>),
     /// Simulation on top of a fragment. Used by the transaction pool.
     TxPoolTopOfFrag(SimulationResult<SimulatedTx, Db>),
+    /// Top of block sims are done, we can start sequencing
+    TopOfBlock(TopOfBlockResult),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]
@@ -392,23 +400,14 @@ pub enum BlockFetch {
 #[derive(Clone, Debug)]
 pub struct EvmBlockParams {
     pub parent_header: Header,
-    pub attributes: NextBlockAttributes
+    pub attributes: NextBlockAttributes,
 }
 
 #[derive(Debug, Clone)]
 pub struct NextBlockAttributes {
-    /// The timestamp of the next block.
-    pub timestamp: u64,
-    /// The suggested fee recipient for the next block.
-    pub suggested_fee_recipient: Address,
-    /// The randomness value for the next block.
-    pub prev_randao: B256,
-    /// Block gas limit.
-    pub gas_limit: u64,
+    pub env_attributes: NextBlockEnvAttributes,
     /// Txs to add top of block.
     pub forced_inclusion_txs: Vec<Arc<Transaction>>,
     /// Parent block beacon root.
     pub parent_beacon_block_root: Option<B256>,
 }
-
-

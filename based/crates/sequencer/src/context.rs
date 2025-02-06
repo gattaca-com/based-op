@@ -25,6 +25,7 @@ pub struct SequencerContext<Db: DatabaseRead> {
     pub block_executor: BlockSync,
     pub parent_hash: B256,
     pub parent_header: Header,
+    pub parent_beacon_block_root: B256,
     pub fork_choice_state: ForkchoiceState,
     pub payload_attributes: Box<OpPayloadAttributes>,
     //TODO: set from blocksync

@@ -10,7 +10,8 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, EvmBlockParams, SimulatorToSequencer, SimulatorToSequencerMsg
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, EvmBlockParams, NextBlockAttributes,
+            SimulatorToSequencer, SimulatorToSequencerMsg, TopOfBlockResult,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -100,7 +101,8 @@ where
 
         // handle sim results
         connections.receive(|msg, _| {
-            self.state.handle_sim_result(msg, &mut self.data);
+            let state = std::mem::take(&mut self.state);
+            self.state = state.handle_sim_result(msg, &mut self.data);
         });
 
         // handle engine API messages from rpc
@@ -144,6 +146,12 @@ pub enum SequencerState<Db: DatabaseWrite + DatabaseRead> {
     /// - `NewPayloadV3 { .. }` This means we were not the sequencer for that block, and now need to sync this new
     ///   block and start the loop again.
     WaitingForForkChoiceWithAttributes,
+
+    /// We've received the FCU to trigger frag sequencing, sent off the top of block required inclusion txs,
+    /// and are now waiting for the top of block initial sim to finish and return the results.
+    /// After receiving those we will start sorting.
+    WaitingForTopOfBlockSimResults,
+
     /// We've received a FCU with attributes and are now sequencing transactions into Frags.
     Sorting(SortingData<Db>),
 }
@@ -173,6 +181,7 @@ where
 
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
+                data.parent_beacon_block_root = parent_beacon_block_root;
                 self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
             }
             ForkChoiceUpdatedV3 { fork_choice_state, payload_attributes, .. } => {
@@ -295,40 +304,39 @@ where
                         // field overrides the gas limit used during block-building. If not
                         // specified as rollup, a STATUS_INVALID is returned.
                         let gas_limit = attributes.gas_limit.unwrap();
-                        let next_attr = NextBlockEnvAttributes {
+                        let env_attributes = NextBlockEnvAttributes {
                             timestamp: attributes.payload_attributes.timestamp,
                             suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
                             prev_randao: attributes.payload_attributes.prev_randao,
                             gas_limit,
                         };
-                        tracing::info!("Sorting start with attributes: {:?}", next_attr);
-
-                        let evm_block_params = EvmBlockParams {
-                            parent_header: data.parent_header.clone(),
-                            attributes: next_attr.clone(),
-                        };
-                        // should never fail as its a broadcast
-                        senders
-                            .send_timeout(evm_block_params, Duration::from_millis(10))
-                            .expect("couldn't send block env");
-                        data.block_env = data
-                            .config
-                            .evm_config
-                            .next_cfg_and_block_env(&data.parent_header, next_attr)
-                            .expect("couldn't create blockenv").block_env;
-
-                        let txs = attributes
+                        let forced_inclusion_txs = attributes
                             .transactions
                             .map(|txs| {
                                 txs.into_iter().map(|bytes| Transaction::decode(bytes).unwrap().into()).collect()
                             })
                             .unwrap_or_default();
 
-                        // TODO: remove gas limit from frags
-                        data.frags.set_gas_limit(gas_limit);
+                        let attributes = NextBlockAttributes {
+                            env_attributes,
+                            forced_inclusion_txs,
+                            parent_beacon_block_root: Some(data.parent_beacon_block_root),
+                        };
+                        data.block_env = data
+                            .config
+                            .evm_config
+                            .next_cfg_and_block_env(&data.parent_header, attributes.env_attributes.clone())
+                            .expect("couldn't create blockenv")
+                            .block_env;
 
-                        let sorting_data = data.new_sorting_data(txs, !attributes.no_tx_pool.unwrap_or(false));
-                        Sorting(sorting_data)
+                        tracing::info!("Sorting start with attributes: {:?}", attributes);
+
+                        let evm_block_params = EvmBlockParams { parent_header: data.parent_header.clone(), attributes };
+                        // should never fail as its a broadcast
+                        senders
+                            .send_timeout(evm_block_params, Duration::from_millis(10))
+                            .expect("couldn't send block env");
+                        WaitingForTopOfBlockSimResults
                     }
                     None => {
                         // We have got 2 FCU in a row with no attributes. This shouldn't happen?
@@ -338,7 +346,7 @@ where
                     }
                 }
             }
-            Syncing { .. } | Sorting(_) | WaitingForNewPayload => {
+            Syncing { .. } | Sorting(_) | WaitingForNewPayload | WaitingForTopOfBlockSimResults => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -430,12 +438,12 @@ where
     ///
     /// Handles both block transaction simulations during sorting and
     /// transaction pool simulations for future inclusion.
-    fn handle_sim_result(&mut self, result: SimulatorToSequencer<Db>, data: &mut SequencerContext<Db>) {
+    fn handle_sim_result(mut self, result: SimulatorToSequencer<Db>, data: &mut SequencerContext<Db>) -> Self {
         let (sender, nonce) = result.sender_info;
         match result.msg {
             SimulatorToSequencerMsg::Tx(simulated_tx) => {
-                let SequencerState::Sorting(sort_data) = self else {
-                    return;
+                let SequencerState::Sorting(sort_data) = &mut self else {
+                    return self;
                 };
 
                 // handle sim on wrong state
@@ -445,7 +453,7 @@ where
                         result.state_id,
                         sort_data.frag.db.state_id()
                     );
-                    return;
+                    return self;
                 }
                 sort_data.handle_sim(simulated_tx, &sender, data.base_fee);
             }
@@ -462,7 +470,17 @@ where
                     }
                 }
             }
+            SimulatorToSequencerMsg::TopOfBlock(top_of_block) => {
+                todo!()
+                // TODO: remove gas limit from frags
+                // data.frags.set_gas_limit(gas_limit);
+
+                // let sorting_data = data.new_sorting_data(txs, !attributes.no_tx_pool.unwrap_or(false));
+                //
+                // return SequencerState::Sorting(sorting_data)
+            }
         }
+        self
     }
 
     /// Performs periodic state machine updates:
@@ -484,7 +502,8 @@ where
                     // broadcast to p2p
                     connections.send(VersionedMessage::from(frag));
                 }
-                let sorting_data = data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
+                let sorting_data =
+                    data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
 
                 // Reset the tx pool
                 let sender = data.config.simulate_tof_in_pools.then_some(connections.senders());
