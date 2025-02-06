@@ -407,11 +407,21 @@ pub struct EvmBlockParams<Db: 'static> {
     pub db: DBFrag<Db>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NextBlockAttributes {
     pub env_attributes: NextBlockEnvAttributes,
     /// Txs to add top of block.
     pub forced_inclusion_txs: Vec<Arc<Transaction>>,
     /// Parent block beacon root.
     pub parent_beacon_block_root: Option<B256>,
+}
+
+impl std::fmt::Debug for NextBlockAttributes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NextBlockAttributes")
+            .field("env_attributes", &self.env_attributes)
+            .field("forced_inclusion_txs", &self.forced_inclusion_txs.len())
+            .field("parent_beacon_block_root", &self.parent_beacon_block_root)
+            .finish()
+    }
 }
