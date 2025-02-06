@@ -149,15 +149,21 @@ impl Deref for Transaction {
 
 impl From<&Transaction> for OptimismFields {
     fn from(value: &Transaction) -> Self {
+        let envelope = value.tx.encoded_2718();
         if let OpTxEnvelope::Deposit(tx) = &value.tx {
             Self {
                 source_hash: tx.source_hash(),
                 mint: tx.mint(),
                 is_system_transaction: Some(tx.is_system_transaction()),
-                enveloped_tx: None,
+                enveloped_tx: Some(envelope.into()),
             }
         } else {
-            Self::default()
+            Self {
+                source_hash: None,
+                mint: None,
+                is_system_transaction: Some(false),
+                enveloped_tx: Some(envelope.into()),
+            }
         }
     }
 }

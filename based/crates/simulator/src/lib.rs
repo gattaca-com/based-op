@@ -4,7 +4,9 @@ use alloy_consensus::{transaction::Transaction as TransactionTrait, Header};
 use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{
-        messages::{EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
+        messages::{
+            EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg,
+        },
         SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DBSorting, DatabaseRead},
@@ -19,7 +21,7 @@ use revm_primitives::{BlockEnv, EnvWithHandlerCfg, SpecId};
 use tracing::{info, instrument::WithSubscriber};
 
 /// Simulator thread.
-/// 
+///
 /// TODO: need to impl fn to use system caller and return changes for that.
 pub struct Simulator<'a, Db: DatabaseRef> {
     /// Top of frag evm.
@@ -27,7 +29,7 @@ pub struct Simulator<'a, Db: DatabaseRef> {
 
     /// Evm on top of partially built frag
     evm_sorting: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
-    
+
     /// Utility to call system smart contracts.
     system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
     /// How to create an EVM.
@@ -54,7 +56,7 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         evm: &mut Evm<'a, (), CacheDB<DbRef>>,
     ) -> Result<SimulatedTx, SimulationError<<DbRef as DatabaseRef>::Error>> {
         tracing::debug!("simming tx for {:?}", tx.chain_id());
-        let old_db = std::mem::replace(evm.db_mut(),CacheDB::new(db));
+        let old_db = std::mem::replace(evm.db_mut(), CacheDB::new(db));
         tx.fill_tx_env(evm.tx_mut());
         tracing::debug!("simming tx on evm {:?}", evm.context.evm.env.cfg.chain_id);
         let res = evm.transact()?;
@@ -71,7 +73,8 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         // Initialise evm cfg and block env for the next block.
         let evm_env = self.evm_config.next_cfg_and_block_env(parent, next_attributes).unwrap();
         let EvmEnv { cfg_env_with_handler_cfg, block_env } = evm_env;
-        let env_with_handler_cfg = EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
+        let env_with_handler_cfg =
+            EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
 
         // Update evms with the new env.
         self.evm_tof.modify_spec_id(env_with_handler_cfg.spec_id());

@@ -137,8 +137,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             block_hash: header.hash_slow(),
             transactions,
         };
-        (
-            SealV0 {
+        let seal =SealV0 {
                 total_frags: self.next_seq,
                 block_number: block_env.number.to(),
                 gas_used,
@@ -148,7 +147,10 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
                 receipts_root,
                 state_root,
                 block_hash: v1.block_hash,
-            },
+            };
+        tracing::info!("seal: {seal:#?}");
+        (
+            seal,
             OpExecutionPayloadEnvelopeV3 {
                 execution_payload: ExecutionPayloadV3 {
                     payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },

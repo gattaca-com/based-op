@@ -473,7 +473,8 @@ where
     fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db>) -> Self {
         use SequencerState::*;
         match self {
-            Sorting(sorting_data) if sorting_data.should_seal_frag() => {
+            Sorting(mut sorting_data) if sorting_data.should_seal_frag() => {
+                sorting_data.maybe_apply(data.base_fee);
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
                 let txs: Vec<Arc<Transaction>> = sorting_data.frag.txs.iter().map(|tx| tx.tx.clone()).collect();
 
