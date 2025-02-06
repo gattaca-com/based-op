@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Deref, sync::Arc};
+use std::{collections::VecDeque, sync::Arc};
 
 use bop_common::{
     communication::{
@@ -7,55 +7,12 @@ use bop_common::{
     },
     db::DatabaseRead,
     time::Instant,
-    transaction::{SimulatedTx, SimulatedTxList, Transaction},
+    transaction::{SimulatedTx, Transaction},
 };
 use revm_primitives::Address;
 use tracing::error;
 
-use crate::frag::InSortFrag;
-
-#[derive(Clone, Debug, Default)]
-pub struct ActiveOrders {
-    orders: Vec<SimulatedTxList>,
-}
-
-impl ActiveOrders {
-    pub fn new(orders: Vec<SimulatedTxList>) -> Self {
-        Self { orders }
-    }
-
-    fn len(&self) -> usize {
-        self.orders.len()
-    }
-
-    pub fn remove_from_sender(&mut self, sender: &Address, base_fee: u64) {
-        for i in (0..self.len() - 1).rev() {
-            let order = &mut self.orders[i];
-            if &order.sender() == sender && order.pop(base_fee) {
-                self.orders.swap_remove(i);
-                return;
-            }
-        }
-    }
-
-    pub fn put(&mut self, tx: SimulatedTx) {
-        let sender = tx.sender();
-        for order in self.orders.iter_mut().rev() {
-            if order.sender() == sender {
-                order.put(tx);
-                return;
-            }
-        }
-    }
-}
-
-impl Deref for ActiveOrders {
-    type Target = Vec<SimulatedTxList>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.orders
-    }
-}
+use crate::sorting::{ActiveOrders, InSortFrag};
 
 /// State of the sequencer while sorting frags
 #[derive(Clone, Debug)]
@@ -110,12 +67,13 @@ impl<Db: DatabaseRead> SortingData<Db> {
         state_id == self.frag.db.state_id()
     }
 
-    pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx, Db>, sender: Address, base_fee: u64) {
+    /// Handles the result of a simulation. `simulated_tx` simulated_at_id should be pre-verified.
+    pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx, Db>, sender: &Address, base_fee: u64) {
         self.in_flight_sims -= 1;
 
         // handle errored sim
         let Ok(simulated_tx) = simulated_tx.inspect_err(|e| error!("simming tx for sender {sender} {e}",)) else {
-            self.tof_snapshot.remove_from_sender(&sender, base_fee);
+            self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
         };
 

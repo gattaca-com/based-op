@@ -40,15 +40,16 @@ pub trait TrackedSenders {
     fn set_ingestion_t(&mut self, ingestion_t: IngestionTime);
     fn ingestion_t(&self) -> IngestionTime;
 
-    fn send<T>(&self, data: T) -> Result<(), InternalMessage<T>>
+    fn send<T: std::fmt::Debug>(&self, data: T) -> Result<(), InternalMessage<T>>
     where
         Self: HasSender<T>,
     {
+        tracing::info!("sending {:.40}", format!("{data:?}"));
         let msg = self.ingestion_t().to_msg(data);
         self.get_sender().try_send(msg)
     }
 
-    fn send_forever<T>(&self, data: T)
+    fn send_forever<T: std::fmt::Debug>(&self, data: T)
     where
         Self: HasSender<T>,
     {
@@ -61,7 +62,7 @@ pub trait TrackedSenders {
         }
     }
 
-    fn send_timeout<T>(&self, data: T, timeout: Duration) -> Result<(), InternalMessage<T>>
+    fn send_timeout<T: std::fmt::Debug>(&self, data: T, timeout: Duration) -> Result<(), InternalMessage<T>>
     where
         Self: HasSender<T>,
     {
@@ -116,7 +117,7 @@ pub struct Receiver<T, R = CrossBeamReceiver<T>> {
     _t: PhantomData<T>,
 }
 
-impl<T, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
+impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
     pub fn new<S: AsRef<str>>(system_name: S, receiver: R) -> Self {
         Self {
             receiver,
@@ -131,6 +132,7 @@ impl<T, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
         F: FnMut(T, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
+            tracing::info!("received {:.40}", format!("{:?}", m.data()));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -149,6 +151,7 @@ impl<T, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
         F: FnMut(InternalMessage<T>, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
+            tracing::info!("received {:.40}", format!("{m:?}"));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -180,7 +183,7 @@ impl<S, R> Connections<S, R> {
 
 impl<S: TrackedSenders, R> Connections<S, R> {
     #[inline]
-    pub fn receive<T, F, RR>(&mut self, mut f: F) -> bool
+    pub fn receive<T: std::fmt::Debug, F, RR>(&mut self, mut f: F) -> bool
     where
         RR: NonBlockingReceiver<InternalMessage<T>>,
         R: AsMut<Receiver<T, RR>>,
@@ -191,7 +194,7 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 
     #[inline]
-    pub fn receive_timestamp<T, F, RR>(&mut self, mut f: F) -> bool
+    pub fn receive_timestamp<T: std::fmt::Debug, F, RR>(&mut self, mut f: F) -> bool
     where
         RR: NonBlockingReceiver<InternalMessage<T>>,
         R: AsMut<Receiver<T, RR>>,

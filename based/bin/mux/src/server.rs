@@ -14,7 +14,7 @@ use jsonrpsee::{
 };
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_rpc_layer::{AuthClientLayer, AuthClientService};
-use tracing::{debug, error, info, trace, Instrument, Level};
+use tracing::{debug, error, info, Instrument, Level};
 
 use crate::{cli::MuxArgs, middleware::ProxyService};
 
@@ -50,8 +50,6 @@ impl MuxServer {
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
-        info!(%addr, "starting RPC server");
-
         let fallback_client = self.fallback_client.clone();
         let rpc_middleware =
             RpcServiceBuilder::new().layer_fn(move |s| ProxyService::new(CAPABILITIES, s, fallback_client.clone()));
@@ -77,16 +75,21 @@ impl MuxServer {
 
 #[async_trait]
 impl EngineApiServer for MuxServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn fork_choice_updated_v3(
         &self,
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<OpPayloadAttributes>,
     ) -> RpcResult<ForkchoiceUpdated> {
-        trace!(?fork_choice_state, ?payload_attributes, "new request");
+        let parent_block_hash = fork_choice_state.head_block_hash;
 
-        // send in background to gateway
-        // return what fallback returns
+        if let Some(payload_attributes) = payload_attributes.as_ref() {
+            let no_tx_pool = payload_attributes.no_tx_pool.unwrap_or(false);
+            let gas_limit = payload_attributes.gas_limit.unwrap_or(0);
+            debug!(parent_block_hash = %parent_block_hash, no_tx_pool = %no_tx_pool, gas_limit = %gas_limit, "new request (with attributes)");
+        } else {
+            debug!(%parent_block_hash, "new request (no attributes)");
+        }
 
         tokio::spawn(
             {
@@ -102,9 +105,7 @@ impl EngineApiServer for MuxServer {
                                 error!(?res, "gateway response");
                             }
                         }
-                        Err(err) => {
-                            error!(%err, "failed gateway");
-                        }
+                        Err(err) => error!(%err, "failed gateway"),
                     }
                 }
             }
@@ -116,17 +117,23 @@ impl EngineApiServer for MuxServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn new_payload_v3(
         &self,
         payload: ExecutionPayloadV3,
         versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
     ) -> RpcResult<PayloadStatus> {
-        trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
+        let block_number = payload.payload_inner.payload_inner.block_number;
+        let block_hash = payload.payload_inner.payload_inner.block_hash;
+        let gas_limit = payload.payload_inner.payload_inner.gas_limit;
+        let gas_used = payload.payload_inner.payload_inner.gas_used;
+        let n_txs = payload.payload_inner.payload_inner.transactions.len();
+        let n_withdrawals = payload.payload_inner.withdrawals.len();
+        let blob_gas_used = payload.blob_gas_used;
+        let excess_blob_gas = payload.excess_blob_gas;
 
-        // send in background to gateway
-        // return what fallback returns
+        debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
 
         tokio::spawn(
             {
@@ -143,9 +150,7 @@ impl EngineApiServer for MuxServer {
                                 error!(?res, "gateway response");
                             }
                         }
-                        Err(err) => {
-                            error!(%err, "failed gateway");
-                        }
+                        Err(err) => error!(?err, "failed gateway"),
                     }
                 }
             }
@@ -157,9 +162,9 @@ impl EngineApiServer for MuxServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
-        trace!(%payload_id, "new request");
+        debug!(%payload_id, "new request");
 
         let fallback_fut = tokio::spawn({
             let client = self.fallback_client.clone();

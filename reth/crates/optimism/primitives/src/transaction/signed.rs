@@ -1,6 +1,6 @@
 //! A signed Optimism transaction.
 
-use crate::OpTxType;
+use crate::{transaction::TransactionSenderInfo, OpTxType};
 use alloc::vec::Vec;
 use alloy_consensus::{
     transaction::RlpEcdsaTx, SignableTransaction, Signed, Transaction, TxEip1559, TxEip2930,
@@ -49,6 +49,19 @@ pub struct OpTransactionSigned {
     #[deref]
     #[as_ref]
     pub transaction: OpTypedTransaction,
+}
+
+
+impl TransactionSenderInfo for OpTransactionSigned {
+    #[inline]
+    fn sender(&self) -> Address {
+        self.recover_signer().unwrap()
+    }
+    
+    #[inline]
+    fn nonce(&self) -> u64 {
+        self.transaction.nonce()
+    }   
 }
 
 impl OpTransactionSigned {

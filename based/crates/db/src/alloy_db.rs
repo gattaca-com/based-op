@@ -155,6 +155,11 @@ impl DatabaseRead for AlloyDB {
         debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
         Ok(self.block_number.as_u64().unwrap())
     }
+
+    fn head_block_hash(&self) -> Result<B256, Error> {
+        debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
+        Ok(self.block_hash_ref(self.block_number.as_u64().unwrap())?)
+    }
 }
 
 impl DatabaseWrite for AlloyDB {

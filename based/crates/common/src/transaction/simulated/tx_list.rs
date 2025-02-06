@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
-use revm_primitives::{Address, B256};
+use revm_primitives::{Address, B256, U256};
 
 use crate::transaction::{simulated::transaction::SimulatedTx, Transaction, TxList};
 
@@ -19,20 +19,22 @@ impl SimulatedTxList {
     /// and returns a SimulatedTxList.
     ///
     /// Will optionally trim the current tx from the pending list.
-    pub fn new(current: SimulatedTx, pending: &TxList) -> SimulatedTxList {
+    pub fn new(current: Option<SimulatedTx>, pending: &TxList) -> SimulatedTxList {
         let mut pending = pending.clone();
 
-        // Remove current from pending
-        if pending.peek_nonce().is_some_and(|nonce| current.nonce() == nonce) {
-            pending.pop_front();
+        // Remove current from pending, if it exists
+        if let Some(ref current) = current {
+            if pending.peek_nonce().is_some_and(|nonce| current.nonce() == nonce) {
+                pending.pop_front();
+            }
+
+            debug_assert!(
+                pending.peek_nonce().map_or(true, |nonce| current.nonce() == nonce + 1),
+                "pending tx list nonce must be consecutive from current"
+            );
         }
 
-        debug_assert!(
-            pending.peek_nonce().map_or(true, |nonce| current.nonce() == nonce + 1),
-            "pending tx list nonce must be consecutive from current"
-        );
-
-        SimulatedTxList { current: Some(current), pending }
+        SimulatedTxList { current, pending }
     }
 
     /// Updates the pending tx list.
@@ -90,5 +92,16 @@ impl SimulatedTxList {
 
     pub fn push(&mut self, tx: Arc<Transaction>) {
         self.pending.push(tx);
+    }
+
+    #[inline]
+    pub fn weight(&self) -> U256 {
+        if let Some(tx) = &self.current {
+            return tx.payment;
+        }
+        if let Some(tx) = self.pending.peek() {
+            return U256::from(tx.priority_fee_or_price());
+        }
+        U256::ZERO
     }
 }

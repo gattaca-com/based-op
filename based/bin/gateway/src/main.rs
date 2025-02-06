@@ -8,9 +8,9 @@ use bop_common::{
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
-use bop_db::init_database;
-use bop_rpc::{start_mock_engine_rpc, start_rpc};
-use bop_sequencer::{block_sync::BlockFetcher, Sequencer};
+use bop_db::{init_database, DatabaseRead};
+use bop_rpc::start_rpc;
+use bop_sequencer::{block_sync::mock_fetcher::MockFetcher, Sequencer};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
@@ -51,6 +51,8 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         args.chain_spec.clone(),
     )?;
     let db_frag: DBFrag<_> = db_bop.clone().into();
+    let start_fetch = db_bop.head_block_number().expect("couldn't get head block number");
+    let fetch_until = args.tmp_end_block;
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -73,7 +75,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         });
 
         s.spawn(|| {
-            BlockFetcher::new(args.rpc_fallback_url).run(
+            MockFetcher::new(args.rpc_fallback_url, start_fetch, fetch_until).run(
                 spine.to_connections("BlockFetch"),
                 ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
             );
@@ -88,8 +90,6 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 }
             });
         }
-
-        start_mock_engine_rpc(&spine, args.tmp_end_block);
     });
 
     Ok(())

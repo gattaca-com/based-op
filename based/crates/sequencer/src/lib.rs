@@ -1,5 +1,6 @@
-use std::cmp;
+use std::{cmp, sync::Arc};
 
+use alloy_consensus::Block;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
@@ -9,7 +10,8 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
+            SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -19,21 +21,20 @@ use bop_common::{
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
-use frag::FragSequence;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
+use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
-use tracing::{error, warn};
+use tracing::warn;
 
 pub mod block_sync;
 pub mod config;
 mod context;
-mod frag;
-mod sorting;
+pub(crate) mod sorting;
 
 pub use config::SequencerConfig;
 use context::SequencerContext;
@@ -63,7 +64,7 @@ pub struct Sequencer<Db: DatabaseWrite + DatabaseRead> {
 impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
     pub fn new(db: Db, frag_db: DBFrag<Db>, config: SequencerConfig) -> Self {
         let frags = FragSequence::new(frag_db, 0); // TODO: move to shared state
-        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone(), config.rpc_url.clone());
+        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
 
         Self {
             state: SequencerState::default(),
@@ -94,25 +95,24 @@ where
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle new transaction
         connections.receive(|msg, senders| {
-            self.data.tx_pool.handle_new_tx(msg, self.data.frags.db_ref(), self.data.base_fee, senders);
+            self.state.handle_new_tx(msg, &mut self.data, senders);
         });
 
         // handle sim results
-        connections.receive(|msg, senders| {
-            self.state.handle_sim_result(msg, &mut self.data, senders);
+        connections.receive(|msg, _| {
+            self.state.handle_sim_result(msg, &mut self.data);
         });
 
         // handle engine API messages from rpc
-        connections.receive(|msg, senders| {
-            tracing::info!("got engine api msg {msg:?}");
+        connections.receive(|msg: messages::EngineApi, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
         });
 
         // handle block sync
-        connections.receive(|msg, _| {
+        connections.receive(|msg, senders| {
             let state = std::mem::take(&mut self.state);
-            self.state = state.handle_block_sync(msg, &mut self.data);
+            self.state = state.handle_block_sync(msg, &mut self.data, senders);
         });
 
         // Check for passive state changes. e.g., sealing frags, sending sims, etc.
@@ -272,7 +272,9 @@ where
                     // Confirm that the FCU payload is the same as the buffered payload.
                     if payload.block_hash() == fork_choice_state.head_block_hash {
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
-                        let _ = data.block_executor.apply_and_commit_block(&block, &data.db, true);
+                        SequencerState::commit_block(&block, data, senders, false);
+                        data.parent_header = block.header.clone();
+                        data.parent_hash = fork_choice_state.head_block_hash;
                         WaitingForForkChoiceWithAttributes
                     } else {
                         // We have received the wrong ExecutionPayload. Need to re-sync with the new head.
@@ -382,13 +384,20 @@ where
     ///
     /// Applies blocks sequentially until reaching target height,
     /// then transitions back to normal operation.
-    fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SequencerContext<Db>) -> Self {
+    ///
+    /// When we are syncing we fetch blocks asynchronously from the rpc and send them back through a channel that gets
+    /// picked up and processed here.
+    fn handle_block_sync(
+        self,
+        block: BlockSyncMessage,
+        data: &mut SequencerContext<Db>,
+        senders: &SendersSpine<Db>,
+    ) -> Self {
         use SequencerState::*;
 
         match self {
             Syncing { last_block_number } => {
-                data.block_executor.apply_and_commit_block(&block, &data.db, true).expect("issue syncing block");
-                data.reset_fragdb();
+                SequencerState::commit_block(&block, data, senders, self.syncing());
 
                 if block.number != last_block_number {
                     Syncing { last_block_number }
@@ -404,21 +413,21 @@ where
         }
     }
 
+    /// Sends a new transaction to the tx pool.
+    /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
+    fn handle_new_tx(&mut self, msg: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+        let senders = data.config.simulate_tof_in_pools.then_some(senders);
+        data.tx_pool.handle_new_tx(msg, data.frags.db_ref(), data.base_fee, self.syncing(), senders);
+    }
+
     /// Processes transaction simulation results from the simulator actor.
     ///
     /// Handles both block transaction simulations during sorting and
     /// transaction pool simulations for future inclusion.
-    fn handle_sim_result(
-        &mut self,
-        result: SimulatorToSequencer<Db>,
-        data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db>,
-    ) {
-        use messages::SimulatorToSequencerMsg::*;
-
-        let sender = *result.sender();
+    fn handle_sim_result(&mut self, result: SimulatorToSequencer<Db>, data: &mut SequencerContext<Db>) {
+        let (sender, nonce) = result.sender_info;
         match result.msg {
-            Tx(simulated_tx) => {
+            SimulatorToSequencerMsg::Tx(simulated_tx) => {
                 let SequencerState::Sorting(sort_data) = self else {
                     return;
                 };
@@ -428,25 +437,18 @@ where
                     warn!("received sim result on wrong state, dropping");
                     return;
                 }
-                sort_data.handle_sim(simulated_tx, sender, data.base_fee);
+                sort_data.handle_sim(simulated_tx, &sender, data.base_fee);
             }
-
-            TxTof(simulated_tx) => {
+            SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
                     Ok(res) if data.frags.is_valid(result.state_id) => data.tx_pool.handle_simulated(res),
-
-                    // resend because was on the wrong hash
-                    // TODO: this should be handled anyway i think?
-                    Ok(res) => {
-                        let _ = senders.send_timeout(
-                            SequencerToSimulator::SimulateTxTof(res.tx, data.frags.db()),
-                            Duration::from_millis(10),
-                        );
+                    Ok(_) => {
+                        // No-op if the simulation is on a different fragment.
+                        // We would have already re-sent the tx for sim on the correct fragment.
                     }
-
                     Err(e) => {
-                        error!("simming tx {e}");
-                        data.tx_pool.remove(&sender)
+                        tracing::debug!("simulation error for transaction pool tx {e}");
+                        data.tx_pool.remove(&sender, nonce);
                     }
                 }
             }
@@ -462,11 +464,20 @@ where
         use SequencerState::*;
         match self {
             Sorting(sorting_data) if sorting_data.should_seal_frag() => {
+                // Collect all transactions from the frag so we can use them to reset the tx pool.
+                let txs: Vec<Arc<Transaction>> = sorting_data.frag.txs.iter().map(|tx| tx.tx.clone()).collect();
+
                 let frag = data.frags.apply_sorted_frag(sorting_data.frag);
+
                 // broadcast to p2p
                 connections.send(VersionedMessage::from(frag));
                 let sorting_data =
                     data.new_sorting_data(sorting_data.remaining_attributes_txs, sorting_data.can_add_txs);
+
+                // Reset the tx pool
+                let sender = data.config.simulate_tof_in_pools.then_some(connections.senders());
+                data.tx_pool.handle_new_mined_txs(txs.iter(), data.base_fee, data.frags.db_ref(), false, sender);
+
                 Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, data.base_fee))
             }
 
@@ -476,5 +487,32 @@ where
 
             _ => self,
         }
+    }
+
+    fn syncing(&self) -> bool {
+        matches!(self, SequencerState::Syncing { .. })
+    }
+
+    /// Helper function for committing a block.
+    /// - Commits to the db.
+    /// - Resets the fragdb.
+    /// - Resets the tx pool.
+    fn commit_block(
+        block: &BlockWithSenders<Block<OpTransactionSigned>>,
+        data: &mut SequencerContext<Db>,
+        senders: &SendersSpine<Db>,
+        syncing: bool,
+    ) {
+        let _ = data.block_executor.apply_and_commit_block(block, &data.db, true);
+        data.reset_fragdb();
+
+        let sender = data.config.simulate_tof_in_pools.then_some(senders);
+        data.tx_pool.handle_new_mined_txs(
+            block.body.transactions.iter(),
+            data.base_fee,
+            data.frags.db_ref(),
+            syncing,
+            sender,
+        );
     }
 }
