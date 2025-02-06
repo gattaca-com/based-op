@@ -553,6 +553,45 @@ func (newFrag *NewFrag) MarshalSSZ(w io.Writer) (n int, err error) {
 	return w.Write(buf)
 }
 
+const SignatureSize = 65
+
+func (signedNewFrag *SignedNewFrag) UnmarshalSSZ(scope uint32, r io.Reader) error {
+	signature := make([]byte, SignatureSize)
+	n, err := r.Read(signature)
+	if err != nil {
+		return err
+	}
+	if n != SignatureSize {
+		return fmt.Errorf("failed to unmarshal SignedNewFrag, not enough bytes (%d) to cover the signature", n)
+	}
+
+	copy(signedNewFrag.Signature[:], signature)
+
+	var frag NewFrag
+
+	err = frag.UnmarshalSSZ(scope-SignatureSize, r)
+	if err != nil {
+		return err
+	}
+
+	signedNewFrag.Frag = frag
+	return nil
+}
+
+func (signedNewFrag *SignedNewFrag) MarshalSSZ(w io.Writer) (n int, err error) {
+	n, err = w.Write(signedNewFrag.Signature[:])
+	if err != nil || n != SignatureSize {
+		return 0, errors.New("unable to write signature")
+	}
+
+	fragSize, err := signedNewFrag.Frag.MarshalSSZ(w)
+
+	if err != nil {
+		return 0, err
+	}
+	return SignatureSize + fragSize, nil
+}
+
 // #frags, block num, gas used, gas limit, parent hash, tx root, receipt root, st root, block hash.
 const SealFixedSize = 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32
 
@@ -617,6 +656,43 @@ func (seal *Seal) MarshalSSZ(w io.Writer) (n int, err error) {
 	offset += 32
 
 	return w.Write(buf)
+}
+
+func (signedSeal *SignedSeal) UnmarshalSSZ(scope uint32, r io.Reader) error {
+	signature := make([]byte, SignatureSize)
+	n, err := r.Read(signature)
+	if err != nil {
+		return err
+	}
+	if n != SignatureSize {
+		return fmt.Errorf("failed to unmarshal SignedSeal, not enough bytes (%d) to cover the signature", n)
+	}
+
+	copy(signedSeal.Signature[:], signature)
+
+	var seal Seal
+
+	err = seal.UnmarshalSSZ(scope-SignatureSize, r)
+	if err != nil {
+		return err
+	}
+
+	signedSeal.Seal = seal
+	return nil
+}
+
+func (signedSeal *SignedSeal) MarshalSSZ(w io.Writer) (n int, err error) {
+	n, err = w.Write(signedSeal.Signature[:])
+	if err != nil || n != SignatureSize {
+		return 0, errors.New("unable to write signature")
+	}
+
+	sealSize, err := signedSeal.Seal.MarshalSSZ(w)
+
+	if err != nil {
+		return 0, err
+	}
+	return SignatureSize + sealSize, nil
 }
 
 func marshalBool(b bool) byte {

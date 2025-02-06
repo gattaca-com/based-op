@@ -191,7 +191,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     use alloy_consensus::Signed;
     use alloy_primitives::U256;
@@ -231,9 +231,8 @@ mod tests {
         let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
 
         // Fetch the block from the RPC.
-        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        let url = rpc_url.clone();
-        let block = rt.block_on(async { fetch_block(25771900, &client, url).await });
+        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let block = rt.block_on(async { fetch_block(25771900, &provider).await });
 
         let header = block.block.header();
 
@@ -261,10 +260,8 @@ mod tests {
         let sim_db = db_frag.clone();
 
         // Simulator
-        let _sim_handle = std::thread::spawn(move || {
-            let simulator = Simulator::new(sim_db, &evm_config);
-            simulator.run(sim_connections, ActorConfig::default())
-        });
+        let _sim_handle =
+            std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default(), 0));
         let mut seq = FragSequence::new(db_frag, 300_000_000);
         let mut sorting_db = seq.create_in_sort();
 

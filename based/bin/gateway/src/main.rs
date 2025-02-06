@@ -10,7 +10,10 @@ use bop_common::{
 };
 use bop_db::{init_database, DatabaseRead};
 use bop_rpc::start_rpc;
-use bop_sequencer::{block_sync::mock_fetcher::MockFetcher, Sequencer, SequencerConfig};
+use bop_sequencer::{
+    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
+    Sequencer,
+};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
@@ -77,15 +80,24 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
-        s.spawn(|| {
-            MockFetcher::new(args.rpc_fallback_url, start_fetch, fetch_until).run(
-                spine.to_connections("BlockFetch"),
-                ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
-            );
-        });
+        if args.test {
+            s.spawn(|| {
+                MockFetcher::new(args.rpc_fallback_url, start_fetch).run(
+                    spine.to_connections("BlockFetch"),
+                    ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
+                );
+            });
+        } else {
+            s.spawn(|| {
+                BlockFetcher::new(args.rpc_fallback_url).run(
+                    spine.to_connections("BlockFetch"),
+                    ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
+                );
+            });
+        }
 
         for core in 2..5 {
-            let connections = spine.to_connections(format!("Simulator-{core}"));
+            let connections = spine.to_connections(format!("sim-{core}"));
             s.spawn({
                 let db_frag = db_frag.clone();
                 let evm_config_c = evm_config.clone();

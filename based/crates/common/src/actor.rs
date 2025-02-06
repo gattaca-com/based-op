@@ -52,16 +52,16 @@ pub trait Actor<Db>: Sized {
     fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {}
 
     fn _on_init(&mut self, connections: &mut SpineConnections<Db>) {
-        info!("Initializing...");
+        info!("initializing...");
         self.on_init(connections);
-        info!("Initialized...");
+        info!("initialized...");
     }
 
     fn on_exit(self, _connections: &mut SpineConnections<Db>) {}
     fn _on_exit(self, connections: &mut SpineConnections<Db>) {
-        info!("Running final tasks before stopping...");
+        info!("running final tasks before stopping...");
         self.on_exit(connections);
-        info!("Finalized");
+        info!("finalized");
     }
 
     fn run(mut self, mut connections: SpineConnections<Db>, actor_config: ActorConfig) {
@@ -76,7 +76,7 @@ pub trait Actor<Db>: Sized {
 
         let term = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
-            .expect("Couldn't register signal hook for some reason");
+            .expect("couldn't register signal hook for some reason");
 
         loop {
             loop_timer.start();

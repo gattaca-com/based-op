@@ -16,6 +16,7 @@ use bop_common::{
     db::{flatten_state_changes, DBFrag, DBSorting},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
+    utils::last_part_of_typename,
 };
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
@@ -229,6 +230,11 @@ where
     <Db as DatabaseRef>::Error: Into<ProviderError> + Debug + Display,
 {
     const CORE_AFFINITY: Option<usize> = None;
+
+    fn name(&self) -> String {
+        let name = last_part_of_typename::<Self>();
+        format!("{}-{}", name, self.id)
+    }
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         // Received each new block from the sequencer.

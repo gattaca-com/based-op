@@ -10,6 +10,7 @@ pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
 pub mod messages;
 pub use messages::InternalMessage;
+use tracing::{error, info, trace, warn};
 
 use crate::{
     p2p::VersionedMessage,
@@ -51,7 +52,7 @@ pub trait TrackedSenders {
         Self: HasSender<T>,
     {
         if let Err(e) = self.send(data) {
-            tracing::error!("Couldn't send {}: retrying forever...", last_part_of_typename::<T>());
+            error!("Couldn't send {}: retrying forever...", last_part_of_typename::<T>());
             let mut msg = e.into_data();
             while let Err(e) = self.send(msg) {
                 msg = e.into_data();
@@ -64,15 +65,12 @@ pub trait TrackedSenders {
         Self: HasSender<T>,
     {
         if let Err(e) = self.send(data) {
-            tracing::error!("Couldn't send {}: retrying for {timeout}...", last_part_of_typename::<T>());
+            error!("Couldn't send {}: retrying for {timeout}...", last_part_of_typename::<T>());
             let curt = Instant::now();
             let mut msg = e.into_data();
             while let Err(e) = self.send(msg) {
                 if timeout < curt.elapsed() {
-                    tracing::error!(
-                        "Couldn't send {}: retried for {timeout}, breaking off",
-                        last_part_of_typename::<T>()
-                    );
+                    error!("Couldn't send {}: retried for {timeout}, breaking off", last_part_of_typename::<T>());
                     return Err(e);
                 }
                 msg = e.into_data();
@@ -483,7 +481,7 @@ pub fn verify_or_remove_queue_files() {
     };
     for f in files.filter_map(|t| t.ok()) {
         if shared_memory::ShmemConf::new().flink(f.path()).open().is_err() {
-            tracing::warn!("couldn't open shmem at {:?} so removing it to be recreated later", f.path());
+            warn!("couldn't open shmem at {:?} so removing it to be recreated later", f.path());
             let _ = std::fs::remove_file(f.path());
         }
     }
