@@ -15,7 +15,7 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
-use revm::DatabaseRef;
+use revm::{CacheState, DatabaseRef};
 use revm_primitives::{Address, EVMError, EvmState, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
@@ -348,10 +348,16 @@ pub type SimulationResult<T> = Result<T, SimulationError>;
 
 #[derive(Clone, Debug)]
 pub struct TopOfBlockResult {
-    pub flat_state_changes: EvmState,
+    pub cache_state: CacheState,
     pub forced_inclusion_txs: Vec<SimulatedTx>,
-    pub payment: U256,
-    pub gas_used: u64,
+}
+impl TopOfBlockResult {
+    pub fn gas_used(&self) -> u64 {
+        self.forced_inclusion_txs.iter().map(|t| t.gas_used()).sum()
+    }
+    pub fn payment(&self) -> U256 {
+        self.forced_inclusion_txs.iter().map(|t| t.payment).sum()
+    }
 }
 
 #[derive(Debug, AsRefStr)]

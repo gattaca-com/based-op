@@ -16,7 +16,7 @@ use reth_primitives::BlockWithSenders;
 use reth_provider::BlockExecutionOutput;
 use reth_storage_errors::{db::DatabaseError, provider::ProviderError};
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::{BundleState, CacheDB};
+use revm::{db::{BundleState, CacheDB}, CacheState};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
     Account, AccountInfo, Address, Bytecode, EvmState, U256,
@@ -132,7 +132,7 @@ impl<Db: DatabaseRef> DBFrag<Db> {
         self.state_id = rand::random()
     }
 
-    pub fn commit_flat_state(&mut self, flat_state: EvmState) {
+    pub fn commit_cache_state(&mut self, flat_state: CacheState) {
         let mut guard = self.db.write();
         guard.commit(flat_state)
     }

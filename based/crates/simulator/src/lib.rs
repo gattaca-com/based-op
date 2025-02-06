@@ -9,9 +9,9 @@ use bop_common::{
     communication::{
         messages::{
             EvmBlockParams, NextBlockAttributes, SequencerToSimulator, SimulationError, SimulatorToSequencer,
-            SimulatorToSequencerMsg,
+            SimulatorToSequencerMsg, TopOfBlockResult,
         },
-        SpineConnections, TrackedSenders,
+        SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DBSorting, DatabaseRead},
     time::Duration,
@@ -31,7 +31,7 @@ use revm::{
     db::{BundleState, CacheDB, State},
     CacheState, Database, DatabaseCommit, DatabaseRef, Evm,
 };
-use revm_primitives::{BlockEnv, EnvWithHandlerCfg, ResultAndState, SpecId};
+use revm_primitives::{Address, BlockEnv, EnvWithHandlerCfg, ResultAndState, SpecId};
 use tracing::{info, instrument::WithSubscriber};
 
 /// Simulator thread.
@@ -91,13 +91,18 @@ where
     /// 1. Updating EVM environments
     /// 2. Applying pre-execution changes
     /// 3. Processing forced inclusion transactions
-    fn on_new_block(
-        &mut self,
-        evm_block_params: EvmBlockParams<Db>,
-    ) -> Result<(Vec<SimulatedTx>, CacheState), BlockExecutionError> {
+    fn on_new_block(&mut self, evm_block_params: EvmBlockParams<Db>, senders: &SendersSpine<Db>) {
         let env_with_handler_cfg = self.get_env_for_new_block(&evm_block_params);
         self.update_evm_environments(&env_with_handler_cfg);
-        self.get_start_state_for_new_block(evm_block_params.db, env_with_handler_cfg, &evm_block_params.attributes)
+        let (forced_inclusion_txs, cache_state) = self
+            .get_start_state_for_new_block(evm_block_params.db, env_with_handler_cfg, &evm_block_params.attributes)
+            .expect("shouldn't fail");
+        let msg = SimulatorToSequencer::new(
+            (Address::random(), 0),
+            0,
+            SimulatorToSequencerMsg::TopOfBlock(TopOfBlockResult { cache_state, forced_inclusion_txs }),
+        );
+        senders.send_forever(msg);
     }
 
     /// Must be called each new block.
@@ -121,11 +126,8 @@ where
 
         let mut tx_results = Vec::with_capacity(next_attributes.forced_inclusion_txs.len());
         let block_coinbase = evm.block().coinbase;
-
-        tracing::info!("ID: {:?}, Getting start state for new block: {:?}", self.id, evm.block());
-
         // Apply must include txs.
-        for (i, tx) in next_attributes.forced_inclusion_txs.iter().enumerate() {
+        for tx in next_attributes.forced_inclusion_txs.iter() {
             let start_balance =
                 evm.db_mut().basic(block_coinbase).ok().flatten().map(|a| a.balance).unwrap_or_default();
 
@@ -136,8 +138,6 @@ where
                 let new_err = err.map_db_err(|e| e.into());
                 BlockValidationError::EVM { hash: tx.tx_hash(), error: Box::new(new_err) }
             })?;
-
-            tracing::info!("simulated tx {}", i);
 
             self.system_caller.on_state(&result_and_state.state);
             evm.db_mut().commit(result_and_state.state.clone());
@@ -206,8 +206,8 @@ where
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         // Received each new block from the sequencer.
-        connections.receive(|msg, _| {
-            self.on_new_block(msg).expect("Must include txs should be valid");
+        connections.receive(|msg, senders| {
+            self.on_new_block(msg, senders);
         });
 
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {

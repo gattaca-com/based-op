@@ -59,6 +59,10 @@ impl SimulatedTx {
         };
         receipt.into_with_bloom()
     }
+
+    pub fn gas_used(&self) -> u64 {
+        self.result_and_state.result.gas_used()
+    }
 }
 
 impl AsRef<ResultAndState> for SimulatedTx {
