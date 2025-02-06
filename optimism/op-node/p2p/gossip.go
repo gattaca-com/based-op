@@ -274,8 +274,6 @@ func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRunt
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		// TODO: use unmarshalling here
 		message.ValidatorData = message.GetData()
-<<<<<<< HEAD
-=======
 		return pubsub.ValidationAccept
 	}
 }
@@ -284,7 +282,6 @@ func BuildNewSealValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRunt
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		// TODO: use unmarshalling here
 		message.ValidatorData = message.GetData()
->>>>>>> origin/main
 		return pubsub.ValidationAccept
 	}
 }
@@ -496,12 +493,8 @@ type GossipTopicInfo interface {
 type GossipOut interface {
 	GossipTopicInfo
 	PublishL2Payload(ctx context.Context, msg *eth.ExecutionPayloadEnvelope, signer Signer) error
-<<<<<<< HEAD
-	PublishNewFrag(ctx context.Context, frag eth.SignedNewFrag) error
-=======
 	PublishNewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) error
 	PublishNewSeal(ctx context.Context, signedSeal eth.SignedSeal) error
->>>>>>> origin/main
 	Close() error
 }
 
@@ -659,8 +652,6 @@ func (p *publisher) PublishNewFrag(ctx context.Context, signedFrag eth.SignedNew
 	return p.newFragV0.topic.Publish(ctx, data)
 }
 
-<<<<<<< HEAD
-=======
 func (p *publisher) PublishNewSeal(ctx context.Context, signedSeal eth.SignedSeal) error {
 	// TODO: Send the new seal instead of the block number
 	data := make([]byte, 64)
@@ -669,7 +660,6 @@ func (p *publisher) PublishNewSeal(ctx context.Context, signedSeal eth.SignedSea
 	return p.newSealV0.topic.Publish(ctx, data)
 }
 
->>>>>>> origin/main
 func (p *publisher) Close() error {
 	p.p2pCancel()
 	e1 := p.blocksV1.Close()
@@ -855,8 +845,6 @@ func NewFragHandler(ctx context.Context, from peer.ID, msg any) error {
 	blockNumber := binary.BigEndian.Uint64(msg.([]byte)[:8])
 
 	log.Info("NewFrag received", "block_number", blockNumber)
-<<<<<<< HEAD
-=======
 
 	// TODO: Call EngineAPI and pass the message to the EL
 
@@ -868,7 +856,6 @@ func NewSealHandler(ctx context.Context, from peer.ID, msg any) error {
 	blockNumber := binary.BigEndian.Uint64(msg.([]byte)[:8])
 
 	log.Info("NewSeal received", "block_number", blockNumber)
->>>>>>> origin/main
 
 	// TODO: Call EngineAPI and pass the message to the EL
 
