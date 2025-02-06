@@ -197,7 +197,7 @@ func NewBasedAPI(node p2p.Node, log log.Logger, metrics metrics.RPCMetricer) *ba
 	}
 }
 
-func (n *basedAPI) NewFrag(ctx context.Context, frag eth.NewFrag) (string, error) {
+func (n *basedAPI) NewFrag(ctx context.Context, frag eth.SignedNewFrag) (string, error) {
 	recordDur := n.metrics.RecordRPCServerRequest("based_newFrag")
 	defer recordDur()
 

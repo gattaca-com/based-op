@@ -474,7 +474,7 @@ type GossipTopicInfo interface {
 type GossipOut interface {
 	GossipTopicInfo
 	PublishL2Payload(ctx context.Context, msg *eth.ExecutionPayloadEnvelope, signer Signer) error
-	PublishNewFrag(ctx context.Context, frag eth.NewFrag) error
+	PublishNewFrag(ctx context.Context, frag eth.SignedNewFrag) error
 	Close() error
 }
 
@@ -604,10 +604,10 @@ func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.Executio
 	}
 }
 
-func (p *publisher) PublishNewFrag(ctx context.Context, frag eth.NewFrag) error {
+func (p *publisher) PublishNewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) error {
 	// TODO: Send the new frag instead of the block number
 	data := make([]byte, 64)
-	binary.BigEndian.PutUint64(data, frag.BlockNumber)
+	binary.BigEndian.PutUint64(data, signedFrag.Frag.BlockNumber)
 
 	return p.newFragV0.topic.Publish(ctx, data)
 }

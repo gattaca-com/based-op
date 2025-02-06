@@ -165,6 +165,30 @@ func (b Bytes256) TerminalString() string {
 	return fmt.Sprintf("%x..%x", b[:3], b[253:])
 }
 
+type Bytes65 [65]byte
+
+func (b *Bytes65) UnmarshalJSON(text []byte) error {
+	return hexutil.UnmarshalFixedJSON(reflect.TypeOf(b), text, b[:])
+}
+
+func (b *Bytes65) UnmarshalText(text []byte) error {
+	return hexutil.UnmarshalFixedText("Bytes65", text, b[:])
+}
+
+func (b Bytes65) MarshalText() ([]byte, error) {
+	return hexutil.Bytes(b[:]).MarshalText()
+}
+
+func (b Bytes65) String() string {
+	return hexutil.Encode(b[:])
+}
+
+// TerminalString implements log.TerminalStringer, formatting a string for console
+// output during logging.
+func (b Bytes65) TerminalString() string {
+	return fmt.Sprintf("%x..%x", b[:3], b[62:])
+}
+
 type Uint64Quantity = hexutil.Uint64
 
 type BytesMax32 []byte
@@ -203,9 +227,9 @@ type (
 	}
 )
 
-type ExecutionPayloadEnvelope struct {
-	ParentBeaconBlockRoot *common.Hash      `json:"parentBeaconBlockRoot,omitempty"`
-	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
+type SignedNewFrag struct {
+	Signature 	Bytes65 `json:"signature"`
+	Frag		NewFrag `json:"frag"`
 }
 
 type NewFrag struct {
@@ -227,6 +251,11 @@ type Seal struct {
 	ReceiptsRoot     Bytes32
 	StateRoot        Bytes32
 	BlockHash        Bytes32
+}
+
+type ExecutionPayloadEnvelope struct {
+	ParentBeaconBlockRoot *common.Hash      `json:"parentBeaconBlockRoot,omitempty"`
+	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
 }
 
 type ExecutionPayload struct {
