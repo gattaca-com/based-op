@@ -461,6 +461,7 @@ func verifyBlockSignature(log log.Logger, cfg *rollup.Config, runCfg GossipRunti
 
 type GossipIn interface {
 	OnUnsafeL2Payload(ctx context.Context, from peer.ID, msg *eth.ExecutionPayloadEnvelope) error
+	OnNewFrag(ctx context.Context, from peer.ID, msg *eth.Frag) error
 }
 
 type GossipTopicInfo interface {
@@ -639,7 +640,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 
 	newFragV0Logger := log.New("topic", "newFragV0")
 	newFragV0Validator := guardGossipValidator(log, logValidationResult(self, "validated newFragV0", newFragV0Logger, BuildNewFragValidator(newFragV0Logger, cfg, runCfg, NewFragV0)))
-	newFragV0, err := newNewFragTopic(p2pCtx, newFragV0(cfg), ps, newFragV0Logger, newFragV0Validator)
+	newFragV0, err := newNewFragTopic(p2pCtx, newFragV0(cfg), ps, newFragV0Logger, gossipIn, newFragV0Validator)
 	if err != nil {
 		p2pCancel()
 		return nil, fmt.Errorf("failed to setup newFragV0 p2p: %w", err)
@@ -657,7 +658,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 	}, nil
 }
 
-func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log log.Logger, validator pubsub.ValidatorEx) (*newFragTopic, error) {
+func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log log.Logger, gossipIn GossipIn, validator pubsub.ValidatorEx) (*newFragTopic, error) {
 	err := ps.RegisterTopicValidator(topicId,
 		validator,
 		pubsub.WithValidatorTimeout(3*time.Second),
@@ -685,7 +686,7 @@ func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log
 		return nil, fmt.Errorf("failed to subscribe to new frags gossip topic: %w", err)
 	}
 
-	subscriber := MakeSubscriber(log, NewFragHandler)
+	subscriber := MakeSubscriber(log, NewFragHandler(gossipIn.OnNewFrag))
 	go subscriber(ctx, subscription)
 
 	return &newFragTopic{
@@ -736,12 +737,15 @@ func newBlockTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log l
 type TopicSubscriber func(ctx context.Context, sub *pubsub.Subscription)
 type MessageHandler func(ctx context.Context, from peer.ID, msg any) error
 
-func NewFragHandler(ctx context.Context, from peer.ID, msg any) error {
+func NewFragHandler(onNewFrag func(ctx context.Context, from peer.ID, msg *eth.Frag) error) MessageHandler {
 	log.Info("NewFrag received")
-
-	// TODO: Call EngineAPI and pass the message to the EL
-
-	return nil
+	return func(ctx context.Context, from peer.ID, msg any) error {
+		frag, ok := msg.(*eth.Frag)
+		if !ok {
+			return fmt.Errorf("expected topic validator to parse and validate data into frag, but got %T", msg)
+		}
+		return onNewFrag(ctx, from, frag)
+	}
 }
 
 func BlocksHandler(onBlock func(ctx context.Context, from peer.ID, msg *eth.ExecutionPayloadEnvelope) error) MessageHandler {
