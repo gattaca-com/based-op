@@ -128,11 +128,12 @@ func TestNewFragV0(t *testing.T) {
 	backend := newStubBackend(t)
 	engineAPI := NewL2EngineAPI(logger, backend, nil)
 
-	frag := &eth.FragV0{
+	frag := &eth.NewFrag{
 		BlockNumber: 1,
 		Seq:         1,
 		IsLast:      true,
-		Txs:         []string{},
+		Txs:         []eth.Data{},
+		Version:     0,
 	}
 
 	res, err := engineAPI.NewFragV0(context.Background(), frag)

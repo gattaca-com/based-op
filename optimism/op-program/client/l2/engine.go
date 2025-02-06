@@ -158,7 +158,7 @@ func (o *OracleEngine) SystemConfigByL2Hash(ctx context.Context, hash common.Has
 // TODO: Define response for the following methods
 // TODO: Do we want a timestamp field in the request?
 
-func (o *OracleEngine) NewFrag(ctx context.Context, frag *eth.FragV0) (*string, error) {
+func (o *OracleEngine) NewFrag(ctx context.Context, frag *eth.NewFrag) (*string, error) {
 	switch method := o.rollupCfg.NewFragVersion(uint64(0)); method {
 	case eth.NewFragV0:
 		return o.api.NewFragV0(ctx, frag)

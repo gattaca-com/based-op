@@ -5,7 +5,7 @@ import (
 )
 
 type NewFragProcessEvent struct {
-	Frag *eth.Frag
+	Frag *eth.NewFrag
 }
 
 func (ev NewFragProcessEvent) String() string {
