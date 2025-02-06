@@ -228,16 +228,16 @@ type (
 )
 
 type SignedNewFrag struct {
-	Signature 	Bytes65 `json:"signature"`
-	Frag		NewFrag `json:"frag"`
+	Signature Bytes65 `json:"signature"`
+	Frag      NewFrag `json:"frag"`
 }
 
 type NewFrag struct {
-	BlockNumber uint64	`json:"blockNumber"`
-	Seq         uint64	`json:"seq"`
-	IsLast      bool	`json:"isLast"`
-	Txs         []Data	`json:"txs"`
-	Version     uint64	`json:"version"`
+	BlockNumber uint64 `json:"blockNumber"`
+	Seq         uint64 `json:"seq"`
+	IsLast      bool   `json:"isLast"`
+	Txs         []Data `json:"txs"`
+	Version     uint64 `json:"version"`
 }
 
 // Total frags in the block + block header fields
@@ -253,11 +253,15 @@ type Seal struct {
 	BlockHash        Bytes32
 }
 
+type SignedSeal struct {
+	Signature Bytes65 `json:"signature"`
+	Seal      Seal    `json:"seal"`
+}
+
 type ExecutionPayloadEnvelope struct {
 	ParentBeaconBlockRoot *common.Hash      `json:"parentBeaconBlockRoot,omitempty"`
 	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
 }
-
 type ExecutionPayload struct {
 	ParentHash    common.Hash     `json:"parentHash"`
 	FeeRecipient  common.Address  `json:"feeRecipient"`
