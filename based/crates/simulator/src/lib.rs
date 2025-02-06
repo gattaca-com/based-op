@@ -13,7 +13,7 @@ use bop_common::{
         },
         SpineConnections, TrackedSenders,
     },
-    db::{DBFrag, DBSorting, DatabaseRead},
+    db::{DBFrag, DBSorting},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
 };
@@ -22,17 +22,15 @@ use reth_evm::{
     env::EvmEnv,
     execute::{BlockExecutionError, BlockValidationError, ProviderError},
     system_calls::SystemCaller,
-    ConfigureEvm, ConfigureEvmEnv, NextBlockEnvAttributes,
+    ConfigureEvm, ConfigureEvmEnv,
 };
-use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
+use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
-use reth_optimism_forks::OpHardfork;
 use revm::{
-    db::{BundleState, CacheDB, State},
+    db::{CacheDB, State},
     CacheState, Database, DatabaseCommit, DatabaseRef, Evm,
 };
-use revm_primitives::{BlockEnv, EnvWithHandlerCfg, ResultAndState, SpecId};
-use tracing::{info, instrument::WithSubscriber};
+use revm_primitives::EnvWithHandlerCfg;
 
 /// Simulator thread.
 ///
@@ -122,8 +120,6 @@ where
         let mut tx_results = Vec::with_capacity(next_attributes.forced_inclusion_txs.len());
         let block_coinbase = evm.block().coinbase;
 
-        tracing::info!("ID: {:?}, Getting start state for new block: {:?}", self.id, evm.block());
-
         // Apply must include txs.
         for (i, tx) in next_attributes.forced_inclusion_txs.iter().enumerate() {
             let start_balance =
@@ -136,8 +132,6 @@ where
                 let new_err = err.map_db_err(|e| e.into());
                 BlockValidationError::EVM { hash: tx.tx_hash(), error: Box::new(new_err) }
             })?;
-
-            tracing::info!("simulated tx {}", i);
 
             self.system_caller.on_state(&result_and_state.state);
             evm.db_mut().commit(result_and_state.state.clone());

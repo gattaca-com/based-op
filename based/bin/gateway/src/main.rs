@@ -43,8 +43,6 @@ fn main() {
 }
 
 fn run(args: GatewayArgs) -> eyre::Result<()> {
-    info!("starting gateway");
-
     let spine = Spine::default();
 
     let db_bop = init_database(
@@ -53,6 +51,9 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         args.max_cached_storages,
         args.chain_spec.clone(),
     )?;
+
+    tracing::info!("Starting gateway at block {}", db_bop.head_block_number().expect("couldn't get head block number"));
+
     let db_frag: DBFrag<_> = db_bop.clone().into();
     let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
     let fetch_until = args.tmp_end_block;

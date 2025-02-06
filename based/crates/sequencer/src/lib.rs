@@ -358,11 +358,11 @@ where
                     }
                 }
             }
-            Syncing { .. }
-            | Sorting(_)
-            | WaitingForNewPayload
-            | WaitingForTopOfBlockSimResults(_)
-            | WaitingForGetPayload(_) => {
+            Syncing { .. } |
+            Sorting(_) |
+            WaitingForNewPayload |
+            WaitingForTopOfBlockSimResults(_) |
+            WaitingForGetPayload(_) => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -573,7 +573,7 @@ where
         senders: &SendersSpine<Db>,
         syncing: bool,
     ) {
-        let _ = data.block_executor.apply_and_commit_block(block, &data.db, true);
+        data.block_executor.apply_and_commit_block(block, &data.db, true).expect("couldn't commit block");
         data.reset_fragdb();
 
         let sender = data.config.simulate_tof_in_pools.then_some(senders);
