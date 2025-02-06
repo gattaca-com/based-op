@@ -38,7 +38,7 @@ restart                        🔄 Restart
 run                            🚀 Run
 ```
 
-### Restart
+#### Restart
 
 > [!WARNING]
 > This will remove the based-op enclave.
@@ -49,12 +49,24 @@ Run the following to restart the project:
 make restart
 ```
 
-### Logging
+#### Logging
 
 To view the logs, run the following:
 
+```Shell
+make op-node-logs            // OP node logs
+make op-reth-logs            // OP reth logs
+make rollup-boost-logs       // Rollup boost logs
+
+make logs SERVICE=<service>  // Replace <service> with the service name
 ```
-make logs
+
+#### Docker Image Build
+
+```Shell
+make build-mux               // Build the local mux docker image
+make build-reth              // Build the local reth docker image
+make build-op-node           // Build the local op-node docker image
 ```
 
 ### Running multiple OP nodes
@@ -75,3 +87,24 @@ optimism_package:
         - blockscout
         - rollup-boost
 ```
+
+### Running Kurtosis with Local Code
+
+To use our local code with Kurtosis, we need to build the docker images with the local code. To do this, we need to build the docker images with the local code and then run the kurtosis tests.
+
+You can do this one time:
+
+```Shell
+make build // Builds mux, op-node, and reth Docker images
+```
+
+Or individually:
+
+```Shell
+make build-mux               // Build the local mux docker image
+make build-reth              // Build the local reth docker image
+make build-op-node           // Build the local op-node docker image
+```
+
+> [!IMPORTANT]
+> You need to re-build the corresponding image if you make changes to the code.
