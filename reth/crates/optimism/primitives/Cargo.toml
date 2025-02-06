@@ -38,6 +38,7 @@ serde = { workspace = true, optional = true }
 derive_more = { workspace = true, features = ["deref", "from", "into", "constructor"] }
 once_cell.workspace = true
 rand = { workspace = true, optional = true }
+auto_impl = { workspace = true }
 
 # test
 arbitrary = { workspace = true, features = ["derive"], optional = true }
