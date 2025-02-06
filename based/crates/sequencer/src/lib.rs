@@ -499,7 +499,6 @@ where
             }
             SimulatorToSequencerMsg::TopOfBlock(top_of_block) => {
                 let SequencerState::WaitingForTopOfBlockSimResults(no_tx_pool) = self else {
-                    debug_assert!(false, "We are in the wrong state: {}", self.as_ref());
                     return self;
                 };
                 data.frags.set_gas_limit(data.as_ref().gas_limit.to());

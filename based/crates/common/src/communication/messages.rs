@@ -202,7 +202,7 @@ impl EngineApi {
             prev_randao: block.mix_hash,
             suggested_fee_recipient: block.beneficiary,
             withdrawals: Default::default(),
-            parent_beacon_block_root: Default::default(),
+            parent_beacon_block_root: block.parent_beacon_block_root,
         };
         let op_payload_attributes = Some(Box::new(OpPayloadAttributes {
             payload_attributes,
