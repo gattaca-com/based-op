@@ -7,7 +7,7 @@ use alloy_consensus::{SignableTransaction, Transaction as TransactionTrait, TxEi
 use alloy_eips::eip2718::{Decodable2718, Encodable2718};
 use alloy_primitives::{Address, Bytes, B256, U256};
 use op_alloy_consensus::{DepositTransaction, OpTxEnvelope};
-use reth_optimism_primitives::OpTransactionSigned;
+use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpTransactionSigned};
 use reth_primitives_traits::SignedTransaction;
 use revm_primitives::{OptimismFields, TxEnv, TxKind};
 pub use simulated::{SimulatedTx, SimulatedTxList};
@@ -182,5 +182,17 @@ impl From<OpTransactionSigned> for Transaction {
             op_alloy_consensus::OpTypedTransaction::Deposit(tx_deposit) => OpTxEnvelope::Deposit(tx_deposit.seal()),
         };
         Self { tx, sender }
+    }
+}
+
+impl TransactionSenderInfo for Transaction {
+    #[inline]
+    fn sender(&self) -> Address {
+        self.sender
+    }
+
+    #[inline]
+    fn nonce(&self) -> u64 {
+        self.tx.nonce()
     }
 }
