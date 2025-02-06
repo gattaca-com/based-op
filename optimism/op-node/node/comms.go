@@ -13,6 +13,7 @@ type Tracer interface {
 	OnNewL1Head(ctx context.Context, sig eth.L1BlockRef)
 	OnUnsafeL2Payload(ctx context.Context, from peer.ID, payload *eth.ExecutionPayloadEnvelope)
 	OnPublishL2Payload(ctx context.Context, payload *eth.ExecutionPayloadEnvelope)
+	OnNewFrag(ctx context.Context, from peer.ID, frag *eth.NewFrag)
 }
 
 type noOpTracer struct{}
@@ -23,5 +24,7 @@ func (n noOpTracer) OnUnsafeL2Payload(ctx context.Context, from peer.ID, payload
 }
 
 func (n noOpTracer) OnPublishL2Payload(ctx context.Context, payload *eth.ExecutionPayloadEnvelope) {}
+
+func (n noOpTracer) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.NewFrag) {}
 
 var _ Tracer = (*noOpTracer)(nil)

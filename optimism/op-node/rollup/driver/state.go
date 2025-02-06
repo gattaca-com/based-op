@@ -142,6 +142,16 @@ func (s *Driver) OnUnsafeL2Payload(ctx context.Context, envelope *eth.ExecutionP
 	}
 }
 
+func (s *Driver) OnNewFrag(ctx context.Context, frag *eth.NewFrag) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		s.Emitter.Emit(engine.NewFragProcessEvent{Frag: frag})
+		return nil
+	}
+}
+
 // the eventLoop responds to L1 changes and internal timers to produce L2 blocks.
 func (s *Driver) eventLoop() {
 	defer s.wg.Done()

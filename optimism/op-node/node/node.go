@@ -614,6 +614,27 @@ func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *
 	return nil
 }
 
+func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.NewFrag) error {
+	// ignore if it's from ourselves
+	if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
+		return nil
+	}
+
+	n.tracer.OnNewFrag(ctx, from, frag)
+
+	n.log.Info("Received new fragment", frag)
+
+	// Pass on the event to the L2 Engine
+	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+
+	if err := n.l2Driver.OnNewFrag(ctx, frag); err != nil {
+		n.log.Warn("failed to notify engine driver of new fragment", frag, "err", err)
+	}
+
+	return nil
+}
+
 func (n *OpNode) RequestL2Range(ctx context.Context, start, end eth.L2BlockRef) error {
 	if n.p2pEnabled() && n.p2pNode.AltSyncEnabled() {
 		if unixTimeStale(start.Time, 12*time.Hour) {
