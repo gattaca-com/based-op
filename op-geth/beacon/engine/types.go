@@ -417,29 +417,3 @@ type ClientVersionV1 struct {
 func (v *ClientVersionV1) String() string {
 	return fmt.Sprintf("%s-%s-%s-%s", v.Code, v.Name, v.Version, v.Commit)
 }
-
-type FragV0 struct {
-	// Block in which this frag will be included
-	BlockNumber uint64 `json:"blockNumber"`
-	// Index of this frag. Frags need to be applied sequentially by index, up to [`SealV0::total_frags`]
-	Seq uint64 `json:"seq"`
-	// Whether this is the last frag in the sequence
-	IsLast bool `json:"isLast"`
-	// Ordered list of EIP-2718 encoded transactions
-	Txs []string `json:"txs"`
-}
-
-type SealV0 struct {
-	// How many frags for this block were in this sequence
-	TotalFrags uint64 `json:"totalFrags"`
-
-	// Header fields
-	BlockNumber      uint64      `json:"blockNumber"`
-	GasUsed          uint64      `json:"gasUsed"`
-	GasLimit         uint64      `json:"gasLimit"`
-	ParentHash       common.Hash `json:"parentHash"`
-	TransactionsRoot common.Hash `json:"transactionsRoot"`
-	ReceiptsRoot     common.Hash `json:"receiptsRoot"`
-	StateRoot        common.Hash `json:"stateRoot"`
-	BlockHash        common.Hash `json:"blockHash"`
-}
