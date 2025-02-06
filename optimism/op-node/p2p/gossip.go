@@ -637,8 +637,6 @@ func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.Executio
 	out := snappy.Encode(nil, data)
 
 	if p.cfg.IsEcotone(uint64(envelope.ExecutionPayload.Timestamp)) {
-		// FIXME: Remove the line below
-		p.newFragV0.topic.Publish(ctx, out)
 		return p.blocksV3.topic.Publish(ctx, out)
 	} else if p.cfg.IsCanyon(uint64(envelope.ExecutionPayload.Timestamp)) {
 		return p.blocksV2.topic.Publish(ctx, out)
