@@ -132,7 +132,7 @@ impl<Db: DatabaseRef> DBFrag<Db> {
         self.state_id = rand::random()
     }
 
-    pub fn commit_cache_state(&mut self, flat_state: CacheState) {
+    pub fn commit_flat_changes(&mut self, flat_state: EvmState) {
         let mut guard = self.db.write();
         guard.commit(flat_state)
     }
@@ -180,6 +180,7 @@ impl<Db: DatabaseRef> DBFrag<Db> {
     pub fn reset(&mut self, db: Db) {
         *self.db.write() = CacheDB::new(db);
         self.state_id = rand::rng().next_u64();
+        self.curr_block_number += 1;
     }
 }
 

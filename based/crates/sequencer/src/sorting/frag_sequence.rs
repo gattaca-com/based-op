@@ -73,7 +73,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
     pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 {
         self.gas_remaining -= top_of_block.gas_used();
         self.payment += top_of_block.payment();
-        self.db.commit_flat_state(top_of_block.flat_state_changes);
+        self.db.commit_flat_changes(top_of_block.flat_state_changes);
         let msg = FragV0::new(
             self.block_number,
             self.next_seq,

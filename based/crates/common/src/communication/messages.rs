@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::Header;
+use alloy_consensus::{BlockHeader, Header};
 use alloy_eips::eip2718::{Decodable2718, Encodable2718};
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
@@ -235,8 +235,8 @@ impl EngineApi {
         };
         let new_payload = EngineApi::NewPayloadV3 {
             payload: v3,
-            versioned_hashes: Default::default(), // not used
-            parent_beacon_block_root: block.parent_beacon_block_root.unwrap(),
+            versioned_hashes: Default::default(),
+            parent_beacon_block_root: block.parent_beacon_block_root().expect("parent beacon root should always be set") ,
             res_tx: new_payload_tx,
         };
         let (fcu_tx, _fcu_rx) = oneshot::channel();
@@ -348,7 +348,7 @@ pub type SimulationResult<T> = Result<T, SimulationError>;
 
 #[derive(Clone, Debug)]
 pub struct TopOfBlockResult {
-    pub cache_state: CacheState,
+    pub flat_state_changes: EvmState,
     pub forced_inclusion_txs: Vec<SimulatedTx>,
 }
 impl TopOfBlockResult {

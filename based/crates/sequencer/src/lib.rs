@@ -15,7 +15,7 @@ use bop_common::{
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{DBFrag, DatabaseWrite},
+    db::{state_changes_to_bundle_state, DBFrag, DatabaseWrite},
     p2p::{SealV0, VersionedMessage},
     time::Duration,
     transaction::Transaction,
@@ -337,13 +337,19 @@ where
                             .expect("couldn't create blockenv")
                             .block_env;
 
-                        tracing::info!("Sorting start with attributes: {:?}", attributes);
+                        // tracing::info!("Sorting start with attributes: {:?}", attributes);
+                        tracing::info!("Sorting on top of {:?}", data.frags.db().head_block_number());
+                        tracing::info!("Sorting on top of state root {:?}", data.frags.db().state_root(Default::default()));
+                        tracing::info!("Sorting on top of state root {:?}", data.db.calculate_state_root(&state_changes_to_bundle_state(&data.db, Default::default()).unwrap()));
+                        
+
 
                         let evm_block_params = EvmBlockParams {
                             parent_header: data.parent_header.clone(),
                             attributes,
                             db: data.frags.db().clone(),
                         };
+
                         // should never fail as its a broadcast
                         senders
                             .send_timeout(evm_block_params, Duration::from_millis(10))

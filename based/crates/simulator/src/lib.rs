@@ -13,7 +13,7 @@ use bop_common::{
         },
         SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{DBFrag, DBSorting},
+    db::{flatten_state_changes, DBFrag, DBSorting},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
 };
@@ -30,7 +30,7 @@ use revm::{
     db::{CacheDB, State},
     CacheState, Database, DatabaseCommit, DatabaseRef, Evm,
 };
-use revm_primitives::{Address, BlockEnv, EnvWithHandlerCfg, ResultAndState, SpecId};
+use revm_primitives::{Address, BlockEnv, EnvWithHandlerCfg, EvmState, ResultAndState, SpecId};
 use tracing::{info, instrument::WithSubscriber};
 
 /// Simulator thread.
@@ -93,13 +93,13 @@ where
     fn on_new_block(&mut self, evm_block_params: EvmBlockParams<Db>, senders: &SendersSpine<Db>) {
         let env_with_handler_cfg = self.get_env_for_new_block(&evm_block_params);
         self.update_evm_environments(&env_with_handler_cfg);
-        let (forced_inclusion_txs, cache_state) = self
+        let (forced_inclusion_txs, flat_state_changes) = self
             .get_start_state_for_new_block(evm_block_params.db, env_with_handler_cfg, &evm_block_params.attributes)
             .expect("shouldn't fail");
         let msg = SimulatorToSequencer::new(
             (Address::random(), 0),
             0,
-            SimulatorToSequencerMsg::TopOfBlock(TopOfBlockResult { cache_state, forced_inclusion_txs }),
+            SimulatorToSequencerMsg::TopOfBlock(TopOfBlockResult { flat_state_changes, forced_inclusion_txs }),
         );
         senders.send_forever(msg);
     }
@@ -113,7 +113,7 @@ where
         db: DBFrag<Db>,
         env_with_handler_cfg: EnvWithHandlerCfg,
         next_attributes: &NextBlockAttributes,
-    ) -> Result<(Vec<SimulatedTx>, CacheState), BlockExecutionError> {
+    ) -> Result<(Vec<SimulatedTx>, EvmState), BlockExecutionError> {
         let evm_config = self.evm_config.clone();
 
         // Configure new EVM to apply pre-execution and must include txs.
@@ -121,7 +121,7 @@ where
         let mut evm = evm_config.evm_with_env(&mut state, env_with_handler_cfg);
 
         // Apply pre-execution changes.
-        self.apply_pre_execution_changes(next_attributes, &mut evm)?;
+        let mut changes = self.apply_pre_execution_changes(next_attributes, &mut evm)?.map(|changes| vec![changes]).unwrap_or_default();
 
         let mut tx_results = Vec::with_capacity(next_attributes.forced_inclusion_txs.len());
         let block_coinbase = evm.block().coinbase;
@@ -137,14 +137,16 @@ where
                 let new_err = err.map_db_err(|e| e.into());
                 BlockValidationError::EVM { hash: tx.tx_hash(), error: Box::new(new_err) }
             })?;
+            info!("simmed {:?}", result_and_state.result);
 
             self.system_caller.on_state(&result_and_state.state);
             evm.db_mut().commit(result_and_state.state.clone());
+            changes.push(result_and_state.state.clone());
             tx_results.push(SimulatedTx::new(tx.clone(), result_and_state, start_balance, block_coinbase));
         }
+        let flattened_changes = flatten_state_changes(changes);
 
-        let cache_state = std::mem::take(&mut evm.db_mut().cache);
-        Ok((tx_results, cache_state))
+        Ok((tx_results, flattened_changes))
     }
 
     /// Applies required state changes before transaction execution:
@@ -155,15 +157,15 @@ where
         &mut self,
         next_attributes: &NextBlockAttributes,
         evm: &mut Evm<'_, (), &mut State<DBFrag<Db>>>,
-    ) -> Result<(), BlockExecutionError> {
+    ) -> Result<Option<EvmState>, BlockExecutionError> {
         let block_number = u64::try_from(evm.block().number).unwrap();
         let block_timestamp = u64::try_from(evm.block().timestamp).unwrap();
 
         // Set state clear flag if the block is after the Spurious Dragon hardfork.
         evm.db_mut()
             .set_state_clear_flag(self.evm_config.chain_spec().is_spurious_dragon_active_at_block(block_number));
-
-        self.system_caller.apply_beacon_root_contract_call(
+        tracing::info!("simming {block_timestamp}, {block_number}");
+        let changes = self.system_caller.apply_beacon_root_contract_call(
             block_timestamp,
             block_number,
             next_attributes.parent_beacon_block_root,
@@ -173,7 +175,7 @@ where
         ensure_create2_deployer(self.evm_config.chain_spec().clone(), block_timestamp, evm.db_mut())
             .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
 
-        Ok(())
+        Ok(changes)
     }
 
     /// Constructs new block environment configuration from parent header and attributes
