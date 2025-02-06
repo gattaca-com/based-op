@@ -13,7 +13,7 @@ use alloy_rpc_types::engine::{
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
+use reth_evm::{execute::BlockExecutionError};
 use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
 use revm::DatabaseRef;
@@ -389,9 +389,27 @@ pub enum BlockFetch {
     FromTo(u64, u64),
 }
 
+/// Represents the parameters required to configure the next block.
 #[derive(Clone, Debug)]
 pub struct EvmBlockParams {
-    pub header: Header,
-    pub attributes: NextBlockEnvAttributes
+    pub parent_header: Header,
+    pub attributes: NextBlockAttributes
 }
+
+#[derive(Debug, Clone)]
+pub struct NextBlockAttributes {
+    /// The timestamp of the next block.
+    pub timestamp: u64,
+    /// The suggested fee recipient for the next block.
+    pub suggested_fee_recipient: Address,
+    /// The randomness value for the next block.
+    pub prev_randao: B256,
+    /// Block gas limit.
+    pub gas_limit: u64,
+    /// Txs to add top of block.
+    pub forced_inclusion_txs: Vec<Arc<Transaction>>,
+    /// Parent block beacon root.
+    pub parent_beacon_block_root: Option<B256>,
+}
+
 

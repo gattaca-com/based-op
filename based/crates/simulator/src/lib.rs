@@ -5,7 +5,7 @@ use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{
         messages::{
-            EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg,
+            EvmBlockParams, NextBlockAttributes, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg
         },
         SpineConnections, TrackedSenders,
     },
@@ -15,10 +15,12 @@ use bop_common::{
 };
 use reth_evm::{env::EvmEnv, system_calls::SystemCaller, ConfigureEvm, ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
-use reth_optimism_evm::OpEvmConfig;
-use revm::{db::CacheDB, DatabaseRef, Evm};
+use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
+use revm::{db::CacheDB, Database, DatabaseRef, Evm, State};
 use revm_primitives::{BlockEnv, EnvWithHandlerCfg, SpecId};
 use tracing::{info, instrument::WithSubscriber};
+use reth_chainspec::EthereumHardforks;
+use reth_optimism_forks::OpHardfork;
 
 /// Simulator thread.
 ///
@@ -50,6 +52,18 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone() }
     }
 
+    /// Simulate all txs in the forced inclusion txs from PayloadAttributes
+    /// and any pre-execution changes.
+    fn simulate_forced_inclusion_txs<DbRef: DatabaseRead>(
+        txs: Vec<Arc<Transaction>>,
+        db: DbRef,
+        evm: &mut Evm<'a, (), CacheDB<DbRef>>,
+    ) -> Result<SimulatedTx, SimulationError<<DbRef as DatabaseRef>::Error>> {
+        let old_db = std::mem::replace(evm.db_mut(), CacheDB::new(db));
+
+
+    }
+
     fn simulate_tx<DbRef: DatabaseRead>(
         tx: Arc<Transaction>,
         db: DbRef,
@@ -66,8 +80,22 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         Ok(SimulatedTx::new(tx, res, evm.db(), evm.block().coinbase))
     }
 
-    fn set_evm_for_new_block(&mut self, evm_block_params: EvmBlockParams) {
-        let parent = &evm_block_params.header;
+    /// Called each new block from the sequencer.
+    /// 1) Updates both evms with the new env.
+    /// 2) Applies pre-execution changes.
+    /// 3) Applies any forced inclusion txs.
+    /// 4) Returns the end state and SimulatedTxs.
+    /// 
+    fn on_new_block(&mut self, evm_block_params: EvmBlockParams) -> Result<(), ()> {  // TODO: error
+        // Update both evms with the new env.
+        self.set_env_for_new_block(evm_block_params);
+
+        // Get start state for sorting.
+        self.apply_pre_execution_changes(&mut self.evm_sorting)?;
+    }
+    
+    fn set_env_for_new_block(&mut self, evm_block_params: EvmBlockParams) {
+        let parent = &evm_block_params.parent_header;
         let next_attributes = evm_block_params.attributes;
 
         // Initialise evm cfg and block env for the next block.
@@ -83,6 +111,41 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         self.evm_sorting.modify_spec_id(env_with_handler_cfg.spec_id());
         self.evm_sorting.context.evm.env = env_with_handler_cfg.env;
     }
+
+    fn apply_pre_execution_changes(
+        &self,
+        next_attributes: &NextBlockAttributes,
+        evm: &mut Evm<'a, (), impl Database>,
+        db: CacheDB<impl DatabaseRef>
+    ) -> Result<(), ()> {  // TODO: error
+        let mut state =
+            State::builder().with_database(db).with_bundle_update().without_state_clear().build();
+        let old_db = std::mem::replace(evm.db_mut(), state);
+
+        let chain_spec = self.evm_config.chain_spec().clone();
+        let block_number = u64::try_from(evm.block().number).unwrap();
+        let block_timestamp = u64::try_from(evm.block().timestamp).unwrap();
+
+        // Set state clear flag if the block is after the Spurious Dragon hardfork.
+        let state_clear_flag = chain_spec.is_spurious_dragon_active_at_block(block_number);
+        evm.db_mut().set_state_clear_flag(state_clear_flag);
+
+        self.system_caller.apply_beacon_root_contract_call(
+            block_timestamp,
+            block_number,
+            next_attributes.parent_beacon_block_root,
+            &mut state,
+        )?;
+
+        // Ensure that the create2deployer is force-deployed at the canyon transition. Optimism
+        // blocks will always have at least a single transaction in them (the L1 info transaction),
+        // so we can safely assume that this will always be triggered upon the transition and that
+        // the above check for empty blocks will never be hit on OP chains.
+        ensure_create2_deployer(chain_spec, block_timestamp, evm.db_mut())
+            .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail).unwrap();  // TODO: error
+
+        Ok(())
+    }
 }
 
 impl<'a, Db: DatabaseRead> Actor<Db> for Simulator<'a, Db> {
@@ -91,7 +154,7 @@ impl<'a, Db: DatabaseRead> Actor<Db> for Simulator<'a, Db> {
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         // Received each new block from the sequencer.
         connections.receive(|msg: EvmBlockParams, _| {
-            self.set_evm_for_new_block(msg);
+            self.set_env_for_new_block(msg);
         });
 
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {

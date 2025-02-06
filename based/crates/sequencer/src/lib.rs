@@ -304,7 +304,7 @@ where
                         tracing::info!("Sorting start with attributes: {:?}", next_attr);
 
                         let evm_block_params = EvmBlockParams {
-                            header: data.parent_header.clone(),
+                            parent_header: data.parent_header.clone(),
                             attributes: next_attr.clone(),
                         };
                         // should never fail as its a broadcast
