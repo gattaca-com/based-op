@@ -146,3 +146,12 @@ pub fn strip_namespace(s: &str) -> &str {
 pub fn last_part_of_typename<T>() -> &'static str {
     strip_namespace(std::any::type_name::<T>())
 }
+
+pub fn typename_no_generics<T>() -> &'static str {
+    let name = strip_namespace(std::any::type_name::<T>());
+    if let Some(last) = name.find('<') {
+        &name[..last]
+    } else {
+        name
+    }
+}

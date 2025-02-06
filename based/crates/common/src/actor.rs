@@ -10,7 +10,7 @@ use crate::{
     communication::SpineConnections,
     db::DatabaseRead,
     time::{vsync, Duration, Timer},
-    utils::last_part_of_typename,
+    utils::{last_part_of_typename, typename_no_generics},
 };
 
 #[derive(Copy, Clone, Default)]
@@ -62,7 +62,7 @@ pub trait Actor<Db: DatabaseRead>: Sized {
     }
 
     fn run(mut self, mut connections: SpineConnections<Db>, actor_config: ActorConfig) {
-        let name = last_part_of_typename::<Self>();
+        let name = typename_no_generics::<Self>();
 
         let _s = span!(Level::INFO, "", system = name).entered();
 

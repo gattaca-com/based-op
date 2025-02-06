@@ -413,3 +413,4 @@ pub struct NextBlockAttributes {
 }
 
 
+pub type TransactionMessage = Arc<Transaction>;

@@ -1,7 +1,9 @@
 use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
 
-use messages::{BlockSyncMessage, EvmBlockParams, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
-use revm_primitives::BlockEnv;
+use messages::{
+    BlockSyncMessage, EvmBlockParams, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer,
+    TransactionMessage,
+};
 use shared_memory::ShmemError;
 use thiserror::Error;
 
@@ -17,7 +19,7 @@ use crate::{
     p2p::VersionedMessage,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
-    utils::last_part_of_typename,
+    utils::{last_part_of_typename, strip_namespace, typename_no_generics},
 };
 
 pub type CrossBeamReceiver<T> = crossbeam_channel::Receiver<InternalMessage<T>>;
@@ -233,8 +235,8 @@ pub struct Spine<Db: DatabaseRead> {
     sender_engine_rpc_to_sequencer: Sender<messages::EngineApi>,
     receiver_engine_rpc_to_sequencer: CrossBeamReceiver<messages::EngineApi>,
 
-    sender_eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
-    receiver_eth_rpc_to_sequencer: CrossBeamReceiver<Arc<Transaction>>,
+    sender_eth_rpc_to_sequencer: Sender<TransactionMessage>,
+    receiver_eth_rpc_to_sequencer: CrossBeamReceiver<TransactionMessage>,
 
     sender_blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     receiver_blockfetch_to_sequencer: CrossBeamReceiver<BlockSyncMessage>,
@@ -342,7 +344,7 @@ from_spine!(SimulatorToSequencer<Db>, simulator_to_sequencer, Sender);
 from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator, Sender);
 from_spine!(SequencerToExternal, sequencer_to_rpc, Sender);
 from_spine!(messages::EngineApi, engine_rpc_to_sequencer, Sender);
-from_spine!(Arc<Transaction>, eth_rpc_to_sequencer, Sender);
+from_spine!(TransactionMessage, eth_rpc_to_sequencer, Sender);
 from_spine!(BlockSyncMessage, blockfetch_to_sequencer, Sender);
 from_spine!(messages::BlockFetch, sequencer_to_blockfetch, Sender);
 
@@ -370,7 +372,7 @@ pub struct SendersSpine<Db: DatabaseRead> {
     sequencer_to_rpc: Sender<SequencerToExternal>,
     simulator_to_sequencer: Sender<SimulatorToSequencer<Db>>,
     engine_rpc_to_sequencer: Sender<messages::EngineApi>,
-    eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
+    eth_rpc_to_sequencer: Sender<TransactionMessage>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     sequencer_frag_broadcast: Sender<VersionedMessage>,
     evm_block_params: Producer<InternalMessage<EvmBlockParams>>,
@@ -411,7 +413,7 @@ pub struct ReceiversSpine<Db: DatabaseRead> {
     sequencer_to_simulator: Receiver<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Receiver<SequencerToExternal>,
     engine_rpc_to_sequencer: Receiver<messages::EngineApi>,
-    eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
+    eth_rpc_to_sequencer: Receiver<TransactionMessage>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
     sequencer_frag_broadcast: Receiver<VersionedMessage>,
     evm_block_params: Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>>>,
