@@ -55,15 +55,15 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         db: DbRef,
         evm: &mut Evm<'a, (), CacheDB<DbRef>>,
     ) -> Result<SimulatedTx, SimulationError<<DbRef as DatabaseRef>::Error>> {
-        tracing::debug!("simming tx for {:?}", tx.chain_id());
         let old_db = std::mem::replace(evm.db_mut(), CacheDB::new(db));
+
         tx.fill_tx_env(evm.tx_mut());
-        tracing::debug!("simming tx on evm {:?}", evm.context.evm.env.cfg.chain_id);
         let res = evm.transact()?;
-        let simtx = SimulatedTx::new(tx, res, evm.db(), evm.block().coinbase);
+
         // This dance is needed to drop the arc ref
         let _ = std::mem::replace(evm.db_mut(), old_db);
-        Ok(simtx)
+
+        Ok(SimulatedTx::new(tx, res, evm.db(), evm.block().coinbase))
     }
 
     fn set_evm_for_new_block(&mut self, evm_block_params: EvmBlockParams) {
