@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use alloy_provider::ProviderBuilder;
 use bop_db::init_database;
 use bop_sequencer::block_sync::fetch_blocks::fetch_block;
 use clap::Parser;
@@ -27,7 +28,7 @@ struct Args {
 
     /// RPC URL
     #[arg(short, long)]
-    rpc_url: String,
+    rpc_url: Url,
 }
 
 // start = 21127040
@@ -41,14 +42,12 @@ async fn main() -> eyre::Result<()> {
     let db = init_database(&args.db_path, 0, 0, BASE_SEPOLIA.clone())?;
 
     // Initialize HTTP client with reasonable timeouts
-    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()?;
-
-    let rpc_url = Url::parse(&args.rpc_url)?;
+    let provider = ProviderBuilder::new().network().on_http(args.rpc_url);
 
     // Fetch and wait for all blocks
     let mut batch_futures = Vec::with_capacity((args.end_block - args.start_block + 1) as usize);
     for block_num in args.start_block..=args.end_block {
-        batch_futures.push(fetch_block(block_num, &client, rpc_url.clone()));
+        batch_futures.push(fetch_block(block_num, &provider));
     }
     let mut blocks = futures::future::join_all(batch_futures).await.into_iter().collect::<Vec<_>>();
 

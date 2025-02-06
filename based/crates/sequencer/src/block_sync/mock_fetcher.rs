@@ -1,3 +1,4 @@
+use alloy_provider::ProviderBuilder;
 use alloy_rpc_types::engine::PayloadId;
 use bop_common::{
     actor::Actor,
@@ -9,31 +10,28 @@ use bop_common::{
     time::Duration,
     transaction::Transaction,
 };
-use reqwest::{Client, Url};
+use reqwest::Url;
 use tokio::{runtime::Runtime, sync::oneshot};
 use tracing::{info, warn};
 
-use super::fetch_blocks::fetch_block;
+use super::{fetch_blocks::fetch_block, AlloyProvider};
 
 #[derive(Debug)]
 pub struct MockFetcher {
-    /// Used to fetch blocks from an EL node.
-    rpc_url: Url,
     executor: Runtime,
     next_block: u64,
     sync_until: u64,
-    client: reqwest::Client,
+    provider: AlloyProvider,
 }
 impl MockFetcher {
-    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64) -> Self {
+    pub fn new(rpc_url: Url, next_block: u64) -> Self {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
             .build()
             .expect("couldn't build local tokio runtime");
-        let client =
-            Client::builder().timeout(Duration::from_secs(5).into()).build().expect("Failed to build HTTP client");
-        Self { rpc_url, executor, next_block, sync_until, client }
+        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        Self { executor, next_block, sync_until: next_block, provider }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
@@ -48,7 +46,7 @@ impl MockFetcher {
 
 impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
     fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
-        let block = self.executor.block_on(fetch_block(self.next_block, &self.client, self.rpc_url.clone()));
+        let block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
         let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, _fcu) =
             messages::EngineApi::messages_from_block(&block, false, None);
         connections.send(new_payload);
@@ -61,7 +59,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             self.handle_fetch(msg);
         });
         if self.next_block < self.sync_until {
-            let block = self.executor.block_on(fetch_block(self.next_block, &self.client, self.rpc_url.clone()));
+            let block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
 
             let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, fcu) =
                 messages::EngineApi::messages_from_block(&block, false, None);

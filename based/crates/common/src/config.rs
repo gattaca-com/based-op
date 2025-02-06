@@ -41,7 +41,7 @@ pub struct GatewayArgs {
     /// Maximum number of cached storages
     #[arg(long = "db.max_cached_storages", default_value_t = 100_000)]
     pub max_cached_storages: u64,
-    /// TMP END BLOCK
-    #[arg(long = "tmp.end_block")]
-    pub tmp_end_block: u64,
+    /// Test mode
+    #[arg(long = "test")]
+    pub test: bool,
 }
