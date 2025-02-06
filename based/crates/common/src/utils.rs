@@ -3,13 +3,16 @@ use tracing::level_filters::LevelFilter;
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
-pub const DEFAULT_TRACING_ENV_FILTERS: [&str; 6] = [
+pub const DEFAULT_TRACING_ENV_FILTERS: &[&str] = &[
     "hyper::proto::h1=off",
     "trust_dns_proto=off",
     "trust_dns_resolver=off",
     "discv5=off",
     "hyper_util=off",
     "reqwest=info",
+    "jsonrpsee=info",
+    "alloy_transport_http=info",
+    "alloy_rpc_client=info",
 ];
 
 /// Builds an environment filter for logging. Uses a default set of filters plus some optional
@@ -40,10 +43,9 @@ pub fn init_tracing(
 ) -> (Option<WorkerGuard>, WorkerGuard) {
     let format = tracing_subscriber::fmt::format()
         .with_level(true)
-        .with_thread_ids(true)
+        .with_thread_ids(false)
         .with_target(false)
-        .with_timer(tracing_subscriber::fmt::time())
-        .compact();
+        .with_timer(tracing_subscriber::fmt::time());
 
     let (file_layer, worker_guard) = if let Some(fname) = filename_prefix {
         let log_path = std::env::var("LOG_PATH").unwrap_or("/tmp".into());
@@ -144,5 +146,10 @@ pub fn strip_namespace(s: &str) -> &str {
 }
 
 pub fn last_part_of_typename<T>() -> &'static str {
-    strip_namespace(std::any::type_name::<T>())
+    let full_name = strip_namespace(std::any::type_name::<T>());
+    if let Some(generic_start) = full_name.find('<') {
+        &full_name[..generic_start]
+    } else {
+        full_name
+    }
 }

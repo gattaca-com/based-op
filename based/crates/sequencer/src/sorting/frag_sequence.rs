@@ -170,7 +170,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     use alloy_consensus::Signed;
     use alloy_primitives::U256;
@@ -186,7 +186,7 @@ mod tests {
     use bop_db::AlloyDB;
     use bop_simulator::Simulator;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
-    use reqwest::{Client, Url};
+    use reqwest::Url;
     use reth_optimism_chainspec::OpChainSpecBuilder;
     use reth_primitives_traits::{Block, SignedTransaction};
     use revm_primitives::{BlobExcessGasAndPrice, BlockEnv};
@@ -209,9 +209,8 @@ mod tests {
         let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
 
         // Fetch the block from the RPC.
-        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        let url = rpc_url.clone();
-        let block = rt.block_on(async { fetch_block(25771900, &client, url).await });
+        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let block = rt.block_on(async { fetch_block(25771900, &provider).await });
 
         let header = block.block.header();
 
@@ -227,8 +226,7 @@ mod tests {
         };
 
         // Create the alloydb.
-        let client = ProviderBuilder::new().network().on_http(rpc_url);
-        let alloy_db = AlloyDB::new(client, block.block.header.number, rt);
+        let alloy_db = AlloyDB::new(provider, block.block.header.number, rt);
 
         // Simulate the txs in the block and add to a frag.
         let db_frag: DBFrag<_> = alloy_db.clone().into();
@@ -239,7 +237,7 @@ mod tests {
 
         // Simulator
         let _sim_handle =
-            std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default()));
+            std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default(), 0));
         let mut seq = FragSequence::new(db_frag, 300_000_000);
         let mut sorting_db = seq.create_in_sort();
 
