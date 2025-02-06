@@ -184,16 +184,16 @@ func (n *nodeAPI) Version(ctx context.Context) (string, error) {
 }
 
 type basedAPI struct {
-	p2p		p2p.Node
-	log		log.Logger
-	metrics	metrics.RPCMetricer
+	p2p     p2p.Node
+	log     log.Logger
+	metrics metrics.RPCMetricer
 }
 
 func NewBasedAPI(node p2p.Node, log log.Logger, metrics metrics.RPCMetricer) *basedAPI {
 	return &basedAPI{
-		p2p: 		node,
-		log:		log,
-		metrics:	metrics,
+		p2p:     node,
+		log:     log,
+		metrics: metrics,
 	}
 }
 
