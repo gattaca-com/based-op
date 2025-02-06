@@ -11,6 +11,7 @@ pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
 pub mod messages;
 pub use messages::InternalMessage;
+use tracing::{error, info, trace, warn};
 
 use crate::{
     db::DatabaseRead,
@@ -44,7 +45,7 @@ pub trait TrackedSenders {
     where
         Self: HasSender<T>,
     {
-        tracing::info!("sending {:.40}", format!("{data:?}"));
+        trace!("sending {:.40}", format!("{data:?}"));
         let msg = self.ingestion_t().to_msg(data);
         self.get_sender().try_send(msg)
     }
@@ -54,7 +55,7 @@ pub trait TrackedSenders {
         Self: HasSender<T>,
     {
         if let Err(e) = self.send(data) {
-            tracing::error!("Couldn't send {}: retrying forever...", last_part_of_typename::<T>());
+            error!("Couldn't send {}: retrying forever...", last_part_of_typename::<T>());
             let mut msg = e.into_data();
             while let Err(e) = self.send(msg) {
                 msg = e.into_data();
@@ -67,15 +68,12 @@ pub trait TrackedSenders {
         Self: HasSender<T>,
     {
         if let Err(e) = self.send(data) {
-            tracing::error!("Couldn't send {}: retrying for {timeout}...", last_part_of_typename::<T>());
+            error!("Couldn't send {}: retrying for {timeout}...", last_part_of_typename::<T>());
             let curt = Instant::now();
             let mut msg = e.into_data();
             while let Err(e) = self.send(msg) {
                 if timeout < curt.elapsed() {
-                    tracing::error!(
-                        "Couldn't send {}: retried for {timeout}, breaking off",
-                        last_part_of_typename::<T>()
-                    );
+                    error!("Couldn't send {}: retried for {timeout}, breaking off", last_part_of_typename::<T>());
                     return Err(e);
                 }
                 msg = e.into_data();
@@ -132,7 +130,7 @@ impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T,
         F: FnMut(T, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
-            tracing::info!("received {:.40}", format!("{:?}", m.data()));
+            info!("received {:.40}", format!("{:?}", m.data()));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -151,7 +149,7 @@ impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T,
         F: FnMut(InternalMessage<T>, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
-            tracing::info!("received {:.40}", format!("{m:?}"));
+            info!("received {:.40}", format!("{m:?}"));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -489,7 +487,7 @@ pub fn verify_or_remove_queue_files() {
     };
     for f in files.filter_map(|t| t.ok()) {
         if shared_memory::ShmemConf::new().flink(f.path()).open().is_err() {
-            tracing::warn!("couldn't open shmem at {:?} so removing it to be recreated later", f.path());
+            warn!("couldn't open shmem at {:?} so removing it to be recreated later", f.path());
             let _ = std::fs::remove_file(f.path());
         }
     }

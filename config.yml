@@ -3,6 +3,9 @@ optimism_package:
     - participants:
         - el_type: op-reth
           cl_type: op-node
+      mev_params:
+        builder_host: "172.17.0.1"
+        builder_port: "9997"
       additional_services:
         - blockscout
         - rollup-boost

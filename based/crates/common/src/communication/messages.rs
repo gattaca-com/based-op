@@ -3,9 +3,8 @@ use std::{
     sync::Arc,
 };
 
-use alloy_eips::eip2718::{Decodable2718, Encodable2718};
+use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
-use alloy_rlp::{Bytes, Encodable};
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes,
     PayloadError, PayloadId, PayloadStatus,
@@ -13,7 +12,7 @@ use alloy_rpc_types::engine::{
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::execute::BlockExecutionError;
-use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
+use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
 use revm::DatabaseRef;
 use revm_primitives::{Address, EVMError, U256};
@@ -239,7 +238,7 @@ impl EngineApi {
             parent_beacon_block_root: B256::ZERO,
             res_tx: new_payload_tx,
         };
-        let (fcu_tx, fcu_rx) = oneshot::channel();
+        let (fcu_tx, _fcu_rx) = oneshot::channel();
 
         let fcu_1 = EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: ForkchoiceState {
@@ -324,18 +323,23 @@ pub enum SequencerToSimulator<Db> {
 
 #[derive(Debug)]
 pub struct SimulatorToSequencer<Db: DatabaseRead> {
-    pub sender: Address,
+    /// Sender address and nonce
+    pub sender_info: (Address, u64),
     pub state_id: u64,
     pub msg: SimulatorToSequencerMsg<Db>,
 }
 
 impl<Db: DatabaseRead> SimulatorToSequencer<Db> {
-    pub fn new(sender: Address, state_id: u64, msg: SimulatorToSequencerMsg<Db>) -> Self {
-        Self { sender, state_id, msg }
+    pub fn new(sender_info: (Address, u64), state_id: u64, msg: SimulatorToSequencerMsg<Db>) -> Self {
+        Self { sender_info, state_id, msg }
     }
 
     pub fn sender(&self) -> &Address {
-        &self.sender
+        &self.sender_info.0
+    }
+
+    pub fn nonce(&self) -> u64 {
+        self.sender_info.1
     }
 }
 

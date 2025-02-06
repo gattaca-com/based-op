@@ -49,7 +49,7 @@ impl<Db: DatabaseRead> RpcServer<Db> {
         }
     }
 
-    #[tracing::instrument(skip_all, name = "rpc_eth")]
+    #[tracing::instrument(skip_all, name = "rpc")]
     pub async fn run(self, addr: SocketAddr) {
         info!(%addr, "starting RPC server");
 

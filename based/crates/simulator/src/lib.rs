@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use alloy_consensus::transaction::Transaction as TransactionTrait;
 use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{
@@ -9,6 +10,7 @@ use bop_common::{
     db::{DBFrag, DBSorting, DatabaseRead},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
+    utils::last_part_of_typename,
 };
 use reth_evm::ConfigureEvm;
 use reth_optimism_chainspec::OpChainSpecBuilder;
@@ -22,10 +24,12 @@ pub struct Simulator<'a, Db: DatabaseRef> {
     evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>,
     /// Evm on top of partially built frag
     evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
+
+    id: usize,
 }
 
 impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
-    pub fn create_and_run(connections: SpineConnections<Db>, db: DBFrag<Db>, actor_config: ActorConfig) {
+    pub fn create_and_run(connections: SpineConnections<Db>, db: DBFrag<Db>, actor_config: ActorConfig, id: usize) {
         //TODO: Is this fine?
         let chainspec = Arc::new(OpChainSpecBuilder::base_mainnet().build());
         let evmconfig = OpEvmConfig::new(chainspec);
@@ -34,11 +38,15 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         let evm_tof: Evm<'_, (), _> = evmconfig.evm(cache_tof);
         let cache = CacheDB::new(Arc::new(DBSorting::new(db)));
         let evm: Evm<'_, (), _> = evmconfig.evm(cache);
-        Simulator::new(evm_tof, evm).run(connections, actor_config);
+        Simulator::new(evm_tof, evm, id).run(connections, actor_config);
     }
 
-    pub fn new(evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>, evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>) -> Self {
-        Self { evm, evm_tof }
+    pub fn new(
+        evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>,
+        evm: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
+        id: usize,
+    ) -> Self {
+        Self { evm, evm_tof, id }
     }
 
     fn simulate_tx<DbRef: DatabaseRead>(
@@ -67,16 +75,20 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
 impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
     const CORE_AFFINITY: Option<usize> = None;
 
+    fn name(&self) -> String {
+        let name = last_part_of_typename::<Self>();
+        format!("{}-{}", name, self.id)
+    }
+
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
             info!("received {}", msg.as_ref());
             match msg {
                 // TODO: Cleanup: merge both functions?
                 SequencerToSimulator::SimulateTx(tx, db) => {
-                    let sender = tx.sender();
                     let _ = senders.send_timeout(
                         SimulatorToSequencer::new(
-                            sender,
+                            (tx.sender(), tx.nonce()),
                             db.state_id(),
                             SimulatorToSequencerMsg::Tx(Self::simulate_tx(tx, db, &mut self.evm)),
                         ),
@@ -84,10 +96,9 @@ impl<Db: DatabaseRead> Actor<Db> for Simulator<'_, Db> {
                     );
                 }
                 SequencerToSimulator::SimulateTxTof(tx, db) => {
-                    let sender = tx.sender();
                     let _ = senders.send_timeout(
                         SimulatorToSequencer::new(
-                            sender,
+                            (tx.sender(), tx.nonce()),
                             db.state_id(),
                             SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_tx(tx, db, &mut self.evm_tof)),
                         ),

@@ -240,28 +240,29 @@ type NewFrag struct {
 	Version     uint64 `json:"version"`
 }
 
-// Total frags in the block + block header fields
-type Seal struct {
-	TotalFrags       uint64
-	BlockNumber      uint64
-	GasUsed          uint64
-	GasLimit         uint64
-	ParentHash       Bytes32
-	TransactionsRoot Bytes32
-	ReceiptsRoot     Bytes32
-	StateRoot        Bytes32
-	BlockHash        Bytes32
-}
-
 type SignedSeal struct {
 	Signature Bytes65 `json:"signature"`
 	Seal      Seal    `json:"seal"`
+}
+
+// Total frags in the block + block header fields
+type Seal struct {
+	TotalFrags       uint64  `json:"totalFrags"`
+	BlockNumber      uint64  `json:"blockNumber"`
+	GasUsed          uint64  `json:"gasUsed"`
+	GasLimit         uint64  `json:"gasLimit"`
+	ParentHash       Bytes32 `json:"parentHash"`
+	TransactionsRoot Bytes32 `json:"transactionsRoot"`
+	ReceiptsRoot     Bytes32 `json:"receiptsRoot"`
+	StateRoot        Bytes32 `json:"stateRoot"`
+	BlockHash        Bytes32 `json:"blockHash"`
 }
 
 type ExecutionPayloadEnvelope struct {
 	ParentBeaconBlockRoot *common.Hash      `json:"parentBeaconBlockRoot,omitempty"`
 	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
 }
+
 type ExecutionPayload struct {
 	ParentHash    common.Hash     `json:"parentHash"`
 	FeeRecipient  common.Address  `json:"feeRecipient"`
