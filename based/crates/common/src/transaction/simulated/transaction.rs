@@ -1,10 +1,11 @@
-use std::{ops::Deref, sync::Arc};
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 
 use alloy_consensus::{Receipt, TxReceipt};
 use alloy_primitives::U256;
 use op_alloy_consensus::{OpDepositReceipt, OpTxType};
 use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpReceipt};
 use reth_primitives::ReceiptWithBloom;
+use revm::{Database, DatabaseRef};
 use revm_primitives::{Address, EvmState, ResultAndState};
 
 use crate::{db::DatabaseRead, transaction::Transaction};
@@ -20,19 +21,8 @@ pub struct SimulatedTx {
 }
 
 impl SimulatedTx {
-    pub fn new<Db>(tx: Arc<Transaction>, result_and_state: ResultAndState, orig_state: &Db, coinbase: Address) -> Self
-    where
-        Db: DatabaseRead,
-    {
-        let start_balance = orig_state
-            .basic_ref(coinbase)
-            .inspect_err(|e| tracing::error!("reading coinbase balance: {e:?}"))
-            .ok()
-            .flatten()
-            .map(|a| a.balance)
-            .unwrap_or_default();
+    pub fn new(tx: Arc<Transaction>, result_and_state: ResultAndState, start_balance: U256, coinbase: Address) -> Self {
         let end_balance = result_and_state.state.get(&coinbase).map(|a| a.info.balance).unwrap_or_default();
-
         let payment = end_balance.saturating_sub(start_balance);
 
         Self { tx, result_and_state, payment }

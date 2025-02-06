@@ -339,7 +339,11 @@ where
 
                         tracing::info!("Sorting start with attributes: {:?}", attributes);
 
-                        let evm_block_params = EvmBlockParams { parent_header: data.parent_header.clone(), attributes };
+                        let evm_block_params = EvmBlockParams {
+                            parent_header: data.parent_header.clone(),
+                            attributes,
+                            db: data.frags.db().clone(),
+                        };
                         // should never fail as its a broadcast
                         senders
                             .send_timeout(evm_block_params, Duration::from_millis(10))
@@ -458,7 +462,7 @@ where
     /// transaction pool simulations for future inclusion.
     fn handle_sim_result(
         mut self,
-        result: SimulatorToSequencer<Db>,
+        result: SimulatorToSequencer,
         data: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> Self {

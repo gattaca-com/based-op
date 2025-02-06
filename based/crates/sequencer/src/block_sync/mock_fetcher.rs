@@ -77,7 +77,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             let (block_tx, block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 
-            let Ok(sealed_block) = block_rx.blocking_recv()  else {
+            let Ok(sealed_block) = block_rx.blocking_recv() else {
                 warn!("issue getting block");
                 return;
             };
@@ -86,6 +86,11 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             block.header.extra_data = Default::default();
             assert_eq!(sealed_block.execution_payload.payload_inner.payload_inner.block_hash, block.hash_slow(), "{block:#?} vs {sealed_block:#?}" );
 
+            assert_eq!(
+                sealed_block.execution_payload.payload_inner.payload_inner.block_hash,
+                block.hash_slow(),
+                "{block:#?} vs {sealed_block:#?}"
+            );
 
             connections.send(new_payload);
             connections.send(fcu_1);

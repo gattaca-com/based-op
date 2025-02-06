@@ -323,15 +323,15 @@ pub enum SequencerToSimulator<Db> {
 }
 
 #[derive(Debug)]
-pub struct SimulatorToSequencer<Db: DatabaseRead> {
+pub struct SimulatorToSequencer {
     /// Sender address and nonce
     pub sender_info: (Address, u64),
     pub state_id: u64,
-    pub msg: SimulatorToSequencerMsg<Db>,
+    pub msg: SimulatorToSequencerMsg,
 }
 
-impl<Db: DatabaseRead> SimulatorToSequencer<Db> {
-    pub fn new(sender_info: (Address, u64), state_id: u64, msg: SimulatorToSequencerMsg<Db>) -> Self {
+impl SimulatorToSequencer {
+    pub fn new(sender_info: (Address, u64), state_id: u64, msg: SimulatorToSequencerMsg) -> Self {
         Self { sender_info, state_id, msg }
     }
 
@@ -344,7 +344,7 @@ impl<Db: DatabaseRead> SimulatorToSequencer<Db> {
     }
 }
 
-pub type SimulationResult<T, Db> = Result<T, SimulationError<<Db as DatabaseRef>::Error>>;
+pub type SimulationResult<T> = Result<T, SimulationError>;
 
 #[derive(Clone, Debug)]
 pub struct TopOfBlockResult {
@@ -356,20 +356,20 @@ pub struct TopOfBlockResult {
 
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
-pub enum SimulatorToSequencerMsg<Db: DatabaseRead> {
+pub enum SimulatorToSequencerMsg {
     /// Simulation on top of any state.
-    Tx(SimulationResult<SimulatedTx, Db>),
+    Tx(SimulationResult<SimulatedTx>),
     /// Simulation on top of a fragment. Used by the transaction pool.
-    TxPoolTopOfFrag(SimulationResult<SimulatedTx, Db>),
+    TxPoolTopOfFrag(SimulationResult<SimulatedTx>),
     /// Top of block sims are done, we can start sequencing
     TopOfBlock(TopOfBlockResult),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]
 #[repr(u8)]
-pub enum SimulationError<DbError> {
+pub enum SimulationError {
     #[error("Evm error: {0}")]
-    EvmError(#[from] EVMError<DbError>),
+    EvmError(String),
     #[error("Order pays nothing")]
     ZeroPayment,
 }
@@ -400,9 +400,11 @@ pub enum BlockFetch {
 
 /// Represents the parameters required to configure the next block.
 #[derive(Clone, Debug)]
-pub struct EvmBlockParams {
+pub struct EvmBlockParams<Db: 'static> {
     pub parent_header: Header,
     pub attributes: NextBlockAttributes,
+    /// New frag db
+    pub db: DBFrag<Db>,
 }
 
 #[derive(Debug, Clone)]

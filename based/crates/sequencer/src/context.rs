@@ -37,7 +37,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             until: Instant::now() + self.config.frag_duration,
             in_flight_sims: 0,
             next_to_be_applied: None,
-            tof_snapshot:  ActiveOrders::new(self.tx_pool.clone_active())
+            tof_snapshot: ActiveOrders::new(self.tx_pool.clone_active()),
         }
     }
 

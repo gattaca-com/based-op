@@ -121,7 +121,7 @@ pub struct DBFrag<Db> {
     curr_block_number: u64,
 }
 
-impl<Db: DatabaseRead> DBFrag<Db> {
+impl<Db: DatabaseRef> DBFrag<Db> {
     pub fn commit<'a>(&mut self, txs: impl Iterator<Item = &'a SimulatedTx>) {
         let mut guard = self.db.write();
 
@@ -181,7 +181,9 @@ impl<Db: DatabaseRead> DBFrag<Db> {
         *self.db.write() = CacheDB::new(db);
         self.state_id = rand::rng().next_u64();
     }
+}
 
+impl<Db: DatabaseRead> DBFrag<Db> {
     pub fn state_root(&self, state_changes: HashMap<Address, Account>) -> B256 {
         let r = self.db.read();
         let bundle_state = state_changes_to_bundle_state(&r.db, state_changes).expect("couldn't create bundle state");
@@ -209,7 +211,7 @@ impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
     }
 }
 
-impl<Db: DatabaseRead> Database for DBFrag<Db> {
+impl<Db: DatabaseRef> Database for DBFrag<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
@@ -283,8 +285,8 @@ impl<Db> Deref for DBSorting<Db> {
     }
 }
 
-impl<DbRead: DatabaseRef> DatabaseRef for DBSorting<DbRead> {
-    type Error = DbRead::Error;
+impl<Db: DatabaseRef> DatabaseRef for DBSorting<Db> {
+    type Error = Db::Error;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         self.db.basic_ref(address)
@@ -303,15 +305,15 @@ impl<DbRead: DatabaseRef> DatabaseRef for DBSorting<DbRead> {
     }
 }
 
-impl<Db: DatabaseRead> Database for DBSorting<Db> {
+impl<Db: DatabaseRef> Database for DBSorting<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        self.db.basic(address)
+        self.db.basic_ref(address)
     }
 
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        self.db.code_by_hash(code_hash)
+        self.db.code_by_hash_ref(code_hash)
     }
 
     fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {

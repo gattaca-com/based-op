@@ -43,7 +43,7 @@ impl ActorConfig {
     }
 }
 
-pub trait Actor<Db: DatabaseRead>: Sized {
+pub trait Actor<Db>: Sized {
     const CORE_AFFINITY: Option<usize> = None;
     fn name(&self) -> &str {
         last_part_of_typename_without_generic::<Self>()

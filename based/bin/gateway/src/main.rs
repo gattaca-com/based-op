@@ -56,7 +56,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     let db_frag: DBFrag<_> = db_bop.clone().into();
     let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
     let fetch_until = args.tmp_end_block;
-    let sequencer_config: SequencerConfig =(&args).into();
+    let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
 
     std::thread::scope(|s| {
@@ -92,7 +92,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 let db_frag = db_frag.clone();
                 let evm_config_c = evm_config.clone();
                 move || {
-                    let simulator = Simulator::new(db_frag, &evm_config_c);
+                    let simulator = Simulator::new(db_frag, &evm_config_c, core);
                     simulator.run(connections, ActorConfig::default().with_core(core));
                 }
             });

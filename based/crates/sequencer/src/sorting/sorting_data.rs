@@ -61,7 +61,7 @@ impl<Db: DatabaseRead> SortingData<Db> {
     }
 
     /// Handles the result of a simulation. `simulated_tx` simulated_at_id should be pre-verified.
-    pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx, Db>, sender: &Address, base_fee: u64) {
+    pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx>, sender: &Address, base_fee: u64) {
         self.in_flight_sims -= 1;
 
         // handle errored sim
