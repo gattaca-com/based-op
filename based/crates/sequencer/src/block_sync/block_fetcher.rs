@@ -1,24 +1,21 @@
-use std::time::Duration;
-
+use alloy_provider::{Provider, ProviderBuilder};
 use bop_common::{
     actor::Actor,
     communication::{messages::BlockFetch, SpineConnections},
     db::DatabaseRead,
 };
-use reqwest::{Client, Url};
+use reqwest::Url;
 use tokio::runtime::Runtime;
 
-use super::fetch_blocks::async_fetch_blocks_and_send_sequentially;
+use super::{fetch_blocks::async_fetch_blocks_and_send_sequentially, AlloyProvider};
 
 #[derive(Debug)]
 pub struct BlockFetcher {
-    /// Used to fetch blocks from an EL node.
-    rpc_url: Url,
     executor: Runtime,
     next_block: u64,
     sync_until: u64,
     batch_size: u64,
-    client: reqwest::Client,
+    provider: AlloyProvider,
 }
 impl BlockFetcher {
     pub fn new(rpc_url: Url) -> Self {
@@ -27,8 +24,10 @@ impl BlockFetcher {
             .enable_all()
             .build()
             .expect("couldn't build local tokio runtime");
-        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        Self { rpc_url, executor, next_block: 0, sync_until: 0, batch_size: 20, client }
+
+        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+
+        Self { executor, next_block: 0, sync_until: 0, batch_size: 20, provider }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
@@ -42,6 +41,16 @@ impl BlockFetcher {
 }
 
 impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
+    fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {
+        let head_block_number = self.executor.block_on(async {
+            let last_block =
+                self.provider.get_block_number().await.expect("failed to fetch last block, is the RPC url correct?");
+            last_block
+        });
+
+        self.next_block = head_block_number;
+    }
+
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         connections.receive(|msg, _| {
             self.handle_fetch(msg);
@@ -51,9 +60,8 @@ impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
             self.executor.block_on(async_fetch_blocks_and_send_sequentially(
                 self.next_block,
                 stop,
-                self.rpc_url.clone(),
                 connections.senders(),
-                &self.client,
+                &self.provider,
             ));
             self.next_block = stop + 1;
         }

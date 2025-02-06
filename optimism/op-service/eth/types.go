@@ -263,6 +263,11 @@ type ExecutionPayloadEnvelope struct {
 	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
 }
 
+type ExecutionPayloadEnvelope struct {
+	ParentBeaconBlockRoot *common.Hash      `json:"parentBeaconBlockRoot,omitempty"`
+	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
+}
+
 type ExecutionPayload struct {
 	ParentHash    common.Hash     `json:"parentHash"`
 	FeeRecipient  common.Address  `json:"feeRecipient"`

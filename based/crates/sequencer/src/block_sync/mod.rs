@@ -17,10 +17,14 @@ use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::{BlockWithSenders, GotExpected};
 use reth_trie_common::updates::TrieUpdates;
 use revm::Database;
+use tracing::{info, warn};
 
 pub mod block_fetcher;
 pub mod fetch_blocks;
 pub mod mock_fetcher;
+
+pub type AlloyProvider =
+    alloy_provider::RootProvider<alloy_transport_http::Http<reqwest::Client>, op_alloy_network::Optimism>;
 
 #[derive(Debug, Clone)]
 pub struct BlockSync {
@@ -46,13 +50,16 @@ impl BlockSync {
     where
         DB: DatabaseWrite + DatabaseRead,
     {
-        tracing::info!("Applying and committing block: {:?}", block.header.number);
-        debug_assert!(block.header.number == db.head_block_number()? + 1, "can only apply blocks sequentially");
+        let db_head = db.head_block_number()?;
+        let block_number = block.header.number;
+
+        info!(db_head, block_number, "applying and committing block");
+        debug_assert!(block_number == db_head + 1, "can only apply blocks sequentially");
 
         // Reorg check
         if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {
             if db_parent_hash != block.header.parent_hash {
-                tracing::warn!(
+                warn!(
                     "reorg detected at: {}. db_parent_hash: {db_parent_hash:?}, block_hash: {:?}",
                     block.header.number,
                     block.header.hash_slow()
@@ -109,7 +116,7 @@ impl BlockSync {
         }
         let after_state_root = Instant::now();
 
-        tracing::info!(
+        info!(
             block_number = %block.header.number,
             parent_hash = ?block.header.parent_hash,
             state_root = ?state_root,
@@ -127,16 +134,11 @@ impl BlockSync {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
-    use alloy_consensus::TxReceipt;
     use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
-    use bop_db::{alloy_db::AlloyDB, init_database};
-    use reqwest::{Client, Url};
-    use reth_db::{tables, transaction::DbTx};
+    use bop_db::{init_database, AlloyDB};
+    use reqwest::Url;
     use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
-    use revm_primitives::address;
     use tracing::level_filters::LevelFilter;
 
     use super::*;
@@ -151,24 +153,22 @@ mod tests {
         // Get RPC URL from environment
         let rpc_url = std::env::var(ENV_RPC_URL).unwrap_or(TEST_BASE_RPC_URL.to_string());
         let rpc_url = Url::parse(&rpc_url).unwrap();
-        tracing::info!("RPC URL: {}", rpc_url);
+        info!("RPC URL: {}", rpc_url);
 
         // Create the block executor.
         let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
         let mut block_sync = BlockSync::new(chain_spec);
 
         // Fetch the block from the RPC.
-        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        let url = rpc_url.clone();
-        let block = rt.block_on(async { fetch_block(25771900, &client, url).await.unwrap() });
+        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let block = rt.block_on(async { fetch_block(25771900, &provider).await });
 
         // Create the alloydb.
-        let client = ProviderBuilder::new().network().on_http(rpc_url);
-        let alloydb = AlloyDB::new(client, block.header.number, rt);
+        let alloydb = AlloyDB::new(provider, block.header.number, rt);
 
         // Execute the block.
         let res = block_sync.apply_and_commit_block(&block, &alloydb, false);
-        tracing::info!("res: {:?}", res);
+        info!("res: {:?}", res);
     }
 
     #[test]
@@ -177,7 +177,7 @@ mod tests {
 
         // Initialise the on disk db.
         let db_location = std::env::var("DB_LOCATION").unwrap_or_else(|_| "/tmp/base_sepolia".to_string());
-        let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000).unwrap();
+        let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000, BASE_SEPOLIA.clone()).unwrap();
         let db_head_block_number = db.head_block_number().unwrap();
         println!("DB Head Block Number: {:?}", db_head_block_number);
 
@@ -187,10 +187,10 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = BASE_SEPOLIA.clone();
-        let mut block_sync = BlockSync::new(chain_spec, RuntimeOrHandle::new_runtime(rt.clone()), rpc_url.clone());
+        let mut block_sync = BlockSync::new(chain_spec);
 
-        let client = Client::builder().timeout(Duration::from_secs(5)).build().expect("Failed to build HTTP client");
-        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &client, rpc_url).await.unwrap() });
+        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &provider).await });
 
         // Execute the block.
         assert!(block_sync.execute(&block, &db).is_ok());
