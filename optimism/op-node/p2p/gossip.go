@@ -778,7 +778,7 @@ func newNewSealTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log
 
 	newSealsTopicEvents, err := newSealsTopic.EventHandler()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new frags gossip topic handler: %w", err)
+		return nil, fmt.Errorf("failed to create new seals gossip topic handler: %w", err)
 	}
 
 	go LogTopicEvents(ctx, log, newSealsTopicEvents)
@@ -786,7 +786,7 @@ func newNewSealTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log
 	subscription, err := newSealsTopic.Subscribe()
 	if err != nil {
 		err = errors.Join(err, newSealsTopic.Close())
-		return nil, fmt.Errorf("failed to subscribe to new frags gossip topic: %w", err)
+		return nil, fmt.Errorf("failed to subscribe to new seals gossip topic: %w", err)
 	}
 
 	subscriber := MakeSubscriber(log, NewSealHandler)
