@@ -235,8 +235,8 @@ impl EngineApi {
         };
         let new_payload = EngineApi::NewPayloadV3 {
             payload: v3,
-            versioned_hashes: Default::default(),
-            parent_beacon_block_root: B256::ZERO,
+            versioned_hashes: Default::default(), // not used
+            parent_beacon_block_root: block.parent_beacon_block_root.unwrap(),
             res_tx: new_payload_tx,
         };
         let (fcu_tx, _fcu_rx) = oneshot::channel();

@@ -13,7 +13,7 @@ use bop_common::{
         },
         SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{DBFrag, DBSorting, DatabaseRead},
+    db::{DBFrag, DBSorting},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
 };
@@ -22,13 +22,12 @@ use reth_evm::{
     env::EvmEnv,
     execute::{BlockExecutionError, BlockValidationError, ProviderError},
     system_calls::SystemCaller,
-    ConfigureEvm, ConfigureEvmEnv, NextBlockEnvAttributes,
+    ConfigureEvm, ConfigureEvmEnv,
 };
-use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
+use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
-use reth_optimism_forks::OpHardfork;
 use revm::{
-    db::{BundleState, CacheDB, State},
+    db::{CacheDB, State},
     CacheState, Database, DatabaseCommit, DatabaseRef, Evm,
 };
 use revm_primitives::{Address, BlockEnv, EnvWithHandlerCfg, ResultAndState, SpecId};
