@@ -19,20 +19,22 @@ impl SimulatedTxList {
     /// and returns a SimulatedTxList.
     ///
     /// Will optionally trim the current tx from the pending list.
-    pub fn new(current: SimulatedTx, pending: &TxList) -> SimulatedTxList {
+    pub fn new(current: Option<SimulatedTx>, pending: &TxList) -> SimulatedTxList {
         let mut pending = pending.clone();
 
-        // Remove current from pending
-        if pending.peek_nonce().is_some_and(|nonce| current.nonce() == nonce) {
-            pending.pop_front();
+        // Remove current from pending, if it exists
+        if let Some(ref current) = current {
+            if pending.peek_nonce().is_some_and(|nonce| current.nonce() == nonce) {
+                pending.pop_front();
+            }
+
+            debug_assert!(
+                pending.peek_nonce().map_or(true, |nonce| current.nonce() == nonce + 1),
+                "pending tx list nonce must be consecutive from current"
+            );
         }
 
-        debug_assert!(
-            pending.peek_nonce().map_or(true, |nonce| current.nonce() == nonce + 1),
-            "pending tx list nonce must be consecutive from current"
-        );
-
-        SimulatedTxList { current: Some(current), pending }
+        SimulatedTxList { current, pending }
     }
 
     /// Updates the pending tx list.

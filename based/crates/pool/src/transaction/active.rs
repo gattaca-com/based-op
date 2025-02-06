@@ -1,3 +1,4 @@
+use alloy_consensus::Transaction;
 use alloy_primitives::Address;
 use bop_common::transaction::SimulatedTxList;
 use rustc_hash::FxHashMap;
@@ -65,5 +66,39 @@ impl Active {
     #[inline]
     pub fn tx_list_mut(&mut self, sender: &Address) -> Option<&mut SimulatedTxList> {
         self.senders.get_mut(sender).map(|index| &mut self.txs[*index])
+    }
+
+    #[inline]
+    pub fn forward(&mut self, address: &Address, nonce: u64) {
+        let Some(&index) = self.senders.get(address) else {
+            return;
+        };
+
+        let tx_list = &mut self.txs[index];
+        if tx_list.pending.forward(&nonce) {
+            self.remove_index(index);
+            return;
+        }
+
+        if let Some(ref current) = tx_list.current {
+            if nonce >= current.nonce() {
+                tx_list.current = None;
+            }
+        }
+    }
+
+    #[inline]
+    fn remove_index(&mut self, index: usize) {
+        let sender = self.txs[index].sender();
+
+        // Remove the sender from the active list.
+        self.txs.swap_remove(index);
+        self.senders.remove(&sender);
+
+        // If we swapped with a tx (wasn't the last element), update its sender's index.
+        if index < self.txs.len() {
+            let swapped_sender = self.txs[index].sender();
+            *self.senders.get_mut(&swapped_sender).unwrap() = index;
+        }
     }
 }
