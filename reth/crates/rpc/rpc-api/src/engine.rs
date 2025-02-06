@@ -217,6 +217,12 @@ pub trait EngineApi<Engine: EngineTypes> {
         &self,
         versioned_hashes: Vec<B256>,
     ) -> RpcResult<Vec<Option<BlobAndProofV1>>>;
+
+    #[method(name = "newFragV0")]
+    async fn new_frag_v0(&self) -> RpcResult<()>;
+
+    #[method(name = "sealFragV0")]
+    async fn seal_frag_v0(&self) -> RpcResult<()>;
 }
 
 /// A subset of the ETH rpc interface: <https://ethereum.github.io/execution-apis/api-documentation/>
