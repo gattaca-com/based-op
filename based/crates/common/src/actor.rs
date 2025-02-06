@@ -45,26 +45,31 @@ impl ActorConfig {
 
 pub trait Actor<Db: DatabaseRead>: Sized {
     const CORE_AFFINITY: Option<usize> = None;
+
+    fn name(&self) -> String {
+        last_part_of_typename::<Self>().to_string()
+    }
+
     fn loop_body(&mut self, _connections: &mut SpineConnections<Db>) {}
     fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {}
 
     fn _on_init(&mut self, connections: &mut SpineConnections<Db>) {
-        info!("Initializing...");
+        info!("initializing...");
         self.on_init(connections);
-        info!("Initialized...");
+        info!("initialized...");
     }
 
     fn on_exit(self, _connections: &mut SpineConnections<Db>) {}
     fn _on_exit(self, connections: &mut SpineConnections<Db>) {
-        info!("Running final tasks before stopping...");
+        info!("running final tasks before stopping...");
         self.on_exit(connections);
-        info!("Finalized");
+        info!("finalized");
     }
 
     fn run(mut self, mut connections: SpineConnections<Db>, actor_config: ActorConfig) {
-        let name = last_part_of_typename::<Self>();
+        let name = self.name();
 
-        let _s = span!(Level::INFO, "", system = name).entered();
+        let _s = span!(Level::INFO, "", id = name).entered();
 
         actor_config.maybe_bind_to_core(Self::CORE_AFFINITY);
 
@@ -74,7 +79,7 @@ pub trait Actor<Db: DatabaseRead>: Sized {
 
         let term = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
-            .expect("Couldn't register signal hook for some reason");
+            .expect("couldn't register signal hook for some reason");
 
         loop {
             loop_timer.start();
