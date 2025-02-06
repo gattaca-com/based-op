@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"sync"
@@ -271,9 +272,18 @@ const (
 )
 
 func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
+	log.Info("BuildNewFragValidator")
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
-		// TODO: use unmarshalling here
-		message.ValidatorData = message.GetData()
+		// TODO: Replace workaround with actual deserialization
+		dec := gob.NewDecoder(bytes.NewReader(message.GetData()))
+		var signedFrag eth.SignedNewFrag
+		if err := dec.Decode(&signedFrag); err != nil {
+			log.Warn("failed to decode signed fragment", "err", err, "peer", id)
+			return pubsub.ValidationReject
+		}
+
+		message.ValidatorData = &signedFrag
+
 		return pubsub.ValidationAccept
 	}
 }
@@ -479,7 +489,7 @@ func verifyBlockSignature(log log.Logger, cfg *rollup.Config, runCfg GossipRunti
 
 type GossipIn interface {
 	OnUnsafeL2Payload(ctx context.Context, from peer.ID, msg *eth.ExecutionPayloadEnvelope) error
-	OnNewFrag(ctx context.Context, from peer.ID, msg *eth.NewFrag) error
+	OnNewFrag(ctx context.Context, from peer.ID, msg *eth.SignedNewFrag) error
 }
 
 type GossipTopicInfo interface {
@@ -494,8 +504,8 @@ type GossipTopicInfo interface {
 type GossipOut interface {
 	GossipTopicInfo
 	PublishL2Payload(ctx context.Context, msg *eth.ExecutionPayloadEnvelope, signer Signer) error
-	PublishNewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) error
-	PublishNewSeal(ctx context.Context, signedSeal eth.SignedSeal) error
+	PublishNewFrag(ctx context.Context, from peer.ID, signedFrag *eth.SignedNewFrag) error
+	PublishNewSeal(ctx context.Context, from peer.ID, signedSeal *eth.SignedSeal) error
 	Close() error
 }
 
@@ -645,15 +655,21 @@ func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.Executio
 	}
 }
 
-func (p *publisher) PublishNewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) error {
-	// TODO: Send the new frag instead of the block number
-	data := make([]byte, 64)
-	binary.BigEndian.PutUint64(data, signedFrag.Frag.BlockNumber)
+func (p *publisher) PublishNewFrag(ctx context.Context, from peer.ID, signedFrag *eth.SignedNewFrag) error {
+	log.Info("PublishNewFrag")
+
+	// TODO: Replace workaround with actual serialization
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(signedFrag); err != nil {
+		return fmt.Errorf("failed to encode signed fragment: %w", err)
+	}
+	data := buf.Bytes()
 
 	return p.newFragV0.topic.Publish(ctx, data)
 }
 
-func (p *publisher) PublishNewSeal(ctx context.Context, signedSeal eth.SignedSeal) error {
+func (p *publisher) PublishNewSeal(ctx context.Context, from peer.ID, signedSeal *eth.SignedSeal) error {
 	// TODO: Send the new seal instead of the block number
 	data := make([]byte, 64)
 	binary.BigEndian.PutUint64(data, signedSeal.Seal.BlockNumber)
@@ -725,6 +741,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 }
 
 func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log log.Logger, gossipIn GossipIn, validator pubsub.ValidatorEx) (*newFragTopic, error) {
+	log.Info("newNewFragTopic")
 	err := ps.RegisterTopicValidator(topicId,
 		validator,
 		pubsub.WithValidatorTimeout(3*time.Second),
@@ -841,10 +858,10 @@ func newBlockTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log l
 type TopicSubscriber func(ctx context.Context, sub *pubsub.Subscription)
 type MessageHandler func(ctx context.Context, from peer.ID, msg any) error
 
-func NewFragHandler(onNewFrag func(ctx context.Context, from peer.ID, msg *eth.NewFrag) error) MessageHandler {
-	log.Info("NewFrag received")
+func NewFragHandler(onNewFrag func(ctx context.Context, from peer.ID, msg *eth.SignedNewFrag) error) MessageHandler {
+	log.Info("NewFragHandler")
 	return func(ctx context.Context, from peer.ID, msg any) error {
-		frag, ok := msg.(*eth.NewFrag)
+		frag, ok := msg.(*eth.SignedNewFrag)
 		if !ok {
 			return fmt.Errorf("expected topic validator to parse and validate data into frag, but got %T", msg)
 		}
@@ -874,6 +891,7 @@ func BlocksHandler(onBlock func(ctx context.Context, from peer.ID, msg *eth.Exec
 }
 
 func MakeSubscriber(log log.Logger, msgHandler MessageHandler) TopicSubscriber {
+	log.Info("MakeSubscriber")
 	return func(ctx context.Context, sub *pubsub.Subscription) {
 		topicLog := log.New("topic", sub.Topic())
 		for {

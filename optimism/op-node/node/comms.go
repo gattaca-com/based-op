@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -13,7 +14,8 @@ type Tracer interface {
 	OnNewL1Head(ctx context.Context, sig eth.L1BlockRef)
 	OnUnsafeL2Payload(ctx context.Context, from peer.ID, payload *eth.ExecutionPayloadEnvelope)
 	OnPublishL2Payload(ctx context.Context, payload *eth.ExecutionPayloadEnvelope)
-	OnNewFrag(ctx context.Context, from peer.ID, frag *eth.NewFrag)
+	OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag)
+	OnPublishNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag)
 }
 
 type noOpTracer struct{}
@@ -25,6 +27,10 @@ func (n noOpTracer) OnUnsafeL2Payload(ctx context.Context, from peer.ID, payload
 
 func (n noOpTracer) OnPublishL2Payload(ctx context.Context, payload *eth.ExecutionPayloadEnvelope) {}
 
-func (n noOpTracer) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.NewFrag) {}
+func (n noOpTracer) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) {
+	log.Info("(n noOpTracer) OnNewFrag")
+}
+
+func (n noOpTracer) OnPublishNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) {}
 
 var _ Tracer = (*noOpTracer)(nil)

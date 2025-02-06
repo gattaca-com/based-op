@@ -162,7 +162,7 @@ func (s *EngineAPIClient) SignalSuperchainV1(ctx context.Context, recommended, r
 	return result, err
 }
 
-func (s *EngineAPIClient) NewFrag(ctx context.Context, frag *eth.NewFrag) (*string, error) {
+func (s *EngineAPIClient) NewFrag(ctx context.Context, frag *eth.SignedNewFrag) (*string, error) {
 	e := s.log.New("new_frag", frag)
 	e.Trace("sending new frag")
 	var result string

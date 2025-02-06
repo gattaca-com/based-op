@@ -560,12 +560,12 @@ func (ea *L2EngineAPI) invalid(err error, latestValid *types.Header) *eth.Payloa
 
 // TODO: Define responses for the following methods
 
-func (ea *L2EngineAPI) NewFragV0(ctx context.Context, frag *eth.NewFrag) (*string, error) {
+func (ea *L2EngineAPI) NewFragV0(ctx context.Context, frag *eth.SignedNewFrag) (*string, error) {
 	log.Info("NewFragV0")
 	return ea.newFragV0(ctx, frag)
 }
 
-func (ea *L2EngineAPI) newFragV0(_ context.Context, _ *eth.NewFrag) (*string, error) {
+func (ea *L2EngineAPI) newFragV0(_ context.Context, _ *eth.SignedNewFrag) (*string, error) {
 	log.Info("newFragV0")
 	return &engine.VALID, nil
 }

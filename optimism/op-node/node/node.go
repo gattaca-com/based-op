@@ -596,6 +596,21 @@ func (n *OpNode) PublishL2Payload(ctx context.Context, envelope *eth.ExecutionPa
 	return nil
 }
 
+func (n *OpNode) PublishNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) error {
+	n.tracer.OnPublishNewFrag(ctx, from, frag)
+
+	// publish to p2p, if we are running p2p at all
+	if n.p2pEnabled() {
+		if n.p2pSigner == nil {
+			return fmt.Errorf("node has no p2p signer, frag", frag, "cannot be published")
+		}
+		n.log.Info("Publishing new frag on p2p", "frag", frag)
+		return n.p2pNode.GossipOut().PublishNewFrag(ctx, from, frag)
+	}
+	// if p2p is not enabled then we just don't publish the frag
+	return nil
+}
+
 func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *eth.ExecutionPayloadEnvelope) error {
 	// ignore if it's from ourselves
 	if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
@@ -618,11 +633,12 @@ func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *
 	return nil
 }
 
-func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.NewFrag) error {
+func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) error {
+	log.Info("(n *OpNode) OnNewFrag")
 	// ignore if it's from ourselves
-	if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
-		return nil
-	}
+	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
+	// 	return nil
+	// }
 
 	n.tracer.OnNewFrag(ctx, from, frag)
 

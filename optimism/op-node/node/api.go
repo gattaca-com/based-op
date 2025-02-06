@@ -184,16 +184,16 @@ func (n *nodeAPI) Version(ctx context.Context) (string, error) {
 }
 
 type basedAPI struct {
-	p2p		p2p.Node
-	log		log.Logger
-	metrics	metrics.RPCMetricer
+	p2p     p2p.Node
+	log     log.Logger
+	metrics metrics.RPCMetricer
 }
 
 func NewBasedAPI(node p2p.Node, log log.Logger, metrics metrics.RPCMetricer) *basedAPI {
 	return &basedAPI{
-		p2p: 		node,
-		log:		log,
-		metrics:	metrics,
+		p2p:     node,
+		log:     log,
+		metrics: metrics,
 	}
 }
 
@@ -203,7 +203,7 @@ func (n *basedAPI) NewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) (s
 
 	n.log.Info("NewFrag RPC request received")
 
-	if err := n.p2p.GossipOut().PublishNewFrag(ctx, signedFrag); err != nil {
+	if err := n.p2p.GossipOut().PublishNewFrag(ctx, n.p2p.Host().ID(), &signedFrag); err != nil {
 		return "", fmt.Errorf("failed to publish new frag: %w", err)
 	}
 
@@ -216,7 +216,7 @@ func (n *basedAPI) NewSeal(ctx context.Context, signedSeal eth.SignedSeal) (stri
 
 	n.log.Info("NewSeal RPC request received", "seal", signedSeal.Seal)
 
-	if err := n.p2p.GossipOut().PublishNewSeal(ctx, signedSeal); err != nil {
+	if err := n.p2p.GossipOut().PublishNewSeal(ctx, n.p2p.Host().ID(), &signedSeal); err != nil {
 		return "", fmt.Errorf("failed to publish new seal: %w", err)
 	}
 

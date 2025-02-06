@@ -5,7 +5,7 @@ import (
 )
 
 type NewFragProcessEvent struct {
-	Frag *eth.NewFrag
+	SignedNewFrag *eth.SignedNewFrag
 }
 
 func (ev NewFragProcessEvent) String() string {
@@ -13,6 +13,6 @@ func (ev NewFragProcessEvent) String() string {
 }
 
 func (eq *EngDeriver) onNewFragProcess(ev NewFragProcessEvent) {
-	eq.ec.engine.NewFrag(eq.ctx, ev.Frag)
-	eq.log.Info("new fragment sent", "frag", ev.Frag)
+	eq.ec.engine.NewFrag(eq.ctx, ev.SignedNewFrag)
+	eq.log.Info("new fragment sent", "frag", ev.SignedNewFrag)
 }

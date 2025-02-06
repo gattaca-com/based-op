@@ -3,6 +3,7 @@ package opnode
 import (
 	"context"
 
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ethereum-optimism/optimism/op-node/node"
@@ -13,7 +14,8 @@ type FnTracer struct {
 	OnNewL1HeadFn        func(ctx context.Context, sig eth.L1BlockRef)
 	OnUnsafeL2PayloadFn  func(ctx context.Context, from peer.ID, payload *eth.ExecutionPayloadEnvelope)
 	OnPublishL2PayloadFn func(ctx context.Context, payload *eth.ExecutionPayloadEnvelope)
-	OnNewFragFn          func(ctx context.Context, from peer.ID, frag *eth.NewFrag)
+	OnNewFragFn          func(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag)
+	OnPublishNewFragFn   func(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag)
 }
 
 func (n *FnTracer) OnNewL1Head(ctx context.Context, sig eth.L1BlockRef) {
@@ -34,9 +36,16 @@ func (n *FnTracer) OnPublishL2Payload(ctx context.Context, payload *eth.Executio
 	}
 }
 
-func (n *FnTracer) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.NewFrag) {
+func (n *FnTracer) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) {
+	log.Info("(n *FnTracer) OnNewFrag")
 	if n.OnNewFragFn != nil {
 		n.OnNewFragFn(ctx, from, frag)
+	}
+}
+
+func (n *FnTracer) OnPublishNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) {
+	if n.OnPublishNewFragFn != nil {
+		n.OnPublishNewFragFn(ctx, from, frag)
 	}
 }
 

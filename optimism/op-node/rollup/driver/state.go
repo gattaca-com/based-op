@@ -142,12 +142,13 @@ func (s *Driver) OnUnsafeL2Payload(ctx context.Context, envelope *eth.ExecutionP
 	}
 }
 
-func (s *Driver) OnNewFrag(ctx context.Context, frag *eth.NewFrag) error {
+func (s *Driver) OnNewFrag(ctx context.Context, frag *eth.SignedNewFrag) error {
+	log.Info("(s *Driver) OnNewFrag")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		s.Emitter.Emit(engine.NewFragProcessEvent{Frag: frag})
+		s.Emitter.Emit(engine.NewFragProcessEvent{SignedNewFrag: frag})
 		return nil
 	}
 }
