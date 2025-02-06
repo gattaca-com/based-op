@@ -240,6 +240,11 @@ type NewFrag struct {
 	Version     uint64	`json:"version"`
 }
 
+type SignedSeal struct {
+	Signature Bytes65 `json:"signature"`
+	Seal      Seal    `json:"seal"`
+}
+
 // Total frags in the block + block header fields
 type Seal struct {
 	TotalFrags       uint64
