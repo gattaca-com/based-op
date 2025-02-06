@@ -1008,6 +1008,18 @@ where
             .get_blobs_for_versioned_hashes(&versioned_hashes)
             .map_err(|err| EngineApiError::Internal(Box::new(err)))?)
     }
+
+    async fn new_frag_v0(&self) -> RpcResult<()> {
+        trace!(target: "rpc::engine", "Serving engine_newFragV0");
+        dbg!("new_frag_v0");
+        Ok(())
+    }
+
+    async fn seal_frag_v0(&self) -> RpcResult<()> {
+        trace!(target: "rpc::engine", "Serving engine_sealFragV0");
+        dbg!("seal_frag_v0");
+        Ok(())
+    }
 }
 
 impl<Provider, EngineT, Pool, Validator, ChainSpec> std::fmt::Debug
