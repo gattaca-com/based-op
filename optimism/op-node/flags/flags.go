@@ -147,6 +147,12 @@ var (
 		EnvVars:  prefixEnvVars("RPC_ADMIN_STATE"),
 		Category: OperationsCategory,
 	}
+	RPCEnableBased = &cli.BoolFlag{
+		Name:     "rpc.enable-based",
+		Usage:    "Enable the based API (experimental)",
+		EnvVars:  prefixEnvVars("RPC_ENABLE_BASED"),
+		Category: OperationsCategory,
+	}
 	L1TrustRPC = &cli.BoolFlag{
 		Name:     "l1.trustrpc",
 		Usage:    "Trust the L1 RPC, sync faster at risk of malicious/buggy RPC providing bad or inconsistent L1 data",
@@ -404,6 +410,7 @@ var optionalFlags = []cli.Flag{
 	L1EpochPollIntervalFlag,
 	RuntimeConfigReloadIntervalFlag,
 	RPCEnableAdmin,
+	RPCEnableBased,
 	RPCAdminPersistence,
 	MetricsEnabledFlag,
 	MetricsAddrFlag,

@@ -62,6 +62,15 @@ func (s *rpcServer) EnableP2P(backend *p2p.APIBackend) {
 	})
 }
 
+func (s *rpcServer) EnableBasedAPI(api *basedAPI) {
+	s.apis = append(s.apis, rpc.API {
+		Namespace:     "based",
+		Version:       "",
+		Service:       api,
+		Authenticated: false,
+	})
+}
+
 func (s *rpcServer) Start() error {
 	srv := rpc.NewServer()
 	if err := node.RegisterApis(s.apis, nil, srv); err != nil {

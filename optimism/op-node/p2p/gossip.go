@@ -263,7 +263,7 @@ const (
 func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		// TODO: use unmarshalling here
-		message.ValidatorData = string(message.GetData())
+		message.ValidatorData = message.GetData()
 		return pubsub.ValidationAccept
 	}
 }
@@ -474,6 +474,7 @@ type GossipTopicInfo interface {
 type GossipOut interface {
 	GossipTopicInfo
 	PublishL2Payload(ctx context.Context, msg *eth.ExecutionPayloadEnvelope, signer Signer) error
+	PublishNewFrag(ctx context.Context, frag eth.SignedNewFrag) error
 	Close() error
 }
 
@@ -601,6 +602,14 @@ func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.Executio
 	} else {
 		return p.blocksV1.topic.Publish(ctx, out)
 	}
+}
+
+func (p *publisher) PublishNewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) error {
+	// TODO: Send the new frag instead of the block number
+	data := make([]byte, 64)
+	binary.BigEndian.PutUint64(data, signedFrag.Frag.BlockNumber)
+
+	return p.newFragV0.topic.Publish(ctx, data)
 }
 
 func (p *publisher) Close() error {
@@ -737,7 +746,10 @@ type TopicSubscriber func(ctx context.Context, sub *pubsub.Subscription)
 type MessageHandler func(ctx context.Context, from peer.ID, msg any) error
 
 func NewFragHandler(ctx context.Context, from peer.ID, msg any) error {
-	log.Info("NewFrag received")
+	// TODO: This won't be needed when NewFrag is parsed
+	blockNumber := binary.BigEndian.Uint64(msg.([]byte)[:8])
+
+	log.Info("NewFrag received", "block_number", blockNumber)
 
 	// TODO: Call EngineAPI and pass the message to the EL
 
