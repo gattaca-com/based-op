@@ -27,10 +27,6 @@ pub struct SortingData<Db: DatabaseRead> {
     pub tof_snapshot: ActiveOrders,
     /// Next best order to apply
     pub next_to_be_applied: Option<SimulatedTx>,
-    /// Txs in payload attributes that need to be applied in order
-    pub remaining_attributes_txs: VecDeque<Arc<Transaction>>,
-    /// Whether we can add transactions other than the ones in the attributes
-    pub can_add_txs: bool,
 }
 
 impl<Db: DatabaseRead> SortingData<Db> {
@@ -44,17 +40,11 @@ impl<Db: DatabaseRead> SortingData<Db> {
 
         let db = self.frag.state();
 
-        if let Some(tx) = self.remaining_attributes_txs.pop_front() {
-            debug_assert_eq!(self.in_flight_sims, 0, "only one attributes tx can be in flight at a time");
+        for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
+            debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
+            let tx = t.unwrap();
             senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
-            self.in_flight_sims = 1;
-        } else if self.can_add_txs {
-            for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
-                debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
-                let tx = t.unwrap();
-                senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
-                self.in_flight_sims += 1;
-            }
+            self.in_flight_sims += 1;
         }
         self
     }
@@ -98,7 +88,7 @@ impl<Db: DatabaseRead> SortingData<Db> {
         if self.in_flight_sims != 0 {
             return false;
         }
-        self.remaining_attributes_txs.is_empty() && (self.tof_snapshot.is_empty() || self.until < Instant::now())
+        (self.tof_snapshot.is_empty() || self.until < Instant::now())
     }
 
     pub fn should_send_next_sims(&self) -> bool {

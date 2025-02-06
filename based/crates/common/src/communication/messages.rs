@@ -350,6 +350,8 @@ pub type SimulationResult<T, Db> = Result<T, SimulationError<<Db as DatabaseRef>
 pub struct TopOfBlockResult {
     pub flat_state_changes: EvmState,
     pub forced_inclusion_txs: Vec<SimulatedTx>,
+    pub payment: U256,
+    pub gas_used: u64,
 }
 
 #[derive(Debug, AsRefStr)]

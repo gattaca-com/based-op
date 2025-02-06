@@ -3,6 +3,7 @@ use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
 use alloy_primitives::{Bloom, U256};
 use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
+    communication::messages::TopOfBlockResult,
     db::{flatten_state_changes, DBFrag, DBSorting},
     p2p::{FragV0, SealV0},
     transaction::SimulatedTx,
@@ -65,6 +66,24 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         msg
     }
 
+    pub fn is_valid(&self, state_id: u64) -> bool {
+        state_id == self.db.state_id()
+    }
+
+    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 {
+        self.db.commit_flat_state(top_of_block.flat_state_changes);
+        let msg = FragV0::new(
+            self.block_number,
+            self.next_seq,
+            top_of_block.forced_inclusion_txs.iter().map(|tx| tx.tx.as_ref()),
+            false,
+        );
+        self.txs.extend(top_of_block.forced_inclusion_txs);
+        self.gas_remaining -= top_of_block.gas_used;
+        self.payment += top_of_block.payment;
+        msg
+    }
+
     /// When a new block is received, we clear all the temp state on the db
     pub fn reset_fragdb(&mut self, db: Db) {
         self.db.reset(db);
@@ -73,8 +92,8 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
     pub fn seal_block(
         &self,
         block_env: &BlockEnv,
-        _chain_spec: impl reth_chainspec::Hardforks,
         parent_hash: B256,
+        parent_beacon_block_root: B256,
     ) -> (SealV0, OpExecutionPayloadEnvelopeV3) {
         let state_changes = flatten_state_changes(self.txs.iter().map(|t| t.result_and_state.state.clone()).collect());
         let state_root = self.db.state_root(state_changes);
@@ -137,36 +156,29 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             block_hash: header.hash_slow(),
             transactions,
         };
-        let seal =SealV0 {
-                total_frags: self.next_seq,
-                block_number: block_env.number.to(),
-                gas_used,
-                gas_limit: block_env.gas_limit.to(),
-                parent_hash,
-                transactions_root,
-                receipts_root,
-                state_root,
-                block_hash: v1.block_hash,
-            };
+        let seal = SealV0 {
+            total_frags: self.next_seq,
+            block_number: block_env.number.to(),
+            gas_used,
+            gas_limit: block_env.gas_limit.to(),
+            parent_hash,
+            transactions_root,
+            receipts_root,
+            state_root,
+            block_hash: v1.block_hash,
+        };
         tracing::info!("seal: {seal:#?}");
-        (
-            seal,
-            OpExecutionPayloadEnvelopeV3 {
-                execution_payload: ExecutionPayloadV3 {
-                    payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                    blob_gas_used: 0,
-                    excess_blob_gas: 0,
-                },
-                block_value: self.payment,
-                blobs_bundle: BlobsBundleV1::new(vec![]),
-                should_override_builder: false,
-                parent_beacon_block_root: B256::ZERO,
+        (seal, OpExecutionPayloadEnvelopeV3 {
+            execution_payload: ExecutionPayloadV3 {
+                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                blob_gas_used: 0,
+                excess_blob_gas: 0,
             },
-        )
-    }
-
-    pub fn is_valid(&self, state_id: u64) -> bool {
-        state_id == self.db.state_id()
+            block_value: self.payment,
+            blobs_bundle: BlobsBundleV1::new(vec![]),
+            should_override_builder: false,
+            parent_beacon_block_root,
+        })
     }
 }
 
@@ -178,7 +190,7 @@ mod tests {
     use alloy_primitives::U256;
     use alloy_provider::ProviderBuilder;
     use bop_common::{
-        actor::ActorConfig,
+        actor::{Actor, ActorConfig},
         communication::{
             messages::{SequencerToSimulator, SimulatorToSequencer, SimulatorToSequencerMsg},
             Spine, TrackedSenders,
@@ -190,10 +202,9 @@ mod tests {
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use reqwest::{Client, Url};
     use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
+    use reth_optimism_evm::OpEvmConfig;
     use reth_primitives_traits::{Block, SignedTransaction};
     use revm_primitives::{BlobExcessGasAndPrice, BlockEnv};
-    use reth_optimism_evm::OpEvmConfig;
-    use bop_common::actor::Actor;
 
     use crate::{block_sync::fetch_blocks::fetch_block, sorting::FragSequence};
 
@@ -243,11 +254,10 @@ mod tests {
         let sim_db = db_frag.clone();
 
         // Simulator
-        let _sim_handle =
-            std::thread::spawn(move || {
-                let simulator = Simulator::new(sim_db, &evm_config);
-                simulator.run(sim_connections, ActorConfig::default())
-            });
+        let _sim_handle = std::thread::spawn(move || {
+            let simulator = Simulator::new(sim_db, &evm_config);
+            simulator.run(sim_connections, ActorConfig::default())
+        });
         let mut seq = FragSequence::new(db_frag, 300_000_000);
         let mut sorting_db = seq.create_in_sort();
 

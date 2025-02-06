@@ -16,7 +16,7 @@ use crate::{
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct SequencerContext<Db: DatabaseRead> {
+pub struct SequencerContext<Db> {
     pub config: SequencerConfig,
     pub db: Db,
     pub tx_pool: TxPool,
@@ -28,28 +28,26 @@ pub struct SequencerContext<Db: DatabaseRead> {
     pub parent_beacon_block_root: B256,
     pub fork_choice_state: ForkchoiceState,
     pub payload_attributes: Box<OpPayloadAttributes>,
-    //TODO: set from blocksync
-    pub base_fee: u64,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
-    pub fn new_sorting_data(
-        &self,
-        remaining_attributes_txs: VecDeque<Arc<Transaction>>,
-        can_add_txs: bool,
-    ) -> SortingData<Db> {
+    pub fn new_sorting_data(&self) -> SortingData<Db> {
         SortingData {
             frag: self.frags.create_in_sort(),
             until: Instant::now() + self.config.frag_duration,
             in_flight_sims: 0,
             next_to_be_applied: None,
-            tof_snapshot: ActiveOrders::new(self.tx_pool.clone_active()),
-            remaining_attributes_txs,
-            can_add_txs,
+            tof_snapshot:  ActiveOrders::new(self.tx_pool.clone_active())
         }
     }
 
     pub fn reset_fragdb(&mut self) {
         self.frags.reset_fragdb(self.db.clone());
+    }
+}
+
+impl<Db> AsRef<BlockEnv> for SequencerContext<Db> {
+    fn as_ref(&self) -> &BlockEnv {
+        &self.block_env
     }
 }

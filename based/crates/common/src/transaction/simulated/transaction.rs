@@ -3,7 +3,7 @@ use std::{ops::Deref, sync::Arc};
 use alloy_consensus::{Receipt, TxReceipt};
 use alloy_primitives::U256;
 use op_alloy_consensus::{OpDepositReceipt, OpTxType};
-use reth_optimism_primitives::OpReceipt;
+use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpReceipt};
 use reth_primitives::ReceiptWithBloom;
 use revm_primitives::{Address, EvmState, ResultAndState};
 
@@ -81,5 +81,15 @@ impl Deref for SimulatedTx {
 
     fn deref(&self) -> &Self::Target {
         &self.tx
+    }
+}
+
+impl TransactionSenderInfo for SimulatedTx {
+    fn sender(&self) -> Address {
+        self.sender
+    }
+
+    fn nonce(&self) -> u64 {
+        self.tx.nonce()
     }
 }

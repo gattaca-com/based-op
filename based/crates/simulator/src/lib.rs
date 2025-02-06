@@ -36,10 +36,12 @@ pub struct Simulator<'a, Db: DatabaseRef> {
     system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
     /// How to create an EVM.
     evm_config: OpEvmConfig,
+
+    id: usize
 }
 
 impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
-    pub fn new(db: DBFrag<Db>, evm_config: &'a OpEvmConfig) -> Self {
+    pub fn new(db: DBFrag<Db>, evm_config: &'a OpEvmConfig, id: usize) -> Self {
         let system_caller = SystemCaller::new(evm_config.clone(), evm_config.chain_spec().clone());
 
         // Initialise with default evms. These will be overridden before the first sim by
@@ -49,7 +51,7 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
         let db_sorting = CacheDB::new(Arc::new(DBSorting::new(db)));
         let evm_sorting: Evm<'_, (), _> = evm_config.evm(db_sorting);
 
-        Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone() }
+        Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone(), id  }
     }
 
     /// Simulate all txs in the forced inclusion txs from PayloadAttributes
@@ -88,15 +90,17 @@ impl<'a, Db: DatabaseRead> Simulator<'a, Db> {
     /// 
     fn on_new_block(&mut self, evm_block_params: EvmBlockParams) -> Result<(), ()> {  // TODO: error
         // Update both evms with the new env.
-        self.set_env_for_new_block(evm_block_params);
+        self.set_env_for_new_block(&evm_block_params);
 
+        todo!();
         // Get start state for sorting.
-        self.apply_pre_execution_changes(&evm_block_params.&mut self.evm_sorting)?;
+        let cache_db = CacheDB::new(self.evm_tof.db().clone()); //This is totally wrong
+        self.apply_pre_execution_changes(&evm_block_params.attributes, &mut self.evm_sorting, cache_db)
     }
     
     fn set_env_for_new_block(&mut self, evm_block_params: &EvmBlockParams) {
         let parent = &evm_block_params.parent_header;
-        let next_attributes = evm_block_params.attributes.clone();
+        let next_attributes = evm_block_params.attributes.env_attributes.clone();
 
         // Initialise evm cfg and block env for the next block.
         let evm_env = self.evm_config.next_cfg_and_block_env(parent, next_attributes).unwrap();

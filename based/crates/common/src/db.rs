@@ -132,6 +132,11 @@ impl<Db: DatabaseRead> DBFrag<Db> {
         self.state_id = rand::random()
     }
 
+    pub fn commit_flat_state(&mut self, flat_state: EvmState) {
+        let mut guard = self.db.write();
+        guard.commit(flat_state)
+    }
+
     pub fn get_nonce(&self, address: Address) -> Result<u64, Error> {
         self.basic_ref(address)
             .map(|acc| acc.map(|acc| acc.nonce).unwrap_or_default())
