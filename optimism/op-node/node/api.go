@@ -217,7 +217,7 @@ func (n *basedAPI) NewSeal(ctx context.Context, signedSeal eth.SignedSeal) (stri
 	n.log.Info("NewSeal RPC request received", "seal", signedSeal.Seal)
 
 	if err := n.p2p.GossipOut().PublishNewSeal(ctx, signedSeal); err != nil {
-		return "", fmt.Errorf("failed to publish new frag: %w", err)
+		return "", fmt.Errorf("failed to publish new seal: %w", err)
 	}
 
 	return "OK", nil
