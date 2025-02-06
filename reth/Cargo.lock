@@ -8490,6 +8490,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "arbitrary",
+ "auto_impl",
  "bytes",
  "derive_more",
  "modular-bitfield",
