@@ -169,7 +169,7 @@ func (o *OracleEngine) NewFrag(ctx context.Context, frag *eth.NewFrag) (*string,
 
 func (o *OracleEngine) SealFrag(ctx context.Context, frag *eth.SealV0) (*string, error) {
 	switch method := o.rollupCfg.NewFragVersion(uint64(0)); method {
-	case eth.NewFragV0:
+	case eth.SealFragV0:
 		return o.api.SealFragV0(ctx, frag)
 	default:
 		return nil, fmt.Errorf("unsupported SealFrag version: %s", method)
