@@ -354,11 +354,11 @@ where
                     }
                 }
             }
-            Syncing { .. } |
-            Sorting(_) |
-            WaitingForNewPayload |
-            WaitingForTopOfBlockSimResults(_) |
-            WaitingForGetPayload(_) => {
+            Syncing { .. }
+            | Sorting(_)
+            | WaitingForNewPayload
+            | WaitingForTopOfBlockSimResults(_)
+            | WaitingForGetPayload(_) => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -503,7 +503,9 @@ where
                 let mut frag = data.frags.apply_top_of_block(top_of_block);
 
                 frag.is_last = no_tx_pool;
-                senders.send(VersionedMessage::from(frag));
+                senders
+                    .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
+                    .expect("couldn't send frag");
 
                 if no_tx_pool {
                     // Can't sort anyway

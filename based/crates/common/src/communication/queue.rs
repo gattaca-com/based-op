@@ -1,7 +1,7 @@
 use std::{
     alloc::Layout,
     borrow::Borrow,
-    mem::{forget, size_of, ManuallyDrop, MaybeUninit},
+    mem::{size_of, MaybeUninit},
     ops::Deref,
     path::Path,
     sync::atomic::{AtomicUsize, Ordering},
@@ -65,8 +65,6 @@ impl QueueHeader {
     }
 }
 
-//TODO: this should in reality really also implement drop and most likely return an Arc instead of
-// &'static or whatever.
 #[repr(C, align(64))]
 pub struct InnerQueue<T> {
     header: QueueHeader,
@@ -125,7 +123,6 @@ impl<T: Clone> InnerQueue<T> {
             if (*ptr).is_initialized != true as u8 {
                 return Err(Error::UnInitialized);
             }
-            // TODO: I think this is slightly wrong
             Ok(std::ptr::slice_from_raw_parts_mut(ptr as *mut Seqlock<T>, len) as *const Self)
         }
     }
@@ -189,27 +186,6 @@ impl<T: Clone> InnerQueue<T> {
         self.header.mask + 1
     }
 
-    // This exists just to check the state of the queue for debugging purposes
-    #[allow(dead_code)]
-    fn verify(&self) {
-        let mut prev_v = self.load(0).version();
-        let mut n_changes = 0;
-        for i in 1..=self.header.mask {
-            let lck = self.load(i);
-            let v = lck.version();
-            if v & 1 == 1 {
-                panic!("odd version at {i}: {prev_v} -> {v}");
-            }
-            if v != prev_v && v & 1 == 0 {
-                n_changes += 1;
-                println!("version change at {i}: {prev_v} -> {v}");
-                prev_v = v;
-            }
-        }
-        if n_changes > 1 {
-            panic!("what")
-        }
-    }
 
     fn produce_first(&self, item: &T) -> usize {
         match self.header.queue_type {

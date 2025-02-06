@@ -1,5 +1,8 @@
 use std::{
-    cell::UnsafeCell, fmt, mem::MaybeUninit, sync::atomic::{compiler_fence, AtomicU32, Ordering}
+    cell::UnsafeCell,
+    fmt,
+    mem::MaybeUninit,
+    sync::atomic::{compiler_fence, AtomicU32, Ordering},
 };
 
 use super::ReadError;
@@ -61,8 +64,9 @@ impl<T: Clone> Seqlock<T> {
         compiler_fence(Ordering::AcqRel);
         let v2 = self.version.load(Ordering::Acquire);
         if v2 == expected_version {
-            Ok(unsafe{result.assume_init()})
-        } else { Err(ReadError::SpedPast)
+            Ok(unsafe { result.assume_init() })
+        } else {
+            Err(ReadError::SpedPast)
         }
     }
 

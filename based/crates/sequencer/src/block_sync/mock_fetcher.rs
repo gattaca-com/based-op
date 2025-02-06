@@ -61,7 +61,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             self.handle_fetch(msg);
         });
         if self.next_block < self.sync_until {
-            let block = self.executor.block_on(fetch_block(self.next_block, &self.client, self.rpc_url.clone()));
+            let mut block = self.executor.block_on(fetch_block(self.next_block, &self.client, self.rpc_url.clone()));
 
             let (new_payload_status_rx, new_payload, fcu_status_rx, fcu_1, fcu) =
                 messages::EngineApi::messages_from_block(&block, true, None);
@@ -82,8 +82,8 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
                 return;
             };
 
-            // info!("got sealed block");
-            
+            // we set the extra data to 0 as that is also what the sequencer will use
+            block.header.extra_data = Default::default();
             assert_eq!(sealed_block.execution_payload.payload_inner.payload_inner.block_hash, block.hash_slow(), "{block:#?} vs {sealed_block:#?}" );
 
 

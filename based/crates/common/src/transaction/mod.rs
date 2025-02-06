@@ -21,11 +21,12 @@ pub struct Transaction {
     /// The sender of the transaction.
     /// Recovered from the tx on initialisation.
     sender: Address,
+    envelope: Bytes,
 }
 
 impl Transaction {
-    pub fn new(tx: OpTxEnvelope, sender: Address) -> Self {
-        Self { tx, sender }
+    pub fn new(tx: OpTxEnvelope, sender: Address, envelope: Bytes) -> Self {
+        Self { tx, sender, envelope }
     }
 
     #[inline]
@@ -112,7 +113,9 @@ impl Transaction {
             ..Default::default()
         };
         let signed_tx = signing_wallet.sign_tx(tx).unwrap();
-        Self { sender: from, tx: OpTxEnvelope::Eip1559(signed_tx) }
+        let tx = OpTxEnvelope::Eip1559(signed_tx);
+        let envelope = tx.encoded_2718().into();
+        Self { sender: from, tx, envelope }
     }
 
     pub fn decode(bytes: Bytes) -> Result<Self, alloy_rlp::Error> {
@@ -127,7 +130,7 @@ impl Transaction {
             _ => panic!("invalid tx type"),
         };
 
-        Ok(Self { sender, tx })
+        Ok(Self { sender, tx, envelope: bytes })
     }
 
     pub fn encode(&self) -> Bytes {
@@ -135,7 +138,7 @@ impl Transaction {
     }
 
     pub fn from_block(block: &BlockSyncMessage) -> Vec<Arc<Transaction>> {
-        block.body.transactions.iter().map(|t| Arc::new(Transaction::from(t.clone()))).collect()
+        block.body.transactions.iter().map(|t| Arc::new(t.clone().into())).collect()
     }
 }
 
@@ -149,21 +152,16 @@ impl Deref for Transaction {
 
 impl From<&Transaction> for OptimismFields {
     fn from(value: &Transaction) -> Self {
-        let envelope = value.tx.encoded_2718();
+        let envelope = value.envelope.clone();
         if let OpTxEnvelope::Deposit(tx) = &value.tx {
             Self {
                 source_hash: tx.source_hash(),
                 mint: tx.mint(),
                 is_system_transaction: Some(tx.is_system_transaction()),
-                enveloped_tx: Some(envelope.into()),
+                enveloped_tx: Some(envelope),
             }
         } else {
-            Self {
-                source_hash: None,
-                mint: None,
-                is_system_transaction: Some(false),
-                enveloped_tx: Some(envelope.into()),
-            }
+            Self { source_hash: None, mint: None, is_system_transaction: Some(false), enveloped_tx: Some(envelope) }
         }
     }
 }
@@ -171,6 +169,7 @@ impl From<&Transaction> for OptimismFields {
 impl From<OpTransactionSigned> for Transaction {
     fn from(value: OpTransactionSigned) -> Self {
         let sender = value.recover_signer().expect("could not recover signer");
+        let envelope = value.encoded_2718().into();
         let signature = value.signature;
         let tx = match value.transaction {
             op_alloy_consensus::OpTypedTransaction::Legacy(tx_legacy) => {
@@ -187,7 +186,7 @@ impl From<OpTransactionSigned> for Transaction {
             }
             op_alloy_consensus::OpTypedTransaction::Deposit(tx_deposit) => OpTxEnvelope::Deposit(tx_deposit.seal()),
         };
-        Self { tx, sender }
+        Self { tx, sender, envelope }
     }
 }
 

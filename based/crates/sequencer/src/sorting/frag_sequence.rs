@@ -10,7 +10,7 @@ use bop_common::{
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
-use revm_primitives::{BlockEnv, Bytes, B256};
+use revm_primitives::{hex, BlockEnv, Bytes, B256, KECCAK_EMPTY};
 
 use crate::sorting::InSortFrag;
 
@@ -123,7 +123,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             state_root,
             transactions_root,
             receipts_root,
-            withdrawals_root: None,
+            withdrawals_root: Some(hex!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421").into()),
             logs_bloom,
             timestamp: block_env.timestamp.to(),
             mix_hash: block_env.prevrandao.unwrap_or_default(),
@@ -134,7 +134,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             difficulty: U256::ZERO,
             gas_used,
             extra_data: Bytes::default(),
-            parent_beacon_block_root: None,
+            parent_beacon_block_root: Some(parent_beacon_block_root),
             blob_gas_used: None,
             excess_blob_gas: None,
             requests_hash: None,
