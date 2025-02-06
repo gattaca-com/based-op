@@ -1011,6 +1011,7 @@ where
 
     async fn new_frag_v0(&self) -> RpcResult<()> {
         trace!(target: "rpc::engine", "Serving engine_newFragV0");
+        // TODO: Implement engine_newFragV0 handling logic here
         dbg!("new_frag_v0");
         Ok(())
     }
