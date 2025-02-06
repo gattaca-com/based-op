@@ -9,11 +9,8 @@ use bop_common::{
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{init_database, DatabaseRead};
-use bop_rpc::{start_mock_engine_rpc, start_rpc};
-use bop_sequencer::{
-    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
-    Sequencer, SequencerConfig,
-};
+use bop_rpc::start_rpc;
+use bop_sequencer::{block_sync::mock_fetcher::MockFetcher, Sequencer, SequencerConfig};
 use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;

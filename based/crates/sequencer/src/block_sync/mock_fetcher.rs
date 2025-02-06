@@ -7,11 +7,10 @@ use bop_common::{
     },
     db::DatabaseRead,
     time::Duration,
-    transaction::Transaction,
 };
 use reqwest::{Client, Url};
 use tokio::{runtime::Runtime, sync::oneshot};
-use tracing::{info, warn};
+use tracing::warn;
 
 use super::fetch_blocks::fetch_block;
 
@@ -63,7 +62,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
         if self.next_block < self.sync_until {
             let mut block = self.executor.block_on(fetch_block(self.next_block, &self.client, self.rpc_url.clone()));
 
-            let (new_payload_status_rx, new_payload, fcu_status_rx, fcu_1, fcu) =
+            let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, fcu) =
                 messages::EngineApi::messages_from_block(&block, true, None);
 
             // let txs = Transaction::from_block(&block);
@@ -73,18 +72,36 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             // Duration::from_millis(100).sleep();
 
             connections.send(fcu);
-            Duration::from_secs(1).sleep();
+            Duration::from_secs(3).sleep();
             let (block_tx, block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 
-            let Ok(sealed_block) = block_rx.blocking_recv() else {
+            let Ok(mut sealed_block) = block_rx.blocking_recv() else {
                 warn!("issue getting block");
                 return;
             };
 
             // we set the extra data to 0 as that is also what the sequencer will use
             block.header.extra_data = Default::default();
-            assert_eq!(sealed_block.execution_payload.payload_inner.payload_inner.block_hash, block.hash_slow(), "{block:#?} vs {sealed_block:#?}" );
+
+            if sealed_block.execution_payload.payload_inner.payload_inner.block_hash != block.hash_slow() {
+                sealed_block.execution_payload.payload_inner.payload_inner.transactions = vec![];
+                block.body = Default::default();
+                println!("\n\n\n\n\n\n\n\n");
+                println!("OUR BLOCK:");
+                println!("{sealed_block:#?}");
+
+                println!("\n\n\n\n\n\n\n\n");
+                println!("ACTUAL BLOCK:");
+                println!("{block:#?}");
+                panic!("block hash mismatch");
+            }
+
+            assert_eq!(
+                sealed_block.execution_payload.payload_inner.payload_inner.block_hash,
+                block.hash_slow(),
+                "{block:#?} vs {sealed_block:#?}"
+            );
 
             assert_eq!(
                 sealed_block.execution_payload.payload_inner.payload_inner.block_hash,

@@ -225,7 +225,6 @@ impl<T: Clone> InnerQueue<T> {
         self.header.mask + 1
     }
 
-
     fn produce_first(&self, item: &T) -> usize {
         match self.header.queue_type {
             QueueType::Unknown => panic!("Unknown queue"),

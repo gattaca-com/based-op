@@ -1,8 +1,6 @@
-use std::{collections::VecDeque, sync::Arc};
-
 use alloy_consensus::Header;
 use alloy_rpc_types::engine::ForkchoiceState;
-use bop_common::{time::Instant, transaction::Transaction};
+use bop_common::time::Instant;
 use bop_db::DatabaseRead;
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;

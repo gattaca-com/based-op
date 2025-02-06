@@ -1,6 +1,6 @@
 use std::{cmp, sync::Arc};
 
-use alloy_consensus::{Block, Header};
+use alloy_consensus::Block;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
@@ -11,7 +11,7 @@ use bop_common::{
     communication::{
         messages::{
             self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, EvmBlockParams, NextBlockAttributes,
-            SimulatorToSequencer, SimulatorToSequencerMsg, TopOfBlockResult,
+            SimulatorToSequencer, SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -26,7 +26,6 @@ use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
-use revm_primitives::Bytes;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
@@ -333,16 +332,22 @@ where
                         data.block_env = data
                             .config
                             .evm_config
-                            .next_cfg_and_block_env(&data.parent_header, attributes.env_attributes.clone())
+                            .next_cfg_and_block_env(&data.parent_header, attributes.env_attributes)
                             .expect("couldn't create blockenv")
                             .block_env;
 
                         // tracing::info!("Sorting start with attributes: {:?}", attributes);
                         tracing::info!("Sorting on top of {:?}", data.frags.db().head_block_number());
-                        tracing::info!("Sorting on top of state root {:?}", data.frags.db().state_root(Default::default()));
-                        tracing::info!("Sorting on top of state root {:?}", data.db.calculate_state_root(&state_changes_to_bundle_state(&data.db, Default::default()).unwrap()));
-                        
-
+                        tracing::info!(
+                            "Sorting on top of state root {:?}",
+                            data.frags.db().state_root(Default::default())
+                        );
+                        tracing::info!(
+                            "Sorting on top of state root {:?}",
+                            data.db.calculate_state_root(
+                                &state_changes_to_bundle_state(&data.db, Default::default()).unwrap()
+                            )
+                        );
 
                         let evm_block_params = EvmBlockParams {
                             parent_header: data.parent_header.clone(),
@@ -399,8 +404,12 @@ where
                 let frag_msg = VersionedMessage::from(frag);
                 let _ = senders.send(frag_msg);
 
-                let (seal, block) =
-                    data.frags.seal_block(data.as_ref(), data.parent_hash, data.parent_beacon_block_root);
+                let (seal, block) = data.frags.seal_block(
+                    data.as_ref(),
+                    data.parent_hash,
+                    data.parent_beacon_block_root,
+                    data.config.evm_config.chain_spec(),
+                );
 
                 // Gossip seal to p2p and return payload to rpc
                 let _ = senders.send(VersionedMessage::from(seal));
@@ -518,8 +527,12 @@ where
 
                 if no_tx_pool {
                     // Can't sort anyway
-                    let seal_block =
-                        data.frags.seal_block(data.as_ref(), data.parent_hash, data.parent_beacon_block_root);
+                    let seal_block = data.frags.seal_block(
+                        data.as_ref(),
+                        data.parent_hash,
+                        data.parent_beacon_block_root,
+                        data.config.evm_config.chain_spec(),
+                    );
                     return SequencerState::WaitingForGetPayload(seal_block);
                 }
                 return SequencerState::Sorting(data.new_sorting_data());

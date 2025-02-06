@@ -3,9 +3,9 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::{transaction::Transaction as TransactionTrait, Header};
+use alloy_consensus::transaction::Transaction as TransactionTrait;
 use bop_common::{
-    actor::{Actor, ActorConfig},
+    actor::Actor,
     communication::{
         messages::{
             EvmBlockParams, NextBlockAttributes, SequencerToSimulator, SimulationError, SimulatorToSequencer,
@@ -26,12 +26,13 @@ use reth_evm::{
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
+use reth_optimism_forks::OpHardfork;
 use revm::{
     db::{CacheDB, State},
-    CacheState, Database, DatabaseCommit, DatabaseRef, Evm,
+    Database, DatabaseCommit, DatabaseRef, Evm,
 };
-use revm_primitives::{Address, BlockEnv, EnvWithHandlerCfg, EvmState, ResultAndState, SpecId};
-use tracing::{info, instrument::WithSubscriber};
+use revm_primitives::{Address, EnvWithHandlerCfg, EvmState};
+use tracing::info;
 
 /// Simulator thread.
 ///
@@ -43,11 +44,14 @@ pub struct Simulator<'a, Db: DatabaseRef> {
     /// Evm on top of partially built frag
     evm_sorting: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
 
+    /// Whether the regolith hardfork is active for the block that the evms are configured for.
+    regolith_active: bool,
+
     /// Utility to call system smart contracts.
     system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
     /// How to create an EVM.
     evm_config: OpEvmConfig,
-    id: usize,
+    _id: usize,
 }
 
 impl<'a, Db: DatabaseRef + Clone> Simulator<'a, Db>
@@ -64,7 +68,7 @@ where
         let db_sorting = CacheDB::new(Arc::new(DBSorting::new(db)));
         let evm_sorting: Evm<'_, (), _> = evm_config.evm(db_sorting);
 
-        Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone(), id }
+        Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone(), _id: id, regolith_active: true }
     }
 
     /// finalise
@@ -72,9 +76,13 @@ where
         tx: Arc<Transaction>,
         db: SimulateTxDb,
         evm: &mut Evm<'a, (), CacheDB<SimulateTxDb>>,
+        regolith_active: bool,
     ) -> Result<SimulatedTx, SimulationError> {
+        // Cache some values pre-simulation.
         let coinbase = evm.block().coinbase;
         let start_balance = evm.db_mut().basic(coinbase).ok().flatten().map(|a| a.balance).unwrap_or_default();
+        let depositor_nonce = (tx.is_deposit() && regolith_active)
+            .then(|| evm.db_mut().basic(tx.sender()).ok().flatten().map(|a| a.nonce).unwrap_or_default());
 
         let old_db = std::mem::replace(evm.db_mut(), CacheDB::new(db));
         tx.fill_tx_env(evm.tx_mut());
@@ -83,7 +91,7 @@ where
         // This dance is needed to drop the arc ref
         let _ = std::mem::replace(evm.db_mut(), old_db);
 
-        Ok(SimulatedTx::new(tx, res, start_balance, coinbase))
+        Ok(SimulatedTx::new(tx, res, start_balance, coinbase, depositor_nonce))
     }
 
     /// Processes a new block from the sequencer by:
@@ -121,14 +129,20 @@ where
         let mut evm = evm_config.evm_with_env(&mut state, env_with_handler_cfg);
 
         // Apply pre-execution changes.
-        let mut changes = self.apply_pre_execution_changes(next_attributes, &mut evm)?.map(|changes| vec![changes]).unwrap_or_default();
+        let mut changes = self
+            .apply_pre_execution_changes(next_attributes, &mut evm)?
+            .map(|changes| vec![changes])
+            .unwrap_or_default();
 
         let mut tx_results = Vec::with_capacity(next_attributes.forced_inclusion_txs.len());
         let block_coinbase = evm.block().coinbase;
         // Apply must include txs.
         for tx in next_attributes.forced_inclusion_txs.iter() {
+            // Cache some values pre-simulation.
             let start_balance =
                 evm.db_mut().basic(block_coinbase).ok().flatten().map(|a| a.balance).unwrap_or_default();
+            let depositor_nonce = (tx.is_deposit() && self.regolith_active)
+                .then(|| evm.db_mut().basic(tx.sender()).ok().flatten().map(|a| a.nonce).unwrap_or_default());
 
             tx.fill_tx_env(evm.tx_mut());
 
@@ -142,7 +156,13 @@ where
             self.system_caller.on_state(&result_and_state.state);
             evm.db_mut().commit(result_and_state.state.clone());
             changes.push(result_and_state.state.clone());
-            tx_results.push(SimulatedTx::new(tx.clone(), result_and_state, start_balance, block_coinbase));
+            tx_results.push(SimulatedTx::new(
+                tx.clone(),
+                result_and_state,
+                start_balance,
+                block_coinbase,
+                depositor_nonce,
+            ));
         }
         let flattened_changes = flatten_state_changes(changes);
 
@@ -164,7 +184,6 @@ where
         // Set state clear flag if the block is after the Spurious Dragon hardfork.
         evm.db_mut()
             .set_state_clear_flag(self.evm_config.chain_spec().is_spurious_dragon_active_at_block(block_number));
-        tracing::info!("simming {block_timestamp}, {block_number}");
         let changes = self.system_caller.apply_beacon_root_contract_call(
             block_timestamp,
             block_number,
@@ -182,7 +201,7 @@ where
     fn get_env_for_new_block(&self, evm_block_params: &EvmBlockParams<Db>) -> EnvWithHandlerCfg {
         let EvmEnv { cfg_env_with_handler_cfg, block_env } = self
             .evm_config
-            .next_cfg_and_block_env(&evm_block_params.parent_header, evm_block_params.attributes.env_attributes.clone())
+            .next_cfg_and_block_env(&evm_block_params.parent_header, evm_block_params.attributes.env_attributes)
             .expect("Valid block environment configuration");
 
         EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default())
@@ -196,10 +215,16 @@ where
 
         self.evm_sorting.modify_spec_id(env_with_handler_cfg.spec_id());
         self.evm_sorting.context.evm.env = env_with_handler_cfg.env.clone();
+
+        self.regolith_active = self
+            .evm_config
+            .chain_spec()
+            .fork(OpHardfork::Regolith)
+            .active_at_timestamp(u64::try_from(env_with_handler_cfg.block.timestamp).unwrap());
     }
 }
 
-impl<'a, Db: DatabaseRef + Clone> Actor<Db> for Simulator<'a, Db>
+impl<Db: DatabaseRef + Clone> Actor<Db> for Simulator<'_, Db>
 where
     <Db as DatabaseRef>::Error: Into<ProviderError> + Debug + Display,
 {
@@ -219,7 +244,12 @@ where
                         SimulatorToSequencer::new(
                             (tx.sender(), tx.nonce()),
                             db.state_id(),
-                            SimulatorToSequencerMsg::Tx(Self::simulate_tx(tx, db, &mut self.evm_sorting)),
+                            SimulatorToSequencerMsg::Tx(Self::simulate_tx(
+                                tx,
+                                db,
+                                &mut self.evm_sorting,
+                                self.regolith_active,
+                            )),
                         ),
                         Duration::from_millis(10),
                     );
@@ -229,7 +259,12 @@ where
                         SimulatorToSequencer::new(
                             (tx.sender(), tx.nonce()),
                             db.state_id(),
-                            SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_tx(tx, db, &mut self.evm_tof)),
+                            SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_tx(
+                                tx,
+                                db,
+                                &mut self.evm_tof,
+                                self.regolith_active,
+                            )),
                         ),
                         Duration::from_millis(10),
                     );

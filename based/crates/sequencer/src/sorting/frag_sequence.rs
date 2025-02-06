@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use alloy_consensus::{proofs::ordered_trie_root_with_encoder, Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
 use alloy_primitives::{Bloom, U256};
@@ -10,7 +12,9 @@ use bop_common::{
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
-use revm_primitives::{hex, BlockEnv, Bytes, B256, KECCAK_EMPTY};
+use reth_optimism_chainspec::OpChainSpec;
+use reth_optimism_forks::OpHardfork;
+use revm_primitives::{hex, BlockEnv, Bytes, B256};
 
 use crate::sorting::InSortFrag;
 
@@ -94,6 +98,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         block_env: &BlockEnv,
         parent_hash: B256,
         parent_beacon_block_root: B256,
+        chain_spec: &Arc<OpChainSpec>,
     ) -> (SealV0, OpExecutionPayloadEnvelopeV3) {
         let state_changes = flatten_state_changes(self.txs.iter().map(|t| t.result_and_state.state.clone()).collect());
         let state_root = self.db.state_root(state_changes);
@@ -103,8 +108,10 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         let mut logs_bloom = Bloom::ZERO;
         let mut gas_used = 0;
 
+        let canyon_active =
+            chain_spec.fork(OpHardfork::Canyon).active_at_timestamp(u64::try_from(block_env.timestamp).unwrap());
         for t in self.txs.iter() {
-            let receipt = t.receipt(gas_used);
+            let receipt = t.receipt(gas_used, canyon_active);
             logs_bloom |= receipt.logs_bloom;
             receipts.push(receipt);
             transactions.push(t.tx.encode());

@@ -8,9 +8,8 @@ use tracing::{info, span, warn, Level};
 
 use crate::{
     communication::SpineConnections,
-    db::DatabaseRead,
     time::{vsync, Duration, Timer},
-    utils::{last_part_of_typename, last_part_of_typename_without_generic},
+    utils::last_part_of_typename_without_generic,
 };
 
 #[derive(Copy, Clone, Default)]

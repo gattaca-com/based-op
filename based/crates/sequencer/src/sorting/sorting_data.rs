@@ -1,5 +1,3 @@
-use std::{collections::VecDeque, sync::Arc};
-
 use bop_common::{
     communication::{
         messages::{SequencerToSimulator, SimulationResult},
@@ -7,7 +5,7 @@ use bop_common::{
     },
     db::DatabaseRead,
     time::Instant,
-    transaction::{SimulatedTx, Transaction},
+    transaction::SimulatedTx,
 };
 use revm_primitives::Address;
 use tracing::error;
@@ -88,7 +86,7 @@ impl<Db: DatabaseRead> SortingData<Db> {
         if self.in_flight_sims != 0 {
             return false;
         }
-        (self.tof_snapshot.is_empty() || self.until < Instant::now())
+        self.tof_snapshot.is_empty() || self.until < Instant::now()
     }
 
     pub fn should_send_next_sims(&self) -> bool {

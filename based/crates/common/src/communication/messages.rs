@@ -4,7 +4,7 @@ use std::{
 };
 
 use alloy_consensus::{BlockHeader, Header};
-use alloy_eips::eip2718::{Decodable2718, Encodable2718};
+use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes,
@@ -13,17 +13,16 @@ use alloy_rpc_types::engine::{
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
-use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
+use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
-use revm::{CacheState, DatabaseRef};
-use revm_primitives::{Address, EVMError, EvmState, U256};
+use revm_primitives::{Address, EvmState, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
 use tokio::sync::oneshot::{self, Receiver};
 
 use crate::{
-    db::{DBFrag, DBSorting, DatabaseRead},
+    db::{DBFrag, DBSorting},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
 };
@@ -236,7 +235,9 @@ impl EngineApi {
         let new_payload = EngineApi::NewPayloadV3 {
             payload: v3,
             versioned_hashes: Default::default(),
-            parent_beacon_block_root: block.parent_beacon_block_root().expect("parent beacon root should always be set") ,
+            parent_beacon_block_root: block
+                .parent_beacon_block_root()
+                .expect("parent beacon root should always be set"),
             res_tx: new_payload_tx,
         };
         let (fcu_tx, _fcu_rx) = oneshot::channel();
@@ -355,6 +356,7 @@ impl TopOfBlockResult {
     pub fn gas_used(&self) -> u64 {
         self.forced_inclusion_txs.iter().map(|t| t.gas_used()).sum()
     }
+
     pub fn payment(&self) -> U256 {
         self.forced_inclusion_txs.iter().map(|t| t.payment).sum()
     }

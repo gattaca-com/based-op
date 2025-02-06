@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
     io,
     ops::Deref,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use alloy_primitives::{map::HashMap, BlockNumber, B256};
@@ -16,7 +16,7 @@ use reth_primitives::BlockWithSenders;
 use reth_provider::BlockExecutionOutput;
 use reth_storage_errors::{db::DatabaseError, provider::ProviderError};
 use reth_trie_common::updates::TrieUpdates;
-use revm::{db::{BundleState, CacheDB}, CacheState};
+use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
     Account, AccountInfo, Address, Bytecode, EvmState, U256,
