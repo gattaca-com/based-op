@@ -231,7 +231,7 @@ where
         block_number: u64,
         parent_block_hash: Option<B256>,
         evm: &mut Evm<'_, Ext, DB>,
-    ) -> Result<(), BlockExecutionError>
+    ) -> Result<Option<EvmState>, BlockExecutionError>
     where
         DB: Database + DatabaseCommit,
         DB::Error: Display,
@@ -249,10 +249,11 @@ where
             if let Some(ref mut hook) = self.hook {
                 hook.on_state(&res.state);
             }
-            evm.context.evm.db.commit(res.state);
+            evm.context.evm.db.commit(res.state.clone());
+            Ok(Some(res.state))
+        } else {
+            Ok(None)
         }
-
-        Ok(())
     }
 
     /// Applies the post-block call to the EIP-7002 withdrawal request contract.

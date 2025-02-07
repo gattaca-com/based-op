@@ -1,7 +1,6 @@
 use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
 
-use messages::{BlockSyncMessage, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
-use revm_primitives::BlockEnv;
+use messages::{BlockSyncMessage, EvmBlockParams, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
 use shared_memory::ShmemError;
 use thiserror::Error;
 
@@ -11,10 +10,9 @@ pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
 pub mod messages;
 pub use messages::InternalMessage;
-use tracing::{error, info, trace, warn};
+use tracing::{error, warn};
 
 use crate::{
-    db::DatabaseRead,
     p2p::VersionedMessage,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
@@ -41,16 +39,15 @@ pub trait TrackedSenders {
     fn set_ingestion_t(&mut self, ingestion_t: IngestionTime);
     fn ingestion_t(&self) -> IngestionTime;
 
-    fn send<T: std::fmt::Debug>(&self, data: T) -> Result<(), InternalMessage<T>>
+    fn send<T>(&self, data: T) -> Result<(), InternalMessage<T>>
     where
         Self: HasSender<T>,
     {
-        trace!("sending {:.40}", format!("{data:?}"));
         let msg = self.ingestion_t().to_msg(data);
         self.get_sender().try_send(msg)
     }
 
-    fn send_forever<T: std::fmt::Debug>(&self, data: T)
+    fn send_forever<T>(&self, data: T)
     where
         Self: HasSender<T>,
     {
@@ -63,7 +60,7 @@ pub trait TrackedSenders {
         }
     }
 
-    fn send_timeout<T: std::fmt::Debug>(&self, data: T, timeout: Duration) -> Result<(), InternalMessage<T>>
+    fn send_timeout<T>(&self, data: T, timeout: Duration) -> Result<(), InternalMessage<T>>
     where
         Self: HasSender<T>,
     {
@@ -115,7 +112,7 @@ pub struct Receiver<T, R = CrossBeamReceiver<T>> {
     _t: PhantomData<T>,
 }
 
-impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
+impl<T, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
     pub fn new<S: AsRef<str>>(system_name: S, receiver: R) -> Self {
         Self {
             receiver,
@@ -130,7 +127,6 @@ impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T,
         F: FnMut(T, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
-            info!("received {:.40}", format!("{:?}", m.data()));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -149,7 +145,6 @@ impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T,
         F: FnMut(InternalMessage<T>, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
-            info!("received {:.40}", format!("{m:?}"));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -181,7 +176,7 @@ impl<S, R> Connections<S, R> {
 
 impl<S: TrackedSenders, R> Connections<S, R> {
     #[inline]
-    pub fn receive<T: std::fmt::Debug, F, RR>(&mut self, mut f: F) -> bool
+    pub fn receive<T, F, RR>(&mut self, mut f: F) -> bool
     where
         RR: NonBlockingReceiver<InternalMessage<T>>,
         R: AsMut<Receiver<T, RR>>,
@@ -192,7 +187,7 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 
     #[inline]
-    pub fn receive_timestamp<T: std::fmt::Debug, F, RR>(&mut self, mut f: F) -> bool
+    pub fn receive_timestamp<T, F, RR>(&mut self, mut f: F) -> bool
     where
         RR: NonBlockingReceiver<InternalMessage<T>>,
         R: AsMut<Receiver<T, RR>>,
@@ -206,10 +201,9 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     pub fn send<T>(&mut self, data: T)
     where
         S: HasSender<T>,
-        T: std::fmt::Debug,
     {
         self.senders.set_ingestion_t(IngestionTime::now());
-        self.senders.send_timeout(data, Duration::from_millis(10)).expect("couldn't send");
+        let _ = self.senders.send_timeout(data, Duration::from_millis(10));
     }
 
     pub fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
@@ -218,9 +212,9 @@ impl<S: TrackedSenders, R> Connections<S, R> {
 }
 
 #[derive(Clone)]
-pub struct Spine<Db: DatabaseRead> {
-    sender_simulator_to_sequencer: Sender<SimulatorToSequencer<Db>>,
-    receiver_simulator_to_sequencer: CrossBeamReceiver<SimulatorToSequencer<Db>>,
+pub struct Spine<Db: 'static> {
+    sender_simulator_to_sequencer: Sender<SimulatorToSequencer>,
+    receiver_simulator_to_sequencer: CrossBeamReceiver<SimulatorToSequencer>,
 
     sender_sequencer_to_simulator: Sender<SequencerToSimulator<Db>>,
     receiver_sequencer_to_simulator: CrossBeamReceiver<SequencerToSimulator<Db>>,
@@ -243,10 +237,10 @@ pub struct Spine<Db: DatabaseRead> {
     sender_sequencer_frag_broadcast: Sender<VersionedMessage>,
     receiver_sequencer_frag_broadcast: CrossBeamReceiver<VersionedMessage>,
 
-    blockenv: Queue<InternalMessage<BlockEnv>>,
+    evm_block_params: Queue<InternalMessage<EvmBlockParams<Db>>>,
 }
 
-impl<Db: DatabaseRead> Default for Spine<Db> {
+impl<Db> Default for Spine<Db> {
     fn default() -> Self {
         let (sender_simulator_to_sequencer, receiver_simulator_to_sequencer) = crossbeam_channel::bounded(4096);
         let (sender_sequencer_to_simulator, receiver_sequencer_to_simulator) = crossbeam_channel::bounded(4096);
@@ -258,7 +252,7 @@ impl<Db: DatabaseRead> Default for Spine<Db> {
         let (sender_sequencer_to_blockfetch, receiver_sequencer_to_blockfetch) = crossbeam_channel::bounded(4096);
 
         // MPMC to be safe, should only be produced to by the sequencer but
-        let blockenv = Queue::new(4096, queue::QueueType::MPMC).expect("couldn't initialize queue");
+        let evm_block_params = Queue::new(4096, queue::QueueType::MPMC).expect("couldn't initialize queue");
         Self {
             sender_simulator_to_sequencer,
             receiver_simulator_to_sequencer,
@@ -276,12 +270,12 @@ impl<Db: DatabaseRead> Default for Spine<Db> {
             receiver_sequencer_frag_broadcast,
             sender_sequencer_to_blockfetch,
             receiver_sequencer_to_blockfetch,
-            blockenv,
+            evm_block_params,
         }
     }
 }
 
-impl<Db: DatabaseRead> Spine<Db> {
+impl<Db: Clone> Spine<Db> {
     pub fn to_connections<S: AsRef<str>>(&self, name: S) -> SpineConnections<Db> {
         SpineConnections::new(self.into(), ReceiversSpine::attach(name, self))
     }
@@ -290,43 +284,43 @@ impl<Db: DatabaseRead> Spine<Db> {
 macro_rules! from_spine {
     ($T:ty, $v:ident, $S: tt) => {
         paste::item! {
-            impl<Db: DatabaseRead> From<&Spine<Db>> for Sender<$T> {
+            impl<Db> From<&Spine<Db>> for Sender<$T> {
                 fn from(spine: &Spine<Db>) -> Self {
                     spine.[<sender_ $v>].clone()
                 }
             }
 
-            impl<Db: DatabaseRead> From<&Spine<Db>> for CrossBeamReceiver<$T> {
+            impl<Db> From<&Spine<Db>> for CrossBeamReceiver<$T> {
                 fn from(spine: &Spine<Db>) -> Self {
                     spine.[<receiver_ $v>].clone()
                 }
             }
 
-            impl<Db: DatabaseRead> AsRef<Sender<$T>> for SendersSpine<Db> {
+            impl<Db> AsRef<Sender<$T>> for SendersSpine<Db> {
                 fn as_ref(&self) -> &Sender<$T> {
                     &self.$v
                 }
             }
 
-            impl<Db: DatabaseRead> AsRef<Sender<$T>> for SpineConnections<Db> {
+            impl<Db> AsRef<Sender<$T>> for SpineConnections<Db> {
                 fn as_ref(&self) -> &Sender<$T> {
                     self.senders.as_ref()
                 }
             }
 
-            impl<Db: DatabaseRead> HasSender<$T> for SendersSpine<Db> {
+            impl<Db> HasSender<$T> for SendersSpine<Db> {
                 type Sender = $S<$T>;
                 fn get_sender(&self) -> &Self::Sender {
                     &self.$v
                 }
             }
 
-            impl<Db: DatabaseRead> From<&'_ SendersSpine<Db>> for Sender<$T> {
+            impl<Db> From<&'_ SendersSpine<Db>> for Sender<$T> {
                 fn from(value: &'_ SendersSpine<Db>) -> Self {
                     value.$v.clone()
                 }
             }
-            impl<Db: DatabaseRead> AsMut<Receiver<$T>> for ReceiversSpine<Db> {
+            impl<Db> AsMut<Receiver<$T>> for ReceiversSpine<Db> {
                 fn as_mut(&mut self) -> &mut Receiver<$T> {
                     &mut self.$v
                 }
@@ -336,7 +330,7 @@ macro_rules! from_spine {
 }
 
 from_spine!(VersionedMessage, sequencer_frag_broadcast, Sender);
-from_spine!(SimulatorToSequencer<Db>, simulator_to_sequencer, Sender);
+from_spine!(SimulatorToSequencer, simulator_to_sequencer, Sender);
 from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator, Sender);
 from_spine!(SequencerToExternal, sequencer_to_rpc, Sender);
 from_spine!(messages::EngineApi, engine_rpc_to_sequencer, Sender);
@@ -344,37 +338,37 @@ from_spine!(Arc<Transaction>, eth_rpc_to_sequencer, Sender);
 from_spine!(BlockSyncMessage, blockfetch_to_sequencer, Sender);
 from_spine!(messages::BlockFetch, sequencer_to_blockfetch, Sender);
 
-impl<Db: DatabaseRead> HasSender<BlockEnv> for SendersSpine<Db> {
-    type Sender = Producer<InternalMessage<BlockEnv>>;
+impl<Db: Clone> HasSender<EvmBlockParams<Db>> for SendersSpine<Db> {
+    type Sender = Producer<InternalMessage<EvmBlockParams<Db>>>;
 
     fn get_sender(&self) -> &Self::Sender {
-        &self.blockenv
+        &self.evm_block_params
     }
 }
 
-impl<Db: DatabaseRead> AsMut<Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>> for ReceiversSpine<Db> {
-    fn as_mut(&mut self) -> &mut Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>> {
-        &mut self.blockenv
+impl<Db> AsMut<Receiver<EvmBlockParams<Db>, Consumer<InternalMessage<EvmBlockParams<Db>>>>> for ReceiversSpine<Db> {
+    fn as_mut(&mut self) -> &mut Receiver<EvmBlockParams<Db>, Consumer<InternalMessage<EvmBlockParams<Db>>>> {
+        &mut self.evm_block_params
     }
 }
 
 //TODO: remove allow dead code
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct SendersSpine<Db: DatabaseRead> {
+pub struct SendersSpine<Db: 'static> {
     sequencer_to_simulator: Sender<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Sender<SequencerToExternal>,
-    simulator_to_sequencer: Sender<SimulatorToSequencer<Db>>,
+    simulator_to_sequencer: Sender<SimulatorToSequencer>,
     engine_rpc_to_sequencer: Sender<messages::EngineApi>,
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     sequencer_frag_broadcast: Sender<VersionedMessage>,
-    blockenv: Producer<InternalMessage<BlockEnv>>,
+    evm_block_params: Producer<InternalMessage<EvmBlockParams<Db>>>,
     sequencer_to_blockfetch: Sender<messages::BlockFetch>,
     timestamp: IngestionTime,
 }
 
-impl<Db: DatabaseRead> From<&Spine<Db>> for SendersSpine<Db> {
+impl<Db: Clone> From<&Spine<Db>> for SendersSpine<Db> {
     fn from(value: &Spine<Db>) -> Self {
         Self {
             sequencer_to_simulator: value.sender_sequencer_to_simulator.clone(),
@@ -385,13 +379,13 @@ impl<Db: DatabaseRead> From<&Spine<Db>> for SendersSpine<Db> {
             blockfetch_to_sequencer: value.sender_blockfetch_to_sequencer.clone(),
             sequencer_frag_broadcast: value.sender_sequencer_frag_broadcast.clone(),
             sequencer_to_blockfetch: value.sender_sequencer_to_blockfetch.clone(),
-            blockenv: value.blockenv.clone().into(),
+            evm_block_params: value.evm_block_params.clone().into(),
             timestamp: Default::default(),
         }
     }
 }
 
-impl<Db: DatabaseRead> TrackedSenders for SendersSpine<Db> {
+impl<Db> TrackedSenders for SendersSpine<Db> {
     fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
         self.timestamp = ingestion_t;
     }
@@ -402,19 +396,19 @@ impl<Db: DatabaseRead> TrackedSenders for SendersSpine<Db> {
 }
 
 #[derive(Debug)]
-pub struct ReceiversSpine<Db: DatabaseRead> {
-    simulator_to_sequencer: Receiver<SimulatorToSequencer<Db>>,
+pub struct ReceiversSpine<Db: 'static> {
+    simulator_to_sequencer: Receiver<SimulatorToSequencer>,
     sequencer_to_simulator: Receiver<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Receiver<SequencerToExternal>,
     engine_rpc_to_sequencer: Receiver<messages::EngineApi>,
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
     sequencer_frag_broadcast: Receiver<VersionedMessage>,
-    blockenv: Receiver<BlockEnv, Consumer<InternalMessage<BlockEnv>>>,
+    evm_block_params: Receiver<EvmBlockParams<Db>, Consumer<InternalMessage<EvmBlockParams<Db>>>>,
     sequencer_to_blockfetch: Receiver<messages::BlockFetch>,
 }
 
-impl<Db: DatabaseRead> ReceiversSpine<Db> {
+impl<Db: Clone> ReceiversSpine<Db> {
     pub fn attach<S: AsRef<str>>(system_name: S, spine: &Spine<Db>) -> Self {
         Self {
             simulator_to_sequencer: Receiver::new(system_name.as_ref(), spine.into()),
@@ -424,7 +418,7 @@ impl<Db: DatabaseRead> ReceiversSpine<Db> {
             sequencer_to_rpc: Receiver::new(system_name.as_ref(), spine.into()),
             blockfetch_to_sequencer: Receiver::new(system_name.as_ref(), spine.into()),
             sequencer_frag_broadcast: Receiver::new(system_name.as_ref(), spine.into()),
-            blockenv: Receiver::new(system_name.as_ref(), spine.blockenv.clone().into()),
+            evm_block_params: Receiver::new(system_name.as_ref(), spine.evm_block_params.clone().into()),
             sequencer_to_blockfetch: Receiver::new(system_name.as_ref(), spine.into()),
         }
     }
