@@ -245,7 +245,7 @@ mod tests {
         db::DBFrag,
     };
     use bop_db::AlloyDB;
-    use bop_simulator::Simulator;
+    use crate::Simulator;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use reqwest::{Client, Url};
     use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};

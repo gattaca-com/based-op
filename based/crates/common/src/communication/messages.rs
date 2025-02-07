@@ -317,8 +317,8 @@ fn internal_error() -> RpcErrorObject<'static> {
 #[derive(Clone, Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SequencerToSimulator<Db> {
-    /// Simulate Tx on top of a partially built frag
-    SimulateTx(Arc<Transaction>, Arc<DBSorting<Db>>),
+    /// Simulate Tx
+    SimulateTx(Arc<Transaction>, DBSorting<Db>),
     /// Simulate Tx Top of frag
     //TODO: Db could be set on frag commit once we broadcast msgs to sims
     SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
@@ -364,6 +364,8 @@ pub enum SimulationError {
     EvmError(String),
     #[error("Order pays nothing")]
     ZeroPayment,
+    #[error("Order reverts and is not allowed to revert")]
+    RevertWithDisallowedRevert,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, AsRefStr)]

@@ -34,7 +34,6 @@ bop-common = { path = "crates/common" }
 bop-rpc = { path = "crates/rpc" }
 bop-pool = { path = "crates/pool" }
 bop-sequencer = { path = "crates/sequencer" }
-bop-simulator = { path = "crates/simulator" }
 bop-db = { path = "crates/db" }
 
 # alloy

@@ -8,31 +8,26 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            EvmBlockParams, NextBlockAttributes, SequencerToSimulator, SimulationError, SimulatorToSequencer,
+            EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer,
             SimulatorToSequencerMsg,
         },
-        SendersSpine, SpineConnections, TrackedSenders,
+        SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DBSorting, DatabaseRead, State},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use reth_chainspec::EthereumHardforks;
 use reth_evm::{
-    env::EvmEnv,
     execute::{BlockExecutionError, BlockValidationError, ProviderError},
-    system_calls::SystemCaller,
     ConfigureEvm, ConfigureEvmEnv,
 };
-use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
 use reth_optimism_forks::OpHardfork;
 use revm::{
-    db::{states::bundle_state::BundleRetention, BundleState, CacheDB},
     Database, DatabaseCommit, DatabaseRef, Evm,
 };
-use revm_primitives::{Address, EnvWithHandlerCfg, EvmState};
+use revm_primitives::{Address, EnvWithHandlerCfg, EvmState, U256};
 
 /// Simulator thread.
 ///
@@ -42,13 +37,11 @@ pub struct Simulator<'a, Db: DatabaseRef> {
     evm_tof: Evm<'a, (), State<DBFrag<Db>>>,
 
     /// Evm on top of partially built frag
-    evm_sorting: Evm<'a, (), State<Arc<DBSorting<Db>>>>,
+    evm_sorting: Evm<'a, (), State<DBSorting<Db>>>,
 
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
 
-    /// Utility to call system smart contracts.
-    system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
     /// How to create an EVM.
     evm_config: OpEvmConfig,
     id: usize,
@@ -59,39 +52,27 @@ where
     <Db as DatabaseRef>::Error: Into<ProviderError> + Debug + Display,
 {
     pub fn new(db: DBFrag<Db>, evm_config: &'a OpEvmConfig, id: usize) -> Self {
-        let system_caller = SystemCaller::new(evm_config.clone(), evm_config.chain_spec().clone());
-
         // Initialise with default evms. These will be overridden before the first sim by
         // `set_evm_for_new_block`.
         let db_tof = State::new(db.clone());
         let evm_tof: Evm<'_, (), _> = evm_config.evm(db_tof);
-        let db_sorting = State::new(Arc::new(DBSorting::new(db)));
+        let db_sorting = State::new(DBSorting::new(db));
         let evm_sorting: Evm<'_, (), _> = evm_config.evm(db_sorting);
 
-        Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone(), id, regolith_active: true }
+        Self { evm_sorting, evm_tof, evm_config: evm_config.clone(), id, regolith_active: true }
     }
 
-    /// finalise
-    fn simulate_tx<SimulateTxDb: DatabaseRef>(
+    /// Simulates a transaction at the state of the `db` parameter.
+    fn simulate_transaction<SimulateTxDb: DatabaseRef>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
         evm: &mut Evm<'a, (), State<SimulateTxDb>>,
         regolith_active: bool,
+        allow_zero_payment: bool,
+        allow_revert: bool,
     ) -> Result<SimulatedTx, SimulationError> {
-        // Cache some values pre-simulation.
-        let coinbase = evm.block().coinbase;
-        let start_balance = evm.db_mut().basic(coinbase).ok().flatten().map(|a| a.balance).unwrap_or_default();
-        let depositor_nonce = (tx.is_deposit() && regolith_active)
-            .then(|| evm.db_mut().basic(tx.sender()).ok().flatten().map(|a| a.nonce).unwrap_or_default());
-
-        let old_db = std::mem::replace(evm.db_mut(), State::new(db));
-        tx.fill_tx_env(evm.tx_mut());
-        let res = evm.transact();
-        // This dance is needed to drop the arc ref
-        let _ = std::mem::replace(evm.db_mut(), old_db);
-        let res = res.map_err(|_e| SimulationError::EvmError("todo 2".to_string()))?;
-
-        Ok(SimulatedTx::new(tx, res, start_balance, coinbase, depositor_nonce))
+        let _ = std::mem::replace(evm.db_mut(), State::new(db));
+        simulate_tx_inner(tx, evm, regolith_active, allow_zero_payment, allow_revert)
     }
 
     /// Updates internal EVM environments with new configuration
@@ -106,6 +87,50 @@ where
 
         self.regolith_active = self.evm_config.chain_spec().fork(OpHardfork::Regolith).active_at_timestamp(timestamp);
     }
+}
+
+/// Simulates a transaction at the passed in EVM's state.
+/// Will not modify the db state after the simulation is complete.
+pub fn simulate_tx_inner<'a>(
+    tx: Arc<Transaction>,
+    evm: &mut Evm<'a, (), impl Database>,
+    regolith_active: bool,
+    allow_zero_payment: bool,
+    allow_revert: bool,
+) -> Result<SimulatedTx, SimulationError> {
+    let coinbase = evm.block().coinbase;
+    // Cache some values pre-simulation.
+    let start_balance = balance_from_db(evm.db_mut(), coinbase);
+    let deposit_nonce = (tx.is_deposit() && regolith_active)
+        .then(|| nonce_from_db(evm.db_mut(), tx.sender()));
+
+    // Prepare and execute the tx.
+    tx.fill_tx_env(evm.tx_mut());
+    let result_and_state = evm.transact().map_err(|_e| SimulationError::EvmError("TODO".to_string()))?;
+
+    if !allow_revert && !result_and_state.result.is_success() {
+        return Err(SimulationError::RevertWithDisallowedRevert);
+    }
+
+    // Determine payment tx made to the coinbase.
+    let end_balance = result_and_state.state.get(&coinbase).map(|a| a.info.balance).unwrap_or_default();
+    let payment = end_balance.saturating_sub(start_balance);
+    
+    if !allow_zero_payment && payment == U256::ZERO {
+        return Err(SimulationError::ZeroPayment);
+    }
+
+    Ok(SimulatedTx::new(tx, result_and_state, payment, deposit_nonce))
+}
+
+#[inline]
+fn nonce_from_db(db: &mut impl Database, address: Address) -> u64 {
+    db.basic(address).ok().flatten().map(|a| a.nonce).unwrap_or_default()
+}
+
+#[inline]
+fn balance_from_db(db: &mut impl Database, address: Address) -> U256 {
+    db.basic(address).ok().flatten().map(|a| a.balance).unwrap_or_default()
 }
 
 impl<Db: DatabaseRef + Clone> Actor<Db> for Simulator<'_, Db>
@@ -133,11 +158,13 @@ where
                         SimulatorToSequencer::new(
                             (tx.sender(), tx.nonce()),
                             db.state_id(),
-                            SimulatorToSequencerMsg::Tx(Self::simulate_tx(
+                            SimulatorToSequencerMsg::Tx(Self::simulate_transaction(
                                 tx,
                                 db,
                                 &mut self.evm_sorting,
                                 self.regolith_active,
+                                false,
+                                true,
                             )),
                         ),
                         Duration::from_millis(10),
@@ -148,11 +175,13 @@ where
                         SimulatorToSequencer::new(
                             (tx.sender(), tx.nonce()),
                             db.state_id(),
-                            SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_tx(
+                            SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_transaction(
                                 tx,
                                 db,
                                 &mut self.evm_tof,
                                 self.regolith_active,
+                                false,
+                                true,
                             )),
                         ),
                         Duration::from_millis(10),
