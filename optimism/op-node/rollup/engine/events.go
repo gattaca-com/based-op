@@ -487,8 +487,8 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 		d.onPayloadInvalid(x)
 	case NewFragProcessEvent:
 		d.onNewFragProcess(x)
-	case SealFragSuccessEvent:
-		d.onSealFragSuccess(x)
+	case SealFragProcessEvent:
+		d.onSealFragProcess(x)
 	default:
 		return false
 	}

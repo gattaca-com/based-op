@@ -176,7 +176,7 @@ func (s *EngineAPIClient) NewFrag(ctx context.Context, frag *eth.SignedNewFrag) 
 	return &result, nil
 }
 
-func (s *EngineAPIClient) SealFrag(ctx context.Context, seal *eth.SealV0) (*string, error) {
+func (s *EngineAPIClient) SealFrag(ctx context.Context, seal *eth.SignedSeal) (*string, error) {
 	e := s.log.New("seal_frag", seal)
 	e.Trace("sending seal frag")
 	var result string

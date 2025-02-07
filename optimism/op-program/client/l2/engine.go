@@ -167,7 +167,7 @@ func (o *OracleEngine) NewFrag(ctx context.Context, frag *eth.SignedNewFrag) (*s
 	}
 }
 
-func (o *OracleEngine) SealFrag(ctx context.Context, frag *eth.SealV0) (*string, error) {
+func (o *OracleEngine) SealFrag(ctx context.Context, frag *eth.SignedSeal) (*string, error) {
 	switch method := o.rollupCfg.NewFragVersion(uint64(0)); method {
 	case eth.SealFragV0:
 		return o.api.SealFragV0(ctx, frag)

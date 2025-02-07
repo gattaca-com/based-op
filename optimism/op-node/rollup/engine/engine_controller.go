@@ -42,7 +42,7 @@ type ExecEngine interface {
 	NewPayload(ctx context.Context, payload *eth.ExecutionPayload, parentBeaconBlockRoot *common.Hash) (*eth.PayloadStatusV1, error)
 	L2BlockRefByLabel(ctx context.Context, label eth.BlockLabel) (eth.L2BlockRef, error)
 	NewFrag(ctx context.Context, frag *eth.SignedNewFrag) (*string, error)
-	SealFrag(ctx context.Context, seal *eth.SealV0) (*string, error)
+	SealFrag(ctx context.Context, seal *eth.SignedSeal) (*string, error)
 }
 
 type EngineController struct {

@@ -661,21 +661,6 @@ func (v *Uint64String) UnmarshalText(b []byte) error {
 	return nil
 }
 
-type SealV0 struct {
-	// How many frags for this block were in this sequence
-	TotalFrags uint64 `json:"totalFrags"`
-
-	// Header fields
-	BlockNumber      uint64      `json:"blockNumber"`
-	GasUsed          uint64      `json:"gasUsed"`
-	GasLimit         uint64      `json:"gasLimit"`
-	ParentHash       common.Hash `json:"parentHash"`
-	TransactionsRoot common.Hash `json:"transactionsRoot"`
-	ReceiptsRoot     common.Hash `json:"receiptsRoot"`
-	StateRoot        common.Hash `json:"stateRoot"`
-	BlockHash        common.Hash `json:"blockHash"`
-}
-
 type EngineAPIMethod string
 
 const (

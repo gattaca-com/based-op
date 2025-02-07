@@ -611,6 +611,21 @@ func (n *OpNode) PublishNewFrag(ctx context.Context, from peer.ID, frag *eth.Sig
 	return nil
 }
 
+func (n *OpNode) PublishSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedSeal) error {
+	n.tracer.OnPublishSealFrag(ctx, from, seal)
+
+	// publish to p2p, if we are running p2p at all
+	if n.p2pEnabled() {
+		if n.p2pSigner == nil {
+			return fmt.Errorf("node has no p2p signer, seal", seal, "cannot be published")
+		}
+		n.log.Info("Publishing seal on p2p", "seal", seal)
+		return n.p2pNode.GossipOut().PublishSealFrag(ctx, from, seal)
+	}
+	// if p2p is not enabled then we just don't publish the seal
+	return nil
+}
+
 func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *eth.ExecutionPayloadEnvelope) error {
 	// ignore if it's from ourselves
 	if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
@@ -635,6 +650,7 @@ func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *
 
 func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) error {
 	log.Info("(n *OpNode) OnNewFrag")
+	// FIXME: Uncomment this
 	// ignore if it's from ourselves
 	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
 	// 	return nil
@@ -650,6 +666,30 @@ func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNe
 
 	if err := n.l2Driver.OnNewFrag(ctx, frag); err != nil {
 		n.log.Warn("failed to notify engine driver of new fragment", frag, "err", err)
+	}
+
+	return nil
+}
+
+func (n *OpNode) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedSeal) error {
+	log.Info("(n *OpNode) OnSeal")
+
+	// FIXME: Uncomment this
+	// // ignore if it's from ourselves
+	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
+	// 	return nil
+	// }
+
+	n.tracer.OnSealFrag(ctx, from, seal)
+
+	n.log.Info("Received new seal", seal)
+
+	// Pass on the event to the L2 Engine
+	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+
+	if err := n.l2Driver.OnSealFrag(ctx, seal); err != nil {
+		n.log.Warn("failed to notify engine driver of new seal", seal, "err", err)
 	}
 
 	return nil

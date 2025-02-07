@@ -570,12 +570,12 @@ func (ea *L2EngineAPI) newFragV0(_ context.Context, _ *eth.SignedNewFrag) (*stri
 	return &engine.VALID, nil
 }
 
-func (ea *L2EngineAPI) SealFragV0(ctx context.Context, frag *eth.SealV0) (*string, error) {
+func (ea *L2EngineAPI) SealFragV0(ctx context.Context, frag *eth.SignedSeal) (*string, error) {
 	log.Info("SealFragV0")
 	return ea.sealFragV0(ctx, frag)
 }
 
-func (ea *L2EngineAPI) sealFragV0(_ context.Context, _ *eth.SealV0) (*string, error) {
+func (ea *L2EngineAPI) sealFragV0(_ context.Context, _ *eth.SignedSeal) (*string, error) {
 	log.Info("sealFragV0")
 	return &engine.VALID, nil
 }

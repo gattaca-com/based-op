@@ -153,6 +153,16 @@ func (s *Driver) OnNewFrag(ctx context.Context, frag *eth.SignedNewFrag) error {
 	}
 }
 
+func (s *Driver) OnSealFrag(ctx context.Context, seal *eth.SignedSeal) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		s.Emitter.Emit(engine.SealFragProcessEvent{SignedSeal: seal})
+		return nil
+	}
+}
+
 // the eventLoop responds to L1 changes and internal timers to produce L2 blocks.
 func (s *Driver) eventLoop() {
 	defer s.wg.Done()

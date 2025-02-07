@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -16,6 +15,8 @@ type Tracer interface {
 	OnPublishL2Payload(ctx context.Context, payload *eth.ExecutionPayloadEnvelope)
 	OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag)
 	OnPublishNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag)
+	OnSealFrag(ctx context.Context, from peer.ID, frag *eth.SignedSeal)
+	OnPublishSealFrag(ctx context.Context, from peer.ID, frag *eth.SignedSeal)
 }
 
 type noOpTracer struct{}
@@ -27,10 +28,12 @@ func (n noOpTracer) OnUnsafeL2Payload(ctx context.Context, from peer.ID, payload
 
 func (n noOpTracer) OnPublishL2Payload(ctx context.Context, payload *eth.ExecutionPayloadEnvelope) {}
 
-func (n noOpTracer) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) {
-	log.Info("(n noOpTracer) OnNewFrag")
-}
+func (n noOpTracer) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) {}
 
 func (n noOpTracer) OnPublishNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) {}
+
+func (n noOpTracer) OnSealFrag(ctx context.Context, from peer.ID, frag *eth.SignedSeal) {}
+
+func (n noOpTracer) OnPublishSealFrag(ctx context.Context, from peer.ID, frag *eth.SignedSeal) {}
 
 var _ Tracer = (*noOpTracer)(nil)
