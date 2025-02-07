@@ -587,3 +587,21 @@ func HeaderParentHashFromRLP(header []byte) common.Hash {
 	}
 	return common.BytesToHash(parentHash)
 }
+
+type UnsealedBlock struct {
+	number            *big.Int
+	frags             []common.NewFrag
+	lastFragSeqNumber uint64
+}
+
+func NewUnsealedBlock() *UnsealedBlock {
+	return &UnsealedBlock{
+		number: new(big.Int),
+		frags:  []common.NewFrag{},
+	}
+}
+
+func (ub *UnsealedBlock) InsertNewFrag(frag common.NewFrag) {
+	ub.frags = append(ub.frags, frag)
+	ub.lastFragSeqNumber = frag.Seq
+}
