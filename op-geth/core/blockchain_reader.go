@@ -64,7 +64,7 @@ func (bc *BlockChain) CurrentSafeBlock() *types.Header {
 }
 
 func (bc *BlockChain) CurrentUnsealedBlock() *types.UnsealedBlock {
-	return bc.currentUnsealedBlock.Load()
+	return bc.currentUnsealedBlock
 }
 
 // HasHeader checks if a block header is present in the database or not, caching
