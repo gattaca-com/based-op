@@ -23,14 +23,14 @@ pub struct MockFetcher {
     provider: AlloyProvider,
 }
 impl MockFetcher {
-    pub fn new(rpc_url: Url, next_block: u64) -> Self {
+    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64) -> Self {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
             .build()
             .expect("couldn't build local tokio runtime");
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
-        Self { executor, next_block, sync_until: next_block, provider }
+        Self { executor, next_block, sync_until, provider }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
@@ -70,7 +70,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             // Duration::from_millis(100).sleep();
 
             connections.send(fcu);
-            Duration::from_secs(3).sleep();
+            Duration::from_millis(100).sleep();
             let (block_tx, block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 
@@ -81,8 +81,9 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
 
             // we set the extra data to 0 as that is also what the sequencer will use
             block.header.extra_data = Default::default();
-
-            if sealed_block.execution_payload.payload_inner.payload_inner.block_hash != block.hash_slow() {
+            let hash = block.hash_slow();
+            let hash1 =sealed_block.execution_payload.payload_inner.payload_inner.block_hash;
+            if hash1 != hash {
                 sealed_block.execution_payload.payload_inner.payload_inner.transactions = vec![];
                 block.body = Default::default();
                 println!("\n\n\n\n\n\n\n\n");
@@ -92,14 +93,8 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
                 println!("\n\n\n\n\n\n\n\n");
                 println!("ACTUAL BLOCK:");
                 println!("{block:#?}");
-                panic!("block hash mismatch");
+                panic!("block hash mismatch {hash} vs {hash1}");
             }
-
-            assert_eq!(
-                sealed_block.execution_payload.payload_inner.payload_inner.block_hash,
-                block.hash_slow(),
-                "{block:#?} vs {sealed_block:#?}"
-            );
 
             assert_eq!(
                 sealed_block.execution_payload.payload_inner.payload_inner.block_hash,

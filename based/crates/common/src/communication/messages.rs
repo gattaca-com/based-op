@@ -15,6 +15,7 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
+use revm::db::BundleState;
 use revm_primitives::{Address, EvmState, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
@@ -349,7 +350,7 @@ pub type SimulationResult<T> = Result<T, SimulationError>;
 
 #[derive(Clone, Debug)]
 pub struct TopOfBlockResult {
-    pub flat_state_changes: EvmState,
+    pub state: BundleState,
     pub forced_inclusion_txs: Vec<SimulatedTx>,
 }
 impl TopOfBlockResult {

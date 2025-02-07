@@ -44,8 +44,8 @@ impl ActorConfig {
 
 pub trait Actor<Db>: Sized {
     const CORE_AFFINITY: Option<usize> = None;
-    fn name(&self) -> &str {
-        last_part_of_typename_without_generic::<Self>()
+    fn name(&self) -> String {
+        last_part_of_typename_without_generic::<Self>().to_string()
     }
 
     fn loop_body(&mut self, _connections: &mut SpineConnections<Db>) {}

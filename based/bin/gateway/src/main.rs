@@ -12,7 +12,7 @@ use bop_db::{init_database, DatabaseRead};
 use bop_rpc::start_rpc;
 use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
-    Sequencer,
+    Sequencer, SequencerConfig,
 };
 use bop_simulator::Simulator;
 use clap::Parser;
@@ -56,7 +56,6 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
     let db_frag: DBFrag<_> = db_bop.clone().into();
     let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
-    let fetch_until = args.tmp_end_block;
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
 
@@ -82,7 +81,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         if args.test {
             s.spawn(|| {
-                MockFetcher::new(args.rpc_fallback_url, start_fetch).run(
+                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100).run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
                 );

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 use alloy_consensus::{proofs::ordered_trie_root_with_encoder, Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
@@ -6,12 +6,14 @@ use alloy_primitives::{Bloom, U256};
 use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
     communication::messages::TopOfBlockResult,
-    db::{flatten_state_changes, DBFrag, DBSorting},
+    db::{flatten_state_changes, state_changes_to_bundle_state, DBFrag, DBSorting},
     p2p::{FragV0, SealV0},
     transaction::SimulatedTx,
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
+use revm::{db::{states::bundle_state::BundleRetention, BundleState}, Database, DatabaseCommit, State};
+use reth_evm::execute::ProviderError;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_forks::OpHardfork;
 use revm_primitives::{hex, BlockEnv, Bytes, B256};
@@ -29,12 +31,13 @@ pub struct FragSequence<Db> {
     next_seq: u64,
     /// Block number for all frags in this block
     block_number: u64,
+    top_of_block_bundle: BundleState
 }
 
 impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
     pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
         let block_number = db.head_block_number().expect("can't get block number") + 1;
-        Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number }
+        Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number, top_of_block_bundle: BundleState::default() }
     }
 
     // TODO: remove this and move to sortign data
@@ -74,10 +77,15 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         state_id == self.db.state_id()
     }
 
-    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 {
+    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 
+    where
+        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>, {
         self.gas_remaining -= top_of_block.gas_used();
         self.payment += top_of_block.payment();
-        self.db.commit_flat_changes(top_of_block.flat_state_changes);
+        self.top_of_block_bundle = top_of_block.state;
+        // tracing::info!("###################{}",self.db.calculate_state_root(&top_of_block.state).unwrap().0);
+        // self.db.commit_flat_changes(top_of_block.flat_state_changes);
+        // self.db.commit( );
         let msg = FragV0::new(
             self.block_number,
             self.next_seq,
@@ -90,6 +98,11 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
 
     /// When a new block is received, we clear all the temp state on the db
     pub fn reset_fragdb(&mut self, db: Db) {
+        self.gas_remaining = 0;
+        self.txs.clear();
+        self.next_seq = 0;
+        self.payment = U256::ZERO;
+        self.top_of_block_bundle = Default::default();
         self.db.reset(db);
     }
 
@@ -99,9 +112,13 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         parent_hash: B256,
         parent_beacon_block_root: B256,
         chain_spec: &Arc<OpChainSpec>,
-    ) -> (SealV0, OpExecutionPayloadEnvelopeV3) {
-        let state_changes = flatten_state_changes(self.txs.iter().map(|t| t.result_and_state.state.clone()).collect());
-        let state_root = self.db.state_root(state_changes);
+    ) -> (SealV0, OpExecutionPayloadEnvelopeV3)
+    where
+        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+    {
+        // self.db.commit_flat_changes(state_changes);
+        // self.db.db.write().merge_transitions(BundleRetention::Reverts);
+        let state_root = self.db.calculate_state_root(&self.top_of_block_bundle).unwrap().0;
 
         let mut receipts = Vec::with_capacity(self.txs.len());
         let mut transactions = Vec::with_capacity(self.txs.len());
@@ -111,11 +128,11 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         let canyon_active =
             chain_spec.fork(OpHardfork::Canyon).active_at_timestamp(u64::try_from(block_env.timestamp).unwrap());
         for t in self.txs.iter() {
+            gas_used += t.result_and_state.result.gas_used();
             let receipt = t.receipt(gas_used, canyon_active);
             logs_bloom |= receipt.logs_bloom;
             receipts.push(receipt);
             transactions.push(t.tx.encode());
-            gas_used += t.result_and_state.result.gas_used();
         }
 
         let receipts_root = ordered_trie_root_with_encoder(&receipts, |r, buf| {
@@ -142,8 +159,8 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             gas_used,
             extra_data: Bytes::default(),
             parent_beacon_block_root: Some(parent_beacon_block_root),
-            blob_gas_used: None,
-            excess_blob_gas: None,
+            blob_gas_used: Some(0),
+            excess_blob_gas: Some(0),
             requests_hash: None,
         };
 

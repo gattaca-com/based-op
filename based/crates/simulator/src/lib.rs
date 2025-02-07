@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     fmt::{Debug, Display},
     sync::Arc,
 };
@@ -13,7 +14,7 @@ use bop_common::{
         },
         SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{flatten_state_changes, DBFrag, DBSorting},
+    db::{flatten_state_changes, DBFrag, DBSorting, DatabaseRead},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
@@ -29,10 +30,10 @@ use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
 use reth_optimism_forks::OpHardfork;
 use revm::{
-    db::{CacheDB, State},
+    db::{states::bundle_state::BundleRetention, BundleState, CacheDB, State},
     Database, DatabaseCommit, DatabaseRef, Evm,
 };
-use revm_primitives::{Address, EnvWithHandlerCfg, EvmState};
+use revm_primitives::{Account, Address, EnvWithHandlerCfg, EvmState, EvmStorageSlot};
 use tracing::info;
 
 /// Simulator thread.
@@ -52,7 +53,7 @@ pub struct Simulator<'a, Db: DatabaseRef> {
     system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
     /// How to create an EVM.
     evm_config: OpEvmConfig,
-    _id: usize,
+    id: usize,
 }
 
 impl<'a, Db: DatabaseRef + Clone> Simulator<'a, Db>
@@ -69,7 +70,7 @@ where
         let db_sorting = CacheDB::new(Arc::new(DBSorting::new(db)));
         let evm_sorting: Evm<'_, (), _> = evm_config.evm(db_sorting);
 
-        Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone(), _id: id, regolith_active: true }
+        Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone(), id, regolith_active: true }
     }
 
     /// finalise
@@ -99,16 +100,19 @@ where
     /// 1. Updating EVM environments
     /// 2. Applying pre-execution changes
     /// 3. Processing forced inclusion transactions
-    fn on_new_block(&mut self, evm_block_params: EvmBlockParams<Db>, senders: &SendersSpine<Db>) {
+    fn on_new_block(&mut self, evm_block_params: EvmBlockParams<Db>, senders: &SendersSpine<Db>)
+    where
+        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+    {
         let env_with_handler_cfg = self.get_env_for_new_block(&evm_block_params);
         self.update_evm_environments(&env_with_handler_cfg);
-        let (forced_inclusion_txs, flat_state_changes) = self
+        let (forced_inclusion_txs, state) = self
             .get_start_state_for_new_block(evm_block_params.db, env_with_handler_cfg, &evm_block_params.attributes)
             .expect("shouldn't fail");
         let msg = SimulatorToSequencer::new(
             (Address::random(), 0),
             0,
-            SimulatorToSequencerMsg::TopOfBlock(TopOfBlockResult { flat_state_changes, forced_inclusion_txs }),
+            SimulatorToSequencerMsg::TopOfBlock(TopOfBlockResult { state, forced_inclusion_txs }),
         );
         senders.send_forever(msg);
     }
@@ -122,7 +126,10 @@ where
         db: DBFrag<Db>,
         env_with_handler_cfg: EnvWithHandlerCfg,
         next_attributes: &NextBlockAttributes,
-    ) -> Result<(Vec<SimulatedTx>, EvmState), BlockExecutionError> {
+    ) -> Result<(Vec<SimulatedTx>, BundleState), BlockExecutionError>
+    where
+        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+    {
         let evm_config = self.evm_config.clone();
 
         // Configure new EVM to apply pre-execution and must include txs.
@@ -130,10 +137,7 @@ where
         let mut evm = evm_config.evm_with_env(&mut state, env_with_handler_cfg);
 
         // Apply pre-execution changes.
-        let mut changes = self
-            .apply_pre_execution_changes(next_attributes, &mut evm)?
-            .map(|changes| vec![changes])
-            .unwrap_or_default();
+        self.apply_pre_execution_changes(next_attributes, &mut evm)?;
 
         let mut tx_results = Vec::with_capacity(next_attributes.forced_inclusion_txs.len());
         let block_coinbase = evm.block().coinbase;
@@ -152,11 +156,9 @@ where
                 let new_err = err.map_db_err(|e| e.into());
                 BlockValidationError::EVM { hash: tx.tx_hash(), error: Box::new(new_err) }
             })?;
-            info!("simmed {:?}", result_and_state.result);
 
             self.system_caller.on_state(&result_and_state.state);
             evm.db_mut().commit(result_and_state.state.clone());
-            changes.push(result_and_state.state.clone());
             tx_results.push(SimulatedTx::new(
                 tx.clone(),
                 result_and_state,
@@ -165,9 +167,9 @@ where
                 depositor_nonce,
             ));
         }
-        let flattened_changes = flatten_state_changes(changes);
-
-        Ok((tx_results, flattened_changes))
+        evm.db_mut().merge_transitions(BundleRetention::Reverts);
+        let bundle = evm.db_mut().take_bundle();
+        Ok((tx_results, bundle))
     }
 
     /// Applies required state changes before transaction execution:
@@ -227,7 +229,7 @@ where
 
 impl<Db: DatabaseRef + Clone> Actor<Db> for Simulator<'_, Db>
 where
-    <Db as DatabaseRef>::Error: Into<ProviderError> + Debug + Display,
+    Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
 {
     const CORE_AFFINITY: Option<usize> = None;
 

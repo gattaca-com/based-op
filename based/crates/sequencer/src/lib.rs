@@ -185,7 +185,6 @@ where
 
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
-                data.parent_beacon_block_root = parent_beacon_block_root;
                 self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
             }
             ForkChoiceUpdatedV3 { fork_choice_state, payload_attributes, .. } => {
@@ -287,6 +286,7 @@ where
                 } else {
                     // Confirm that the FCU payload is the same as the buffered payload.
                     if payload.block_hash() == fork_choice_state.head_block_hash {
+                        data.parent_beacon_block_root = sidecar.parent_beacon_block_root().unwrap();
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
                         SequencerState::commit_block(&block, data, senders, false);
                         data.parent_header = block.header.clone();
@@ -304,6 +304,7 @@ where
             WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
+                        data.frags.reset_fragdb(data.db.clone());
                         // From: https://specs.optimism.io/protocol/exec-engine.html#extended-payloadattributesv2
                         // The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup. This
                         // field overrides the gas limit used during block-building. If not
@@ -324,30 +325,19 @@ where
 
                         let no_tx_pool = attributes.no_tx_pool.unwrap_or_default();
 
+                        data.parent_beacon_block_root = attributes.payload_attributes.parent_beacon_block_root.unwrap();
                         let attributes = NextBlockAttributes {
                             env_attributes,
                             forced_inclusion_txs,
-                            parent_beacon_block_root: Some(data.parent_beacon_block_root),
+                            parent_beacon_block_root: attributes.payload_attributes.parent_beacon_block_root,
                         };
+
                         data.block_env = data
                             .config
                             .evm_config
                             .next_cfg_and_block_env(&data.parent_header, attributes.env_attributes)
                             .expect("couldn't create blockenv")
                             .block_env;
-
-                        // tracing::info!("Sorting start with attributes: {:?}", attributes);
-                        tracing::info!("Sorting on top of {:?}", data.frags.db().head_block_number());
-                        tracing::info!(
-                            "Sorting on top of state root {:?}",
-                            data.frags.db().state_root(Default::default())
-                        );
-                        tracing::info!(
-                            "Sorting on top of state root {:?}",
-                            data.db.calculate_state_root(
-                                &state_changes_to_bundle_state(&data.db, Default::default()).unwrap()
-                            )
-                        );
 
                         let evm_block_params = EvmBlockParams {
                             parent_header: data.parent_header.clone(),

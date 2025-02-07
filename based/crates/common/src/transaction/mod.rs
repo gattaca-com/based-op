@@ -73,22 +73,101 @@ impl Transaction {
     }
 
     #[inline]
-    pub fn fill_tx_env(&self, env: &mut TxEnv) {
-        env.caller = self.sender;
-        env.gas_limit = self.gas_limit();
-        env.gas_price = U256::from(self.max_fee_per_gas());
-        env.gas_priority_fee = self.max_priority_fee_per_gas().map(U256::from);
-        env.transact_to = self.to().into();
-        env.value = self.value();
-        env.data = self.input().clone();
-        env.chain_id = self.chain_id();
-        env.nonce = Some(self.nonce());
-        env.access_list = self.access_list().cloned().unwrap_or_default().0;
-        env.blob_hashes = self.blob_versioned_hashes().map(|t| t.to_vec()).unwrap_or_default();
-        env.max_fee_per_blob_gas = self.max_fee_per_blob_gas().map(U256::from);
-        env.optimism = self.into()
-    }
+    pub fn fill_tx_env(&self, tx_env: &mut TxEnv) {
+        let envelope = self.encode();
 
+        tx_env.caller = self.sender;
+        match &self.tx {
+            OpTxEnvelope::Legacy(tx) => {
+                tx_env.gas_limit = tx.tx().gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::from(tx.tx().gas_price);
+                tx_env.gas_priority_fee = None;
+                tx_env.transact_to = tx.tx().to;
+                tx_env.value = tx.tx().value;
+                tx_env.data = tx.tx().input.clone();
+                tx_env.chain_id = tx.tx().chain_id;
+                tx_env.nonce = Some(tx.tx().nonce);
+                tx_env.access_list.clear();
+                tx_env.blob_hashes.clear();
+                tx_env.max_fee_per_blob_gas.take();
+                tx_env.authorization_list = None;
+            }
+            OpTxEnvelope::Eip2930(tx) => {
+                tx_env.gas_limit = tx.tx().gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::from(tx.tx().gas_price);
+                tx_env.gas_priority_fee = None;
+                tx_env.transact_to = tx.tx().to;
+                tx_env.value = tx.tx().value;
+                tx_env.data = tx.tx().input.clone();
+                tx_env.chain_id = Some(tx.tx().chain_id);
+                tx_env.nonce = Some(tx.tx().nonce);
+                tx_env.access_list.clone_from(&tx.tx().access_list.0);
+                tx_env.blob_hashes.clear();
+                tx_env.max_fee_per_blob_gas.take();
+                tx_env.authorization_list = None;
+            }
+            OpTxEnvelope::Eip1559(tx) => {
+                tx_env.gas_limit = tx.tx().gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::from(tx.tx().max_fee_per_gas);
+                tx_env.gas_priority_fee =
+                    Some(alloy_primitives::U256::from(tx.tx().max_priority_fee_per_gas));
+                tx_env.transact_to = tx.tx().to;
+                tx_env.value = tx.tx().value;
+                tx_env.data = tx.tx().input.clone();
+                tx_env.chain_id = Some(tx.tx().chain_id);
+                tx_env.nonce = Some(tx.tx().nonce);
+                tx_env.access_list.clone_from(&tx.tx().access_list.0);
+                tx_env.blob_hashes.clear();
+                tx_env.max_fee_per_blob_gas.take();
+                tx_env.authorization_list = None;
+            }
+            OpTxEnvelope::Eip7702(tx) => {
+                tx_env.gas_limit = tx.tx().gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::from(tx.tx().max_fee_per_gas);
+                tx_env.gas_priority_fee =
+                    Some(alloy_primitives::U256::from(tx.tx().max_priority_fee_per_gas));
+                tx_env.transact_to = tx.tx().to.into();
+                tx_env.value = tx.tx().value;
+                tx_env.data = tx.tx().input.clone();
+                tx_env.chain_id = Some(tx.tx().chain_id);
+                tx_env.nonce = Some(tx.tx().nonce);
+                tx_env.access_list.clone_from(&tx.tx().access_list.0);
+                tx_env.blob_hashes.clear();
+                tx_env.max_fee_per_blob_gas.take();
+                tx_env.authorization_list =
+                    Some(revm_primitives::AuthorizationList::Signed(tx.tx().authorization_list.clone()));
+            }
+            OpTxEnvelope::Deposit(tx) => {
+                tx_env.access_list.clear();
+                tx_env.gas_limit = tx.gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::ZERO;
+                tx_env.gas_priority_fee = None;
+                tx_env.transact_to = tx.to;
+                tx_env.value = tx.value;
+                tx_env.data = tx.input.clone();
+                tx_env.chain_id = None;
+                tx_env.nonce = None;
+                tx_env.authorization_list = None;
+
+                tx_env.optimism = revm_primitives::OptimismFields {
+                    source_hash: Some(tx.source_hash),
+                    mint: tx.mint,
+                    is_system_transaction: Some(tx.is_system_transaction),
+                    enveloped_tx: Some(envelope),
+                };
+                return
+            }
+            _ => unreachable!(),
+        }
+
+        tx_env.optimism = revm_primitives::OptimismFields {
+            source_hash: None,
+            mint: None,
+            is_system_transaction: Some(false),
+            enveloped_tx: Some(envelope),
+        }
+    }
+   
     #[inline]
     pub fn random() -> Self {
         let value = 50;
@@ -126,7 +205,7 @@ impl Transaction {
             OpTxEnvelope::Eip2930(signed) => signed.recover_signer().unwrap(),
             OpTxEnvelope::Eip1559(signed) => signed.recover_signer().unwrap(),
             OpTxEnvelope::Eip7702(signed) => signed.recover_signer().unwrap(),
-            OpTxEnvelope::Deposit(_sealed) => Address::ZERO,
+            OpTxEnvelope::Deposit(_sealed) => _sealed.from,
             _ => panic!("invalid tx type"),
         };
 
