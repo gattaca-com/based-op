@@ -15,7 +15,7 @@ use bop_common::{
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{state_changes_to_bundle_state, DBFrag, DatabaseWrite},
+    db::{DBFrag, DatabaseWrite},
     p2p::{SealV0, VersionedMessage},
     time::Duration,
     transaction::Transaction,
@@ -315,8 +315,10 @@ where
                             prev_randao: data.payload_attributes.payload_attributes.prev_randao,
                             gas_limit,
                         };
-                        let forced_inclusion_txs = data.payload_attributes
-                            .transactions.as_ref()
+                        let forced_inclusion_txs = data
+                            .payload_attributes
+                            .transactions
+                            .as_ref()
                             .map(|txs| {
                                 txs.iter().map(|bytes| Transaction::decode(bytes.clone()).unwrap().into()).collect()
                             })
@@ -327,7 +329,10 @@ where
                         let attributes = NextBlockAttributes {
                             env_attributes,
                             forced_inclusion_txs,
-                            parent_beacon_block_root: data.payload_attributes.payload_attributes.parent_beacon_block_root,
+                            parent_beacon_block_root: data
+                                .payload_attributes
+                                .payload_attributes
+                                .parent_beacon_block_root,
                         };
 
                         data.block_env = data
@@ -396,7 +401,7 @@ where
                     data.parent_hash,
                     data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
                     data.config.evm_config.chain_spec(),
-                    data.extra_data()
+                    data.extra_data(),
                 );
 
                 // Gossip seal to p2p and return payload to rpc
@@ -520,7 +525,7 @@ where
                         data.parent_hash,
                         data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
                         data.config.evm_config.chain_spec(),
-                        data.extra_data()
+                        data.extra_data(),
                     );
                     return SequencerState::WaitingForGetPayload(seal_block);
                 }

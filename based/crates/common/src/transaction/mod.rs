@@ -109,8 +109,7 @@ impl Transaction {
             OpTxEnvelope::Eip1559(tx) => {
                 tx_env.gas_limit = tx.tx().gas_limit;
                 tx_env.gas_price = alloy_primitives::U256::from(tx.tx().max_fee_per_gas);
-                tx_env.gas_priority_fee =
-                    Some(alloy_primitives::U256::from(tx.tx().max_priority_fee_per_gas));
+                tx_env.gas_priority_fee = Some(alloy_primitives::U256::from(tx.tx().max_priority_fee_per_gas));
                 tx_env.transact_to = tx.tx().to;
                 tx_env.value = tx.tx().value;
                 tx_env.data = tx.tx().input.clone();
@@ -124,8 +123,7 @@ impl Transaction {
             OpTxEnvelope::Eip7702(tx) => {
                 tx_env.gas_limit = tx.tx().gas_limit;
                 tx_env.gas_price = alloy_primitives::U256::from(tx.tx().max_fee_per_gas);
-                tx_env.gas_priority_fee =
-                    Some(alloy_primitives::U256::from(tx.tx().max_priority_fee_per_gas));
+                tx_env.gas_priority_fee = Some(alloy_primitives::U256::from(tx.tx().max_priority_fee_per_gas));
                 tx_env.transact_to = tx.tx().to.into();
                 tx_env.value = tx.tx().value;
                 tx_env.data = tx.tx().input.clone();
@@ -167,7 +165,7 @@ impl Transaction {
             enveloped_tx: Some(envelope),
         }
     }
-   
+
     #[inline]
     pub fn random() -> Self {
         let value = 50;

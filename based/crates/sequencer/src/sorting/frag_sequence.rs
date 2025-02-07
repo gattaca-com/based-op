@@ -6,16 +6,16 @@ use alloy_primitives::{Bloom, U256};
 use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
     communication::messages::TopOfBlockResult,
-    db::{flatten_state_changes, state_changes_to_bundle_state, DBFrag, DBSorting},
+    db::{DBFrag, DBSorting},
     p2p::{FragV0, SealV0},
     transaction::SimulatedTx,
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
-use revm::{db::{states::bundle_state::BundleRetention, BundleState}, Database, DatabaseCommit, State};
 use reth_evm::execute::ProviderError;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_forks::OpHardfork;
+use revm::{db::BundleState, Database};
 use revm_primitives::{hex, BlockEnv, Bytes, B256};
 
 use crate::sorting::InSortFrag;
@@ -31,13 +31,21 @@ pub struct FragSequence<Db> {
     next_seq: u64,
     /// Block number for all frags in this block
     block_number: u64,
-    top_of_block_bundle: BundleState
+    top_of_block_bundle: BundleState,
 }
 
 impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
     pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
         let block_number = db.head_block_number().expect("can't get block number") + 1;
-        Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number, top_of_block_bundle: BundleState::default() }
+        Self {
+            db,
+            gas_remaining: max_gas,
+            payment: U256::ZERO,
+            txs: vec![],
+            next_seq: 0,
+            block_number,
+            top_of_block_bundle: BundleState::default(),
+        }
     }
 
     // TODO: remove this and move to sortign data
@@ -77,9 +85,10 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         state_id == self.db.state_id()
     }
 
-    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 
+    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0
     where
-        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>, {
+        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+    {
         self.gas_remaining -= top_of_block.gas_used();
         self.payment += top_of_block.payment();
         self.top_of_block_bundle = top_of_block.state;
@@ -112,7 +121,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         parent_hash: B256,
         parent_beacon_block_root: B256,
         chain_spec: &Arc<OpChainSpec>,
-        extra_data: Bytes
+        extra_data: Bytes,
     ) -> (SealV0, OpExecutionPayloadEnvelopeV3)
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
