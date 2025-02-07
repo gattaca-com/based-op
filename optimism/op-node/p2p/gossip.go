@@ -287,8 +287,15 @@ func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRunt
 
 func BuildNewSealValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newSealVersion NewSealVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
-		// TODO: use unmarshalling here
-		message.ValidatorData = message.GetData()
+		var signedSeal eth.SignedSeal
+
+		data := message.GetData()
+		if err := signedSeal.UnmarshalSSZ(uint32(len(data)), bytes.NewReader(data)); err != nil {
+			log.Warn("invalid signedFrag payload", "err", err, "peer", id)
+			return pubsub.ValidationReject
+		}
+
+		message.ValidatorData = signedSeal.Seal
 		return pubsub.ValidationAccept
 	}
 }
@@ -659,11 +666,10 @@ func (p *publisher) PublishNewFrag(ctx context.Context, signedFrag eth.SignedNew
 }
 
 func (p *publisher) PublishNewSeal(ctx context.Context, signedSeal eth.SignedSeal) error {
-	// TODO: Send the new seal instead of the block number
-	data := make([]byte, 64)
-	binary.BigEndian.PutUint64(data, signedSeal.Seal.BlockNumber)
+	buf := new(bytes.Buffer)
+	signedSeal.MarshalSSZ(buf)
 
-	return p.newSealV0.topic.Publish(ctx, data)
+	return p.newSealV0.topic.Publish(ctx, buf.Bytes())
 }
 
 func (p *publisher) Close() error {
@@ -849,10 +855,10 @@ type MessageHandler func(ctx context.Context, from peer.ID, msg any) error
 func NewFragHandler(ctx context.Context, from peer.ID, msg any) error {
 	frag, ok := msg.(eth.NewFrag)
 	if !ok {
-		return fmt.Errorf("expected topic validator to parse and validate data into new frag, but got %T", msg)
+		return fmt.Errorf("expected topic validator to parse and validate data into a frag, but got %T", msg)
 	}
 
-	log.Info("NewFrag received", "frag", frag)
+	log.Info("new frag received", "frag", frag)
 
 	// TODO: Call EngineAPI and pass the message to the EL
 
@@ -860,10 +866,12 @@ func NewFragHandler(ctx context.Context, from peer.ID, msg any) error {
 }
 
 func NewSealHandler(ctx context.Context, from peer.ID, msg any) error {
-	// TODO: This won't be needed when NewSeal is parsed
-	blockNumber := binary.BigEndian.Uint64(msg.([]byte)[:8])
+	seal, ok := msg.(eth.Seal)
+	if !ok {
+		return fmt.Errorf("expected topic validator to parse and validate data into a seal, but got %T", msg)
+	}
 
-	log.Info("NewSeal received", "block_number", blockNumber)
+	log.Info("new seal received", "seal", seal)
 
 	// TODO: Call EngineAPI and pass the message to the EL
 
