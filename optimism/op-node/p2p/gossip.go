@@ -671,7 +671,7 @@ func (p *publisher) PublishSealFrag(ctx context.Context, from peer.ID, signedSea
 	buf := new(bytes.Buffer)
 	signedSeal.MarshalSSZ(buf)
 
-	return p.newSealV0.topic.Publish(ctx, buf.Bytes())
+	return p.sealFragV0.topic.Publish(ctx, buf.Bytes())
 }
 
 func (p *publisher) Close() error {
