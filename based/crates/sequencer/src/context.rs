@@ -1,14 +1,10 @@
 use std::{fmt::Display, sync::Arc};
 
 use alloy_consensus::Header;
-use alloy_eips::eip4788::BEACON_ROOTS_ADDRESS;
 use alloy_rpc_types::engine::ForkchoiceState;
 use bop_common::{
-    communication::{
-        messages::{EvmBlockParams, NextBlockAttributes, SimulatorToSequencer, SimulatorToSequencerMsg},
-        SendersSpine, TrackedSenders,
-    },
-    db::{state::ensure_create2_deployer, DBFrag, State},
+    communication::{messages::EvmBlockParams, SendersSpine, TrackedSenders},
+    db::{state::ensure_create2_deployer, DBFrag},
     time::Instant,
     transaction::{SimulatedTx, Transaction},
 };
@@ -18,21 +14,21 @@ use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
     env::EvmEnv,
-    execute::{BlockExecutionError, BlockValidationError, ProviderError},
+    execute::{BlockExecutionError, ProviderError},
     system_calls::SystemCaller,
     ConfigureEvm, ConfigureEvmEnv, NextBlockEnvAttributes,
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{OpBlockExecutionError, OpEvmConfig};
 use reth_optimism_forks::{OpHardfork, OpHardforks};
-use revm::{
-    db::{states::bundle_state::BundleRetention, BundleState},
-    Database, DatabaseCommit, Evm,
-};
-use revm_primitives::{Address, BlockEnv, Bytes, EnvWithHandlerCfg, EvmState, B256};
+use revm::{Database, DatabaseCommit};
+use revm_primitives::{BlockEnv, Bytes, EnvWithHandlerCfg, B256};
 
 use crate::{
-    block_sync::BlockSync, simulator::simulate_tx_inner, sorting::{ActiveOrders, SortingData}, FragSequence, SequencerConfig
+    block_sync::BlockSync,
+    simulator::simulate_tx_inner,
+    sorting::{ActiveOrders, SortingData},
+    FragSequence, SequencerConfig,
 };
 
 pub struct SequencerContext<Db> {
@@ -44,7 +40,7 @@ pub struct SequencerContext<Db> {
     pub block_executor: BlockSync,
     pub parent_hash: B256,
     pub parent_header: Header,
-    pub fork_choice_state: ForkchoiceState,
+    pub _fork_choice_state: ForkchoiceState,
     pub payload_attributes: Box<OpPayloadAttributes>,
     pub system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
 }
@@ -61,7 +57,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             config,
             system_caller,
             tx_pool: Default::default(),
-            fork_choice_state: Default::default(),
+            _fork_choice_state: Default::default(),
             payload_attributes: Default::default(),
             parent_hash: Default::default(),
             parent_header: Default::default(),

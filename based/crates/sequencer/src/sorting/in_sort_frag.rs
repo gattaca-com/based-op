@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use alloy_primitives::U256;
 use bop_common::{db::DBSorting, transaction::SimulatedTx};
 

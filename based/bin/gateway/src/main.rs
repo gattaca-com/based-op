@@ -12,9 +12,8 @@ use bop_db::{init_database, DatabaseRead};
 use bop_rpc::start_rpc;
 use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
-    Sequencer, SequencerConfig,
+    Sequencer, SequencerConfig, Simulator,
 };
-use bop_sequencer::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
 use tracing::{error, info};

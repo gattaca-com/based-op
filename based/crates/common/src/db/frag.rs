@@ -3,16 +3,15 @@ use std::sync::Arc;
 use alloy_primitives::{map::HashMap, B256};
 use op_alloy_rpc_types::OpTransactionReceipt;
 use parking_lot::RwLock;
-use rand::RngCore;
 use reth_optimism_primitives::OpBlock;
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::{BundleState, CacheDB};
+use revm::db::BundleState;
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
     Account, AccountInfo, Address, Bytecode, EvmState, U256,
 };
 
-use super::{state_changes_to_bundle_state, DatabaseRead, Error, State};
+use super::{DatabaseRead, Error, State};
 use crate::transaction::SimulatedTx;
 
 /// DB That adds chunks on top of last on chain block
@@ -93,7 +92,7 @@ impl<Db: DatabaseRef> DBFrag<Db> {
 }
 
 impl<Db: DatabaseRead> DBFrag<Db> {
-    pub fn state_root(&self, state_changes: HashMap<Address, Account>) -> B256 {
+    pub fn state_root(&self, _state_changes: HashMap<Address, Account>) -> B256 {
         todo!();
         // let r = self.db.read();
         // let bundle_state = state_changes_to_bundle_state(&r.db, state_changes).expect("couldn't create bundle

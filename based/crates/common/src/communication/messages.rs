@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::{BlockHeader, Header};
+use alloy_consensus::BlockHeader;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
@@ -15,7 +15,6 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
-use revm::db::BundleState;
 use revm_primitives::{Address, Env, SpecId, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;

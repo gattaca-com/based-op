@@ -8,8 +8,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer,
-            SimulatorToSequencerMsg,
+            EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg,
         },
         SpineConnections, TrackedSenders,
     },
@@ -18,16 +17,11 @@ use bop_common::{
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use reth_evm::{
-    execute::{BlockExecutionError, BlockValidationError, ProviderError},
-    ConfigureEvm, ConfigureEvmEnv,
-};
-use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
+use reth_evm::{execute::ProviderError, ConfigureEvm};
+use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::OpHardfork;
-use revm::{
-    Database, DatabaseCommit, DatabaseRef, Evm,
-};
-use revm_primitives::{Address, EnvWithHandlerCfg, EvmState, U256};
+use revm::{Database, DatabaseRef, Evm};
+use revm_primitives::{Address, U256};
 
 /// Simulator thread.
 ///
@@ -101,8 +95,7 @@ pub fn simulate_tx_inner<'a>(
     let coinbase = evm.block().coinbase;
     // Cache some values pre-simulation.
     let start_balance = balance_from_db(evm.db_mut(), coinbase);
-    let deposit_nonce = (tx.is_deposit() && regolith_active)
-        .then(|| nonce_from_db(evm.db_mut(), tx.sender()));
+    let deposit_nonce = (tx.is_deposit() && regolith_active).then(|| nonce_from_db(evm.db_mut(), tx.sender()));
 
     // Prepare and execute the tx.
     tx.fill_tx_env(evm.tx_mut());
@@ -115,7 +108,7 @@ pub fn simulate_tx_inner<'a>(
     // Determine payment tx made to the coinbase.
     let end_balance = result_and_state.state.get(&coinbase).map(|a| a.info.balance).unwrap_or_default();
     let payment = end_balance.saturating_sub(start_balance);
-    
+
     if !allow_zero_payment && payment == U256::ZERO {
         return Err(SimulationError::ZeroPayment);
     }

@@ -5,24 +5,21 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
 };
-use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, EvmBlockParams, NextBlockAttributes,
-            SimulatorToSequencer, SimulatorToSequencerMsg,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
+            SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DatabaseWrite},
     p2p::{SealV0, VersionedMessage},
-    time::Duration,
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
@@ -33,13 +30,13 @@ use tracing::warn;
 
 pub mod block_sync;
 pub mod config;
-pub mod simulator;
 mod context;
+pub mod simulator;
 pub(crate) mod sorting;
 
-pub use simulator::Simulator;
 pub use config::SequencerConfig;
 use context::SequencerContext;
+pub use simulator::Simulator;
 use sorting::SortingData;
 
 pub fn payload_to_block(
@@ -415,7 +412,7 @@ where
         mut self,
         result: SimulatorToSequencer,
         data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db>,
+        _senders: &SendersSpine<Db>,
     ) -> Self {
         let (sender, nonce) = result.sender_info;
         match result.msg {

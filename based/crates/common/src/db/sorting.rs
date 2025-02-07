@@ -1,20 +1,18 @@
-use std::ops::Deref;
-
-use alloy_primitives::B256;
-use reth_trie_common::updates::TrieUpdates;
-use revm::db::{BundleState, CacheDB};
 use std::sync::Arc;
 
+use alloy_primitives::B256;
+use parking_lot::RwLock;
+use reth_trie_common::updates::TrieUpdates;
+use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
     AccountInfo, Address, Bytecode, EvmState, U256,
 };
-use parking_lot::RwLock;
 
 use super::{DBFrag, DatabaseRead, Error};
 
 /// DB That is used when sorting a new frag
-/// Thread safe 
+/// Thread safe
 #[derive(Clone, Debug)]
 pub struct DBSorting<Db> {
     db: Arc<RwLock<CacheDB<DBFrag<Db>>>>,

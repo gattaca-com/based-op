@@ -3,7 +3,6 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationResult},
         SpineConnections,
     },
-    db::DatabaseRead,
     time::Instant,
     transaction::SimulatedTx,
 };

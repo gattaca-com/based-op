@@ -120,7 +120,7 @@ impl TxPool {
     pub fn remove_mined_txs<'a, T: TransactionSenderInfo + 'a>(
         &mut self,
         mined_txs: impl Iterator<Item = &'a T>,
-        base_fee: u64,
+        _base_fee: u64,
     ) {
         // Clear all mined nonces from the pool
         for tx in mined_txs {
