@@ -53,21 +53,22 @@ impl BlockSync {
         let db_head = db.head_block_number()?;
         let block_number = block.header.number;
 
-        info!(db_head, block_number, "applying and committing block");
         debug_assert!(block_number == db_head + 1, "can only apply blocks sequentially");
 
         // Reorg check
-        if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {
-            if db_parent_hash != block.header.parent_hash {
-                warn!(
-                    "reorg detected at: {}. db_parent_hash: {db_parent_hash:?}, block_hash: {:?}",
-                    block.header.number,
-                    block.header.hash_slow()
-                );
+        let db_parent_hash = db.block_hash_ref(block.header.number.saturating_sub(1)).unwrap();
 
-                // TODO: re-wind the state to the last known good state and sync
-                panic!("reorg should be impossible on L2");
-            }
+        info!(db_head, block_number, %db_parent_hash, "applying and committing block");
+
+        if db_parent_hash != block.header.parent_hash {
+            warn!(
+                "reorg detected at: {}. db_parent_hash: {db_parent_hash:?}, block_hash: {:?}",
+                block.header.number,
+                block.header.hash_slow()
+            );
+
+            // TODO: re-wind the state to the last known good state and sync
+            panic!("reorg should be impossible on L2");
         }
 
         let (execution_output, trie_updates) = self.execute(block, db)?;

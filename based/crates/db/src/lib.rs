@@ -6,18 +6,17 @@ use std::{
 
 use parking_lot::RwLock;
 use reth_db::{
-    cursor::DbCursorRO,
     tables,
     transaction::{DbTx, DbTxMut},
-    Bytecodes, CanonicalHeaders, DatabaseEnv,
+    Bytecodes, DatabaseEnv,
 };
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
 use reth_provider::{
-    providers::ConsistentDbView, BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory,
-    StateWriter, TrieWriter,
+    providers::ConsistentDbView, BlockExecutionOutput, BlockHashReader, BlockNumReader, DatabaseProviderRO,
+    LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter,
 };
 use reth_storage_api::HashedPostStateProvider;
 use reth_trie::{StateRoot, TrieInput};
@@ -100,13 +99,19 @@ impl DatabaseRead for SequencerDB {
     }
 
     fn head_block_number(&self) -> Result<u64, Error> {
+        // let provider = self.provider()?;
+        // provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
         let provider = self.provider()?;
-        provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(0), |(num, _)| Ok(num))
+        let bn = provider.best_block_number()?;
+        Ok(bn)
     }
 
     fn head_block_hash(&self) -> Result<B256, Error> {
         let provider = self.provider()?;
-        provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(B256::ZERO), |(_, hash)| Ok(hash))
+        let block_number = self.head_block_number()?;
+        let hash = provider.block_hash(block_number)?.unwrap();
+        Ok(hash)
+        // provider.tx_ref().cursor_read::<CanonicalHeaders>()?.last()?.map_or(Ok(B256::ZERO), |(_, hash)| Ok(hash))
     }
 }
 
@@ -205,8 +210,12 @@ impl DatabaseRef for SequencerDB {
     }
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
-        let hash = self.provider()?.tx_ref().get::<CanonicalHeaders>(number).map_err(Error::ReadTransactionError)?;
-        Ok(hash.unwrap_or_default())
+        let hash = self
+            .provider()?
+            .block_hash(number)?
+            .ok_or(Error::Other(format!("Block hash not found for number: {}", number)))?;
+        //let hash = self.provider()?.tx_ref().get::<CanonicalHeaders>(number).map_err(Error::ReadTransactionError)?;
+        Ok(hash)
     }
 }
 

@@ -130,7 +130,7 @@ impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T,
         F: FnMut(T, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
-            info!("received {:.40}", format!("{:?}", m.data()));
+            trace!("received {:.40}", format!("{:?}", m.data()));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);
@@ -149,7 +149,7 @@ impl<T: std::fmt::Debug, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T,
         F: FnMut(InternalMessage<T>, &P),
     {
         if let Some(m) = self.receiver.try_receive() {
-            info!("received {:.40}", format!("{m:?}"));
+            trace!("received {:.40}", format!("{m:?}"));
             let ingestion_t: IngestionTime = (&m).into();
             let origin = *ingestion_t.internal();
             senders.set_ingestion_t(ingestion_t);

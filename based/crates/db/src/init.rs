@@ -1,6 +1,7 @@
 use std::{fs, path::Path, sync::Arc};
 
 use reth_db::{init_db, ClientVersion};
+use reth_db_common::init::init_genesis;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
@@ -37,6 +38,9 @@ pub fn init_database<P: AsRef<Path>>(
     let db = Arc::new(init_db(db_dir, db_args).map_err(|e| Error::DatabaseInitialisationError(e.to_string()))?);
 
     let factory = ProviderFactory::new(db, chain_spec, StaticFileProvider::read_write(static_files_dir)?);
+
+    init_genesis(&factory).expect("failed to init db");
+
     Ok(SequencerDB::new(factory, max_cached_accounts, max_cached_storages))
 }
 
