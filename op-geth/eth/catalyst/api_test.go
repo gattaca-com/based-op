@@ -1859,19 +1859,22 @@ func TestNewFragV0(t *testing.T) {
 	defer n.Close()
 
 	api := NewConsensusAPI(ethservice)
-	info := engine.SignedNewFrag{
-		Signature: engine.Bytes65{},
-		Frag: engine.NewFrag{
+	info := common.SignedNewFrag{
+		Signature: common.Bytes65{},
+		Frag: common.NewFrag{
 			BlockNumber: 10,
 			Seq:         0,
 			IsLast:      true,
-			Txs:         make([]engine.Data, 0),
+			Txs:         make([]common.Data, 0),
 			Version:     0,
 		},
 	}
-	err := api.NewFragV0(info)
+	status, err := api.NewFragV0(info)
 	if err != nil {
 		t.Fatalf("error creating new frag: %v", err)
+	}
+	if status != engine.VALID {
+		t.Fatalf("unexpected status: %v", status)
 	}
 }
 
@@ -1881,18 +1884,18 @@ func TestSealFragV0(t *testing.T) {
 	defer n.Close()
 
 	api := NewConsensusAPI(ethservice)
-	info := engine.SignedSeal{
-		Signature: engine.Bytes65{},
-		Seal: engine.Seal{
+	info := common.SignedSeal{
+		Signature: common.Bytes65{},
+		Seal: common.Seal{
 			TotalFrags:       1,
 			BlockNumber:      1,
 			GasUsed:          0,
 			GasLimit:         0,
-			ParentHash:       engine.Bytes32{},
-			TransactionsRoot: engine.Bytes32{},
-			ReceiptsRoot:     engine.Bytes32{},
-			StateRoot:        engine.Bytes32{},
-			BlockHash:        engine.Bytes32{},
+			ParentHash:       common.Bytes32{},
+			TransactionsRoot: common.Bytes32{},
+			ReceiptsRoot:     common.Bytes32{},
+			StateRoot:        common.Bytes32{},
+			BlockHash:        common.Bytes32{},
 		}}
 	err := api.SealFragV0(info)
 	if err != nil {
