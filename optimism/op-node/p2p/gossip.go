@@ -265,7 +265,7 @@ const (
 	NewFragV0 NewFragVersion = iota
 )
 
-type sealVersion int
+type SealFragVersion int
 
 const (
 	SealFragV0 sealVersion = iota
