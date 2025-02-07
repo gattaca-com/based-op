@@ -143,7 +143,6 @@ func (s *Driver) OnUnsafeL2Payload(ctx context.Context, envelope *eth.ExecutionP
 }
 
 func (s *Driver) OnNewFrag(ctx context.Context, frag *eth.SignedNewFrag) error {
-	log.Info("(s *Driver) OnNewFrag")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

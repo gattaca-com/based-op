@@ -3,7 +3,6 @@ package opnode
 import (
 	"context"
 
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ethereum-optimism/optimism/op-node/node"
@@ -39,7 +38,6 @@ func (n *FnTracer) OnPublishL2Payload(ctx context.Context, payload *eth.Executio
 }
 
 func (n *FnTracer) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) {
-	log.Info("(n *FnTracer) OnNewFrag")
 	if n.OnNewFragFn != nil {
 		n.OnNewFragFn(ctx, from, frag)
 	}
@@ -52,7 +50,6 @@ func (n *FnTracer) OnPublishNewFrag(ctx context.Context, from peer.ID, frag *eth
 }
 
 func (n *FnTracer) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedSeal) {
-	log.Info("(n *FnTracer) OnSeal")
 	if n.OnSealFn != nil {
 		n.OnSealFn(ctx, from, seal)
 	}

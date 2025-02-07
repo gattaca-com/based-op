@@ -272,7 +272,6 @@ const (
 )
 
 func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
-	log.Info("BuildNewFragValidator")
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		// TODO: Replace workaround with actual deserialization
 		dec := gob.NewDecoder(bytes.NewReader(message.GetData()))
@@ -288,8 +287,7 @@ func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRunt
 	}
 }
 
-func BuildSealFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, sealFragVersion sealVersion) pubsub.ValidatorEx {
-	log.Info("BuildSealFragValidator")
+func BuildSealFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, sealFragVersion SealFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		// TODO: Replace workaround with actual deserialization
 		dec := gob.NewDecoder(bytes.NewReader(message.GetData()))
@@ -666,8 +664,6 @@ func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.Executio
 }
 
 func (p *publisher) PublishNewFrag(ctx context.Context, from peer.ID, signedFrag *eth.SignedNewFrag) error {
-	log.Info("PublishNewFrag")
-
 	// TODO: Replace workaround with actual serialization
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -680,8 +676,6 @@ func (p *publisher) PublishNewFrag(ctx context.Context, from peer.ID, signedFrag
 }
 
 func (p *publisher) PublishSealFrag(ctx context.Context, from peer.ID, signedSeal *eth.SignedSeal) error {
-	log.Info("PublishSealFrag")
-
 	// TODO: Replace workaround with actual serialization
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -757,7 +751,6 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 }
 
 func newNewFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log log.Logger, gossipIn GossipIn, validator pubsub.ValidatorEx) (*newFragTopic, error) {
-	log.Info("newNewFragTopic")
 	err := ps.RegisterTopicValidator(topicId,
 		validator,
 		pubsub.WithValidatorTimeout(3*time.Second),
@@ -875,7 +868,6 @@ type TopicSubscriber func(ctx context.Context, sub *pubsub.Subscription)
 type MessageHandler func(ctx context.Context, from peer.ID, msg any) error
 
 func NewFragHandler(onNewFrag func(ctx context.Context, from peer.ID, msg *eth.SignedNewFrag) error) MessageHandler {
-	log.Info("NewFragHandler")
 	return func(ctx context.Context, from peer.ID, msg any) error {
 		frag, ok := msg.(*eth.SignedNewFrag)
 		if !ok {
@@ -886,7 +878,6 @@ func NewFragHandler(onNewFrag func(ctx context.Context, from peer.ID, msg *eth.S
 }
 
 func SealFragHandler(onSealFrag func(ctx context.Context, from peer.ID, msg *eth.SignedSeal) error) MessageHandler {
-	log.Info("SealFragHandler")
 	return func(ctx context.Context, from peer.ID, msg any) error {
 		seal, ok := msg.(*eth.SignedSeal)
 		if !ok {
@@ -907,7 +898,6 @@ func BlocksHandler(onBlock func(ctx context.Context, from peer.ID, msg *eth.Exec
 }
 
 func MakeSubscriber(log log.Logger, msgHandler MessageHandler) TopicSubscriber {
-	log.Info("MakeSubscriber")
 	return func(ctx context.Context, sub *pubsub.Subscription) {
 		topicLog := log.New("topic", sub.Topic())
 		for {

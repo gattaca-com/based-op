@@ -1342,7 +1342,6 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 
 func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) error {
 	// TODO: Perform validations
-	log.Info("(api *ConsensusAPI) NewFragV0")
 	return api.newFragV0(frag)
 }
 
@@ -1354,7 +1353,6 @@ func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) error {
 
 func (api *ConsensusAPI) SealFragV0(frag engine.SignedSeal) error {
 	// TODO: Perform validations
-	log.Info("(api *ConsensusAPI) SealFragV0")
 	return api.sealFragV0(frag)
 }
 

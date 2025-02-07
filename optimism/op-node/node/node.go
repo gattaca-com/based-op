@@ -649,7 +649,6 @@ func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *
 }
 
 func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) error {
-	log.Info("(n *OpNode) OnNewFrag")
 	// FIXME: Uncomment this
 	// ignore if it's from ourselves
 	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
@@ -672,8 +671,6 @@ func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNe
 }
 
 func (n *OpNode) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedSeal) error {
-	log.Info("(n *OpNode) OnSeal")
-
 	// FIXME: Uncomment this
 	// // ignore if it's from ourselves
 	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
