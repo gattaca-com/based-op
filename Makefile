@@ -56,3 +56,49 @@ clean: ## 🧹 Clean
 	kurtosis enclave rm  based-op --force
 
 restart: clean run ## 🔄 Restart
+
+# Testing
+
+frag:
+	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
+	--data '{ \
+		"jsonrpc": "2.0", \
+		"id": 1, \
+		"method": "based_newFrag", \
+		"params": [ \
+			{ \
+				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
+				"frag": { \
+					"blockNumber": 2, \
+					"seq": 1, \
+					"isLast": false, \
+					"txs": [], \
+					"version": 0 \
+				} \
+			} \
+		] \
+	}'
+
+seal:
+	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
+	--data '{ \
+		"jsonrpc": "2.0", \
+		"id": 1, \
+		"method": "based_sealFrag", \
+		"params": [ \
+			{ \
+				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
+				"seal": { \
+					"totalFrags": 2, \
+					"blockNumber": 2, \
+					"gasUsed": 0, \
+					"gasLimit": 0, \
+					"parentHash": "0x1234567890123456789012345678901234567890123456789012345678901234", \
+					"transactionsRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
+					"receiptsRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
+					"stateRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
+					"blockHash": "0x1234567890123456789012345678901234567890123456789012345678901234" \
+				} \
+			} \
+		] \
+	}'
