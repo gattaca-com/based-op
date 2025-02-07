@@ -109,15 +109,15 @@ impl<Db: DatabaseRead> FragSequence<Db> {
 impl<Db: DatabaseRef> FragSequence<Db> {
     /// Creates a new frag, all subsequent frags will be built on top of this one
     pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragV0 {
-        todo!();
-        self.gas_remaining -= in_sort.gas_used;
-        self.payment += in_sort.payment;
+        // todo!();
+        // self.gas_remaining -= in_sort.gas_used;
+        // self.payment += in_sort.payment;
 
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
 
-        self.db.commit(in_sort.txs.iter());
-        self.txs.extend(in_sort.txs);
-        self.next_seq += 1;
+        // self.db.commit(in_sort.txs.iter());
+        // self.txs.extend(in_sort.txs);
+        // self.next_seq += 1;
 
         msg
     }
@@ -135,6 +135,7 @@ impl<Db> FragSequence<Db> {
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
+        self.db.db.write().merge_transitions(BundleRetention::Reverts);
         let bundle = self.db.db.write().take_bundle();
         // self.db.commit_flat_changes(state_changes);
         // self.db.merge_transitions(BundleRetention::Reverts);
