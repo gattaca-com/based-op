@@ -32,9 +32,7 @@ use revm::{
 use revm_primitives::{Address, BlockEnv, Bytes, EnvWithHandlerCfg, EvmState, B256};
 
 use crate::{
-    block_sync::BlockSync,
-    sorting::{ActiveOrders, SortingData},
-    FragSequence, SequencerConfig,
+    block_sync::BlockSync, simulator::simulate_tx_inner, sorting::{ActiveOrders, SortingData}, FragSequence, SequencerConfig
 };
 
 pub struct SequencerContext<Db> {
@@ -170,37 +168,19 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
 
         let forced_inclusion_txs = self.payload_attributes.transactions.as_ref().unwrap();
-        let block_coinbase = evm.block().coinbase;
 
-        let mut tx_results = vec![];
+        let mut tx_results = Vec::with_capacity(forced_inclusion_txs.len());
 
         // Apply must include txs.
         for tx in forced_inclusion_txs.iter() {
-            let tx = Transaction::decode(tx.clone()).unwrap();
-            // Cache some values pre-simulation.
-            let start_balance =
-                evm.db_mut().basic(block_coinbase).ok().flatten().map(|a| a.balance).unwrap_or_default();
-            let depositor_nonce = (tx.is_deposit() && regolith_active)
-                .then(|| evm.db_mut().basic(tx.sender()).ok().flatten().map(|a| a.nonce).unwrap_or_default());
-
-            tx.fill_tx_env(evm.tx_mut());
+            let tx = Arc::new(Transaction::decode(tx.clone()).unwrap());
 
             // Execute transaction.
-            let hash = tx.tx_hash();
-            let result_and_state = evm.transact().map_err(move |err| {
-                let new_err = err.map_db_err(|e| e.into());
-                BlockValidationError::EVM { hash, error: Box::new(new_err) }
-            })?;
+            let simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true).unwrap();
 
-            self.system_caller.on_state(&result_and_state.state);
-            evm.db_mut().commit(result_and_state.state.clone());
-            tx_results.push(SimulatedTx::new(
-                Arc::new(tx),
-                result_and_state,
-                start_balance,
-                block_coinbase,
-                depositor_nonce,
-            ));
+            self.system_caller.on_state(&simulated_tx.result_and_state.state);
+            evm.db_mut().commit(simulated_tx.result_and_state.state.clone());
+            tx_results.push(simulated_tx);
         }
         Ok(tx_results)
     }

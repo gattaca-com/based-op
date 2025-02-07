@@ -26,14 +26,9 @@ impl SimulatedTx {
     pub fn new(
         tx: Arc<Transaction>,
         result_and_state: ResultAndState,
-        start_balance: U256,
-        coinbase: Address,
+        payment: U256,
         deposit_nonce: Option<u64>,
     ) -> Self {
-        // Determing payment
-        let end_balance = result_and_state.state.get(&coinbase).map(|a| a.info.balance).unwrap_or_default();
-        let payment = end_balance.saturating_sub(start_balance);
-
         Self { tx, result_and_state, payment, deposit_nonce }
     }
 

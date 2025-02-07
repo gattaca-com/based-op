@@ -33,9 +33,11 @@ use tracing::warn;
 
 pub mod block_sync;
 pub mod config;
+pub mod simulator;
 mod context;
 pub(crate) mod sorting;
 
+pub use simulator::Simulator;
 pub use config::SequencerConfig;
 use context::SequencerContext;
 use sorting::SortingData;
