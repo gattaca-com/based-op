@@ -8,9 +8,8 @@ use tracing::{info, span, warn, Level};
 
 use crate::{
     communication::SpineConnections,
-    db::DatabaseRead,
     time::{vsync, Duration, Timer},
-    utils::last_part_of_typename,
+    utils::last_part_of_typename_without_generic,
 };
 
 #[derive(Copy, Clone, Default)]
@@ -43,11 +42,10 @@ impl ActorConfig {
     }
 }
 
-pub trait Actor<Db: DatabaseRead>: Sized {
+pub trait Actor<Db>: Sized {
     const CORE_AFFINITY: Option<usize> = None;
-
     fn name(&self) -> String {
-        last_part_of_typename::<Self>().to_string()
+        last_part_of_typename_without_generic::<Self>().to_string()
     }
 
     fn loop_body(&mut self, _connections: &mut SpineConnections<Db>) {}
@@ -68,14 +66,13 @@ pub trait Actor<Db: DatabaseRead>: Sized {
 
     fn run(mut self, mut connections: SpineConnections<Db>, actor_config: ActorConfig) {
         let name = self.name();
-
-        let _s = span!(Level::INFO, "", id = name).entered();
+        let _s = span!(Level::INFO, "", actor = name).entered();
 
         actor_config.maybe_bind_to_core(Self::CORE_AFFINITY);
 
-        self._on_init(&mut connections);
-
         let mut loop_timer = Timer::new(format!("{}-loop", name));
+
+        self._on_init(&mut connections);
 
         let term = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))

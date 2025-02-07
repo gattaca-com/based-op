@@ -41,6 +41,8 @@ type ExecEngine interface {
 	ForkchoiceUpdate(ctx context.Context, state *eth.ForkchoiceState, attr *eth.PayloadAttributes) (*eth.ForkchoiceUpdatedResult, error)
 	NewPayload(ctx context.Context, payload *eth.ExecutionPayload, parentBeaconBlockRoot *common.Hash) (*eth.PayloadStatusV1, error)
 	L2BlockRefByLabel(ctx context.Context, label eth.BlockLabel) (eth.L2BlockRef, error)
+	NewFrag(ctx context.Context, frag *eth.SignedNewFrag) (*string, error)
+	SealFrag(ctx context.Context, seal *eth.SignedSeal) (*string, error)
 }
 
 type EngineController struct {

@@ -103,6 +103,7 @@ reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = [
     "optimism",
 ] }
 reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
+reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
 
 # revm
 revm-primitives = { version = "15.1.0", features = [

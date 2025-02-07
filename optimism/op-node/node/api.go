@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/node/safedb"
+	"github.com/ethereum-optimism/optimism/op-node/p2p"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/version"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -180,4 +181,44 @@ func (n *nodeAPI) Version(ctx context.Context) (string, error) {
 	recordDur := n.m.RecordRPCServerRequest("optimism_version")
 	defer recordDur()
 	return version.Version + "-" + version.Meta, nil
+}
+
+type basedAPI struct {
+	p2p     p2p.Node
+	log     log.Logger
+	metrics metrics.RPCMetricer
+}
+
+func NewBasedAPI(node p2p.Node, log log.Logger, metrics metrics.RPCMetricer) *basedAPI {
+	return &basedAPI{
+		p2p:     node,
+		log:     log,
+		metrics: metrics,
+	}
+}
+
+func (n *basedAPI) NewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) (string, error) {
+	recordDur := n.metrics.RecordRPCServerRequest("based_newFrag")
+	defer recordDur()
+
+	n.log.Info("NewFrag RPC request received")
+
+	if err := n.p2p.GossipOut().PublishNewFrag(ctx, n.p2p.Host().ID(), &signedFrag); err != nil {
+		return "", fmt.Errorf("failed to publish new frag: %w", err)
+	}
+
+	return "OK", nil
+}
+
+func (n *basedAPI) SealFrag(ctx context.Context, signedSeal eth.SignedSeal) (string, error) {
+	recordDur := n.metrics.RecordRPCServerRequest("based_sealFrag")
+	defer recordDur()
+
+	n.log.Info("SealFrag RPC request received", "seal", signedSeal.Seal)
+
+	if err := n.p2p.GossipOut().PublishSealFrag(ctx, n.p2p.Host().ID(), &signedSeal); err != nil {
+		return "", fmt.Errorf("failed to publish new seal: %w", err)
+	}
+
+	return "OK", nil
 }

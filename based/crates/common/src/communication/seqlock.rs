@@ -1,6 +1,7 @@
 use std::{
     cell::UnsafeCell,
     fmt,
+    mem::MaybeUninit,
     sync::atomic::{compiler_fence, AtomicU32, Ordering},
 };
 
@@ -52,6 +53,24 @@ impl<T: Clone> Seqlock<T> {
     }
 
     #[inline(never)]
+    pub fn read_with_version_clone(&self, expected_version: u32) -> Result<T, ReadError> {
+        let v1 = self.version.load(Ordering::Acquire);
+        if v1 < expected_version {
+            return Err(ReadError::Empty);
+        }
+
+        compiler_fence(Ordering::AcqRel);
+        let result = unsafe { MaybeUninit::new((*self.data.get()).clone()) };
+        compiler_fence(Ordering::AcqRel);
+        let v2 = self.version.load(Ordering::Acquire);
+        if v2 == expected_version {
+            Ok(unsafe { result.assume_init() })
+        } else {
+            Err(ReadError::SpedPast)
+        }
+    }
+
+    #[inline(never)]
     pub fn read(&self, result: &mut T) {
         loop {
             let v1 = self.version.load(Ordering::Acquire);
@@ -78,29 +97,23 @@ impl<T: Clone> Seqlock<T> {
     }
 
     #[inline(never)]
-    pub fn write_lock<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut T) -> R,
-    {
+    pub fn write(&self, val: &T) {
         // Increment the sequence number. At this point, the number will be odd,
         // which will force readers to spin until we finish writing.
         let v = self.version.fetch_add(1, Ordering::Release);
         compiler_fence(Ordering::AcqRel);
+        if v != 0 {
+            unsafe { *self.data.get() = val.clone() };
+        } else {
+            // first time we write, shouldn't drop this value
+            unsafe { std::ptr::write(self.data.get(), val.clone()) };
+        }
         // Make sure any writes to the data happen after incrementing the
         // sequence number. What we ideally want is a store(Acquire), but the
         // Acquire ordering is not available on stores.
-        let o = f(unsafe { &mut *self.data.get() });
         compiler_fence(Ordering::AcqRel);
         // unsafe {asm!("sti");}
         self.version.store(v.wrapping_add(2), Ordering::Release);
-        o
-    }
-
-    #[inline]
-    pub fn write(&self, val: &T) {
-        self.write_lock(|data| {
-            *data = val.clone();
-        });
     }
 
     #[inline(never)]
@@ -287,69 +300,5 @@ mod tests {
         lock.set_version(1);
         lock.write_unpoison(&1);
         assert_eq!(lock.version(), 2);
-    }
-
-    fn consumer_vec_loop_data_consistency(lock: &Seqlock<Vec<usize>>, done: &AtomicBool) {
-        let mut msg = vec![0; 10];
-        let mut got_larger = false;
-        let mut got_empty = false;
-        let mut got_110 = false;
-        while !done.load(Ordering::Relaxed) {
-            lock.read(&mut msg);
-            if msg.is_empty() {
-                got_empty = true;
-                continue;
-            }
-            if msg.len() == 110 {
-                got_110 = true;
-                assert_eq!(msg[0], 110);
-            }
-            let first = msg[0];
-            if first != 0 {
-                got_larger = true;
-            }
-            for &i in &msg {
-                assert_eq!(first, i);
-            }
-        }
-        assert!(got_larger);
-        assert!(got_empty);
-        assert!(got_110);
-    }
-    fn producer_vec_loop(lock: &Seqlock<Vec<usize>>, done: &AtomicBool, multi: bool) {
-        let curt = Instant::now();
-        let mut count = 0;
-        let mut msg = vec![0; 100];
-        while curt.elapsed() < Duration::from_secs(1) {
-            msg.fill(count);
-            if multi {
-                lock.write_multi(&msg);
-            } else {
-                lock.write(&msg);
-            }
-            count = count.wrapping_add(1);
-        }
-        lock.write_lock(|v| v.fill(110));
-        for _ in 0..10 {
-            lock.write_lock(|v| v.push(110));
-        }
-        std::thread::sleep(std::time::Duration::from_secs(1));
-
-        lock.write_lock(|v| v.clear());
-        done.store(true, Ordering::Relaxed);
-    }
-
-    #[test]
-    fn read_vec_data_consistency_test() {
-        let lock = Seqlock::new(vec![0; 10]);
-        let done = AtomicBool::new(false);
-        std::thread::scope(|s| {
-            s.spawn(|| {
-                consumer_vec_loop_data_consistency(&lock, &done);
-            });
-            s.spawn(|| {
-                producer_vec_loop(&lock, &done, false);
-            });
-        });
     }
 }

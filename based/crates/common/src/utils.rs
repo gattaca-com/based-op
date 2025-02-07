@@ -153,3 +153,21 @@ pub fn last_part_of_typename<T>() -> &'static str {
         full_name
     }
 }
+
+pub fn last_part_of_typename_without_generic<T>() -> &'static str {
+    let name = strip_namespace(std::any::type_name::<T>());
+    if let Some(id) = name.find('<') {
+        &name[..id]
+    } else {
+        name
+    }
+}
+
+pub fn typename_no_generics<T>() -> &'static str {
+    let name = strip_namespace(std::any::type_name::<T>());
+    if let Some(last) = name.find('<') {
+        &name[..last]
+    } else {
+        name
+    }
+}

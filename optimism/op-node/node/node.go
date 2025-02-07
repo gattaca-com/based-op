@@ -441,6 +441,10 @@ func (n *OpNode) initRPCServer(cfg *Config) error {
 		server.EnableAdminAPI(NewAdminAPI(n.l2Driver, n.metrics, n.log))
 		n.log.Info("Admin RPC enabled")
 	}
+	if cfg.RPC.EnableBased {
+		server.EnableBasedAPI(NewBasedAPI(n.p2pNode, n.log, n.metrics))
+		n.log.Info("Based RPC enabled")
+	}
 	n.log.Info("Starting JSON-RPC server")
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("unable to start RPC server: %w", err)
@@ -592,6 +596,36 @@ func (n *OpNode) PublishL2Payload(ctx context.Context, envelope *eth.ExecutionPa
 	return nil
 }
 
+func (n *OpNode) PublishNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) error {
+	n.tracer.OnPublishNewFrag(ctx, from, frag)
+
+	// publish to p2p, if we are running p2p at all
+	if n.p2pEnabled() {
+		if n.p2pSigner == nil {
+			return fmt.Errorf("node has no p2p signer, frag", frag, "cannot be published")
+		}
+		n.log.Info("Publishing new frag on p2p", "frag", frag)
+		return n.p2pNode.GossipOut().PublishNewFrag(ctx, from, frag)
+	}
+	// if p2p is not enabled then we just don't publish the frag
+	return nil
+}
+
+func (n *OpNode) PublishSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedSeal) error {
+	n.tracer.OnPublishSealFrag(ctx, from, seal)
+
+	// publish to p2p, if we are running p2p at all
+	if n.p2pEnabled() {
+		if n.p2pSigner == nil {
+			return fmt.Errorf("node has no p2p signer, seal", seal, "cannot be published")
+		}
+		n.log.Info("Publishing seal on p2p", "seal", seal)
+		return n.p2pNode.GossipOut().PublishSealFrag(ctx, from, seal)
+	}
+	// if p2p is not enabled then we just don't publish the seal
+	return nil
+}
+
 func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *eth.ExecutionPayloadEnvelope) error {
 	// ignore if it's from ourselves
 	if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
@@ -609,6 +643,50 @@ func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *
 
 	if err := n.l2Driver.OnUnsafeL2Payload(ctx, envelope); err != nil {
 		n.log.Warn("failed to notify engine driver of new L2 payload", "err", err, "id", envelope.ExecutionPayload.ID())
+	}
+
+	return nil
+}
+
+func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) error {
+	// FIXME: Uncomment this
+	// ignore if it's from ourselves
+	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
+	// 	return nil
+	// }
+
+	n.tracer.OnNewFrag(ctx, from, frag)
+
+	n.log.Info("Received new fragment", "frag", frag)
+
+	// Pass on the event to the L2 Engine
+	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+
+	if err := n.l2Driver.OnNewFrag(ctx, frag); err != nil {
+		n.log.Warn("failed to notify engine driver of new fragment", frag, "err", err)
+	}
+
+	return nil
+}
+
+func (n *OpNode) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedSeal) error {
+	// FIXME: Uncomment this
+	// // ignore if it's from ourselves
+	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
+	// 	return nil
+	// }
+
+	n.tracer.OnSealFrag(ctx, from, seal)
+
+	n.log.Info("Received new seal", "seal", seal)
+
+	// Pass on the event to the L2 Engine
+	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+
+	if err := n.l2Driver.OnSealFrag(ctx, seal); err != nil {
+		n.log.Warn("failed to notify engine driver of new seal", seal, "err", err)
 	}
 
 	return nil
