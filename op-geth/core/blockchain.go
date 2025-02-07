@@ -634,6 +634,10 @@ func (bc *BlockChain) SetSafe(header *types.Header) {
 	}
 }
 
+func (bc *BlockChain) SetCurrentUnsealedBlock(block *types.UnsealedBlock) {
+	bc.currentUnsealedBlock.Store(block)
+}
+
 // rewindHashHead implements the logic of rewindHead in the context of hash scheme.
 func (bc *BlockChain) rewindHashHead(head *types.Header, root common.Hash) (*types.Header, uint64) {
 	var (
