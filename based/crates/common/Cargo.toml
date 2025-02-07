@@ -28,7 +28,7 @@ op-alloy-network.workspace = true
 #revm
 revm-primitives.workspace = true
 revm.workspace = true
-
+revm-interpreter.workspace =  true
 
 reth-cli.workspace = true
 
