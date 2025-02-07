@@ -235,10 +235,11 @@ type BlockChain struct {
 	// Readers don't need to take it, they can just read the database.
 	chainmu *syncx.ClosableMutex
 
-	currentBlock      atomic.Pointer[types.Header] // Current head of the chain
-	currentSnapBlock  atomic.Pointer[types.Header] // Current head of snap-sync
-	currentFinalBlock atomic.Pointer[types.Header] // Latest (consensus) finalized block
-	currentSafeBlock  atomic.Pointer[types.Header] // Latest (consensus) safe block
+	currentBlock         atomic.Pointer[types.Header]        // Current head of the chain
+	currentSnapBlock     atomic.Pointer[types.Header]        // Current head of snap-sync
+	currentFinalBlock    atomic.Pointer[types.Header]        // Latest (consensus) finalized block
+	currentSafeBlock     atomic.Pointer[types.Header]        // Latest (consensus) safe block
+	currentUnsealedBlock atomic.Pointer[types.UnsealedBlock] // Current unsealed block
 
 	bodyCache     *lru.Cache[common.Hash, *types.Body]
 	bodyRLPCache  *lru.Cache[common.Hash, rlp.RawValue]
@@ -327,6 +328,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	bc.currentSnapBlock.Store(nil)
 	bc.currentFinalBlock.Store(nil)
 	bc.currentSafeBlock.Store(nil)
+	bc.currentUnsealedBlock.Store(nil)
 
 	// Update chain info data metrics
 	chainInfoGauge.Update(metrics.GaugeInfoValue{"chain_id": bc.chainConfig.ChainID.String()})
