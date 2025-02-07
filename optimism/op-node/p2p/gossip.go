@@ -268,7 +268,7 @@ const (
 type SealFragVersion int
 
 const (
-	SealFragV0 sealVersion = iota
+	SealFragV0 SealFragVersion = iota
 )
 
 func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
