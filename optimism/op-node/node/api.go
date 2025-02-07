@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/node/safedb"
@@ -197,11 +198,24 @@ func NewBasedAPI(node p2p.Node, log log.Logger, metrics metrics.RPCMetricer) *ba
 	}
 }
 
+func verifySignature(log log.Logger, signatureBytes []byte, messageBytes []byte) error {
+	_, err := crypto.SigToPub(messageBytes, signatureBytes)
+	if err != nil {
+		log.Warn("invalid signature", "err", err)
+		return fmt.Errorf("Invalid signature")
+	}
+
+	return nil
+}
+
 func (n *basedAPI) NewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) (string, error) {
 	recordDur := n.metrics.RecordRPCServerRequest("based_newFrag")
 	defer recordDur()
 
 	n.log.Info("NewFrag RPC request received")
+
+	root := signedFrag.Frag.Root()
+	verifySignature(n.log, signedFrag.Signature[:], root[:])
 
 	if err := n.p2p.GossipOut().PublishNewFrag(ctx, n.p2p.Host().ID(), &signedFrag); err != nil {
 		return "", fmt.Errorf("failed to publish new frag: %w", err)
@@ -215,6 +229,9 @@ func (n *basedAPI) SealFrag(ctx context.Context, signedSeal eth.SignedSeal) (str
 	defer recordDur()
 
 	n.log.Info("SealFrag RPC request received", "seal", signedSeal.Seal)
+
+	root := signedSeal.Seal.Root()
+	verifySignature(n.log, signedSeal.Signature[:], root[:])
 
 	if err := n.p2p.GossipOut().PublishSealFrag(ctx, n.p2p.Host().ID(), &signedSeal); err != nil {
 		return "", fmt.Errorf("failed to publish new seal: %w", err)
