@@ -43,9 +43,7 @@ impl BlockFetcher {
 impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
     fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {
         let head_block_number = self.executor.block_on(async {
-            let last_block =
-                self.provider.get_block_number().await.expect("failed to fetch last block, is the RPC url correct?");
-            last_block
+            self.provider.get_block_number().await.expect("failed to fetch last block, is the RPC url correct?")
         });
 
         self.next_block = head_block_number;
