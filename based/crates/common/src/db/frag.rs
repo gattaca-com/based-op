@@ -98,9 +98,10 @@ impl<Db: DatabaseRef > DBFrag<Db> {
 
 impl<Db: DatabaseRead> DBFrag<Db> {
     pub fn state_root(&self, state_changes: HashMap<Address, Account>) -> B256 {
-        let r = self.db.read();
-        let bundle_state = state_changes_to_bundle_state(&r.db, state_changes).expect("couldn't create bundle state");
-        self.calculate_state_root(&bundle_state).expect("couldn't calculate state root").0
+        todo!();
+        // let r = self.db.read();
+        // let bundle_state = state_changes_to_bundle_state(&r.db, state_changes).expect("couldn't create bundle state");
+        // self.calculate_state_root(&bundle_state).expect("couldn't calculate state root").0
     }
 }
 
@@ -146,7 +147,8 @@ impl<Db: DatabaseRef> Database for DBFrag<Db> {
 
 impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
-        self.db.read().calculate_state_root(bundle_state)
+        todo!();
+        // self.db.read().calculate_state_root(bundle_state)
     }
 
     fn head_block_number(&self) -> Result<u64, Error> {
@@ -154,14 +156,16 @@ impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     }
 
     fn head_block_hash(&self) -> Result<B256, Error> {
-        self.db.read().head_block_hash()
+        todo!();
+        // self.db.read().head_block_hash()
     }
 }
 
-impl<Db: DatabaseRead> From<Db> for DBFrag<Db> {
+impl<Db: DatabaseRead + Database> From<Db> for DBFrag<Db> {
     fn from(value: Db) -> Self {
         let curr_block_number = value.head_block_number().unwrap() + 1;
-        Self { db: Arc::new(RwLock::new(CacheDB::new(value))), state_id: rand::random(), curr_block_number }
+        let state = State::builder().with_database(value).with_bundle_update().without_state_clear().build();
+        Self { db: Arc::new(RwLock::new(state)), state_id: rand::random(), curr_block_number }
     }
 }
 

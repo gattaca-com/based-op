@@ -350,18 +350,8 @@ pub type SimulationResult<T> = Result<T, SimulationError>;
 
 #[derive(Clone, Debug)]
 pub struct TopOfBlockResult {
-    pub state: BundleState,
-    pub forced_inclusion_txs: Vec<SimulatedTx>,
-    pub changes: Vec<EvmState>,
 }
 impl TopOfBlockResult {
-    pub fn gas_used(&self) -> u64 {
-        self.forced_inclusion_txs.iter().map(|t| t.gas_used()).sum()
-    }
-
-    pub fn payment(&self) -> U256 {
-        self.forced_inclusion_txs.iter().map(|t| t.payment).sum()
-    }
 }
 
 #[derive(Debug, AsRefStr)]

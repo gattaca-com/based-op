@@ -6,7 +6,7 @@ use alloy_primitives::{Bloom, U256};
 use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
     communication::messages::TopOfBlockResult,
-    db::{DBFrag, DBSorting},
+    db::{flatten_state_changes, DBFrag, DBSorting},
     p2p::{FragV0, SealV0},
     transaction::SimulatedTx,
 };

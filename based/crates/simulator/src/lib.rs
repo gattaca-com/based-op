@@ -13,7 +13,7 @@ use bop_common::{
         },
         SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{DBFrag, DBSorting, DatabaseRead},
+    db::{DBFrag, DBSorting, DatabaseRead, State},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
@@ -29,7 +29,7 @@ use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
 use reth_optimism_forks::OpHardfork;
 use revm::{
-    db::{states::bundle_state::BundleRetention, BundleState, CacheDB, State},
+    db::{states::bundle_state::BundleRetention, BundleState, CacheDB},
     Database, DatabaseCommit, DatabaseRef, Evm,
 };
 use revm_primitives::{Address, EnvWithHandlerCfg, EvmState};
@@ -39,10 +39,10 @@ use revm_primitives::{Address, EnvWithHandlerCfg, EvmState};
 /// TODO: need to impl fn to use system caller and return changes for that.
 pub struct Simulator<'a, Db: DatabaseRef> {
     /// Top of frag evm.
-    evm_tof: Evm<'a, (), CacheDB<DBFrag<Db>>>,
+    evm_tof: Evm<'a, (), State<DBFrag<Db>>>,
 
     /// Evm on top of partially built frag
-    evm_sorting: Evm<'a, (), CacheDB<Arc<DBSorting<Db>>>>,
+    evm_sorting: Evm<'a, (), State<Arc<DBSorting<Db>>>>,
 
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,

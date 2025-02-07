@@ -140,7 +140,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             .active_at_timestamp(u64::try_from(env_with_handler_cfg.block.timestamp).unwrap());
 
         // Configure new EVM to apply pre-execution and must include txs.
-        let mut state = State::builder().with_database(db).with_bundle_update().without_state_clear().build();
+        let mut state = ;
         let mut evm = evm_config.evm_with_env(&mut state, env_with_handler_cfg);
 
         // Apply pre-execution changes.
