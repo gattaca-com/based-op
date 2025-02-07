@@ -9,7 +9,7 @@ type SealFragProcessEvent struct {
 }
 
 func (ev SealFragProcessEvent) String() string {
-	return "new-frag-process"
+	return "seal-frag-process"
 }
 
 func (eq *EngDeriver) onSealFragProcess(ev SealFragProcessEvent) {
