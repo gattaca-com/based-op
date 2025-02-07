@@ -560,13 +560,8 @@ func (f *NewFrag) SizeSSZ(siz *ssz.Sizer, fixed bool) uint32 {
 		return size
 	}
 
-	// Dynamic section of the size
-	txs := make([][]byte, len(f.Txs))
-	for i, tx := range f.Txs {
-		txs[i] = []byte(tx)
-	}
-	size += ssz.SizeSliceOfDynamicBytes(siz, txs)
-
+	// Variable size section
+	size += ssz.SizeSliceOfDynamicBytes(siz, f.Txs)
 	return size
 }
 
@@ -578,14 +573,10 @@ func (f *NewFrag) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineUint64(codec, &f.BlockNumber)
 	ssz.DefineUint64(codec, &f.Seq)
 	ssz.DefineBool(codec, &f.IsLast)
-	txs := make([][]byte, len(f.Txs))
-	for i, tx := range f.Txs {
-		txs[i] = []byte(tx)
-	}
-	ssz.DefineSliceOfDynamicBytesOffset(codec, &txs, MaxTxAmount, MaxTxsSize)
+	ssz.DefineSliceOfDynamicBytesOffset(codec, &f.Txs, MaxTxAmount, MaxTxsSize)
 
 	// Variable size section
-	ssz.DefineSliceOfDynamicBytesContent(codec, &txs, MaxTxAmount, MaxTxsSize)
+	ssz.DefineSliceOfDynamicBytesContent(codec, &f.Txs, MaxTxAmount, MaxTxsSize)
 }
 
 func (f *NewFrag) Root() Bytes32 {

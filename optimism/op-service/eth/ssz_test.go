@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -499,7 +498,7 @@ func TestMarshalUnmarshalNewFrag(t *testing.T) {
 		BlockNumber: 7,
 		Seq:         3,
 		IsLast:      false,
-		Txs: []hexutil.Bytes{
+		Txs: [][]byte{
 			{0x01, 0x02, 0x03},
 			{0x04, 0x05, 0x06, 0x07},
 		},
@@ -529,7 +528,7 @@ func TestMarshalUnmarshalSignedNewFrag(t *testing.T) {
 			BlockNumber: 7,
 			Seq:         3,
 			IsLast:      false,
-			Txs: []hexutil.Bytes{
+			Txs: [][]byte{
 				{0x01, 0x02, 0x03},
 				{0x04, 0x05, 0x06, 0x07},
 			},
@@ -644,7 +643,7 @@ func TestSealRoot(t *testing.T) {
 }
 
 func TestFragRoot(t *testing.T) {
-	transactions := []Data{{1, 2, 3}}
+	transactions := [][]byte{{1, 2, 3}}
 	f := NewFrag{
 		BlockNumber: 1,
 		Seq:         0,

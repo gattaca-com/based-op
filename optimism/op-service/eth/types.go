@@ -233,10 +233,10 @@ type SignedNewFrag struct {
 }
 
 type NewFrag struct {
-	BlockNumber uint64 `json:"blockNumber" ssz-size:"8"`
-	Seq         uint64 `json:"seq" ssz-size:"8"`
-	IsLast      bool   `json:"isLast" ssz-size:"1"`
-	Txs         []Data `json:"txs" ssz-max:"1048576,1073741824"`
+	BlockNumber uint64   `json:"blockNumber" ssz-size:"8"`
+	Seq         uint64   `json:"seq" ssz-size:"8"`
+	IsLast      bool     `json:"isLast" ssz-size:"1"`
+	Txs         [][]byte `json:"txs" ssz-max:"1048576,1073741824"`
 }
 
 type SignedSeal struct {
