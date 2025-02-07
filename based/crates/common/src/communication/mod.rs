@@ -10,7 +10,7 @@ pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
 pub mod messages;
 pub use messages::InternalMessage;
-use tracing::{error, info, trace, warn};
+use tracing::{error, warn};
 
 use crate::{
     p2p::VersionedMessage,

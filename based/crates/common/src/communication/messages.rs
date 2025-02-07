@@ -16,7 +16,7 @@ use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
 use revm::db::BundleState;
-use revm_primitives::{Address, EvmState, U256};
+use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
