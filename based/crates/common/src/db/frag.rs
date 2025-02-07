@@ -125,19 +125,19 @@ impl<Db: DatabaseRef> Database for DBFrag<Db> {
     type Error = <Db as DatabaseRef>::Error;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        self.db.read().basic_ref(address)
+        self.db.write().basic(address)
     }
 
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        self.db.read().code_by_hash_ref(code_hash)
+        self.db.write().code_by_hash(code_hash)
     }
 
     fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        self.db.read().storage_ref(address, index)
+        self.db.write().storage(address, index)
     }
 
     fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
-        self.db.read().block_hash_ref(number)
+        self.db.write().block_hash(number)
     }
 }
 
@@ -150,8 +150,8 @@ impl<Db: DatabaseRef> DatabaseCommit for DBFrag<Db> {
 
 impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
-        todo!();
-        // self.db.read().calculate_state_root(bundle_state)
+        // todo!();
+        self.db.read().database.calculate_state_root(bundle_state)
     }
 
     fn head_block_number(&self) -> Result<u64, Error> {
@@ -159,8 +159,7 @@ impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     }
 
     fn head_block_hash(&self) -> Result<B256, Error> {
-        todo!();
-        // self.db.read().head_block_hash()
+        self.db.read().database.head_block_hash()
     }
 }
 

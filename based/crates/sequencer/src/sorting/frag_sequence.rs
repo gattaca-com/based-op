@@ -71,7 +71,7 @@ impl<Db> FragSequence<Db> {
         self.payment = forced_inclusion_txs.iter().map(|t| t.payment).sum();
         self.txs = forced_inclusion_txs;
         self.next_seq = 0;
-        todo!()
+        // todo!()
         // self.db.reset(db);
     }
 }
@@ -109,6 +109,7 @@ impl<Db: DatabaseRead> FragSequence<Db> {
 impl<Db: DatabaseRef> FragSequence<Db> {
     /// Creates a new frag, all subsequent frags will be built on top of this one
     pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragV0 {
+        todo!();
         self.gas_remaining -= in_sort.gas_used;
         self.payment += in_sort.payment;
 
