@@ -121,23 +121,13 @@ impl TxPool {
         self.active_txs.forward(sender, nonce);
     }
 
-    /// Clears all mined txs from the pending list and resets the active list.
-    /// This gets called in two places:
-    /// 1) When we sync a new block.
-    /// 2) When we commit a new Frag.
-    pub fn handle_new_mined_txs<'a, Db: DatabaseRead, I, T: TransactionSenderInfo + 'a>(
+    pub fn remove_mined_txs<'a, T: TransactionSenderInfo + 'a>(
         &mut self,
-        mined_txs: I,
+        mined_txs: impl Iterator<Item = &'a T>,
         base_fee: u64,
-        db: &DBFrag<Db>,
-        syncing: bool,
-        sim_sender: Option<&SendersSpine<Db>>,
-    ) where
-        I: IntoIterator<Item = &'a T>,
-        I::IntoIter: DoubleEndedIterator,
-    {
+    ) {
         // Clear all mined nonces from the pool
-        for tx in mined_txs.into_iter().rev() {
+        for tx in mined_txs {
             let sender = tx.sender();
             if let Some(sender_tx_list) = self.pool_data.get_mut(&sender) {
                 if sender_tx_list.forward(&tx.nonce()) {
@@ -145,7 +135,21 @@ impl TxPool {
                 }
             }
         }
+    }
 
+    /// Clears all mined txs from the pending list and resets the active list.
+    /// This gets called in two places:
+    /// 1) When we sync a new block.
+    /// 2) When we commit a new Frag.
+    pub fn handle_new_mined_txs<'a, Db: DatabaseRead, T: TransactionSenderInfo + 'a>(
+        &mut self,
+        mined_txs: impl Iterator<Item = &'a T>,
+        base_fee: u64,
+        db: &DBFrag<Db>,
+        syncing: bool,
+        sim_sender: Option<&SendersSpine<Db>>,
+    ) {
+        self.remove_mined_txs(mined_txs, base_fee);
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
         self.active_txs.clear();
 

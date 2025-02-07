@@ -12,7 +12,7 @@ use bop_db::{init_database, DatabaseRead};
 use bop_rpc::start_rpc;
 use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
-    Sequencer,
+    Sequencer, SequencerConfig,
 };
 use bop_simulator::Simulator;
 use clap::Parser;
@@ -43,8 +43,6 @@ fn main() {
 }
 
 fn run(args: GatewayArgs) -> eyre::Result<()> {
-    info!("starting gateway");
-
     let spine = Spine::default();
 
     let db_bop = init_database(
@@ -53,8 +51,13 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         args.max_cached_storages,
         args.chain_spec.clone(),
     )?;
+
+    tracing::info!("Starting gateway at block {}", db_bop.head_block_number().expect("couldn't get head block number"));
+
     let db_frag: DBFrag<_> = db_bop.clone().into();
-    let start_fetch = db_bop.head_block_number().expect("couldn't get head block number");
+    let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
+    let sequencer_config: SequencerConfig = (&args).into();
+    let evm_config = sequencer_config.evm_config.clone();
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -71,14 +74,14 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             move || rt.block_on(wait_for_signal())
         });
 
-        let sequencer = Sequencer::new(db_bop, db_frag.clone(), (&args).into());
+        let sequencer = Sequencer::new(db_bop, db_frag.clone(), sequencer_config);
         s.spawn(|| {
             sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
         if args.test {
             s.spawn(|| {
-                MockFetcher::new(args.rpc_fallback_url, start_fetch).run(
+                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100).run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
                 );
@@ -96,9 +99,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             let connections = spine.to_connections(format!("sim-{core}"));
             s.spawn({
                 let db_frag = db_frag.clone();
-
+                let evm_config_c = evm_config.clone();
                 move || {
-                    Simulator::create_and_run(connections, db_frag, ActorConfig::default().with_core(core), core);
+                    let simulator = Simulator::new(db_frag, &evm_config_c, core);
+                    simulator.run(connections, ActorConfig::default().with_core(core));
                 }
             });
         }

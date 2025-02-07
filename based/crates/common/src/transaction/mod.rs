@@ -21,11 +21,12 @@ pub struct Transaction {
     /// The sender of the transaction.
     /// Recovered from the tx on initialisation.
     sender: Address,
+    envelope: Bytes,
 }
 
 impl Transaction {
-    pub fn new(tx: OpTxEnvelope, sender: Address) -> Self {
-        Self { tx, sender }
+    pub fn new(tx: OpTxEnvelope, sender: Address, envelope: Bytes) -> Self {
+        Self { tx, sender, envelope }
     }
 
     #[inline]
@@ -72,22 +73,101 @@ impl Transaction {
     }
 
     #[inline]
-    pub fn fill_tx_env(&self, env: &mut TxEnv) {
-        env.caller = self.sender;
-        env.gas_limit = self.gas_limit();
-        env.gas_price = U256::from(self.max_fee_per_gas());
-        env.gas_priority_fee = self.max_priority_fee_per_gas().map(U256::from);
-        env.transact_to = self.to().into();
-        env.value = self.value();
-        env.data = self.input().clone();
-        env.chain_id = self.chain_id();
-        env.nonce = Some(self.nonce());
-        env.access_list = self.access_list().cloned().unwrap_or_default().0;
-        env.blob_hashes = self.blob_versioned_hashes().map(|t| t.to_vec()).unwrap_or_default();
-        env.max_fee_per_blob_gas = self.max_fee_per_blob_gas().map(U256::from);
-        env.optimism = self.into()
-    }
+    pub fn fill_tx_env(&self, tx_env: &mut TxEnv) {
+        let envelope = self.encode();
 
+        tx_env.caller = self.sender;
+        match &self.tx {
+            OpTxEnvelope::Legacy(tx) => {
+                tx_env.gas_limit = tx.tx().gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::from(tx.tx().gas_price);
+                tx_env.gas_priority_fee = None;
+                tx_env.transact_to = tx.tx().to;
+                tx_env.value = tx.tx().value;
+                tx_env.data = tx.tx().input.clone();
+                tx_env.chain_id = tx.tx().chain_id;
+                tx_env.nonce = Some(tx.tx().nonce);
+                tx_env.access_list.clear();
+                tx_env.blob_hashes.clear();
+                tx_env.max_fee_per_blob_gas.take();
+                tx_env.authorization_list = None;
+            }
+            OpTxEnvelope::Eip2930(tx) => {
+                tx_env.gas_limit = tx.tx().gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::from(tx.tx().gas_price);
+                tx_env.gas_priority_fee = None;
+                tx_env.transact_to = tx.tx().to;
+                tx_env.value = tx.tx().value;
+                tx_env.data = tx.tx().input.clone();
+                tx_env.chain_id = Some(tx.tx().chain_id);
+                tx_env.nonce = Some(tx.tx().nonce);
+                tx_env.access_list.clone_from(&tx.tx().access_list.0);
+                tx_env.blob_hashes.clear();
+                tx_env.max_fee_per_blob_gas.take();
+                tx_env.authorization_list = None;
+            }
+            OpTxEnvelope::Eip1559(tx) => {
+                tx_env.gas_limit = tx.tx().gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::from(tx.tx().max_fee_per_gas);
+                tx_env.gas_priority_fee =
+                    Some(alloy_primitives::U256::from(tx.tx().max_priority_fee_per_gas));
+                tx_env.transact_to = tx.tx().to;
+                tx_env.value = tx.tx().value;
+                tx_env.data = tx.tx().input.clone();
+                tx_env.chain_id = Some(tx.tx().chain_id);
+                tx_env.nonce = Some(tx.tx().nonce);
+                tx_env.access_list.clone_from(&tx.tx().access_list.0);
+                tx_env.blob_hashes.clear();
+                tx_env.max_fee_per_blob_gas.take();
+                tx_env.authorization_list = None;
+            }
+            OpTxEnvelope::Eip7702(tx) => {
+                tx_env.gas_limit = tx.tx().gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::from(tx.tx().max_fee_per_gas);
+                tx_env.gas_priority_fee =
+                    Some(alloy_primitives::U256::from(tx.tx().max_priority_fee_per_gas));
+                tx_env.transact_to = tx.tx().to.into();
+                tx_env.value = tx.tx().value;
+                tx_env.data = tx.tx().input.clone();
+                tx_env.chain_id = Some(tx.tx().chain_id);
+                tx_env.nonce = Some(tx.tx().nonce);
+                tx_env.access_list.clone_from(&tx.tx().access_list.0);
+                tx_env.blob_hashes.clear();
+                tx_env.max_fee_per_blob_gas.take();
+                tx_env.authorization_list =
+                    Some(revm_primitives::AuthorizationList::Signed(tx.tx().authorization_list.clone()));
+            }
+            OpTxEnvelope::Deposit(tx) => {
+                tx_env.access_list.clear();
+                tx_env.gas_limit = tx.gas_limit;
+                tx_env.gas_price = alloy_primitives::U256::ZERO;
+                tx_env.gas_priority_fee = None;
+                tx_env.transact_to = tx.to;
+                tx_env.value = tx.value;
+                tx_env.data = tx.input.clone();
+                tx_env.chain_id = None;
+                tx_env.nonce = None;
+                tx_env.authorization_list = None;
+
+                tx_env.optimism = revm_primitives::OptimismFields {
+                    source_hash: Some(tx.source_hash),
+                    mint: tx.mint,
+                    is_system_transaction: Some(tx.is_system_transaction),
+                    enveloped_tx: Some(envelope),
+                };
+                return
+            }
+            _ => unreachable!(),
+        }
+
+        tx_env.optimism = revm_primitives::OptimismFields {
+            source_hash: None,
+            mint: None,
+            is_system_transaction: Some(false),
+            enveloped_tx: Some(envelope),
+        }
+    }
+   
     #[inline]
     pub fn random() -> Self {
         let value = 50;
@@ -112,7 +192,9 @@ impl Transaction {
             ..Default::default()
         };
         let signed_tx = signing_wallet.sign_tx(tx).unwrap();
-        Self { sender: from, tx: OpTxEnvelope::Eip1559(signed_tx) }
+        let tx = OpTxEnvelope::Eip1559(signed_tx);
+        let envelope = tx.encoded_2718().into();
+        Self { sender: from, tx, envelope }
     }
 
     pub fn decode(bytes: Bytes) -> Result<Self, alloy_rlp::Error> {
@@ -123,11 +205,11 @@ impl Transaction {
             OpTxEnvelope::Eip2930(signed) => signed.recover_signer().unwrap(),
             OpTxEnvelope::Eip1559(signed) => signed.recover_signer().unwrap(),
             OpTxEnvelope::Eip7702(signed) => signed.recover_signer().unwrap(),
-            OpTxEnvelope::Deposit(_sealed) => Address::ZERO,
+            OpTxEnvelope::Deposit(_sealed) => _sealed.from,
             _ => panic!("invalid tx type"),
         };
 
-        Ok(Self { sender, tx })
+        Ok(Self { sender, tx, envelope: bytes })
     }
 
     pub fn encode(&self) -> Bytes {
@@ -135,7 +217,7 @@ impl Transaction {
     }
 
     pub fn from_block(block: &BlockSyncMessage) -> Vec<Arc<Transaction>> {
-        block.body.transactions.iter().map(|t| Arc::new(Transaction::from(t.clone()))).collect()
+        block.body.transactions.iter().map(|t| Arc::new(t.clone().into())).collect()
     }
 }
 
@@ -149,15 +231,16 @@ impl Deref for Transaction {
 
 impl From<&Transaction> for OptimismFields {
     fn from(value: &Transaction) -> Self {
+        let envelope = value.envelope.clone();
         if let OpTxEnvelope::Deposit(tx) = &value.tx {
             Self {
                 source_hash: tx.source_hash(),
                 mint: tx.mint(),
                 is_system_transaction: Some(tx.is_system_transaction()),
-                enveloped_tx: None,
+                enveloped_tx: Some(envelope),
             }
         } else {
-            Self::default()
+            Self { source_hash: None, mint: None, is_system_transaction: Some(false), enveloped_tx: Some(envelope) }
         }
     }
 }
@@ -165,6 +248,7 @@ impl From<&Transaction> for OptimismFields {
 impl From<OpTransactionSigned> for Transaction {
     fn from(value: OpTransactionSigned) -> Self {
         let sender = value.recover_signer().expect("could not recover signer");
+        let envelope = value.encoded_2718().into();
         let signature = value.signature;
         let tx = match value.transaction {
             op_alloy_consensus::OpTypedTransaction::Legacy(tx_legacy) => {
@@ -181,7 +265,7 @@ impl From<OpTransactionSigned> for Transaction {
             }
             op_alloy_consensus::OpTypedTransaction::Deposit(tx_deposit) => OpTxEnvelope::Deposit(tx_deposit.seal()),
         };
-        Self { tx, sender }
+        Self { tx, sender, envelope }
     }
 }
 
