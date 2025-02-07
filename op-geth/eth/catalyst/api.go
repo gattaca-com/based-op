@@ -32,8 +32,10 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/internal/version"
@@ -1369,7 +1371,7 @@ func (api *ConsensusAPI) NewFragV0(frag common.SignedNewFrag) (string, error) {
 		}
 
 		// Check frag sequence number == latest_frag_seq_in_current_unsealed_block + 1.
-		if frag.Frag.Seq != currentUnsealedBlock.LastSequenceNumber + 1 {
+		if frag.Frag.Seq != currentUnsealedBlock.LastSequenceNumber+1 {
 			return engine.INVALID, errors.New("unexpected sequence number")
 		}
 	}
@@ -1393,10 +1395,59 @@ func (api *ConsensusAPI) newFragV0(frag common.SignedNewFrag) (string, error) {
 		unsealedBlock = api.eth.BlockChain().CurrentUnsealedBlock()
 	}
 
-	// 2. Execute the frag
-	for _, tx := range frag.Frag.Txs {
-		log.Info("[engine_newFragV0] Executing transaction", "tx", tx)
+	bc := api.eth.BlockChain()
+	parent := bc.GetBlockByNumber(frag.Frag.BlockNumber - 1)
+	statedb, _ := state.New(parent.Header().Root, bc.StateCache())
+	chainConfig := bc.Config()
+
+	blockNumber := new(big.Int).SetUint64(frag.Frag.BlockNumber)
+
+	blockContext := vm.BlockContext{
+		CanTransfer: core.CanTransfer,
+		Transfer:    core.Transfer,
+		Coinbase:    parent.Coinbase(),
+		BlockNumber: blockNumber,
+		Time:        parent.Time(),
+		Difficulty:  parent.Difficulty(),
+		GasLimit:    parent.GasLimit(),
+		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
+		// Coinbase:    pre.Env.Coinbase,
+		// BlockNumber: new(big.Int).SetUint64(pre.Env.Number),
+		// Time:        pre.Env.Timestamp,
+		// Difficulty:  pre.Env.Difficulty,
+		// GasLimit:    pre.Env.GasLimit,
+		// GetHash: getHash,
 	}
+	vmConfig := bc.GetVMConfig()
+	txContext := core.NewEVMTxContext(nil)
+	evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
+
+	gp := new(core.GasPool).AddGas(0) // TODO: Replace with txs' gas limit
+	intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(blockNumber)).Bytes()
+	blockHash := common.Hash{} // Empty until it's sealed. This should be defined later.
+	signer := types.MakeSigner(bc.Config(), new(big.Int).SetUint64(frag.Frag.BlockNumber), parent.Time())
+	tx := types.Transaction{}
+	msg, _ := core.TransactionToMessage(&tx, signer, parent.BaseFee())
+	txExecutionResult, _ := core.ApplyMessage(evm, msg, gp)
+	txReceipt := core.MakeReceipt(evm, txExecutionResult, statedb, blockNumber, blockHash, &tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
+	_ = txReceipt // TODO: Complete this
+
+	// 2. Execute the frag
+	// for i, tx := range frag.Frag.Txs {
+	// 	log.Info("[engine_newFragV0] Executing transaction", "tx", tx)
+	// 	msg, err := core.TransactionToMessage(&tx, signer, header.BaseFee)
+	// 	if err != nil {
+	// 		return engine.INVALID, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+	// 	}
+	// 	statedb.SetTxContext(tx.Hash(), i)
+
+	// 	receipt, err := core.ApplyTransactionWithEVM(msg, p.config, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+	// 	}
+	// 	receipts = append(receipts, receipt)
+	// 	allLogs = append(allLogs, receipt.Logs...)
+	// }
 
 	// 3. Insert frag into the unsealed block
 	unsealedBlock.InsertNewFrag(frag.Frag)
