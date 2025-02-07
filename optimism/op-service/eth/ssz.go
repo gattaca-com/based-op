@@ -1,6 +1,7 @@
 package eth
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/karalabe/ssz"
 )
 
 type BlockVersion int
@@ -490,67 +492,12 @@ const NewFragFixedSize = 8 + 8 + 1 + 4 + 8
 
 // UnmarshalSSZ decodes the NewFrag as SSZ type
 func (newFrag *NewFrag) UnmarshalSSZ(scope uint32, r io.Reader) error {
-	offset := uint32(0)
-
-	buf := *payloadBufPool.Get().(*[]byte)
-	if uint32(cap(buf)) < scope {
-		buf = make([]byte, scope)
-	} else {
-		buf = buf[:scope]
-	}
-	defer payloadBufPool.Put(&buf)
-
-	if _, err := io.ReadFull(r, buf); err != nil {
-		return fmt.Errorf("failed to read fixed-size part of NewFrag: %w", err)
-	}
-
-	newFrag.BlockNumber = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-	newFrag.Seq = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-	isLast, err := unmarshalBool(buf[offset])
-	if err != nil {
-		return err
-	}
-	newFrag.IsLast = isLast
-	offset += 1
-	txsOffset := binary.LittleEndian.Uint32(buf[offset : offset+4])
-	if txsOffset != NewFragFixedSize {
-		return fmt.Errorf("unexpected txs offset in NewFrag message: %d <> %d", txsOffset, NewFragFixedSize)
-	}
-	offset += 4
-	newFrag.Version = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-
-	txs, err := unmarshalTransactions(buf[offset:])
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal transactions list: %w", err)
-	}
-	newFrag.Txs = txs
-
-	return nil
+	return ssz.DecodeFromStream(r, newFrag, scope)
 }
 
 // MarshalSSZ encodes the newFrag as SSZ type
-func (newFrag *NewFrag) MarshalSSZ(w io.Writer) (n int, err error) {
-	offset := uint32(0)
-	txSize := TransactionsSize(newFrag.Txs)
-	size := NewFragFixedSize + txSize
-	buf := make([]byte, size)
-
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.BlockNumber)
-	offset += 8
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.Seq)
-	offset += 8
-	buf[offset] = marshalBool(newFrag.IsLast)
-	offset += 1
-	binary.LittleEndian.PutUint32(buf[offset:offset+4], NewFragFixedSize)
-	offset += 4
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.Version)
-	offset += 8
-	marshalTransactions(buf[offset:offset+txSize], newFrag.Txs)
-
-	return w.Write(buf)
+func (newFrag *NewFrag) MarshalSSZ(w io.Writer) error {
+	return ssz.EncodeToStream(w, newFrag)
 }
 
 const SignatureSize = 65
@@ -578,84 +525,72 @@ func (signedNewFrag *SignedNewFrag) UnmarshalSSZ(scope uint32, r io.Reader) erro
 	return nil
 }
 
-func (signedNewFrag *SignedNewFrag) MarshalSSZ(w io.Writer) (n int, err error) {
-	n, err = w.Write(signedNewFrag.Signature[:])
+func (signedNewFrag *SignedNewFrag) MarshalSSZ(w io.Writer) error {
+	n, err := w.Write(signedNewFrag.Signature[:])
 	if err != nil || n != SignatureSize {
-		return 0, errors.New("unable to write signature")
+		return errors.New("unable to write signature")
 	}
 
-	fragSize, err := signedNewFrag.Frag.MarshalSSZ(w)
+	err = signedNewFrag.Frag.MarshalSSZ(w)
 
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return SignatureSize + fragSize, nil
-}
-
-// #frags, block num, gas used, gas limit, parent hash, tx root, receipt root, st root, block hash.
-const SealFixedSize = 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32
-
-func (seal *Seal) UnmarshalSSZ(scope uint32, r io.Reader) error {
-	offset := uint32(0)
-
-	buf := *payloadBufPool.Get().(*[]byte)
-	if uint32(cap(buf)) < scope {
-		buf = make([]byte, scope)
-	} else {
-		buf = buf[:scope]
-	}
-	defer payloadBufPool.Put(&buf)
-
-	if _, err := io.ReadFull(r, buf); err != nil {
-		return fmt.Errorf("failed to read fixed-size part of Seal: %w", err)
-	}
-
-	seal.TotalFrags = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-	seal.BlockNumber = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-	seal.GasUsed = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-	seal.GasLimit = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-	copy(seal.ParentHash[:], buf[offset:offset+32])
-	offset += 32
-	copy(seal.TransactionsRoot[:], buf[offset:offset+32])
-	offset += 32
-	copy(seal.ReceiptsRoot[:], buf[offset:offset+32])
-	offset += 32
-	copy(seal.StateRoot[:], buf[offset:offset+32])
-	offset += 32
-	copy(seal.BlockHash[:], buf[offset:offset+32])
-	offset += 32
-
 	return nil
 }
 
-func (seal *Seal) MarshalSSZ(w io.Writer) (n int, err error) {
-	offset := uint32(0)
-	buf := make([]byte, SealFixedSize)
+func (s *Seal) SizeSSZ(siz *ssz.Sizer) uint32 { return 32*4 + 8*4 }
 
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], seal.TotalFrags)
-	offset += 8
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], seal.BlockNumber)
-	offset += 8
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], seal.GasUsed)
-	offset += 8
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], seal.GasLimit)
-	offset += 8
-	copy(buf[offset:offset+32], seal.ParentHash[:])
-	offset += 32
-	copy(buf[offset:offset+32], seal.TransactionsRoot[:])
-	offset += 32
-	copy(buf[offset:offset+32], seal.ReceiptsRoot[:])
-	offset += 32
-	copy(buf[offset:offset+32], seal.StateRoot[:])
-	offset += 32
-	copy(buf[offset:offset+32], seal.BlockHash[:])
-	offset += 32
+func (s *Seal) DefineSSZ(codec *ssz.Codec) {
+	ssz.DefineUint64(codec, &s.TotalFrags)
+	ssz.DefineUint64(codec, &s.BlockNumber)
+	ssz.DefineUint64(codec, &s.GasUsed)
+	ssz.DefineUint64(codec, &s.GasLimit)
+	ssz.DefineStaticBytes(codec, &s.ParentHash)
+	ssz.DefineStaticBytes(codec, &s.TransactionsRoot)
+	ssz.DefineStaticBytes(codec, &s.ReceiptsRoot)
+	ssz.DefineStaticBytes(codec, &s.StateRoot)
+	ssz.DefineStaticBytes(codec, &s.BlockHash)
+}
 
-	return w.Write(buf)
+func (f *NewFrag) SizeSSZ(siz *ssz.Sizer, fixed bool) uint32 {
+	// fixed size, 2 uint64 + 1 bool + 1 offset
+	size := uint32(8*2 + 1 + 4)
+	if fixed {
+		return size
+	}
+
+	// Variable size section
+	size += ssz.SizeSliceOfDynamicBytes(siz, f.Txs)
+	return size
+}
+
+const MaxTxAmount = 1_048_576
+const MaxTxsSize = 1_073_741_824
+
+func (f *NewFrag) DefineSSZ(codec *ssz.Codec) {
+	// Fixed size section
+	ssz.DefineUint64(codec, &f.BlockNumber)
+	ssz.DefineUint64(codec, &f.Seq)
+	ssz.DefineBool(codec, &f.IsLast)
+	ssz.DefineSliceOfDynamicBytesOffset(codec, &f.Txs, MaxTxAmount, MaxTxsSize)
+
+	// Variable size section
+	ssz.DefineSliceOfDynamicBytesContent(codec, &f.Txs, MaxTxAmount, MaxTxsSize)
+}
+
+func (f *NewFrag) Root() Bytes32 {
+	return unionRoot(ssz.HashSequential(f), 0)
+}
+
+func (s *Seal) Root() Bytes32 {
+	return unionRoot(ssz.HashSequential(s), 1)
+}
+
+func unionRoot(valueRoot Bytes32, typeIndex uint64) Bytes32 {
+	var serialized_type [32]byte
+	binary.LittleEndian.PutUint64(serialized_type[:], typeIndex)
+	return sha256.Sum256(append(valueRoot[:], serialized_type[:]...))
 }
 
 func (signedSeal *SignedSeal) UnmarshalSSZ(scope uint32, r io.Reader) error {
@@ -672,7 +607,8 @@ func (signedSeal *SignedSeal) UnmarshalSSZ(scope uint32, r io.Reader) error {
 
 	var seal Seal
 
-	err = seal.UnmarshalSSZ(scope-SignatureSize, r)
+	err = ssz.DecodeFromStream(r, &seal, scope-SignatureSize)
+
 	if err != nil {
 		return err
 	}
@@ -681,32 +617,17 @@ func (signedSeal *SignedSeal) UnmarshalSSZ(scope uint32, r io.Reader) error {
 	return nil
 }
 
-func (signedSeal *SignedSeal) MarshalSSZ(w io.Writer) (n int, err error) {
-	n, err = w.Write(signedSeal.Signature[:])
+func (signedSeal *SignedSeal) MarshalSSZ(w io.Writer) error {
+	n, err := w.Write(signedSeal.Signature[:])
 	if err != nil || n != SignatureSize {
-		return 0, errors.New("unable to write signature")
+		return errors.New("unable to write signature")
 	}
 
-	sealSize, err := signedSeal.Seal.MarshalSSZ(w)
+	err = ssz.EncodeToStream(w, &signedSeal.Seal)
 
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return SignatureSize + sealSize, nil
-}
 
-func marshalBool(b bool) byte {
-	if b {
-		return 0x01
-	}
-	return 0x00
-}
-
-func unmarshalBool(b byte) (bool, error) {
-	if b == 0x1 {
-		return true, nil
-	} else if b == 0x0 {
-		return false, nil
-	}
-	return false, fmt.Errorf("invalid bool byte: %x", b)
+	return nil
 }

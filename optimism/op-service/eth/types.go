@@ -233,11 +233,10 @@ type SignedNewFrag struct {
 }
 
 type NewFrag struct {
-	BlockNumber uint64 `json:"blockNumber"`
-	Seq         uint64 `json:"seq"`
-	IsLast      bool   `json:"isLast"`
-	Txs         []Data `json:"txs"`
-	Version     uint64 `json:"version"`
+	BlockNumber uint64   `json:"blockNumber" ssz-size:"8"`
+	Seq         uint64   `json:"seq" ssz-size:"8"`
+	IsLast      bool     `json:"isLast" ssz-size:"1"`
+	Txs         [][]byte `json:"txs" ssz-max:"1048576,1073741824"`
 }
 
 type SignedSeal struct {
@@ -247,15 +246,15 @@ type SignedSeal struct {
 
 // Total frags in the block + block header fields
 type Seal struct {
-	TotalFrags       uint64  `json:"totalFrags"`
-	BlockNumber      uint64  `json:"blockNumber"`
-	GasUsed          uint64  `json:"gasUsed"`
-	GasLimit         uint64  `json:"gasLimit"`
-	ParentHash       Bytes32 `json:"parentHash"`
-	TransactionsRoot Bytes32 `json:"transactionsRoot"`
-	ReceiptsRoot     Bytes32 `json:"receiptsRoot"`
-	StateRoot        Bytes32 `json:"stateRoot"`
-	BlockHash        Bytes32 `json:"blockHash"`
+	TotalFrags       uint64  `json:"totalFrags" ssz-size:"8"`
+	BlockNumber      uint64  `json:"blockNumber" ssz-size:"8"`
+	GasUsed          uint64  `json:"gasUsed" ssz-size:"8"`
+	GasLimit         uint64  `json:"gasLimit" ssz-size:"8"`
+	ParentHash       Bytes32 `json:"parentHash" ssz-size:"32"`
+	TransactionsRoot Bytes32 `json:"transactionsRoot" ssz-size:"32"`
+	ReceiptsRoot     Bytes32 `json:"receiptsRoot" ssz-size:"32"`
+	StateRoot        Bytes32 `json:"stateRoot" ssz-size:"32"`
+	BlockHash        Bytes32 `json:"blockHash" ssz-size:"32"`
 }
 
 type ExecutionPayloadEnvelope struct {

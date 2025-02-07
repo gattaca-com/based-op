@@ -6,46 +6,38 @@ use bop_common::{db::DBSorting, transaction::SimulatedTx};
 /// Fragment of a block being sorted and built
 #[derive(Clone, Debug)]
 pub struct InSortFrag<Db> {
-    pub db: Arc<DBSorting<Db>>,
+    pub db: DBSorting<Db>,
     pub gas_remaining: u64,
     pub gas_used: u64,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
 }
 
-impl<Db: std::fmt::Debug + Clone> InSortFrag<Db> {
+impl<Db> InSortFrag<Db> {
     pub fn new(db: DBSorting<Db>, max_gas: u64) -> Self {
-        Self { db: Arc::new(db), gas_remaining: max_gas, gas_used: 0, payment: U256::ZERO, txs: vec![] }
+        Self { db, gas_remaining: max_gas, gas_used: 0, payment: U256::ZERO, txs: vec![] }
     }
 
-    pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
-        debug_assert!(
-            Arc::strong_count(&self.db) == 1,
-            "InSortFrag::apply_tx: cannot make arc mut as we are not the only owner"
-        );
+    pub fn is_empty(&self) -> bool {
+        self.txs.is_empty()
+    }
+}
 
-        // SAFETY: we know we are the only owner of the db
-        let db = Arc::make_mut(&mut self.db);
-        db.commit(tx.take_state());
+impl<Db: Clone> InSortFrag<Db> {
+    pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
+        self.db.commit(tx.take_state());
         self.payment += tx.payment;
 
         // TODO: check gas usage
         let gas_used = tx.as_ref().result.gas_used();
-        debug_assert!(
-            self.gas_remaining > gas_used,
-            "had too little gas remaining on block {self:#?} to apply tx {tx:#?}"
-        );
+        debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
 
         self.gas_remaining -= gas_used;
         self.gas_used += gas_used;
         self.txs.push(tx);
     }
 
-    pub fn state(&self) -> Arc<DBSorting<Db>> {
+    pub fn state(&self) -> DBSorting<Db> {
         self.db.clone()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.txs.is_empty()
     }
 }

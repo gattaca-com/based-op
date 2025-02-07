@@ -1,5 +1,5 @@
 .PHONY: deps run clean restart help \
-		build build-mux build-op-node build-op-geth \
+		build build-portal build-op-node build-op-geth \
 		logs op-node-logs op-geth-logs \
 		test-frag test-seal
 
@@ -22,10 +22,10 @@ deps: ## 🚀 Install all dependencies
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
-build: build-mux build-op-node build-op-geth ## 🏗️ Build
+build: build-portal build-op-node build-op-geth ## 🏗️ Build
 
-build-mux:
-	docker buildx build -t bop-mux --build-context reth=./reth ./based
+build-portal:
+	docker buildx build -t based_portal_local --build-context reth=./reth ./based
 
 build-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
@@ -44,8 +44,8 @@ run: ## 🚀 Run
 logs: ## 📜 Show logs
 	kurtosis service logs -f based-op $(SERVICE)
 
-rollup-boost-logs:
-	$(MAKE) logs SERVICE=op-rollup-boost-1-op-kurtosis
+based-portal-logs:
+	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
 
 op-node-logs:
 	$(MAKE) logs SERVICE=op-cl-1-op-node-op-geth-op-kurtosis

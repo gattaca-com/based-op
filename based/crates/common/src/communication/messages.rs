@@ -16,7 +16,7 @@ use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
 use revm::db::BundleState;
-use revm_primitives::{Address, U256};
+use revm_primitives::{Address, Env, SpecId, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
@@ -317,8 +317,8 @@ fn internal_error() -> RpcErrorObject<'static> {
 #[derive(Clone, Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SequencerToSimulator<Db> {
-    /// Simulate Tx on top of a partially built frag
-    SimulateTx(Arc<Transaction>, Arc<DBSorting<Db>>),
+    /// Simulate Tx
+    SimulateTx(Arc<Transaction>, DBSorting<Db>),
     /// Simulate Tx Top of frag
     //TODO: Db could be set on frag commit once we broadcast msgs to sims
     SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
@@ -348,21 +348,6 @@ impl SimulatorToSequencer {
 
 pub type SimulationResult<T> = Result<T, SimulationError>;
 
-#[derive(Clone, Debug)]
-pub struct TopOfBlockResult {
-    pub state: BundleState,
-    pub forced_inclusion_txs: Vec<SimulatedTx>,
-}
-impl TopOfBlockResult {
-    pub fn gas_used(&self) -> u64 {
-        self.forced_inclusion_txs.iter().map(|t| t.gas_used()).sum()
-    }
-
-    pub fn payment(&self) -> U256 {
-        self.forced_inclusion_txs.iter().map(|t| t.payment).sum()
-    }
-}
-
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SimulatorToSequencerMsg {
@@ -370,8 +355,6 @@ pub enum SimulatorToSequencerMsg {
     Tx(SimulationResult<SimulatedTx>),
     /// Simulation on top of a fragment. Used by the transaction pool.
     TxPoolTopOfFrag(SimulationResult<SimulatedTx>),
-    /// Top of block sims are done, we can start sequencing
-    TopOfBlock(TopOfBlockResult),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]
@@ -381,6 +364,8 @@ pub enum SimulationError {
     EvmError(String),
     #[error("Order pays nothing")]
     ZeroPayment,
+    #[error("Order reverts and is not allowed to revert")]
+    RevertWithDisallowedRevert,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, AsRefStr)]
@@ -409,11 +394,9 @@ pub enum BlockFetch {
 
 /// Represents the parameters required to configure the next block.
 #[derive(Clone, Debug)]
-pub struct EvmBlockParams<Db: 'static> {
-    pub parent_header: Header,
-    pub attributes: NextBlockAttributes,
-    /// New frag db
-    pub db: DBFrag<Db>,
+pub struct EvmBlockParams {
+    pub spec_id: SpecId,
+    pub env: Box<Env>,
 }
 
 #[derive(Clone)]

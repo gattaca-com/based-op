@@ -33,9 +33,11 @@ use tracing::warn;
 
 pub mod block_sync;
 pub mod config;
+pub mod simulator;
 mod context;
 pub(crate) mod sorting;
 
+pub use simulator::Simulator;
 pub use config::SequencerConfig;
 use context::SequencerContext;
 use sorting::SortingData;
@@ -55,33 +57,14 @@ pub fn payload_to_block(
     Ok(BlockWithSenders { block, senders: block_senders })
 }
 
-#[derive(Clone, Debug)]
-pub struct Sequencer<Db: DatabaseWrite + DatabaseRead> {
+pub struct Sequencer<Db> {
     state: SequencerState<Db>,
     data: SequencerContext<Db>,
 }
 
-impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
-    pub fn new(db: Db, frag_db: DBFrag<Db>, config: SequencerConfig) -> Self {
-        let frags = FragSequence::new(frag_db, 0); // TODO: move to shared state
-        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
-
-        Self {
-            state: SequencerState::default(),
-
-            data: SequencerContext {
-                db,
-                frags,
-                block_executor,
-                config,
-                tx_pool: Default::default(),
-                fork_choice_state: Default::default(),
-                payload_attributes: Default::default(),
-                parent_hash: Default::default(),
-                parent_header: Default::default(),
-                block_env: Default::default(),
-            },
-        }
+impl<Db: DatabaseRead> Sequencer<Db> {
+    pub fn new(db: Db, db_frag: DBFrag<Db>, config: SequencerConfig) -> Self {
+        Self { state: SequencerState::default(), data: SequencerContext::new(db, db_frag, config) }
     }
 }
 
@@ -124,7 +107,7 @@ where
 /// Contains different states of the Sequencer state machine.
 /// The state is stored as a reference in the Sequencer struct.
 #[derive(Clone, Debug, Default, AsRefStr)]
-pub enum SequencerState<Db: DatabaseWrite + DatabaseRead> {
+pub enum SequencerState<Db> {
     /// Waiting for block sync
     Syncing {
         /// When the stage reaches this syncing is done
@@ -144,12 +127,6 @@ pub enum SequencerState<Db: DatabaseWrite + DatabaseRead> {
     /// - `NewPayloadV3 { .. }` This means we were not the sequencer for that block, and now need to sync this new
     ///   block and start the loop again.
     WaitingForForkChoiceWithAttributes,
-
-    /// We've received the FCU to trigger frag sequencing, sent off the top of block required inclusion txs,
-    /// and are now waiting for the top of block initial sim to finish and return the results.
-    /// After receiving those we will start sorting.
-    /// The bool captures the "no_tx_pool" flag in the payload attributes
-    WaitingForTopOfBlockSimResults(bool),
 
     /// We've received a FCU with attributes and are now sequencing transactions into Frags.
     Sorting(SortingData<Db>),
@@ -247,7 +224,7 @@ where
                 }
             }
 
-            Sorting(_) | WaitingForTopOfBlockSimResults(_) | WaitingForGetPayload(_) => {
+            Sorting(_) | WaitingForGetPayload(_) => {
                 // This should never happen. We have been sequencing frags but haven't had GetPayload called before
                 // NewPayload.
                 debug_assert!(false, "Received NewPayload while in the wrong state");
@@ -302,57 +279,27 @@ where
             WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
-                        data.payload_attributes = attributes;
-                        data.frags.reset_fragdb(data.db.clone());
-                        // From: https://specs.optimism.io/protocol/exec-engine.html#extended-payloadattributesv2
-                        // The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup. This
-                        // field overrides the gas limit used during block-building. If not
-                        // specified as rollup, a STATUS_INVALID is returned.
-                        let gas_limit = data.payload_attributes.gas_limit.unwrap();
-                        let env_attributes = NextBlockEnvAttributes {
-                            timestamp: data.payload_attributes.payload_attributes.timestamp,
-                            suggested_fee_recipient: data.payload_attributes.payload_attributes.suggested_fee_recipient,
-                            prev_randao: data.payload_attributes.payload_attributes.prev_randao,
-                            gas_limit,
-                        };
-                        let forced_inclusion_txs = data
-                            .payload_attributes
-                            .transactions
-                            .as_ref()
-                            .map(|txs| {
-                                txs.iter().map(|bytes| Transaction::decode(bytes.clone()).unwrap().into()).collect()
-                            })
-                            .unwrap_or_default();
+                        let no_tx_pool = attributes.no_tx_pool.unwrap_or_default();
+                        data.on_new_block(attributes, senders);
 
-                        let no_tx_pool = data.payload_attributes.no_tx_pool.unwrap_or_default();
-
-                        let attributes = NextBlockAttributes {
-                            env_attributes,
-                            forced_inclusion_txs,
-                            parent_beacon_block_root: data
-                                .payload_attributes
-                                .payload_attributes
-                                .parent_beacon_block_root,
-                        };
-
-                        data.block_env = data
-                            .config
-                            .evm_config
-                            .next_cfg_and_block_env(&data.parent_header, attributes.env_attributes)
-                            .expect("couldn't create blockenv")
-                            .block_env;
-
-                        let evm_block_params = EvmBlockParams {
-                            parent_header: data.parent_header.clone(),
-                            attributes,
-                            db: data.frags.db().clone(),
-                        };
-
-                        // should never fail as its a broadcast
-                        senders
-                            .send_timeout(evm_block_params, Duration::from_millis(10))
-                            .expect("couldn't send block env");
-                        WaitingForTopOfBlockSimResults(no_tx_pool)
+                        if no_tx_pool {
+                            //   senders
+                            // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
+                            // .expect("couldn't send frag");
+                            // Can't sort anyway
+                            let seal_block = data.frags.seal_block(
+                                &data.block_env,
+                                data.parent_hash,
+                                data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
+                                data.config.evm_config.chain_spec(),
+                                data.extra_data(),
+                            );
+                            //   senders
+                            // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
+                            // .expect("couldn't send frag");
+                            return SequencerState::WaitingForGetPayload(seal_block);
+                        }
+                        SequencerState::Sorting(data.new_sorting_data())
                     }
                     None => {
                         // We have got 2 FCU in a row with no attributes. This shouldn't happen?
@@ -362,11 +309,7 @@ where
                     }
                 }
             }
-            Syncing { .. } |
-            Sorting(_) |
-            WaitingForNewPayload |
-            WaitingForTopOfBlockSimResults(_) |
-            WaitingForGetPayload(_) => {
+            Syncing { .. } | Sorting(_) | WaitingForNewPayload | WaitingForGetPayload(_) => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -397,7 +340,7 @@ where
                 let frag_msg = VersionedMessage::from(frag);
                 let _ = senders.send(frag_msg);
                 let (seal, block) = data.frags.seal_block(
-                    data.as_ref(),
+                    &data.block_env,
                     data.parent_hash,
                     data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
                     data.config.evm_config.chain_spec(),
@@ -504,33 +447,8 @@ where
                         data.tx_pool.remove(&sender, nonce);
                     }
                 }
-            }
-            SimulatorToSequencerMsg::TopOfBlock(top_of_block) => {
-                let SequencerState::WaitingForTopOfBlockSimResults(no_tx_pool) = self else {
-                    return self;
-                };
-                data.frags.set_gas_limit(data.as_ref().gas_limit.to());
-                data.tx_pool.remove_mined_txs(top_of_block.forced_inclusion_txs.iter(), data.as_ref().basefee.to());
-                let mut frag = data.frags.apply_top_of_block(top_of_block);
-
-                frag.is_last = no_tx_pool;
-                senders
-                    .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
-                    .expect("couldn't send frag");
-
-                if no_tx_pool {
-                    // Can't sort anyway
-                    let seal_block = data.frags.seal_block(
-                        data.as_ref(),
-                        data.parent_hash,
-                        data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
-                        data.config.evm_config.chain_spec(),
-                        data.extra_data(),
-                    );
-                    return SequencerState::WaitingForGetPayload(seal_block);
-                }
-                return SequencerState::Sorting(data.new_sorting_data());
-            }
+            } /* SimulatorToSequencerMsg::TopOfBlock(top_of_block) => {
+               * } */
         }
         self
     }
@@ -587,7 +505,7 @@ where
         syncing: bool,
     ) {
         data.block_executor.apply_and_commit_block(block, &data.db, true).expect("couldn't commit block");
-        data.reset_fragdb();
+        // todo!("reset frag");
 
         let sender = data.config.simulate_tof_in_pools.then_some(senders);
         data.tx_pool.handle_new_mined_txs(

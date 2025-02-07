@@ -374,11 +374,20 @@ optimism_package:
         # Interval between submitting L2 output proposals
         proposal_internal: 10m
 
+      # Default: null, no sidecar
+      # "rollup-boost"
+      # "based-portal"
+      mev_type: null
+
       # Default MEV configuration
       mev_params:
         # The Docker image that should be used for rollup boost; leave blank to use the default rollup-boost image
         # Defaults to "flashbots/rollup-boost:latest"
         rollup_boost_image: ""
+
+        # The Docker image that should be used for based-portal; leave blank to use the default image
+        # Defaults to "TODO"
+        based_portal_image: ""
 
         # The host of an external builder
         builder_host: ""
@@ -390,7 +399,6 @@ optimism_package:
       # Defaults to []
       # Available services:
       # - blockscout
-      # - rollup-boost
       additional_services: []
 
   # L2 contract deployer configuration - used for all L2 networks
@@ -564,13 +572,30 @@ optimism_package:
     - participants:
         - el_builder_type: op-geth
           cl_builder_type: op-node
+      mev_type: "rollup-boost"
       mev_params:
         rollup_boost_image: "flashbots/rollup-boost:latest"
         builder_host: "localhost"
         builder_port: "8545"
-      additional_services:
-        - rollup-boost
 ```
+
+#### Based Portal for Gateway Connectivity
+
+TODO: Docs
+
+```yaml
+optimism_package:
+  chains:
+    - participants:
+        - el_builder_type: op-geth
+          cl_builder_type: op-node
+      mev_type: "based-portal"
+      mev_params:
+        based_portal_image: "TODO"
+        builder_host: "localhost"
+        builder_port: "8545"
+```
+
 
 #### Run tx-fuzz to send l2 transactions
 

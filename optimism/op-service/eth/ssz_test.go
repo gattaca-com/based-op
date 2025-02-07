@@ -3,6 +3,7 @@ package eth
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -10,11 +11,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/holiman/uint256"
+	"github.com/karalabe/ssz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -497,16 +498,15 @@ func TestMarshalUnmarshalNewFrag(t *testing.T) {
 		BlockNumber: 7,
 		Seq:         3,
 		IsLast:      false,
-		Txs: []hexutil.Bytes{
+		Txs: [][]byte{
 			{0x01, 0x02, 0x03},
 			{0x04, 0x05, 0x06, 0x07},
 		},
-		Version: 42,
 	}
 
 	var buf bytes.Buffer
 
-	_, err := f.MarshalSSZ(&buf)
+	err := f.MarshalSSZ(&buf)
 	require.NoError(t, err)
 
 	data := buf.Bytes()
@@ -528,17 +528,16 @@ func TestMarshalUnmarshalSignedNewFrag(t *testing.T) {
 			BlockNumber: 7,
 			Seq:         3,
 			IsLast:      false,
-			Txs: []hexutil.Bytes{
+			Txs: [][]byte{
 				{0x01, 0x02, 0x03},
 				{0x04, 0x05, 0x06, 0x07},
 			},
-			Version: 42,
 		},
 	}
 
 	var buf bytes.Buffer
 
-	_, err := f.MarshalSSZ(&buf)
+	err := f.MarshalSSZ(&buf)
 	require.NoError(t, err)
 
 	data := buf.Bytes()
@@ -568,13 +567,14 @@ func TestMarshalUnmarshalSeal(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	_, err := s.MarshalSSZ(&buf)
+	err := ssz.EncodeToStream(&buf, &s)
 	require.NoError(t, err)
 
 	data := buf.Bytes()
 
 	unmarshalled := &Seal{}
-	err = unmarshalled.UnmarshalSSZ(uint32(len(data)), bytes.NewBuffer(data))
+	err = ssz.DecodeFromStream(bytes.NewBuffer(data), unmarshalled, uint32(len(data)))
+
 	require.NoError(t, err)
 
 	if diff := cmp.Diff(s, *unmarshalled); diff != "" {
@@ -599,7 +599,7 @@ func TestMarshalUnmarshalSignedSeal(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	_, err := s.MarshalSSZ(&buf)
+	err := s.MarshalSSZ(&buf)
 	require.NoError(t, err)
 
 	data := buf.Bytes()
@@ -610,5 +610,51 @@ func TestMarshalUnmarshalSignedSeal(t *testing.T) {
 
 	if diff := cmp.Diff(s, *unmarshalled); diff != "" {
 		t.Fatalf("The data did not round trip correctly:\n%s", diff)
+	}
+}
+
+func decodeOrPanic(s string) Bytes32 {
+	decoded, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return Bytes32(decoded)
+}
+
+func TestSealRoot(t *testing.T) {
+	s := Seal{
+		TotalFrags:       8,
+		BlockNumber:      123,
+		GasUsed:          25_000,
+		GasLimit:         1_000_000,
+		ParentHash:       decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		TransactionsRoot: decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		ReceiptsRoot:     decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		StateRoot:        decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		BlockHash:        decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+	}
+
+	expected := decodeOrPanic("e86afda21ddc7338c7e84561681fde45e2ab55cce8cde3163e0ae5f1c378439e")
+	root := s.Root()
+
+	if expected != root {
+		t.Fatalf("Expected root %s, found %s", expected.String(), root.String())
+	}
+}
+
+func TestFragRoot(t *testing.T) {
+	transactions := [][]byte{{1, 2, 3}}
+	f := NewFrag{
+		BlockNumber: 1,
+		Seq:         0,
+		IsLast:      true,
+		Txs:         transactions,
+	}
+
+	expected := decodeOrPanic("2a5ebad20a81878e5f229928e5c2043580051673b89a7a286008d30f62b10963")
+	root := f.Root()
+
+	if expected != root {
+		t.Fatalf("Expected root %s, found %s", expected.String(), root.String())
 	}
 }

@@ -3,8 +3,11 @@ optimism_package:
     - participants:
         - el_type: op-geth
           cl_type: op-node
+          # cl_extra_params: [--rpc.based]
+      mev_type: based-portal
       mev_params:
+        based_portal_image: based_portal_local
         builder_host: "172.17.0.1"
         builder_port: "9997"
       additional_services:
-        - rollup-boost
+        - blockscout
