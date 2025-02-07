@@ -203,20 +203,20 @@ func (n *basedAPI) NewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) (s
 
 	n.log.Info("NewFrag RPC request received")
 
-	if err := n.p2p.GossipOut().PublishNewFrag(ctx, signedFrag); err != nil {
+	if err := n.p2p.GossipOut().PublishNewFrag(ctx, n.p2p.Host().ID(), &signedFrag); err != nil {
 		return "", fmt.Errorf("failed to publish new frag: %w", err)
 	}
 
 	return "OK", nil
 }
 
-func (n *basedAPI) NewSeal(ctx context.Context, signedSeal eth.SignedSeal) (string, error) {
-	recordDur := n.metrics.RecordRPCServerRequest("based_newSeal")
+func (n *basedAPI) SealFrag(ctx context.Context, signedSeal eth.SignedSeal) (string, error) {
+	recordDur := n.metrics.RecordRPCServerRequest("based_sealFrag")
 	defer recordDur()
 
-	n.log.Info("NewSeal RPC request received", "seal", signedSeal.Seal)
+	n.log.Info("SealFrag RPC request received", "seal", signedSeal.Seal)
 
-	if err := n.p2p.GossipOut().PublishNewSeal(ctx, signedSeal); err != nil {
+	if err := n.p2p.GossipOut().PublishSealFrag(ctx, n.p2p.Host().ID(), &signedSeal); err != nil {
 		return "", fmt.Errorf("failed to publish new seal: %w", err)
 	}
 

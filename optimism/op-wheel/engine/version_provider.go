@@ -42,3 +42,11 @@ func (v StaticVersionProvider) GetPayloadVersion(uint64) eth.EngineAPIMethod {
 		panic("invalid Engine API version: " + strconv.Itoa(int(v)))
 	}
 }
+
+func (v StaticVersionProvider) NewFragVersion(uint64) eth.EngineAPIMethod {
+	return eth.NewFragV0
+}
+
+func (v StaticVersionProvider) SealFragVersion(uint64) eth.EngineAPIMethod {
+	return eth.SealFragV0
+}
