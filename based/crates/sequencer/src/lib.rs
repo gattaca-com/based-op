@@ -222,7 +222,7 @@ where
                 }
             }
 
-            Sorting(_) |  WaitingForGetPayload(_) => {
+            Sorting(_) | WaitingForGetPayload(_) => {
                 // This should never happen. We have been sequencing frags but haven't had GetPayload called before
                 // NewPayload.
                 debug_assert!(false, "Received NewPayload while in the wrong state");
@@ -277,9 +277,28 @@ where
             WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
-                        todo!();
-                        self
-                        // data.payload_attributes = attributes;
+                        let no_tx_pool = attributes.no_tx_pool.unwrap_or_default();
+                        data.on_new_block(attributes, senders);
+
+                        if no_tx_pool {
+                            todo!("get frag message too");
+                            //   senders
+                            // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
+                            // .expect("couldn't send frag");
+                            // Can't sort anyway
+                            let seal_block = data.frags.seal_block(
+                                &data.block_env,
+                                data.parent_hash,
+                                data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
+                                data.config.evm_config.chain_spec(),
+                                data.extra_data(),
+                            );
+                            //   senders
+                            // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
+                            // .expect("couldn't send frag");
+                            return SequencerState::WaitingForGetPayload(seal_block);
+                        }
+                        SequencerState::Sorting(data.new_sorting_data())
                     }
                     None => {
                         // We have got 2 FCU in a row with no attributes. This shouldn't happen?
@@ -289,10 +308,7 @@ where
                     }
                 }
             }
-            Syncing { .. } |
-            Sorting(_) |
-            WaitingForNewPayload |
-            WaitingForGetPayload(_) => {
+            Syncing { .. } | Sorting(_) | WaitingForNewPayload | WaitingForGetPayload(_) => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -430,34 +446,8 @@ where
                         data.tx_pool.remove(&sender, nonce);
                     }
                 }
-            }
-            // SimulatorToSequencerMsg::TopOfBlock(top_of_block) => {
-            //     let SequencerState::WaitingForTopOfBlockSimResults(no_tx_pool) = self else {
-            //         return self;
-            //     };
-            //     data.frags.set_gas_limit(data.as_ref().gas_limit.to());
-            //     todo!();
-            //     // data.tx_pool.remove_mined_txs(top_of_block.forced_inclusion_txs.iter(), data.as_ref().basefee.to());
-            //     let mut frag = data.frags.apply_top_of_block(top_of_block);
-
-            //     frag.is_last = no_tx_pool;
-            //     senders
-            //         .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
-            //         .expect("couldn't send frag");
-
-            //     if no_tx_pool {
-            //         // Can't sort anyway
-            //         let seal_block = data.frags.seal_block(
-            //             &data.block_env,
-            //             data.parent_hash,
-            //             data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
-            //             data.config.evm_config.chain_spec(),
-            //             data.extra_data(),
-            //         );
-            //         return SequencerState::WaitingForGetPayload(seal_block);
-            //     }
-            //     return SequencerState::Sorting(data.new_sorting_data());
-            // }
+            } /* SimulatorToSequencerMsg::TopOfBlock(top_of_block) => {
+               * } */
         }
         self
     }
@@ -514,7 +504,7 @@ where
         syncing: bool,
     ) {
         data.block_executor.apply_and_commit_block(block, &data.db, true).expect("couldn't commit block");
-        data.reset_fragdb();
+        todo!("reset frag");
 
         let sender = data.config.simulate_tof_in_pools.then_some(senders);
         data.tx_pool.handle_new_mined_txs(

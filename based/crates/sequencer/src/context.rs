@@ -96,10 +96,6 @@ impl<Db: Clone> SequencerContext<Db> {
             tof_snapshot: ActiveOrders::new(self.tx_pool.clone_active()),
         }
     }
-
-    pub fn reset_fragdb(&mut self) {
-        self.frags.reset_fragdb(self.db.clone());
-    }
 }
 
 impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SequencerContext<Db> {
@@ -107,8 +103,11 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
     /// 1. Updating EVM environments
     /// 2. Applying pre-execution changes
     /// 3. Processing forced inclusion transactions
-    fn on_new_block(&mut self, senders: &SendersSpine<Db>) {
+    pub fn on_new_block(&mut self, attributes: Box<OpPayloadAttributes>, senders: &SendersSpine<Db>) {
+        self.payload_attributes = attributes;
         let forced_inclusion_txs = self.get_start_state_for_new_block(senders).expect("shouldn't fail");
+        self.tx_pool.remove_mined_txs(forced_inclusion_txs.iter(), self.block_env.basefee.to());
+        self.frags.reset(self.payload_attributes.gas_limit.unwrap(), forced_inclusion_txs);
     }
 
     /// Must be called each new block.
@@ -134,12 +133,14 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             .evm_config
             .next_cfg_and_block_env(&self.parent_header, env_attributes)
             .expect("Valid block environment configuration");
-
+        self.block_env = block_env.clone();
         let env_with_handler_cfg =
             EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
 
         // send new block params to simulators
-        senders.send(EvmBlockParams { spec_id: env_with_handler_cfg.spec_id(), env: env_with_handler_cfg.env.clone() });
+        senders
+            .send(EvmBlockParams { spec_id: env_with_handler_cfg.spec_id(), env: env_with_handler_cfg.env.clone() })
+            .expect("should never fail");
 
         let evm_config = self.config.evm_config.clone();
         let chain_spec = self.config.evm_config.chain_spec().clone();

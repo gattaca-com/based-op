@@ -1,6 +1,4 @@
-use std::
-    sync::Arc
-;
+use std::sync::Arc;
 
 use alloy_primitives::{map::HashMap, B256};
 use op_alloy_rpc_types::OpTransactionReceipt;
@@ -8,15 +6,14 @@ use parking_lot::RwLock;
 use rand::RngCore;
 use reth_optimism_primitives::OpBlock;
 use reth_trie_common::updates::TrieUpdates;
-use revm::{db::{BundleState, CacheDB,}};
+use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
     Account, AccountInfo, Address, Bytecode, EvmState, U256,
 };
 
+use super::{state_changes_to_bundle_state, DatabaseRead, Error, State};
 use crate::transaction::SimulatedTx;
-
-use super::{Error, State, state_changes_to_bundle_state, DatabaseRead};
 
 /// DB That adds chunks on top of last on chain block
 #[derive(Clone, Debug)]
@@ -43,7 +40,7 @@ impl<Db> DBFrag<Db> {
     }
 }
 
-impl<Db: DatabaseRef > DBFrag<Db> {
+impl<Db: DatabaseRef> DBFrag<Db> {
     pub fn commit<'a>(&mut self, txs: impl Iterator<Item = &'a SimulatedTx>) {
         let mut guard = self.db.write();
 
@@ -93,15 +90,14 @@ impl<Db: DatabaseRef > DBFrag<Db> {
     pub fn get_transaction_receipt(&self, _hash: B256) -> Result<OpTransactionReceipt, Error> {
         todo!()
     }
-
 }
 
 impl<Db: DatabaseRead> DBFrag<Db> {
     pub fn state_root(&self, state_changes: HashMap<Address, Account>) -> B256 {
         todo!();
         // let r = self.db.read();
-        // let bundle_state = state_changes_to_bundle_state(&r.db, state_changes).expect("couldn't create bundle state");
-        // self.calculate_state_root(&bundle_state).expect("couldn't calculate state root").0
+        // let bundle_state = state_changes_to_bundle_state(&r.db, state_changes).expect("couldn't create bundle
+        // state"); self.calculate_state_root(&bundle_state).expect("couldn't calculate state root").0
     }
 }
 
@@ -147,7 +143,7 @@ impl<Db: DatabaseRef> Database for DBFrag<Db> {
 
 impl<Db: DatabaseRef> DatabaseCommit for DBFrag<Db> {
     #[doc = " Commit changes to the database."]
-    fn commit(&mut self,changes:HashMap<Address,Account>) {
+    fn commit(&mut self, changes: HashMap<Address, Account>) {
         self.db.write().commit(changes)
     }
 }
@@ -175,4 +171,3 @@ impl<Db: DatabaseRead + Database> From<Db> for DBFrag<Db> {
         Self { db: Arc::new(RwLock::new(state)), state_id: rand::random(), curr_block_number }
     }
 }
-

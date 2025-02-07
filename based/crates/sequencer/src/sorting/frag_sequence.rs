@@ -11,10 +11,13 @@ use bop_common::{
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
-use revm::{db::{states::bundle_state::BundleRetention, BundleState, State}, Database, DatabaseCommit, DatabaseRef};
 use reth_evm::execute::ProviderError;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_forks::OpHardfork;
+use revm::{
+    db::{states::bundle_state::BundleRetention, BundleState, State},
+    Database, DatabaseCommit, DatabaseRef,
+};
 use revm_primitives::{hex, BlockEnv, Bytes, EvmState, B256};
 
 use crate::sorting::InSortFrag;
@@ -30,9 +33,6 @@ pub struct FragSequence<Db> {
     next_seq: u64,
     /// Block number for all frags in this block
     block_number: u64,
-    top_of_block_bundle: BundleState,
-    top_of_block_changes: Vec<EvmState>
-
 }
 impl<Db> FragSequence<Db> {
     pub fn set_gas_limit(&mut self, gas_limit: u64) {
@@ -42,35 +42,35 @@ impl<Db> FragSequence<Db> {
     pub fn db_ref(&self) -> &DBFrag<Db> {
         &self.db
     }
-    // pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 
+
+    // pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0
     // where
     //     Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     // {
-        // todo!();
-        // self.gas_remaining -= top_of_block.gas_used();
-        // self.payment += top_of_block.payment();
-        // self.top_of_block_bundle = top_of_block.state;
-        // self.top_of_block_changes = top_of_block.changes;
-        // tracing::info!("###################{}",self.db.calculate_state_root(&top_of_block.state).unwrap().0);
-        // self.db.commit_flat_changes(top_of_block.flat_state_changes);
-        // self.db.commit( );
-        // let msg = FragV0::new(
-        //     self.block_number,
-        //     self.next_seq,
-        //     top_of_block.forced_inclusion_txs.iter().map(|tx| tx.tx.as_ref()),
-        //     false,
-        // );
-        // self.txs.extend(top_of_block.forced_inclusion_txs);
-        // msg
+    // todo!();
+    // self.gas_remaining -= top_of_block.gas_used();
+    // self.payment += top_of_block.payment();
+    // self.top_of_block_bundle = top_of_block.state;
+    // self.top_of_block_changes = top_of_block.changes;
+    // tracing::info!("###################{}",self.db.calculate_state_root(&top_of_block.state).unwrap().0);
+    // self.db.commit_flat_changes(top_of_block.flat_state_changes);
+    // self.db.commit( );
+    // let msg = FragV0::new(
+    //     self.block_number,
+    //     self.next_seq,
+    //     top_of_block.forced_inclusion_txs.iter().map(|tx| tx.tx.as_ref()),
+    //     false,
+    // );
+    // self.txs.extend(top_of_block.forced_inclusion_txs);
+    // msg
     // }
 
     /// When a new block is received, we clear all the temp state on the db
-    pub fn reset_fragdb(&mut self, db: Db) {
-        self.gas_remaining = 0;
-        self.txs.clear();
+    pub fn reset(&mut self, gas_limit: u64, forced_inclusion_txs: Vec<SimulatedTx>) {
+        self.gas_remaining = gas_limit - forced_inclusion_txs.iter().map(|t| t.gas_used()).sum::<u64>();
+        self.payment = forced_inclusion_txs.iter().map(|t| t.payment).sum();
+        self.txs = forced_inclusion_txs;
         self.next_seq = 0;
-        self.payment = U256::ZERO;
-        self.top_of_block_bundle = Default::default();
         todo!()
         // self.db.reset(db);
     }
@@ -91,7 +91,7 @@ impl<Db: Clone> FragSequence<Db> {
 impl<Db: DatabaseRead> FragSequence<Db> {
     pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
         let block_number = db.head_block_number().expect("can't get block number") + 1;
-        Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number, top_of_block_bundle: BundleState::default(), top_of_block_changes: Default::default() }
+        Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number }
     }
 
     pub fn is_valid(&self, state_id: u64) -> bool {
@@ -115,7 +115,6 @@ impl<Db: DatabaseRef> FragSequence<Db> {
     }
 }
 
-
 impl<Db> FragSequence<Db> {
     pub fn seal_block(
         &mut self,
@@ -128,13 +127,11 @@ impl<Db> FragSequence<Db> {
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
-        let mut state = State::builder().with_database(self.db.clone()).with_bundle_update().without_state_clear().build();
-        state.commit(flatten_state_changes(self.top_of_block_changes.clone()));
-        state.merge_transitions(BundleRetention::Reverts);
-        let bundle = state.take_bundle();
+        let bundle = self.db.db.write().take_bundle();
         // self.db.commit_flat_changes(state_changes);
         // self.db.merge_transitions(BundleRetention::Reverts);
-        // let state_root = self.db.calculate_state_root(&state_changes_to_bundle_state(&self.db, flatten_state_changes(self.top_of_block_changes.clone())).unwrap()).unwrap().0;
+        // let state_root = self.db.calculate_state_root(&state_changes_to_bundle_state(&self.db,
+        // flatten_state_changes(self.top_of_block_changes.clone())).unwrap()).unwrap().0;
         let state_root = self.db.calculate_state_root(&bundle).unwrap().0;
 
         let mut receipts = Vec::with_capacity(self.txs.len());

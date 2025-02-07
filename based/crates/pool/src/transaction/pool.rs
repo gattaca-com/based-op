@@ -197,4 +197,3 @@ impl TxPool {
         self.active_txs.is_empty()
     }
 }
-
