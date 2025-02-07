@@ -673,4 +673,7 @@ const (
 
 	GetPayloadV2 EngineAPIMethod = "engine_getPayloadV2"
 	GetPayloadV3 EngineAPIMethod = "engine_getPayloadV3"
+
+	NewFragV0  EngineAPIMethod = "engine_newFragV0"
+	SealFragV0 EngineAPIMethod = "engine_sealFragV0"
 )

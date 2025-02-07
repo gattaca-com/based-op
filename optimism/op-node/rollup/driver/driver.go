@@ -5,6 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	altda "github.com/ethereum-optimism/optimism/op-alt-da"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
@@ -124,6 +125,8 @@ type SyncStatusTracker interface {
 type Network interface {
 	// PublishL2Payload is called by the driver whenever there is a new payload to publish, synchronously with the driver main loop.
 	PublishL2Payload(ctx context.Context, payload *eth.ExecutionPayloadEnvelope) error
+	PublishNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag) error
+	PublishSealFrag(ctx context.Context, from peer.ID, frag *eth.SignedSeal) error
 }
 
 type AltSync interface {

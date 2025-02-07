@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use alloy_consensus::{BlockHeader, Header};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
@@ -11,18 +12,18 @@ use alloy_rpc_types::engine::{
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::execute::BlockExecutionError;
+use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
-use revm::DatabaseRef;
-use revm_primitives::{Address, EVMError, U256};
+use revm::db::BundleState;
+use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
 use tokio::sync::oneshot::{self, Receiver};
 
 use crate::{
-    db::{DBFrag, DBSorting, DatabaseRead},
+    db::{DBFrag, DBSorting},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
 };
@@ -201,14 +202,14 @@ impl EngineApi {
             prev_randao: block.mix_hash,
             suggested_fee_recipient: block.beneficiary,
             withdrawals: Default::default(),
-            parent_beacon_block_root: Default::default(),
+            parent_beacon_block_root: block.parent_beacon_block_root,
         };
         let op_payload_attributes = Some(Box::new(OpPayloadAttributes {
             payload_attributes,
             transactions: txs_in_attributes.then(|| transactions.clone()),
             no_tx_pool,
             gas_limit: Some(block.gas_limit),
-            eip_1559_params: None,
+            eip_1559_params: Some(revm_primitives::FixedBytes::from_slice(&block.extra_data[1..9])),
         }));
         let v1 = ExecutionPayloadV1 {
             parent_hash: block.parent_hash,
@@ -235,7 +236,9 @@ impl EngineApi {
         let new_payload = EngineApi::NewPayloadV3 {
             payload: v3,
             versioned_hashes: Default::default(),
-            parent_beacon_block_root: B256::ZERO,
+            parent_beacon_block_root: block
+                .parent_beacon_block_root()
+                .expect("parent beacon root should always be set"),
             res_tx: new_payload_tx,
         };
         let (fcu_tx, _fcu_rx) = oneshot::channel();
@@ -322,15 +325,15 @@ pub enum SequencerToSimulator<Db> {
 }
 
 #[derive(Debug)]
-pub struct SimulatorToSequencer<Db: DatabaseRead> {
+pub struct SimulatorToSequencer {
     /// Sender address and nonce
     pub sender_info: (Address, u64),
     pub state_id: u64,
-    pub msg: SimulatorToSequencerMsg<Db>,
+    pub msg: SimulatorToSequencerMsg,
 }
 
-impl<Db: DatabaseRead> SimulatorToSequencer<Db> {
-    pub fn new(sender_info: (Address, u64), state_id: u64, msg: SimulatorToSequencerMsg<Db>) -> Self {
+impl SimulatorToSequencer {
+    pub fn new(sender_info: (Address, u64), state_id: u64, msg: SimulatorToSequencerMsg) -> Self {
         Self { sender_info, state_id, msg }
     }
 
@@ -343,22 +346,39 @@ impl<Db: DatabaseRead> SimulatorToSequencer<Db> {
     }
 }
 
-pub type SimulationResult<T, Db> = Result<T, SimulationError<<Db as DatabaseRef>::Error>>;
+pub type SimulationResult<T> = Result<T, SimulationError>;
+
+#[derive(Clone, Debug)]
+pub struct TopOfBlockResult {
+    pub state: BundleState,
+    pub forced_inclusion_txs: Vec<SimulatedTx>,
+}
+impl TopOfBlockResult {
+    pub fn gas_used(&self) -> u64 {
+        self.forced_inclusion_txs.iter().map(|t| t.gas_used()).sum()
+    }
+
+    pub fn payment(&self) -> U256 {
+        self.forced_inclusion_txs.iter().map(|t| t.payment).sum()
+    }
+}
 
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
-pub enum SimulatorToSequencerMsg<Db: DatabaseRead> {
+pub enum SimulatorToSequencerMsg {
     /// Simulation on top of any state.
-    Tx(SimulationResult<SimulatedTx, Db>),
+    Tx(SimulationResult<SimulatedTx>),
     /// Simulation on top of a fragment. Used by the transaction pool.
-    TxPoolTopOfFrag(SimulationResult<SimulatedTx, Db>),
+    TxPoolTopOfFrag(SimulationResult<SimulatedTx>),
+    /// Top of block sims are done, we can start sequencing
+    TopOfBlock(TopOfBlockResult),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]
 #[repr(u8)]
-pub enum SimulationError<DbError> {
-    #[error("Evm error")]
-    EvmError(#[from] EVMError<DbError>),
+pub enum SimulationError {
+    #[error("Evm error: {0}")]
+    EvmError(String),
     #[error("Order pays nothing")]
     ZeroPayment,
 }
@@ -385,4 +405,32 @@ pub type BlockSyncMessage = BlockWithSenders<OpBlock>;
 #[derive(Clone, Debug, AsRefStr)]
 pub enum BlockFetch {
     FromTo(u64, u64),
+}
+
+/// Represents the parameters required to configure the next block.
+#[derive(Clone, Debug)]
+pub struct EvmBlockParams<Db: 'static> {
+    pub parent_header: Header,
+    pub attributes: NextBlockAttributes,
+    /// New frag db
+    pub db: DBFrag<Db>,
+}
+
+#[derive(Clone)]
+pub struct NextBlockAttributes {
+    pub env_attributes: NextBlockEnvAttributes,
+    /// Txs to add top of block.
+    pub forced_inclusion_txs: Vec<Arc<Transaction>>,
+    /// Parent block beacon root.
+    pub parent_beacon_block_root: Option<B256>,
+}
+
+impl std::fmt::Debug for NextBlockAttributes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NextBlockAttributes")
+            .field("env_attributes", &self.env_attributes)
+            .field("forced_inclusion_txs", &self.forced_inclusion_txs.len())
+            .field("parent_beacon_block_root", &self.parent_beacon_block_root)
+            .finish()
+    }
 }
