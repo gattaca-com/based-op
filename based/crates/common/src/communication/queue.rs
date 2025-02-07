@@ -65,15 +65,13 @@ impl QueueHeader {
     }
 }
 
-//TODO: this should in reality really also implement drop and most likely return an Arc instead of
-// &'static or whatever.
 #[repr(C, align(64))]
 pub struct InnerQueue<T> {
     header: QueueHeader,
     buffer: [Seqlock<T>],
 }
 
-impl<T: Clone> InnerQueue<T> {
+impl<T> InnerQueue<T> {
     /// Allocs (unshared) memory and initializes a new queue from it.
     ///     QueueType::MPMC = multi producer multi consumer
     ///     QueueType::SPMC = single producer multi consumer
@@ -87,10 +85,6 @@ impl<T: Clone> InnerQueue<T> {
             // unsized part of the struct i.e. the buffer.
             Self::from_uninitialized_ptr(ptr, real_len, queue_type)
         }
-    }
-
-    const fn size_of(len: usize) -> usize {
-        size_of::<QueueHeader>() + len.next_power_of_two() * size_of::<Seqlock<T>>()
     }
 
     fn from_uninitialized_ptr(ptr: *mut u8, len: usize, queue_type: QueueType) -> Result<*const Self, Error> {
@@ -115,7 +109,44 @@ impl<T: Clone> InnerQueue<T> {
         }
     }
 
-    #[allow(dead_code)]
+    fn create_or_open_shared<P: AsRef<Path>>(shmem_file: P, len: usize, typ: QueueType) -> Result<*const Self, Error> {
+        use shared_memory::{ShmemConf, ShmemError};
+        let _ = std::fs::create_dir_all(shmem_file.as_ref().parent().unwrap());
+        match ShmemConf::new().size(Self::size_of(len)).flink(&shmem_file).create() {
+            Ok(shmem) => {
+                let ptr = shmem.as_ptr();
+                std::mem::forget(shmem);
+                Ok(Self::from_uninitialized_ptr(ptr, len, typ)?)
+            }
+            Err(ShmemError::LinkExists) => {
+                let v = Self::open_shared(&shmem_file)?;
+                if unsafe { (*v).header.len() } < len {
+                    Err(Error::TooSmall)
+                } else {
+                    Ok(v)
+                }
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn open_shared<S: AsRef<Path>>(shmem_file: S) -> Result<*const Self, Error> {
+        if !shmem_file.as_ref().exists() {
+            return Err(Error::NonExistingFile);
+        }
+        let mut tries = 0;
+        let mut header = QueueHeader::open_shared(shmem_file.as_ref());
+        while !header.is_initialized() {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            header = QueueHeader::open_shared(shmem_file.as_ref());
+            if tries == 10 {
+                return Err(Error::UnInitialized);
+            }
+            tries += 1;
+        }
+        Self::from_initialized_ptr(header)
+    }
+
     fn from_initialized_ptr(ptr: *mut QueueHeader) -> Result<*const Self, Error> {
         unsafe {
             let len = (*ptr).mask + 1;
@@ -125,11 +156,16 @@ impl<T: Clone> InnerQueue<T> {
             if (*ptr).is_initialized != true as u8 {
                 return Err(Error::UnInitialized);
             }
-            // TODO: I think this is slightly wrong
             Ok(std::ptr::slice_from_raw_parts_mut(ptr as *mut Seqlock<T>, len) as *const Self)
         }
     }
 
+    const fn size_of(len: usize) -> usize {
+        size_of::<QueueHeader>() + len.next_power_of_two() * size_of::<Seqlock<T>>()
+    }
+}
+
+impl<T: Clone> InnerQueue<T> {
     // Note: Calling this from anywhere that's not a producer -> false sharing
     fn count(&self) -> usize {
         self.header.count.load(Ordering::Relaxed)
@@ -176,6 +212,10 @@ impl<T: Clone> InnerQueue<T> {
         self.load(ri).read_with_version(el, ri_ver)
     }
 
+    fn consume_clone(&self, ri: usize, ri_ver: u32) -> Result<T, ReadError> {
+        self.load(ri).read_with_version_clone(ri_ver)
+    }
+
     #[allow(dead_code)]
     fn read(&self, el: &mut T, ri: usize) {
         self.load(ri).read(el)
@@ -183,28 +223,6 @@ impl<T: Clone> InnerQueue<T> {
 
     fn len(&self) -> usize {
         self.header.mask + 1
-    }
-
-    // This exists just to check the state of the queue for debugging purposes
-    #[allow(dead_code)]
-    fn verify(&self) {
-        let mut prev_v = self.load(0).version();
-        let mut n_changes = 0;
-        for i in 1..=self.header.mask {
-            let lck = self.load(i);
-            let v = lck.version();
-            if v & 1 == 1 {
-                panic!("odd version at {i}: {prev_v} -> {v}");
-            }
-            if v != prev_v && v & 1 == 0 {
-                n_changes += 1;
-                println!("version change at {i}: {prev_v} -> {v}");
-                prev_v = v;
-            }
-        }
-        if n_changes > 1 {
-            panic!("what")
-        }
     }
 
     fn produce_first(&self, item: &T) -> usize {
@@ -225,44 +243,6 @@ impl<T: Clone> InnerQueue<T> {
             }
         }
     }
-
-    fn create_or_open_shared<P: AsRef<Path>>(shmem_file: P, len: usize, typ: QueueType) -> Result<*const Self, Error> {
-        use shared_memory::{ShmemConf, ShmemError};
-        let _ = std::fs::create_dir_all(shmem_file.as_ref().parent().unwrap());
-        match ShmemConf::new().size(Self::size_of(len)).flink(&shmem_file).create() {
-            Ok(shmem) => {
-                let ptr = shmem.as_ptr();
-                std::mem::forget(shmem);
-                Ok(Self::from_uninitialized_ptr(ptr, len, typ)?)
-            }
-            Err(ShmemError::LinkExists) => {
-                let v = Self::open_shared(&shmem_file)?;
-                if unsafe { (*v).header.len() } < len {
-                    Err(Error::TooSmall)
-                } else {
-                    Ok(v)
-                }
-            }
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    fn open_shared<S: AsRef<Path>>(shmem_file: S) -> Result<*const Self, Error> {
-        if !shmem_file.as_ref().exists() {
-            return Err(Error::NonExistingFile);
-        }
-        let mut tries = 0;
-        let mut header = QueueHeader::open_shared(shmem_file.as_ref());
-        while !header.is_initialized() {
-            std::thread::sleep(std::time::Duration::from_millis(1));
-            header = QueueHeader::open_shared(shmem_file.as_ref());
-            if tries == 10 {
-                return Err(Error::UnInitialized);
-            }
-            tries += 1;
-        }
-        Self::from_initialized_ptr(header)
-    }
 }
 
 unsafe impl<T> Send for InnerQueue<T> {}
@@ -279,7 +259,7 @@ pub struct Queue<T> {
     inner: *const InnerQueue<T>,
 }
 
-impl<T: Clone> Queue<T> {
+impl<T> Queue<T> {
     pub fn new(len: usize, queue_type: QueueType) -> Result<Self, Error> {
         InnerQueue::new(len, queue_type).map(|inner| Self { inner })
     }
@@ -384,6 +364,13 @@ impl<T: Clone> ConsumerBare<T> {
         Ok(())
     }
 
+    #[inline]
+    pub fn try_consume_clone(&mut self) -> Result<T, ReadError> {
+        let t = self.queue.consume_clone(self.pos, self.expected_version)?;
+        self.update_pos();
+        Ok(t)
+    }
+
     /// Blocking consume
     #[inline]
     pub fn blocking_consume(&mut self, el: &mut T) {
@@ -443,7 +430,7 @@ pub struct Consumer<T: 'static> {
     should_log: bool,
 }
 
-impl<T: 'static + Clone> Consumer<T> {
+impl<T: 'static + Copy> Consumer<T> {
     /// Maybe consume one message in a queue with error recovery and logging,
     /// and return whether one was read
     #[inline]
@@ -463,11 +450,13 @@ impl<T: 'static + Clone> Consumer<T> {
             Err(ReadError::Empty) => false,
         }
     }
+}
 
+impl<T: 'static + Clone> Consumer<T> {
     #[inline]
     pub fn try_consume(&mut self) -> Option<T> {
-        match self.consumer.try_consume(&mut self.message) {
-            Ok(()) => Some(self.message.clone()),
+        match self.consumer.try_consume_clone() {
+            Ok(t) => Some(t),
             Err(ReadError::SpedPast) => {
                 self.log_and_recover();
                 self.try_consume()

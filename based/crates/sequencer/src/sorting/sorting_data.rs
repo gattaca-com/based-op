@@ -1,5 +1,3 @@
-use std::{collections::VecDeque, sync::Arc};
-
 use bop_common::{
     communication::{
         messages::{SequencerToSimulator, SimulationResult},
@@ -7,7 +5,7 @@ use bop_common::{
     },
     db::DatabaseRead,
     time::Instant,
-    transaction::{SimulatedTx, Transaction},
+    transaction::SimulatedTx,
 };
 use revm_primitives::Address;
 use tracing::error;
@@ -27,10 +25,6 @@ pub struct SortingData<Db: DatabaseRead> {
     pub tof_snapshot: ActiveOrders,
     /// Next best order to apply
     pub next_to_be_applied: Option<SimulatedTx>,
-    /// Txs in payload attributes that need to be applied in order
-    pub remaining_attributes_txs: VecDeque<Arc<Transaction>>,
-    /// Whether we can add transactions other than the ones in the attributes
-    pub can_add_txs: bool,
 }
 
 impl<Db: DatabaseRead> SortingData<Db> {
@@ -40,27 +34,24 @@ impl<Db: DatabaseRead> SortingData<Db> {
         senders: &mut SpineConnections<Db>,
         base_fee: u64,
     ) -> Self {
+        self.maybe_apply(base_fee);
+
+        let db = self.frag.state();
+
+        for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
+            debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
+            let tx = t.unwrap();
+            senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
+            self.in_flight_sims += 1;
+        }
+        self
+    }
+
+    pub fn maybe_apply(&mut self, base_fee: u64) {
         if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
             self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
             self.frag.apply_tx(tx_to_apply);
         }
-
-        let db = self.frag.state();
-
-        if let Some(tx) = self.remaining_attributes_txs.pop_front() {
-            debug_assert_eq!(self.in_flight_sims, 0, "only one attributes tx can be in flight at a time");
-            senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
-            self.in_flight_sims = 1;
-        } else if self.can_add_txs {
-            for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
-                debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
-                let tx = t.unwrap();
-                senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
-                self.in_flight_sims += 1;
-            }
-        }
-
-        self
     }
 
     pub fn is_valid(&self, state_id: u64) -> bool {
@@ -68,7 +59,7 @@ impl<Db: DatabaseRead> SortingData<Db> {
     }
 
     /// Handles the result of a simulation. `simulated_tx` simulated_at_id should be pre-verified.
-    pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx, Db>, sender: &Address, base_fee: u64) {
+    pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx>, sender: &Address, base_fee: u64) {
         self.in_flight_sims -= 1;
 
         // handle errored sim
@@ -88,10 +79,21 @@ impl<Db: DatabaseRead> SortingData<Db> {
     }
 
     pub fn should_seal_frag(&self) -> bool {
-        self.until < Instant::now()
+        // for now this is to get around the fact that if the initialy opattrs contains a list of txs to be included and
+        // we sent off the last one to be included while the self.until runs out, it would return true. What we
+        // should do is keep track whether we're the first frag and not return ever until remaining attributes
+        // txs == 0 and num in flights == 0
+        if self.in_flight_sims != 0 {
+            return false;
+        }
+        self.tof_snapshot.is_empty() || self.until < Instant::now()
     }
 
     pub fn should_send_next_sims(&self) -> bool {
         self.in_flight_sims == 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.frag.is_empty()
     }
 }

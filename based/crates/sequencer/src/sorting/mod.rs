@@ -32,6 +32,9 @@ impl ActiveOrders {
     /// Removes all pending txs for a sender list.
     /// We remove all as nonces needed to be mined in sequential order.
     pub fn remove_from_sender(&mut self, sender: &Address, base_fee: u64) {
+        if self.is_empty() {
+            return;
+        }
         for i in (0..self.len() - 1).rev() {
             let order = &mut self.orders[i];
             if &order.sender() == sender && order.pop(base_fee) {
