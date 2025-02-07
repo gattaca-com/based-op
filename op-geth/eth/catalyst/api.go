@@ -1338,10 +1338,17 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 	}
 }
 
-// TODO: We must define the responses for the following methods
+func (api *ConsensusAPI) NewFragV0(frag common.SignedNewFrag) (string, error) {
+	// TODO: Validations
+	// -1. Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
+	// 0. If frag.seq == 0
+	//     a. check there's no unsealed block in progress.
+	//     b. check frag block number == current_head_block_number + 1.
+	// 1. If frag.seq > 0
+	//     a. check frag block number matches the current unsealed block number
+	//     b. check frag sequence number == latest_frag_seq_in_current_unsealed_block + 1.
+	//     c. check that the current last frag is does not have the IsLast flag set.
 
-func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) error {
-	// TODO: Perform validations
 	return api.newFragV0(frag)
 }
 
@@ -1351,13 +1358,27 @@ func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) error {
 	return nil
 }
 
-func (api *ConsensusAPI) SealFragV0(frag engine.SignedSeal) error {
-	// TODO: Perform validations
+func (api *ConsensusAPI) SealFragV0(frag common.SignedSeal) error {
+	// TODO: Validations
+	// -1. Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
+	// 0. Gas used < gas limit
+	// 1. Check the total frags is correct
+	// 2. Seal the UnsealedBlock
+	// 3. Check the block number
+	// 4. Check the parent hash
+	// 5. Compute and check the block hash (*)
+	// 6. Compute and check the state root (*)
+	// 7. Compute and check the transactions root (*)
+	// 8. Compute and check the receipts root (*)
+	//
+	// (*) double check if we need to compute since we should already know the last new frag sent
 	return api.sealFragV0(frag)
 }
 
-func (api *ConsensusAPI) sealFragV0(frag engine.SignedSeal) error {
-	// TODO: Implement
+func (api *ConsensusAPI) sealFragV0(frag common.SignedSeal) error {
+	// TODO:
+	// 1. Commit the seal
+	// 2. Response (we still need to define how we'll response)
 	log.Info("(api *ConsensusAPI) sealFragV0", frag)
 	return nil
 }
