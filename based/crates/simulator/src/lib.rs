@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     fmt::{Debug, Display},
     sync::Arc,
 };
@@ -14,7 +13,7 @@ use bop_common::{
         },
         SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{flatten_state_changes, DBFrag, DBSorting, DatabaseRead},
+    db::{DBFrag, DBSorting, DatabaseRead},
     time::Duration,
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
@@ -33,8 +32,7 @@ use revm::{
     db::{states::bundle_state::BundleRetention, BundleState, CacheDB, State},
     Database, DatabaseCommit, DatabaseRef, Evm,
 };
-use revm_primitives::{Account, Address, EnvWithHandlerCfg, EvmState, EvmStorageSlot};
-use tracing::info;
+use revm_primitives::{Address, EnvWithHandlerCfg, EvmState};
 
 /// Simulator thread.
 ///
