@@ -352,6 +352,7 @@ pub type SimulationResult<T> = Result<T, SimulationError>;
 pub struct TopOfBlockResult {
     pub state: BundleState,
     pub forced_inclusion_txs: Vec<SimulatedTx>,
+    pub changes: Vec<EvmState>,
 }
 impl TopOfBlockResult {
     pub fn gas_used(&self) -> u64 {

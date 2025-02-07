@@ -74,9 +74,9 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             move || rt.block_on(wait_for_signal())
         });
 
-        let sequencer = Sequencer::new(db_bop, db_frag.clone(), sequencer_config);
         s.spawn(|| {
-            sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
+            Sequencer::new(db_bop, db_frag.clone(), sequencer_config)
+                .run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
         if args.test {

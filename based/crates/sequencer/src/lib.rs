@@ -55,33 +55,14 @@ pub fn payload_to_block(
     Ok(BlockWithSenders { block, senders: block_senders })
 }
 
-#[derive(Clone, Debug)]
-pub struct Sequencer<Db: DatabaseWrite + DatabaseRead> {
+pub struct Sequencer<Db> {
     state: SequencerState<Db>,
     data: SequencerContext<Db>,
 }
 
-impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
-    pub fn new(db: Db, frag_db: DBFrag<Db>, config: SequencerConfig) -> Self {
-        let frags = FragSequence::new(frag_db, 0); // TODO: move to shared state
-        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
-
-        Self {
-            state: SequencerState::default(),
-
-            data: SequencerContext {
-                db,
-                frags,
-                block_executor,
-                config,
-                tx_pool: Default::default(),
-                fork_choice_state: Default::default(),
-                payload_attributes: Default::default(),
-                parent_hash: Default::default(),
-                parent_header: Default::default(),
-                block_env: Default::default(),
-            },
-        }
+impl<Db: DatabaseRead> Sequencer<Db> {
+    pub fn new(db: Db, db_frag: DBFrag<Db>, config: SequencerConfig) -> Self {
+        Self { state: SequencerState::default(), data: SequencerContext::new(db, db_frag, config) }
     }
 }
 
@@ -124,7 +105,7 @@ where
 /// Contains different states of the Sequencer state machine.
 /// The state is stored as a reference in the Sequencer struct.
 #[derive(Clone, Debug, Default, AsRefStr)]
-pub enum SequencerState<Db: DatabaseWrite + DatabaseRead> {
+pub enum SequencerState<Db> {
     /// Waiting for block sync
     Syncing {
         /// When the stage reaches this syncing is done
@@ -397,7 +378,7 @@ where
                 let frag_msg = VersionedMessage::from(frag);
                 let _ = senders.send(frag_msg);
                 let (seal, block) = data.frags.seal_block(
-                    data.as_ref(),
+                    &data.block_env,
                     data.parent_hash,
                     data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
                     data.config.evm_config.chain_spec(),
@@ -521,7 +502,7 @@ where
                 if no_tx_pool {
                     // Can't sort anyway
                     let seal_block = data.frags.seal_block(
-                        data.as_ref(),
+                        &data.block_env,
                         data.parent_hash,
                         data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
                         data.config.evm_config.chain_spec(),

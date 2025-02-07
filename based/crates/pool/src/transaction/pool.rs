@@ -1,18 +1,14 @@
-#![allow(unused)] // TODO: remove
-
 use std::{collections::HashMap, sync::Arc};
 
 use alloy_consensus::Transaction as TransactionTrait;
 use alloy_primitives::Address;
 use bop_common::{
-    communication::{messages::SequencerToSimulator, Sender, SendersSpine, TrackedSenders},
+    communication::{messages::SequencerToSimulator, SendersSpine, TrackedSenders},
     db::{DBFrag, DatabaseRead},
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
 };
-use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpTransactionSigned};
-use reth_primitives_traits::transaction::signed::SignedTransaction;
-use revm::db::CacheDB;
+use reth_optimism_primitives::transaction::TransactionSenderInfo;
 
 use crate::transaction::active::Active;
 
@@ -201,3 +197,4 @@ impl TxPool {
         self.active_txs.is_empty()
     }
 }
+

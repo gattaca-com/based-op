@@ -108,6 +108,7 @@ reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
 revm-primitives = { version = "15.1.0", features = [
     "std",
 ], default-features = false }
+revm-interpreter = "15.1.0"
 revm = { version = "19.2.0", features = [
     "std",
     "secp256k1",

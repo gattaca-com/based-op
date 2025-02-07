@@ -13,11 +13,17 @@ pub struct InSortFrag<Db> {
     pub txs: Vec<SimulatedTx>,
 }
 
-impl<Db: std::fmt::Debug + Clone> InSortFrag<Db> {
+impl<Db> InSortFrag<Db> {
     pub fn new(db: DBSorting<Db>, max_gas: u64) -> Self {
         Self { db: Arc::new(db), gas_remaining: max_gas, gas_used: 0, payment: U256::ZERO, txs: vec![] }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.txs.is_empty()
+    }
+}
+
+impl<Db: Clone> InSortFrag<Db> {
     pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
         debug_assert!(
             Arc::strong_count(&self.db) == 1,
@@ -31,10 +37,7 @@ impl<Db: std::fmt::Debug + Clone> InSortFrag<Db> {
 
         // TODO: check gas usage
         let gas_used = tx.as_ref().result.gas_used();
-        debug_assert!(
-            self.gas_remaining > gas_used,
-            "had too little gas remaining on block {self:#?} to apply tx {tx:#?}"
-        );
+        debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
 
         self.gas_remaining -= gas_used;
         self.gas_used += gas_used;
@@ -43,9 +46,5 @@ impl<Db: std::fmt::Debug + Clone> InSortFrag<Db> {
 
     pub fn state(&self) -> Arc<DBSorting<Db>> {
         self.db.clone()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.txs.is_empty()
     }
 }

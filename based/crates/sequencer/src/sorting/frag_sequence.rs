@@ -12,11 +12,11 @@ use bop_common::{
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
+use revm::{db::{states::bundle_state::BundleRetention, BundleState, State}, Database, DatabaseCommit, DatabaseRef};
 use reth_evm::execute::ProviderError;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_forks::OpHardfork;
-use revm::{db::BundleState, Database};
-use revm_primitives::{hex, BlockEnv, Bytes, B256};
+use revm_primitives::{hex, BlockEnv, Bytes, EvmState, B256};
 
 use crate::sorting::InSortFrag;
 
@@ -32,66 +32,25 @@ pub struct FragSequence<Db> {
     /// Block number for all frags in this block
     block_number: u64,
     top_of_block_bundle: BundleState,
+    top_of_block_changes: Vec<EvmState>
+
 }
-
-impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
-    pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
-        let block_number = db.head_block_number().expect("can't get block number") + 1;
-        Self {
-            db,
-            gas_remaining: max_gas,
-            payment: U256::ZERO,
-            txs: vec![],
-            next_seq: 0,
-            block_number,
-            top_of_block_bundle: BundleState::default(),
-        }
-    }
-
-    // TODO: remove this and move to sortign data
+impl<Db> FragSequence<Db> {
     pub fn set_gas_limit(&mut self, gas_limit: u64) {
         self.gas_remaining = gas_limit;
-    }
-
-    pub fn db(&self) -> DBFrag<Db> {
-        self.db.clone()
     }
 
     pub fn db_ref(&self) -> &DBFrag<Db> {
         &self.db
     }
-
-    /// Builds a new in-sort frag
-    pub fn create_in_sort(&self) -> InSortFrag<Db> {
-        let db_sort = DBSorting::new(self.db());
-        InSortFrag::new(db_sort, self.gas_remaining)
-    }
-
-    /// Creates a new frag, all subsequent frags will be built on top of this one
-    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragV0 {
-        self.gas_remaining -= in_sort.gas_used;
-        self.payment += in_sort.payment;
-
-        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
-
-        self.db.commit(in_sort.txs.iter());
-        self.txs.extend(in_sort.txs);
-        self.next_seq += 1;
-
-        msg
-    }
-
-    pub fn is_valid(&self, state_id: u64) -> bool {
-        state_id == self.db.state_id()
-    }
-
-    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0
+    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
         self.gas_remaining -= top_of_block.gas_used();
         self.payment += top_of_block.payment();
         self.top_of_block_bundle = top_of_block.state;
+        self.top_of_block_changes = top_of_block.changes;
         // tracing::info!("###################{}",self.db.calculate_state_root(&top_of_block.state).unwrap().0);
         // self.db.commit_flat_changes(top_of_block.flat_state_changes);
         // self.db.commit( );
@@ -114,9 +73,51 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         self.top_of_block_bundle = Default::default();
         self.db.reset(db);
     }
+}
+impl<Db: Clone> FragSequence<Db> {
+    /// Builds a new in-sort frag
+    pub fn create_in_sort(&self) -> InSortFrag<Db> {
+        let db_sort = DBSorting::new(self.db());
+        InSortFrag::new(db_sort, self.gas_remaining)
+    }
 
+    // TODO: remove this and move to sortign data
+    pub fn db(&self) -> DBFrag<Db> {
+        self.db.clone()
+    }
+}
+
+impl<Db: DatabaseRead> FragSequence<Db> {
+    pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
+        let block_number = db.head_block_number().expect("can't get block number") + 1;
+        Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number, top_of_block_bundle: BundleState::default(), top_of_block_changes: Default::default() }
+    }
+
+    pub fn is_valid(&self, state_id: u64) -> bool {
+        state_id == self.db.state_id()
+    }
+}
+
+impl<Db: DatabaseRef> FragSequence<Db> {
+    /// Creates a new frag, all subsequent frags will be built on top of this one
+    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragV0 {
+        self.gas_remaining -= in_sort.gas_used;
+        self.payment += in_sort.payment;
+
+        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
+
+        self.db.commit(in_sort.txs.iter());
+        self.txs.extend(in_sort.txs);
+        self.next_seq += 1;
+
+        msg
+    }
+}
+
+
+impl<Db> FragSequence<Db> {
     pub fn seal_block(
-        &self,
+        &mut self,
         block_env: &BlockEnv,
         parent_hash: B256,
         parent_beacon_block_root: B256,
@@ -126,9 +127,14 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
+        let mut state = State::builder().with_database(self.db.clone()).with_bundle_update().without_state_clear().build();
+        state.commit(flatten_state_changes(self.top_of_block_changes.clone()));
+        state.merge_transitions(BundleRetention::Reverts);
+        let bundle = state.take_bundle();
         // self.db.commit_flat_changes(state_changes);
-        // self.db.db.write().merge_transitions(BundleRetention::Reverts);
-        let state_root = self.db.calculate_state_root(&self.top_of_block_bundle).unwrap().0;
+        // self.db.merge_transitions(BundleRetention::Reverts);
+        // let state_root = self.db.calculate_state_root(&state_changes_to_bundle_state(&self.db, flatten_state_changes(self.top_of_block_changes.clone())).unwrap()).unwrap().0;
+        let state_root = self.db.calculate_state_root(&bundle).unwrap().0;
 
         let mut receipts = Vec::with_capacity(self.txs.len());
         let mut transactions = Vec::with_capacity(self.txs.len());
