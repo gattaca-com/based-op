@@ -56,7 +56,7 @@ To view the logs, run the following:
 ```Shell
 make op-node-logs            // OP node logs
 make op-reth-logs            // OP reth logs
-make rollup-boost-logs       // Rollup boost logs
+make based-portal-logs       // Based portal logs
 
 make logs SERVICE=<service>  // Replace <service> with the service name
 ```
@@ -64,7 +64,7 @@ make logs SERVICE=<service>  // Replace <service> with the service name
 #### Docker Image Build
 
 ```Shell
-make build-mux               // Build the local mux docker image
+make build-portal            // Build the local portal docker image
 make build-reth              // Build the local reth docker image
 make build-op-node           // Build the local op-node docker image
 ```
@@ -83,9 +83,11 @@ optimism_package:
           cl_type: op-node
         - el_type: op-geth
           cl_type: op-node
+      mev_type: based-portal
+      mev_params:
+        based_portal_image: based_portal_local
       additional_services:
         - blockscout
-        - rollup-boost
 ```
 
 ### Running Kurtosis with Local Code
@@ -95,13 +97,13 @@ To use our local code with Kurtosis, we need to build the docker images with the
 You can do this one time:
 
 ```Shell
-make build // Builds mux, op-node, and reth Docker images
+make build // Builds portal, op-node, and reth Docker images
 ```
 
 Or individually:
 
 ```Shell
-make build-mux               // Build the local mux docker image
+make build-portal            // Build the local portal docker image
 make build-reth              // Build the local reth docker image
 make build-op-node           // Build the local op-node docker image
 ```

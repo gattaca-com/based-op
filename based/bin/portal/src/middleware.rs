@@ -15,14 +15,14 @@ use crate::server::HttpClient;
 
 #[derive(Clone)]
 pub struct ProxyService<S> {
-    mux_methods: &'static [&'static str],
+    supported_methods: &'static [&'static str],
     inner: S,
     fallback_client: HttpClient,
 }
 
 impl<S> ProxyService<S> {
-    pub fn new(mux_methods: &'static [&'static str], inner: S, fallback_client: HttpClient) -> Self {
-        Self { mux_methods, inner, fallback_client }
+    pub fn new(supported_methods: &'static [&'static str], inner: S, fallback_client: HttpClient) -> Self {
+        Self { supported_methods, inner, fallback_client }
     }
 }
 
@@ -36,10 +36,10 @@ where
     fn call(&self, req: Request<'a>) -> Self::Future {
         let inner = self.inner.clone();
         let fallback_client = self.fallback_client.clone();
-        let mux_methods = self.mux_methods;
+        let supported_methods = self.supported_methods;
 
         async move {
-            if mux_methods.contains(&req.method_name()) {
+            if supported_methods.contains(&req.method_name()) {
                 debug!(method = %req.method_name(), "handling request");
 
                 inner.call(req).await
