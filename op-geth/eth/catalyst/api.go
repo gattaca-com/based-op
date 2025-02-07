@@ -1340,24 +1340,25 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 
 // TODO: We must define the responses for the following methods
 
-func (api *ConsensusAPI) NewFragV0(frag engine.FragV0) error {
+func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) error {
 	// TODO: Perform validations
 	log.Info("(api *ConsensusAPI) NewFragV0")
 	return api.newFragV0(frag)
 }
 
-func (api *ConsensusAPI) newFragV0(frag engine.FragV0) error {
+func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) error {
 	// TODO: Implement
 	log.Info("(api *ConsensusAPI) newFragV0", frag)
 	return nil
 }
 
-func (api *ConsensusAPI) SealFragV0(frag engine.SealV0) error {
+func (api *ConsensusAPI) SealFragV0(frag engine.SignedSeal) error {
+	// TODO: Perform validations
 	log.Info("(api *ConsensusAPI) SealFragV0")
 	return api.sealFragV0(frag)
 }
 
-func (api *ConsensusAPI) sealFragV0(frag engine.SealV0) error {
+func (api *ConsensusAPI) sealFragV0(frag engine.SignedSeal) error {
 	// TODO: Implement
 	log.Info("(api *ConsensusAPI) sealFragV0", frag)
 	return nil
