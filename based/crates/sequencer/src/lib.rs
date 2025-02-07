@@ -33,13 +33,13 @@ use tracing::warn;
 
 pub mod block_sync;
 pub mod config;
-pub mod simulator;
 mod context;
+pub mod simulator;
 pub(crate) mod sorting;
 
-pub use simulator::Simulator;
 pub use config::SequencerConfig;
 use context::SequencerContext;
+pub use simulator::Simulator;
 use sorting::SortingData;
 
 pub fn payload_to_block(

@@ -32,7 +32,10 @@ use revm::{
 use revm_primitives::{Address, BlockEnv, Bytes, EnvWithHandlerCfg, EvmState, B256};
 
 use crate::{
-    block_sync::BlockSync, simulator::simulate_tx_inner, sorting::{ActiveOrders, SortingData}, FragSequence, SequencerConfig
+    block_sync::BlockSync,
+    simulator::simulate_tx_inner,
+    sorting::{ActiveOrders, SortingData},
+    FragSequence, SequencerConfig,
 };
 
 pub struct SequencerContext<Db> {

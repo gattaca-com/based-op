@@ -217,6 +217,10 @@ impl Transaction {
     pub fn from_block(block: &BlockSyncMessage) -> Vec<Arc<Transaction>> {
         block.body.transactions.iter().map(|t| Arc::new(t.clone().into())).collect()
     }
+
+    pub fn envelope(&self) -> Bytes {
+        self.envelope.clone()
+    }
 }
 
 impl Deref for Transaction {
