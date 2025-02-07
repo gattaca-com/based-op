@@ -59,7 +59,7 @@ restart: clean run ## 🔄 Restart
 
 # Testing
 
-frag:
+test-frag:
 	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
 	--data '{ \
 		"jsonrpc": "2.0", \
@@ -79,7 +79,7 @@ frag:
 		] \
 	}'
 
-seal:
+test-seal:
 	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
 	--data '{ \
 		"jsonrpc": "2.0", \
