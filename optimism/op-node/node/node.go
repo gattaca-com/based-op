@@ -657,7 +657,7 @@ func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNe
 
 	n.tracer.OnNewFrag(ctx, from, frag)
 
-	n.log.Info("Received new fragment", frag)
+	n.log.Info("Received new fragment", "frag", frag)
 
 	// Pass on the event to the L2 Engine
 	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
@@ -679,7 +679,7 @@ func (n *OpNode) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedS
 
 	n.tracer.OnSealFrag(ctx, from, seal)
 
-	n.log.Info("Received new seal", seal)
+	n.log.Info("Received new seal", "seal", seal)
 
 	// Pass on the event to the L2 Engine
 	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
