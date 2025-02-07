@@ -1,8 +1,8 @@
 
-use revm::db::{states::{
+use revm::{db::{states::{
     bundle_state::BundleRetention, cache::CacheState, plain_account::PlainStorage, BundleState,
     CacheAccount, StateBuilder, TransitionAccount, TransitionState,
-}, EmptyDB};
+}, EmptyDB}, DatabaseRef};
 
 use revm_interpreter::primitives::{
     db::{Database, DatabaseCommit},
@@ -67,7 +67,7 @@ impl State<EmptyDB> {
     }
 }
 
-impl<DB> State<DB> {
+impl<DB: DatabaseRef> State<DB> {
     /// Returns the size hint for the inner bundle state.
     /// See [BundleState::size_hint] for more info.
     pub fn bundle_size_hint(&self) -> usize {
@@ -187,7 +187,7 @@ impl<DB> State<DB> {
                     }
                 }
                 // if not found in bundle, load it from database
-                let info = self.database.basic(address)?;
+                let info = self.database.basic_ref(address)?;
                 let account = match info {
                     None => CacheAccount::new_loaded_not_existing(),
                     Some(acc) if acc.is_empty() => {
@@ -216,7 +216,7 @@ impl<DB> State<DB> {
     }
 }
 
-impl<DB: Database> Database for State<DB> {
+impl<DB: DatabaseRef> Database for State<DB> {
     type Error = DB::Error;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
@@ -234,7 +234,7 @@ impl<DB: Database> Database for State<DB> {
                     }
                 }
                 // if not found in bundle ask database
-                let code = self.database.code_by_hash(code_hash)?;
+                let code = self.database.code_by_hash_ref(code_hash)?;
                 entry.insert(code.clone());
                 Ok(code)
             }
@@ -259,7 +259,7 @@ impl<DB: Database> Database for State<DB> {
                         let value = if is_storage_known {
                             U256::ZERO
                         } else {
-                            self.database.storage(address, index)?
+                            self.database.storage_ref(address, index)?
                         };
                         entry.insert(value);
                         Ok(value)
@@ -276,7 +276,7 @@ impl<DB: Database> Database for State<DB> {
         match self.block_hashes.entry(number) {
             btree_map::Entry::Occupied(entry) => Ok(*entry.get()),
             btree_map::Entry::Vacant(entry) => {
-                let ret = *entry.insert(self.database.block_hash(number)?);
+                let ret = *entry.insert(self.database.block_hash_ref(number)?);
 
                 // prune all hashes that are older then BLOCK_HASH_HISTORY
                 let last_block = number.saturating_sub(BLOCK_HASH_HISTORY);
@@ -294,7 +294,7 @@ impl<DB: Database> Database for State<DB> {
     }
 }
 
-impl<DB: Database> DatabaseCommit for State<DB> {
+impl<DB: DatabaseRef> DatabaseCommit for State<DB> {
     fn commit(&mut self, evm_state: HashMap<Address, Account>) {
         let transitions = self.cache.apply_evm_state(evm_state);
         self.apply_transition(transitions);
