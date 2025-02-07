@@ -47,7 +47,7 @@ async fn main() -> eyre::Result<()> {
     // Fetch and wait for all blocks
     let mut batch_futures = Vec::with_capacity((args.end_block - args.start_block + 1) as usize);
     for block_num in args.start_block..=args.end_block {
-        batch_futures.push(fetch_block(block_num, &provider));
+        batch_futures.push(fetch_block(block_num, args.end_block, &provider));
     }
     let mut blocks = futures::future::join_all(batch_futures).await.into_iter().collect::<Vec<_>>();
 

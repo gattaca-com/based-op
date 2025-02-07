@@ -44,17 +44,18 @@ fn main() {
 fn run(args: GatewayArgs) -> eyre::Result<()> {
     let spine = Spine::default();
 
-    let db_bop = init_database(
+    let db = init_database(
         args.db_datadir.clone(),
         args.max_cached_accounts,
         args.max_cached_storages,
         args.chain_spec.clone(),
     )?;
+    let db_head_block = db.head_block_number()?;
+    let db_head_hash = db.head_block_hash()?;
 
-    tracing::info!("Starting gateway at block {}", db_bop.head_block_number().expect("couldn't get head block number"));
+    tracing::info!(db_head_block, %db_head_hash, "starting gateway");
 
-    let db_frag: DBFrag<_> = db_bop.clone().into();
-    let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
+    let db_frag: DBFrag<_> = db.clone().into();
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
 
@@ -74,12 +75,13 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         });
 
         s.spawn(|| {
-            Sequencer::new(db_bop, db_frag.clone(), sequencer_config)
+            Sequencer::new(db, db_frag.clone(), sequencer_config)
                 .run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
         if args.test {
             s.spawn(|| {
+                let start_fetch = db_head_block + 1;
                 MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100).run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
@@ -87,7 +89,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             });
         } else {
             s.spawn(|| {
-                BlockFetcher::new(args.rpc_fallback_url).run(
+                BlockFetcher::new(args.rpc_fallback_url, db_head_block).run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
                 );

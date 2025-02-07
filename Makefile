@@ -41,6 +41,9 @@ build-op-geth: ## 🏗️ Build OP geth from op-eth directory
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op
 
+genesis:
+	kurtosis files download based-op el_cl_genesis_data ./genesis
+
 logs: ## 📜 Show logs
 	kurtosis service logs -f based-op $(SERVICE)
 

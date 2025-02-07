@@ -180,7 +180,7 @@ pub enum EngineApi {
 }
 impl EngineApi {
     pub fn messages_from_block(
-        block: &BlockSyncMessage,
+        BlockSyncMessage { block, requested: _ }: &BlockSyncMessage,
         txs_in_attributes: bool,
         no_tx_pool: Option<bool>,
     ) -> (Receiver<PayloadStatus>, EngineApi, Receiver<ForkchoiceUpdated>, EngineApi, EngineApi) {
@@ -384,7 +384,19 @@ pub enum BlockSyncError {
     SignerRecovery,
 }
 
-pub type BlockSyncMessage = BlockWithSenders<OpBlock>;
+#[derive(Clone, Debug)]
+pub struct BlockSyncMessage {
+    pub block: BlockWithSenders<OpBlock>,
+    pub requested: u64,
+}
+
+impl Deref for BlockSyncMessage {
+    type Target = BlockWithSenders<OpBlock>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.block
+    }
+}
 
 #[derive(Clone, Debug, AsRefStr)]
 pub enum BlockFetch {

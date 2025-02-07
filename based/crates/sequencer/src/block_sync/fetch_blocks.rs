@@ -29,14 +29,15 @@ pub(crate) const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.pub
 pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
     curr_block: u64,
     end_block: u64,
+    max_block: u64,
     block_sender: &SendersSpine<Db>,
     provider: &AlloyProvider,
 ) {
     info!(start = curr_block, end = end_block, "fetching blocks");
 
-    let futures = (curr_block..=end_block).map(|i| fetch_block(i, provider));
+    let futures = (curr_block..=end_block).map(|i| fetch_block(i, max_block, provider));
 
-    let blocks: Vec<BlockWithSenders<OpBlock>> = join_all(futures).await;
+    let blocks: Vec<BlockSyncMessage> = join_all(futures).await;
 
     for block in blocks {
         block_sender.send_forever(block);
@@ -45,11 +46,11 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
     info!("fetching and sending blocks done. Last fetched block: {}", curr_block - 1);
 }
 
-pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockSyncMessage {
+pub async fn fetch_block(block_number: u64, max_block: u64, client: &AlloyProvider) -> BlockSyncMessage {
     let mut backoff_ms = 10;
     loop {
         match client.get_block_by_number(block_number.into(), true.into()).await {
-            Ok(Some(block)) => return convert_block(block),
+            Ok(Some(block)) => return BlockSyncMessage { requested: max_block, block: convert_block(block) },
             Ok(None) => {
                 warn!(
                     retry_after=?backoff_ms,
@@ -115,7 +116,7 @@ mod tests {
     #[tokio::test]
     async fn test_single_block_fetch() {
         let provider = ProviderBuilder::new().network().on_http(TEST_BASE_RPC_URL.parse().unwrap());
-        let block = fetch_block(25738473, &provider).await;
+        let block = fetch_block(25738473, 25738473, &provider).await;
 
         assert_eq!(block.header.number, 25738473);
         assert_eq!(block.header.hash_slow(), b256!("ad9e6c25e60e711e5e99684892848adc06d44b1cc0e5056b06fcead6c7eb6186"));

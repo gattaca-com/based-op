@@ -116,6 +116,10 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
+        // From: https://specs.optimism.io/protocol/exec-engine.html#extended-payloadattributesv2
+        // The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup. This
+        // field overrides the gas limit used during block-building. If not
+        // specified as rollup, a STATUS_INVALID is returned.
         let gas_limit = self.payload_attributes.gas_limit.unwrap();
         let env_attributes = NextBlockEnvAttributes {
             timestamp: self.payload_attributes.payload_attributes.timestamp,

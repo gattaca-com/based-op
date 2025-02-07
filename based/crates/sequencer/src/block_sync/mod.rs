@@ -162,7 +162,7 @@ mod tests {
 
         // Fetch the block from the RPC.
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
-        let block = rt.block_on(async { fetch_block(25771900, &provider).await });
+        let block = rt.block_on(async { fetch_block(25771900, 0, &provider).await });
 
         // Create the alloydb.
         let alloydb = AlloyDB::new(provider, block.header.number, rt);
@@ -191,7 +191,7 @@ mod tests {
         let mut block_sync = BlockSync::new(chain_spec);
 
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
-        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &provider).await });
+        let block = rt.block_on(async { fetch_block(db_head_block_number + 1, 0, &provider).await });
 
         // Execute the block.
         assert!(block_sync.execute(&block, &db).is_ok());

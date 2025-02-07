@@ -45,7 +45,7 @@ impl MockFetcher {
 
 impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
     fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
-        let block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
+        let block = self.executor.block_on(fetch_block(self.next_block, self.sync_until, &self.provider));
         let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, _fcu) =
             messages::EngineApi::messages_from_block(&block, false, None);
         connections.send(new_payload);
@@ -58,7 +58,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             self.handle_fetch(msg);
         });
         if self.next_block < self.sync_until {
-            let mut block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
+            let mut block = self.executor.block_on(fetch_block(self.next_block, self.sync_until, &self.provider));
 
             let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, fcu) =
                 messages::EngineApi::messages_from_block(&block, true, None);
@@ -81,11 +81,11 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
 
             // we set the extra data to 0 as that is also what the sequencer will use
             // block.header.extra_data = Default::default();
-            let hash = block.hash_slow();
+            let hash = block.block.hash_slow();
             let hash1 = sealed_block.execution_payload.payload_inner.payload_inner.block_hash;
             if hash1 != hash {
                 sealed_block.execution_payload.payload_inner.payload_inner.transactions = vec![];
-                block.body = Default::default();
+                block.block.body = Default::default();
                 println!("\n\n\n\n\n\n\n\n");
                 println!("OUR BLOCK:");
                 println!("{sealed_block:#?}");
@@ -98,7 +98,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
 
             assert_eq!(
                 sealed_block.execution_payload.payload_inner.payload_inner.block_hash,
-                block.hash_slow(),
+                block.block.hash_slow(),
                 "{block:#?} vs {sealed_block:#?}"
             );
 

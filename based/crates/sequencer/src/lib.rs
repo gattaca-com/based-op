@@ -20,7 +20,7 @@ use bop_common::{
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_optimism_primitives::OpTransactionSigned;
+use reth_optimism_primitives::{OpBlock as RethOpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
 use sorting::FragSequence;
@@ -42,8 +42,8 @@ use sorting::SortingData;
 pub fn payload_to_block(
     payload: ExecutionPayload,
     sidecar: ExecutionPayloadSidecar,
-) -> Result<BlockSyncMessage, BlockSyncError> {
-    let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
+) -> Result<BlockWithSenders<RethOpBlock>, BlockSyncError> {
+    let block: Block<OpTransactionSigned> = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
     let block_senders = block
         .body
         .transactions
@@ -51,6 +51,7 @@ pub fn payload_to_block(
         .map(|tx| tx.recover_signer_unchecked())
         .collect::<Option<Vec<_>>>()
         .ok_or(BlockSyncError::SignerRecovery)?;
+
     Ok(BlockWithSenders { block, senders: block_senders })
 }
 
@@ -131,6 +132,20 @@ pub enum SequencerState<Db> {
     /// We've applied the forced inclusion txs, and weren't allowed to use any other
     /// txs from the pool, so we sealed the block immediately and are waiting to send it
     WaitingForGetPayload((SealV0, OpExecutionPayloadEnvelopeV3)),
+}
+
+impl<Db: DatabaseWrite + DatabaseRead> SequencerState<Db> {
+    pub fn is_sorting(&self) -> bool {
+        matches!(self, SequencerState::Sorting(_))
+    }
+
+    pub fn is_waiting_for_get_payload(&self) -> bool {
+        matches!(self, SequencerState::WaitingForGetPayload(_))
+    }
+
+    pub fn is_syncing(&self) -> bool {
+        matches!(self, SequencerState::Syncing { .. })
+    }
 }
 
 impl<Db> SequencerState<Db>
@@ -373,27 +388,31 @@ where
     /// picked up and processed here.
     fn handle_block_sync(
         self,
-        block: BlockSyncMessage,
+        BlockSyncMessage { block, requested }: BlockSyncMessage,
         data: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> Self {
         use SequencerState::*;
 
-        match self {
-            Syncing { last_block_number } => {
-                SequencerState::commit_block(&block, data, senders, self.syncing());
+        // TODO: tidy up other states
 
-                if block.number != last_block_number {
-                    Syncing { last_block_number }
-                } else {
-                    // Wait until the next payload and attributes arrive
-                    WaitingForNewPayload
-                }
-            }
-            _ => {
-                debug_assert!(false, "Should not have received block sync update while in state {self:?}");
-                self
-            }
+        let db_head_bn = data.db.head_block_number().expect("couldn't get db head block number");
+
+        if block.number != db_head_bn + 1 {
+            warn!("received block sync for block {} but db head is at {db_head_bn}", block.number);
+            return self;
+        }
+
+        if self.is_sorting() || self.is_waiting_for_get_payload() {
+            panic!("should not have received block sync update while in state {self:?}");
+        }
+
+        SequencerState::commit_block(&block, data, senders, self.syncing());
+
+        if requested > db_head_bn + 1 {
+            Syncing { last_block_number: requested }
+        } else {
+            WaitingForNewPayload
         }
     }
 
@@ -458,6 +477,7 @@ where
     fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db>) -> Self {
         use SequencerState::*;
         let base_fee = data.as_ref().basefee.to();
+
         match self {
             Sorting(mut sorting_data) if sorting_data.should_seal_frag() => {
                 sorting_data.maybe_apply(base_fee);
