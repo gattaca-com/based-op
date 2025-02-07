@@ -1,6 +1,7 @@
 .PHONY: deps run clean restart help \
 		build build-mux build-op-node build-op-geth \
 		logs op-node-logs op-geth-logs \
+		test-frag test-seal
 
 .DEFAULT_GOAL := help
 
