@@ -86,10 +86,10 @@ where
 
         let old_db = std::mem::replace(evm.db_mut(), State::new(db));
         tx.fill_tx_env(evm.tx_mut());
-        let res = evm.transact().map_err(|_e| SimulationError::EvmError("todo 2".to_string()))?;
-
+        let res = evm.transact();
         // This dance is needed to drop the arc ref
         let _ = std::mem::replace(evm.db_mut(), old_db);
+        let res = res.map_err(|_e| SimulationError::EvmError("todo 2".to_string()))?;
 
         Ok(SimulatedTx::new(tx, res, start_balance, coinbase, depositor_nonce))
     }

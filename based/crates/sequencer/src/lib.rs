@@ -281,7 +281,6 @@ where
                         data.on_new_block(attributes, senders);
 
                         if no_tx_pool {
-                            todo!("get frag message too");
                             //   senders
                             // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
                             // .expect("couldn't send frag");
@@ -504,7 +503,7 @@ where
         syncing: bool,
     ) {
         data.block_executor.apply_and_commit_block(block, &data.db, true).expect("couldn't commit block");
-        todo!("reset frag");
+        // todo!("reset frag");
 
         let sender = data.config.simulate_tof_in_pools.then_some(senders);
         data.tx_pool.handle_new_mined_txs(

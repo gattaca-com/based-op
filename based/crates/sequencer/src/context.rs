@@ -158,6 +158,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         let block_number = u64::try_from(evm.block().number).unwrap();
         let block_timestamp = u64::try_from(evm.block().timestamp).unwrap();
         evm.db_mut().db.write().set_state_clear_flag(chain_spec.is_spurious_dragon_active_at_block(block_number));
+        tracing::info!("calling_beacon contract");
 
         self.system_caller.apply_beacon_root_contract_call(
             block_timestamp,
@@ -165,6 +166,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             self.payload_attributes.payload_attributes.parent_beacon_block_root,
             &mut evm,
         )?;
+        tracing::info!("called_beacon contract");
 
         ensure_create2_deployer(chain_spec, block_timestamp, &mut evm.db_mut().db.write())
             .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
@@ -192,7 +194,9 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             })?;
 
             self.system_caller.on_state(&result_and_state.state);
+            tracing::info!("committing");
             evm.db_mut().commit(result_and_state.state.clone());
+            tracing::info!("committed");
             tx_results.push(SimulatedTx::new(
                 Arc::new(tx),
                 result_and_state,

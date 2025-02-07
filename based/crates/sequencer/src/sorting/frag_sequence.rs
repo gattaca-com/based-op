@@ -91,7 +91,14 @@ impl<Db: Clone> FragSequence<Db> {
 impl<Db: DatabaseRead> FragSequence<Db> {
     pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
         let block_number = db.head_block_number().expect("can't get block number") + 1;
-        Self { db, gas_remaining: max_gas, payment: U256::ZERO, txs: vec![], next_seq: 0, block_number }
+        Self {
+            db,
+            gas_remaining: max_gas,
+            payment: U256::ZERO,
+            txs: vec![],
+            next_seq: 0,
+            block_number,
+        }
     }
 
     pub fn is_valid(&self, state_id: u64) -> bool {
