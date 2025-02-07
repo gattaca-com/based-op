@@ -492,67 +492,12 @@ const NewFragFixedSize = 8 + 8 + 1 + 4 + 8
 
 // UnmarshalSSZ decodes the NewFrag as SSZ type
 func (newFrag *NewFrag) UnmarshalSSZ(scope uint32, r io.Reader) error {
-	offset := uint32(0)
-
-	buf := *payloadBufPool.Get().(*[]byte)
-	if uint32(cap(buf)) < scope {
-		buf = make([]byte, scope)
-	} else {
-		buf = buf[:scope]
-	}
-	defer payloadBufPool.Put(&buf)
-
-	if _, err := io.ReadFull(r, buf); err != nil {
-		return fmt.Errorf("failed to read fixed-size part of NewFrag: %w", err)
-	}
-
-	newFrag.BlockNumber = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-	newFrag.Seq = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-	isLast, err := unmarshalBool(buf[offset])
-	if err != nil {
-		return err
-	}
-	newFrag.IsLast = isLast
-	offset += 1
-	txsOffset := binary.LittleEndian.Uint32(buf[offset : offset+4])
-	if txsOffset != NewFragFixedSize {
-		return fmt.Errorf("unexpected txs offset in NewFrag message: %d <> %d", txsOffset, NewFragFixedSize)
-	}
-	offset += 4
-	newFrag.Version = binary.LittleEndian.Uint64(buf[offset : offset+8])
-	offset += 8
-
-	txs, err := unmarshalTransactions(buf[offset:])
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal transactions list: %w", err)
-	}
-	newFrag.Txs = txs
-
-	return nil
+	return ssz.DecodeFromStream(r, newFrag, scope)
 }
 
 // MarshalSSZ encodes the newFrag as SSZ type
-func (newFrag *NewFrag) MarshalSSZ(w io.Writer) (n int, err error) {
-	offset := uint32(0)
-	txSize := TransactionsSize(newFrag.Txs)
-	size := NewFragFixedSize + txSize
-	buf := make([]byte, size)
-
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.BlockNumber)
-	offset += 8
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.Seq)
-	offset += 8
-	buf[offset] = marshalBool(newFrag.IsLast)
-	offset += 1
-	binary.LittleEndian.PutUint32(buf[offset:offset+4], NewFragFixedSize)
-	offset += 4
-	binary.LittleEndian.PutUint64(buf[offset:offset+8], newFrag.Version)
-	offset += 8
-	marshalTransactions(buf[offset:offset+txSize], newFrag.Txs)
-
-	return w.Write(buf)
+func (newFrag *NewFrag) MarshalSSZ(w io.Writer) error {
+	return ssz.EncodeToStream(w, newFrag)
 }
 
 const SignatureSize = 65
@@ -580,18 +525,18 @@ func (signedNewFrag *SignedNewFrag) UnmarshalSSZ(scope uint32, r io.Reader) erro
 	return nil
 }
 
-func (signedNewFrag *SignedNewFrag) MarshalSSZ(w io.Writer) (n int, err error) {
-	n, err = w.Write(signedNewFrag.Signature[:])
+func (signedNewFrag *SignedNewFrag) MarshalSSZ(w io.Writer) error {
+	n, err := w.Write(signedNewFrag.Signature[:])
 	if err != nil || n != SignatureSize {
-		return 0, errors.New("unable to write signature")
+		return errors.New("unable to write signature")
 	}
 
-	fragSize, err := signedNewFrag.Frag.MarshalSSZ(w)
+	err = signedNewFrag.Frag.MarshalSSZ(w)
 
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return SignatureSize + fragSize, nil
+	return nil
 }
 
 func (s *Seal) SizeSSZ(siz *ssz.Sizer) uint32 { return 32*4 + 8*4 }
@@ -606,6 +551,45 @@ func (s *Seal) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineStaticBytes(codec, &s.ReceiptsRoot)
 	ssz.DefineStaticBytes(codec, &s.StateRoot)
 	ssz.DefineStaticBytes(codec, &s.BlockHash)
+}
+
+func (f *NewFrag) SizeSSZ(siz *ssz.Sizer, fixed bool) uint32 {
+	// fixed size, 2 uint64 + 1 bool + 1 offset
+	size := uint32(8*2 + 1 + 4)
+	if fixed {
+		return size
+	}
+
+	// Dynamic section of the size
+	txs := make([][]byte, len(f.Txs))
+	for i, tx := range f.Txs {
+		txs[i] = []byte(tx)
+	}
+	size += ssz.SizeSliceOfDynamicBytes(siz, txs)
+
+	return size
+}
+
+const MaxTxAmount = 1_048_576
+const MaxTxsSize = 1_073_741_824
+
+func (f *NewFrag) DefineSSZ(codec *ssz.Codec) {
+	// Fixed size section
+	ssz.DefineUint64(codec, &f.BlockNumber)
+	ssz.DefineUint64(codec, &f.Seq)
+	ssz.DefineBool(codec, &f.IsLast)
+	txs := make([][]byte, len(f.Txs))
+	for i, tx := range f.Txs {
+		txs[i] = []byte(tx)
+	}
+	ssz.DefineSliceOfDynamicBytesOffset(codec, &txs, MaxTxAmount, MaxTxsSize)
+
+	// Variable size section
+	ssz.DefineSliceOfDynamicBytesContent(codec, &txs, MaxTxAmount, MaxTxsSize)
+}
+
+func (f *NewFrag) Root() Bytes32 {
+	return unionRoot(ssz.HashSequential(f), 0)
 }
 
 func (s *Seal) Root() Bytes32 {
@@ -655,20 +639,4 @@ func (signedSeal *SignedSeal) MarshalSSZ(w io.Writer) error {
 	}
 
 	return nil
-}
-
-func marshalBool(b bool) byte {
-	if b {
-		return 0x01
-	}
-	return 0x00
-}
-
-func unmarshalBool(b byte) (bool, error) {
-	if b == 0x1 {
-		return true, nil
-	} else if b == 0x0 {
-		return false, nil
-	}
-	return false, fmt.Errorf("invalid bool byte: %x", b)
 }

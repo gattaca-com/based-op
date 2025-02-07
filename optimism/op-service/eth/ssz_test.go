@@ -503,12 +503,11 @@ func TestMarshalUnmarshalNewFrag(t *testing.T) {
 			{0x01, 0x02, 0x03},
 			{0x04, 0x05, 0x06, 0x07},
 		},
-		Version: 42,
 	}
 
 	var buf bytes.Buffer
 
-	_, err := f.MarshalSSZ(&buf)
+	err := f.MarshalSSZ(&buf)
 	require.NoError(t, err)
 
 	data := buf.Bytes()
@@ -534,13 +533,12 @@ func TestMarshalUnmarshalSignedNewFrag(t *testing.T) {
 				{0x01, 0x02, 0x03},
 				{0x04, 0x05, 0x06, 0x07},
 			},
-			Version: 42,
 		},
 	}
 
 	var buf bytes.Buffer
 
-	_, err := f.MarshalSSZ(&buf)
+	err := f.MarshalSSZ(&buf)
 	require.NoError(t, err)
 
 	data := buf.Bytes()
@@ -639,6 +637,23 @@ func TestSealRoot(t *testing.T) {
 
 	expected := decodeOrPanic("e86afda21ddc7338c7e84561681fde45e2ab55cce8cde3163e0ae5f1c378439e")
 	root := s.Root()
+
+	if expected != root {
+		t.Fatalf("Expected root %s, found %s", expected.String(), root.String())
+	}
+}
+
+func TestFragRoot(t *testing.T) {
+	transactions := []Data{{1, 2, 3}}
+	f := NewFrag{
+		BlockNumber: 1,
+		Seq:         0,
+		IsLast:      true,
+		Txs:         transactions,
+	}
+
+	expected := decodeOrPanic("2a5ebad20a81878e5f229928e5c2043580051673b89a7a286008d30f62b10963")
+	root := f.Root()
 
 	if expected != root {
 		t.Fatalf("Expected root %s, found %s", expected.String(), root.String())
