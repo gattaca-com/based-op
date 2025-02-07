@@ -145,6 +145,13 @@ impl<Db: DatabaseRef> Database for DBFrag<Db> {
     }
 }
 
+impl<Db: DatabaseRef> DatabaseCommit for DBFrag<Db> {
+    #[doc = " Commit changes to the database."]
+    fn commit(&mut self,changes:HashMap<Address,Account>) {
+        self.db.write().commit(changes)
+    }
+}
+
 impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
         todo!();

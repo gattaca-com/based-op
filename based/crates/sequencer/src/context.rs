@@ -4,14 +4,12 @@ use alloy_consensus::Header;
 use alloy_rpc_types::engine::ForkchoiceState;
 use bop_common::{
     communication::{
-        messages::{
-            EvmBlockParams, NextBlockAttributes, SimulatorToSequencer, SimulatorToSequencerMsg, TopOfBlockResult,
-        },
+        messages::{EvmBlockParams, NextBlockAttributes, SimulatorToSequencer, SimulatorToSequencerMsg},
         SendersSpine, TrackedSenders,
     },
     db::{state::ensure_create2_deployer, DBFrag, State},
     time::Instant,
-    transaction::SimulatedTx,
+    transaction::{SimulatedTx, Transaction},
 };
 use bop_db::DatabaseRead;
 use bop_pool::transaction::pool::TxPool;
@@ -21,13 +19,13 @@ use reth_evm::{
     env::EvmEnv,
     execute::{BlockExecutionError, BlockValidationError, ProviderError},
     system_calls::SystemCaller,
-    ConfigureEvm, ConfigureEvmEnv,
+    ConfigureEvm, ConfigureEvmEnv, NextBlockEnvAttributes,
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{OpBlockExecutionError, OpEvmConfig};
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use revm::{
-    db::{states::bundle_state::BundleRetention, BundleState },
+    db::{states::bundle_state::BundleRetention, BundleState},
     Database, DatabaseCommit, Evm,
 };
 use revm_primitives::{Address, BlockEnv, Bytes, EnvWithHandlerCfg, EvmState, B256};
@@ -109,13 +107,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
     /// 1. Updating EVM environments
     /// 2. Applying pre-execution changes
     /// 3. Processing forced inclusion transactions
-    fn on_new_block(&mut self, evm_block_params: EvmBlockParams<Db>) {
-        let env_with_handler_cfg = self.get_env_for_new_block(&evm_block_params);
-        let (forced_inclusion_txs, state, changes) = self
-            .get_start_state_for_new_block(evm_block_params.db, env_with_handler_cfg, &evm_block_params.attributes)
-            .expect("shouldn't fail");
-
-
+    fn on_new_block(&mut self, senders: &SendersSpine<Db>) {
+        let forced_inclusion_txs = self.get_start_state_for_new_block(senders).expect("shouldn't fail");
     }
 
     /// Must be called each new block.
@@ -124,14 +117,32 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
     /// Returns the end state and SimulatedTxs for all must include txs.
     fn get_start_state_for_new_block(
         &mut self,
-        db: DBFrag<Db>,
-        env_with_handler_cfg: EnvWithHandlerCfg,
-        next_attributes: &NextBlockAttributes,
-    ) -> Result<(Vec<SimulatedTx>, BundleState, Vec<EvmState>), BlockExecutionError>
+        senders: &SendersSpine<Db>,
+    ) -> Result<Vec<SimulatedTx>, BlockExecutionError>
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
+        let gas_limit = self.payload_attributes.gas_limit.unwrap();
+        let env_attributes = NextBlockEnvAttributes {
+            timestamp: self.payload_attributes.payload_attributes.timestamp,
+            suggested_fee_recipient: self.payload_attributes.payload_attributes.suggested_fee_recipient,
+            prev_randao: self.payload_attributes.payload_attributes.prev_randao,
+            gas_limit,
+        };
+        let EvmEnv { cfg_env_with_handler_cfg, block_env } = self
+            .config
+            .evm_config
+            .next_cfg_and_block_env(&self.parent_header, env_attributes)
+            .expect("Valid block environment configuration");
+
+        let env_with_handler_cfg =
+            EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
+
+        // send new block params to simulators
+        senders.send(EvmBlockParams { spec_id: env_with_handler_cfg.spec_id(), env: env_with_handler_cfg.env.clone() });
+
         let evm_config = self.config.evm_config.clone();
+        let chain_spec = self.config.evm_config.chain_spec().clone();
         let regolith_active = self
             .config
             .evm_config
@@ -140,19 +151,30 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             .active_at_timestamp(u64::try_from(env_with_handler_cfg.block.timestamp).unwrap());
 
         // Configure new EVM to apply pre-execution and must include txs.
-        let mut state = State::new(db);
-        let mut evm = evm_config.evm_with_env(&mut state, env_with_handler_cfg);
+        let mut evm = evm_config.evm_with_env(&mut self.frags.db, env_with_handler_cfg);
 
         // Apply pre-execution changes.
-        let mut changes = self
-            .apply_pre_execution_changes(next_attributes, &mut evm)?
-            .map(|changes| vec![changes])
-            .unwrap_or_default();
+        let block_number = u64::try_from(evm.block().number).unwrap();
+        let block_timestamp = u64::try_from(evm.block().timestamp).unwrap();
+        evm.db_mut().db.write().set_state_clear_flag(chain_spec.is_spurious_dragon_active_at_block(block_number));
 
-        let mut tx_results = Vec::with_capacity(next_attributes.forced_inclusion_txs.len());
+        self.system_caller.apply_beacon_root_contract_call(
+            block_timestamp,
+            block_number,
+            self.payload_attributes.payload_attributes.parent_beacon_block_root,
+            &mut evm,
+        )?;
+
+        ensure_create2_deployer(chain_spec, block_timestamp, &mut evm.db_mut().db.write())
+            .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
+        let forced_inclusion_txs = self.payload_attributes.transactions.as_ref().unwrap();
         let block_coinbase = evm.block().coinbase;
+
+        let mut tx_results = vec![];
+
         // Apply must include txs.
-        for tx in next_attributes.forced_inclusion_txs.iter() {
+        for tx in forced_inclusion_txs.iter() {
+            let tx = Transaction::decode(tx.clone()).unwrap();
             // Cache some values pre-simulation.
             let start_balance =
                 evm.db_mut().basic(block_coinbase).ok().flatten().map(|a| a.balance).unwrap_or_default();
@@ -162,63 +184,23 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             tx.fill_tx_env(evm.tx_mut());
 
             // Execute transaction.
+            let hash = tx.tx_hash();
             let result_and_state = evm.transact().map_err(move |err| {
                 let new_err = err.map_db_err(|e| e.into());
-                BlockValidationError::EVM { hash: tx.tx_hash(), error: Box::new(new_err) }
+                BlockValidationError::EVM { hash, error: Box::new(new_err) }
             })?;
 
             self.system_caller.on_state(&result_and_state.state);
             evm.db_mut().commit(result_and_state.state.clone());
-            changes.push(result_and_state.state.clone());
             tx_results.push(SimulatedTx::new(
-                tx.clone(),
+                Arc::new(tx),
                 result_and_state,
                 start_balance,
                 block_coinbase,
                 depositor_nonce,
             ));
         }
-        evm.db_mut().merge_transitions(BundleRetention::Reverts);
-        let bundle = evm.db_mut().take_bundle();
-        Ok((tx_results, bundle, changes))
-    }
-
-    /// Applies required state changes before transaction execution:
-    /// - Sets state clear flag based on Spurious Dragon hardfork
-    /// - Updates beacon root contract
-    /// - Ensures create2deployer deployment at canyon transition
-    fn apply_pre_execution_changes(
-        &mut self,
-        next_attributes: &NextBlockAttributes,
-        evm: &mut Evm<'_, (), &mut State<DBFrag<Db>>>,
-    ) -> Result<Option<EvmState>, BlockExecutionError> {
-        let block_number = u64::try_from(evm.block().number).unwrap();
-        let block_timestamp = u64::try_from(evm.block().timestamp).unwrap();
-
-        // Set state clear flag if the block is after the Spurious Dragon hardfork.
-        evm.db_mut().set_state_clear_flag(self.chain_spec().is_spurious_dragon_active_at_block(block_number));
-        let changes = self.system_caller.apply_beacon_root_contract_call(
-            block_timestamp,
-            block_number,
-            next_attributes.parent_beacon_block_root,
-            evm,
-        )?;
-
-        ensure_create2_deployer(self.chain_spec().clone(), block_timestamp, evm.db_mut())
-            .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
-
-        Ok(changes)
-    }
-
-    /// Constructs new block environment configuration from parent header and attributes
-    fn get_env_for_new_block(&self, evm_block_params: &EvmBlockParams<Db>) -> EnvWithHandlerCfg {
-        let EvmEnv { cfg_env_with_handler_cfg, block_env } = self
-            .config
-            .evm_config
-            .next_cfg_and_block_env(&evm_block_params.parent_header, evm_block_params.attributes.env_attributes)
-            .expect("Valid block environment configuration");
-
-        EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default())
+        Ok(tx_results)
     }
 }
 

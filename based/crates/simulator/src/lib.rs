@@ -9,7 +9,7 @@ use bop_common::{
     communication::{
         messages::{
             EvmBlockParams, NextBlockAttributes, SequencerToSimulator, SimulationError, SimulatorToSequencer,
-            SimulatorToSequencerMsg, TopOfBlockResult,
+            SimulatorToSequencerMsg,
         },
         SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -94,21 +94,17 @@ where
         Ok(SimulatedTx::new(tx, res, start_balance, coinbase, depositor_nonce))
     }
 
-    
     /// Updates internal EVM environments with new configuration
     #[inline]
-    fn update_evm_environments(&mut self, env_with_handler_cfg: &EnvWithHandlerCfg) {
-        self.evm_tof.modify_spec_id(env_with_handler_cfg.spec_id());
-        self.evm_tof.context.evm.env = env_with_handler_cfg.env.clone();
+    fn update_evm_environments(&mut self, evm_block_params: EvmBlockParams) {
+        let timestamp = u64::try_from(evm_block_params.env.block.timestamp).unwrap();
+        self.evm_tof.modify_spec_id(evm_block_params.spec_id);
+        self.evm_tof.context.evm.env = evm_block_params.env.clone();
 
-        self.evm_sorting.modify_spec_id(env_with_handler_cfg.spec_id());
-        self.evm_sorting.context.evm.env = env_with_handler_cfg.env.clone();
+        self.evm_sorting.modify_spec_id(evm_block_params.spec_id);
+        self.evm_sorting.context.evm.env = evm_block_params.env;
 
-        self.regolith_active = self
-            .evm_config
-            .chain_spec()
-            .fork(OpHardfork::Regolith)
-            .active_at_timestamp(u64::try_from(env_with_handler_cfg.block.timestamp).unwrap());
+        self.regolith_active = self.evm_config.chain_spec().fork(OpHardfork::Regolith).active_at_timestamp(timestamp);
     }
 }
 
@@ -125,10 +121,9 @@ where
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         // Received each new block from the sequencer.
-        // connections.receive(|msg, senders| {
-            todo!();
-            // self.update_evm_environments();
-        // });
+        connections.receive(|msg, _| {
+            self.update_evm_environments(msg);
+        });
 
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
             match msg {

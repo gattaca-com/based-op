@@ -5,7 +5,6 @@ use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
 use alloy_primitives::{Bloom, U256};
 use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
-    communication::messages::TopOfBlockResult,
     db::{flatten_state_changes, DBFrag, DBSorting},
     p2p::{FragV0, SealV0},
     transaction::SimulatedTx,
@@ -23,7 +22,7 @@ use crate::sorting::InSortFrag;
 /// Sequence of frags applied on the last block
 #[derive(Clone, Debug)]
 pub struct FragSequence<Db> {
-    db: DBFrag<Db>,
+    pub db: DBFrag<Db>,
     gas_remaining: u64,
     payment: U256,
     txs: Vec<SimulatedTx>,
@@ -43,11 +42,11 @@ impl<Db> FragSequence<Db> {
     pub fn db_ref(&self) -> &DBFrag<Db> {
         &self.db
     }
-    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 
-    where
-        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
-    {
-        todo!();
+    // pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0 
+    // where
+    //     Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+    // {
+        // todo!();
         // self.gas_remaining -= top_of_block.gas_used();
         // self.payment += top_of_block.payment();
         // self.top_of_block_bundle = top_of_block.state;
@@ -63,7 +62,7 @@ impl<Db> FragSequence<Db> {
         // );
         // self.txs.extend(top_of_block.forced_inclusion_txs);
         // msg
-    }
+    // }
 
     /// When a new block is received, we clear all the temp state on the db
     pub fn reset_fragdb(&mut self, db: Db) {

@@ -16,7 +16,7 @@ use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpBlock;
 use reth_primitives::BlockWithSenders;
 use revm::db::BundleState;
-use revm_primitives::{Address, U256};
+use revm_primitives::{Address, Env, SpecId, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
@@ -348,12 +348,6 @@ impl SimulatorToSequencer {
 
 pub type SimulationResult<T> = Result<T, SimulationError>;
 
-#[derive(Clone, Debug)]
-pub struct TopOfBlockResult {
-}
-impl TopOfBlockResult {
-}
-
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SimulatorToSequencerMsg {
@@ -361,8 +355,6 @@ pub enum SimulatorToSequencerMsg {
     Tx(SimulationResult<SimulatedTx>),
     /// Simulation on top of a fragment. Used by the transaction pool.
     TxPoolTopOfFrag(SimulationResult<SimulatedTx>),
-    /// Top of block sims are done, we can start sequencing
-    TopOfBlock(TopOfBlockResult),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]
@@ -400,11 +392,9 @@ pub enum BlockFetch {
 
 /// Represents the parameters required to configure the next block.
 #[derive(Clone, Debug)]
-pub struct EvmBlockParams<Db: 'static> {
-    pub parent_header: Header,
-    pub attributes: NextBlockAttributes,
-    /// New frag db
-    pub db: DBFrag<Db>,
+pub struct EvmBlockParams {
+    pub spec_id: SpecId,
+    pub env: Box<Env>,
 }
 
 #[derive(Clone)]
