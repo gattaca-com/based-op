@@ -80,7 +80,6 @@ impl<Db: DatabaseWrite + DatabaseRead> Sequencer<Db> {
                 parent_hash: Default::default(),
                 parent_header: Default::default(),
                 block_env: Default::default(),
-                parent_beacon_block_root: Default::default(),
             },
         }
     }
@@ -286,7 +285,6 @@ where
                 } else {
                     // Confirm that the FCU payload is the same as the buffered payload.
                     if payload.block_hash() == fork_choice_state.head_block_hash {
-                        data.parent_beacon_block_root = sidecar.parent_beacon_block_root().unwrap();
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
                         SequencerState::commit_block(&block, data, senders, false);
                         data.parent_header = block.header.clone();
@@ -304,32 +302,32 @@ where
             WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
+                        data.payload_attributes = attributes;
                         data.frags.reset_fragdb(data.db.clone());
                         // From: https://specs.optimism.io/protocol/exec-engine.html#extended-payloadattributesv2
                         // The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup. This
                         // field overrides the gas limit used during block-building. If not
                         // specified as rollup, a STATUS_INVALID is returned.
-                        let gas_limit = attributes.gas_limit.unwrap();
+                        let gas_limit = data.payload_attributes.gas_limit.unwrap();
                         let env_attributes = NextBlockEnvAttributes {
-                            timestamp: attributes.payload_attributes.timestamp,
-                            suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
-                            prev_randao: attributes.payload_attributes.prev_randao,
+                            timestamp: data.payload_attributes.payload_attributes.timestamp,
+                            suggested_fee_recipient: data.payload_attributes.payload_attributes.suggested_fee_recipient,
+                            prev_randao: data.payload_attributes.payload_attributes.prev_randao,
                             gas_limit,
                         };
-                        let forced_inclusion_txs = attributes
-                            .transactions
+                        let forced_inclusion_txs = data.payload_attributes
+                            .transactions.as_ref()
                             .map(|txs| {
-                                txs.into_iter().map(|bytes| Transaction::decode(bytes).unwrap().into()).collect()
+                                txs.iter().map(|bytes| Transaction::decode(bytes.clone()).unwrap().into()).collect()
                             })
                             .unwrap_or_default();
 
-                        let no_tx_pool = attributes.no_tx_pool.unwrap_or_default();
+                        let no_tx_pool = data.payload_attributes.no_tx_pool.unwrap_or_default();
 
-                        data.parent_beacon_block_root = attributes.payload_attributes.parent_beacon_block_root.unwrap();
                         let attributes = NextBlockAttributes {
                             env_attributes,
                             forced_inclusion_txs,
-                            parent_beacon_block_root: attributes.payload_attributes.parent_beacon_block_root,
+                            parent_beacon_block_root: data.payload_attributes.payload_attributes.parent_beacon_block_root,
                         };
 
                         data.block_env = data
@@ -393,12 +391,12 @@ where
                 frag.is_last = true;
                 let frag_msg = VersionedMessage::from(frag);
                 let _ = senders.send(frag_msg);
-
                 let (seal, block) = data.frags.seal_block(
                     data.as_ref(),
                     data.parent_hash,
-                    data.parent_beacon_block_root,
+                    data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
                     data.config.evm_config.chain_spec(),
+                    data.extra_data()
                 );
 
                 // Gossip seal to p2p and return payload to rpc
@@ -520,8 +518,9 @@ where
                     let seal_block = data.frags.seal_block(
                         data.as_ref(),
                         data.parent_hash,
-                        data.parent_beacon_block_root,
+                        data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
                         data.config.evm_config.chain_spec(),
+                        data.extra_data()
                     );
                     return SequencerState::WaitingForGetPayload(seal_block);
                 }

@@ -80,7 +80,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             };
 
             // we set the extra data to 0 as that is also what the sequencer will use
-            block.header.extra_data = Default::default();
+            // block.header.extra_data = Default::default();
             let hash = block.hash_slow();
             let hash1 =sealed_block.execution_payload.payload_inner.payload_inner.block_hash;
             if hash1 != hash {

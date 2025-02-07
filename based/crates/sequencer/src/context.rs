@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use alloy_consensus::Header;
 use alloy_rpc_types::engine::ForkchoiceState;
 use bop_common::time::Instant;
 use bop_db::DatabaseRead;
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
-use revm_primitives::{BlockEnv, B256};
+use reth_optimism_chainspec::OpChainSpec;
+use reth_optimism_forks::OpHardforks;
+use revm_primitives::{BlockEnv, Bytes, B256};
 
 use crate::{
     block_sync::BlockSync,
@@ -23,7 +27,6 @@ pub struct SequencerContext<Db> {
     pub block_executor: BlockSync,
     pub parent_hash: B256,
     pub parent_header: Header,
-    pub parent_beacon_block_root: B256,
     pub fork_choice_state: ForkchoiceState,
     pub payload_attributes: Box<OpPayloadAttributes>,
 }
@@ -41,6 +44,21 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
 
     pub fn reset_fragdb(&mut self) {
         self.frags.reset_fragdb(self.db.clone());
+    }
+
+    pub fn chain_spec(&self) -> &Arc<OpChainSpec> {
+        self.config.evm_config.chain_spec()
+    }
+
+    pub fn extra_data(&self) -> Bytes {
+        let timestamp = self.payload_attributes.payload_attributes.timestamp;
+        if self.chain_spec().is_holocene_active_at_timestamp(timestamp) {
+            self.payload_attributes
+                .get_holocene_extra_data(self.chain_spec().base_fee_params_at_timestamp(timestamp))
+                .expect("couldn't get extra data")
+        } else {
+            Bytes::default()
+        }
     }
 }
 

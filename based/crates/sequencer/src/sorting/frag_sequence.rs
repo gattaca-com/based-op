@@ -112,6 +112,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
         parent_hash: B256,
         parent_beacon_block_root: B256,
         chain_spec: &Arc<OpChainSpec>,
+        extra_data: Bytes
     ) -> (SealV0, OpExecutionPayloadEnvelopeV3)
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
@@ -157,7 +158,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             gas_limit: block_env.gas_limit.to(),
             difficulty: U256::ZERO,
             gas_used,
-            extra_data: Bytes::default(),
+            extra_data: extra_data.clone(),
             parent_beacon_block_root: Some(parent_beacon_block_root),
             blob_gas_used: Some(0),
             excess_blob_gas: Some(0),
@@ -175,7 +176,7 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             gas_limit: block_env.gas_limit.to(),
             gas_used,
             timestamp: block_env.timestamp.to(),
-            extra_data: Bytes::default(),
+            extra_data,
             base_fee_per_gas: block_env.basefee,
             block_hash: header.hash_slow(),
             transactions,
