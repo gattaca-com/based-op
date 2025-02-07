@@ -47,21 +47,22 @@ impl<Db> FragSequence<Db> {
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
-        self.gas_remaining -= top_of_block.gas_used();
-        self.payment += top_of_block.payment();
-        self.top_of_block_bundle = top_of_block.state;
-        self.top_of_block_changes = top_of_block.changes;
+        todo!();
+        // self.gas_remaining -= top_of_block.gas_used();
+        // self.payment += top_of_block.payment();
+        // self.top_of_block_bundle = top_of_block.state;
+        // self.top_of_block_changes = top_of_block.changes;
         // tracing::info!("###################{}",self.db.calculate_state_root(&top_of_block.state).unwrap().0);
         // self.db.commit_flat_changes(top_of_block.flat_state_changes);
         // self.db.commit( );
-        let msg = FragV0::new(
-            self.block_number,
-            self.next_seq,
-            top_of_block.forced_inclusion_txs.iter().map(|tx| tx.tx.as_ref()),
-            false,
-        );
-        self.txs.extend(top_of_block.forced_inclusion_txs);
-        msg
+        // let msg = FragV0::new(
+        //     self.block_number,
+        //     self.next_seq,
+        //     top_of_block.forced_inclusion_txs.iter().map(|tx| tx.tx.as_ref()),
+        //     false,
+        // );
+        // self.txs.extend(top_of_block.forced_inclusion_txs);
+        // msg
     }
 
     /// When a new block is received, we clear all the temp state on the db
@@ -71,7 +72,8 @@ impl<Db> FragSequence<Db> {
         self.next_seq = 0;
         self.payment = U256::ZERO;
         self.top_of_block_bundle = Default::default();
-        self.db.reset(db);
+        todo!()
+        // self.db.reset(db);
     }
 }
 impl<Db: Clone> FragSequence<Db> {

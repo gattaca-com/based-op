@@ -63,9 +63,9 @@ where
 
         // Initialise with default evms. These will be overridden before the first sim by
         // `set_evm_for_new_block`.
-        let db_tof = CacheDB::new(db.clone());
+        let db_tof = State::new(db.clone());
         let evm_tof: Evm<'_, (), _> = evm_config.evm(db_tof);
-        let db_sorting = CacheDB::new(Arc::new(DBSorting::new(db)));
+        let db_sorting = State::new(Arc::new(DBSorting::new(db)));
         let evm_sorting: Evm<'_, (), _> = evm_config.evm(db_sorting);
 
         Self { evm_sorting, evm_tof, system_caller, evm_config: evm_config.clone(), id, regolith_active: true }
@@ -75,7 +75,7 @@ where
     fn simulate_tx<SimulateTxDb: DatabaseRef>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
-        evm: &mut Evm<'a, (), CacheDB<SimulateTxDb>>,
+        evm: &mut Evm<'a, (), State<SimulateTxDb>>,
         regolith_active: bool,
     ) -> Result<SimulatedTx, SimulationError> {
         // Cache some values pre-simulation.
@@ -84,7 +84,7 @@ where
         let depositor_nonce = (tx.is_deposit() && regolith_active)
             .then(|| evm.db_mut().basic(tx.sender()).ok().flatten().map(|a| a.nonce).unwrap_or_default());
 
-        let old_db = std::mem::replace(evm.db_mut(), CacheDB::new(db));
+        let old_db = std::mem::replace(evm.db_mut(), State::new(db));
         tx.fill_tx_env(evm.tx_mut());
         let res = evm.transact().map_err(|_e| SimulationError::EvmError("todo 2".to_string()))?;
 

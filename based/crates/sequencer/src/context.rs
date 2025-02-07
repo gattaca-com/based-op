@@ -9,7 +9,7 @@ use bop_common::{
         },
         SendersSpine, TrackedSenders,
     },
-    db::DBFrag,
+    db::{state::ensure_create2_deployer, DBFrag, State},
     time::Instant,
     transaction::SimulatedTx,
 };
@@ -24,10 +24,10 @@ use reth_evm::{
     ConfigureEvm, ConfigureEvmEnv,
 };
 use reth_optimism_chainspec::OpChainSpec;
-use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
+use reth_optimism_evm::{OpBlockExecutionError, OpEvmConfig};
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use revm::{
-    db::{states::bundle_state::BundleRetention, BundleState, State},
+    db::{states::bundle_state::BundleRetention, BundleState },
     Database, DatabaseCommit, Evm,
 };
 use revm_primitives::{Address, BlockEnv, Bytes, EnvWithHandlerCfg, EvmState, B256};
@@ -140,7 +140,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             .active_at_timestamp(u64::try_from(env_with_handler_cfg.block.timestamp).unwrap());
 
         // Configure new EVM to apply pre-execution and must include txs.
-        let mut state = ;
+        let mut state = State::new(db);
         let mut evm = evm_config.evm_with_env(&mut state, env_with_handler_cfg);
 
         // Apply pre-execution changes.

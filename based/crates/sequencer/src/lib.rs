@@ -491,7 +491,8 @@ where
                     return self;
                 };
                 data.frags.set_gas_limit(data.as_ref().gas_limit.to());
-                data.tx_pool.remove_mined_txs(top_of_block.forced_inclusion_txs.iter(), data.as_ref().basefee.to());
+                todo!();
+                // data.tx_pool.remove_mined_txs(top_of_block.forced_inclusion_txs.iter(), data.as_ref().basefee.to());
                 let mut frag = data.frags.apply_top_of_block(top_of_block);
 
                 frag.is_last = no_tx_pool;
