@@ -1344,38 +1344,33 @@ func (api *ConsensusAPI) NewFragV0(frag common.SignedNewFrag) (string, error) {
 	// - Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
 
 	if frag.Frag.Seq == 0 {
-		// a. check there's no unsealed block in progress.
+		// Check there's no unsealed block in progress.
 		if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
 			return engine.INVALID, errors.New("current block was not sealed")
 		}
 
-		// b. check frag block number == current_head_block_number + 1.
+		// Check frag block number == current_head_block_number + 1.
 		expected_block_number := new(big.Int)
 		expected_block_number.Add(api.eth.BlockChain().CurrentBlock().Number, big.NewInt(1))
 		if new(big.Int).SetUint64(frag.Frag.BlockNumber) != expected_block_number {
 			return engine.INVALID, errors.New("unexpected block number")
 		}
 	} else {
-		// a. check frag block number matches the current unsealed block number
-		if api.eth.BlockChain().CurrentUnsealedBlock() == nil {
+		currentUnsealedBlock := api.eth.BlockChain().CurrentUnsealedBlock()
+
+		// Check that the current last frag does not have the IsLast flag set.
+		if currentUnsealedBlock == nil {
 			return engine.INVALID, errors.New("current block was not started")
-		} else if new(big.Int).SetUint64(frag.Frag.BlockNumber) != api.eth.BlockChain().CurrentUnsealedBlock().Number {
+		}
+
+		// Check frag block number matches the current unsealed block number
+		if new(big.Int).SetUint64(frag.Frag.BlockNumber) != currentUnsealedBlock.Number {
 			return engine.INVALID, errors.New("unexpected block number")
 		}
 
-		// b. check frag sequence number == latest_frag_seq_in_current_unsealed_block + 1.
-		lastFrag, err := api.eth.BlockChain().CurrentUnsealedBlock().LastFrag()
-		if err != nil {
-			return engine.INVALID, errors.New("no frags in current unsealed block")
-		}
-
-		if frag.Frag.Seq != lastFrag.Seq + 1 {
+		// Check frag sequence number == latest_frag_seq_in_current_unsealed_block + 1.
+		if frag.Frag.Seq != currentUnsealedBlock.LastSequenceNumber + 1 {
 			return engine.INVALID, errors.New("unexpected sequence number")
-		}
-
-		// c. check that the current last frag does not have the IsLast flag set.
-		if lastFrag.IsLast {
-			return engine.INVALID, errors.New("last frag already sealed")
 		}
 	}
 
