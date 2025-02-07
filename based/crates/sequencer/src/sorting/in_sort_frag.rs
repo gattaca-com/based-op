@@ -44,4 +44,8 @@ impl<Db: std::fmt::Debug + Clone> InSortFrag<Db> {
     pub fn state(&self) -> Arc<DBSorting<Db>> {
         self.db.clone()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.txs.is_empty()
+    }
 }
