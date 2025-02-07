@@ -16,17 +16,17 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use reth_rpc_layer::{AuthClientLayer, AuthClientService};
 use tracing::{debug, error, info, Instrument, Level};
 
-use crate::{cli::MuxArgs, middleware::ProxyService};
+use crate::{cli::PortalArgs, middleware::ProxyService};
 
 pub type HttpClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
 
-pub struct MuxServer {
+pub struct PortalServer {
     fallback_client: HttpClient,
     gateway_client: HttpClient,
 }
 
-impl MuxServer {
-    pub fn new(args: MuxArgs) -> eyre::Result<Self> {
+impl PortalServer {
+    pub fn new(args: PortalArgs) -> eyre::Result<Self> {
         let gateway_jwt = args.gateway_jwt()?;
         let fallback_jwt = args.fallback_jwt()?;
 
@@ -74,7 +74,7 @@ impl MuxServer {
 }
 
 #[async_trait]
-impl EngineApiServer for MuxServer {
+impl EngineApiServer for PortalServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn fork_choice_updated_v3(
         &self,
