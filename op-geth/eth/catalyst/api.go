@@ -1352,10 +1352,40 @@ func (api *ConsensusAPI) NewFragV0(frag common.SignedNewFrag) (string, error) {
 	return api.newFragV0(frag)
 }
 
-func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) error {
-	// TODO: Implement
-	log.Info("(api *ConsensusAPI) newFragV0", frag)
-	return nil
+func (api *ConsensusAPI) newFragV0(frag common.SignedNewFrag) (string, error) {
+	var unsealedBlock *types.UnsealedBlock
+
+	// 1. if frag.seq == 0
+	//     a. start an unsealed block.
+	//    else
+	//     a. fetch the current unsealed block
+	if frag.Frag.Seq == 0 {
+		log.Info("[engine_newFragV0] Frag sequence is 0, starting a new unsealed block", "frag", frag.Frag)
+		unsealedBlock = types.NewUnsealedBlock()
+		api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
+	} else {
+		log.Info("[engine_newFragV0] Fetching current unsealed block", "frag", frag.Frag)
+		unsealedBlock = api.eth.BlockChain().CurrentUnsealedBlock()
+	}
+
+	// 2. Execute the frag
+	for _, tx := range frag.Frag.Txs {
+		log.Info("[engine_newFragV0] Executing transaction", "tx", tx)
+	}
+
+	// 3. Insert frag into the unsealed block
+	unsealedBlock.InsertNewFrag(frag.Frag)
+
+	// 4. If frag.IsLast, seal the unsealed block
+	if frag.Frag.IsLast {
+		engine.SealBlock(unsealedBlock)
+	}
+
+	log.Info("[engine_newFragV0] New frag added to unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
+
+	// 5. Response (we still need to define how we'll response)
+	// TODO: figure out if we want to respond with more data
+	return engine.VALID, nil
 }
 
 func (api *ConsensusAPI) SealFragV0(frag common.SignedSeal) error {
