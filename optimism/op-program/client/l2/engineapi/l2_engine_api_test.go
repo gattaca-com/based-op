@@ -121,3 +121,52 @@ func (s *stubCachingBackend) AssembleAndInsertBlockWithoutSetHead(processor *Blo
 }
 
 var _ CachingEngineBackend = (*stubCachingBackend)(nil)
+
+func TestNewFragV0(t *testing.T) {
+	logger, _ := testlog.CaptureLogger(t, log.LvlInfo)
+
+	backend := newStubBackend(t)
+	engineAPI := NewL2EngineAPI(logger, backend, nil)
+
+	frag := &eth.SignedNewFrag{
+		Signature: eth.Bytes65{},
+		Frag: eth.NewFrag{
+			BlockNumber: 10,
+			Seq:         0,
+			IsLast:      true,
+			Txs:         make([]eth.Data, 0),
+			Version:     0,
+		},
+	}
+
+	res, err := engineAPI.NewFragV0(context.Background(), frag)
+
+	require.EqualValues(t, engine.VALID, res)
+	require.NoError(t, err)
+}
+
+func TestSealFragV0(t *testing.T) {
+	logger, _ := testlog.CaptureLogger(t, log.LvlInfo)
+
+	backend := newStubBackend(t)
+	engineAPI := NewL2EngineAPI(logger, backend, nil)
+
+	seal := &eth.SignedSeal{
+		Signature: eth.Bytes65{},
+		Seal: eth.Seal{
+			TotalFrags:       1,
+			BlockNumber:      1,
+			GasUsed:          0,
+			GasLimit:         0,
+			ParentHash:       eth.Bytes32{},
+			TransactionsRoot: eth.Bytes32{},
+			ReceiptsRoot:     eth.Bytes32{},
+			StateRoot:        eth.Bytes32{},
+			BlockHash:        eth.Bytes32{},
+		}}
+
+	res, err := engineAPI.SealFragV0(context.Background(), seal)
+
+	require.EqualValues(t, engine.VALID, res)
+	require.NoError(t, err)
+}

@@ -1,6 +1,7 @@
 .PHONY: deps run clean restart help \
-		build build-mux build-op-node build-reth \
-		logs op-node-logs op-reth-logs \
+		build build-mux build-op-node build-op-geth \
+		logs op-node-logs op-geth-logs \
+		test-frag test-seal
 
 .DEFAULT_GOAL := help
 
@@ -21,12 +22,12 @@ deps: ## 🚀 Install all dependencies
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
-build: build-mux build-op-node build-reth ## 🏗️ Build
+build: build-mux build-op-node build-op-geth ## 🏗️ Build
 
 build-mux:
 	docker build  -t bop-mux --build-context reth=./reth ./based
 
-build-op-node: ## 🏗️ Build OP node from optimistic directory
+build-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
 	IMAGE_TAGS=develop \
 	PLATFORMS="linux/arm64" \
@@ -34,8 +35,8 @@ build-op-node: ## 🏗️ Build OP node from optimistic directory
 	-f docker-bake.hcl \
 	op-node
 
-build-reth: ## 🏗️ Build Reth from reth directory
-	docker build -t ghcr.io/paradigmxyz/op-reth ./reth
+build-op-geth: ## 🏗️ Build OP geth from op-eth directory
+	docker build -t us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth ./op-geth
 
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op
@@ -47,12 +48,58 @@ rollup-boost-logs:
 	$(MAKE) logs SERVICE=op-rollup-boost-1-op-kurtosis
 
 op-node-logs:
-	$(MAKE) logs SERVICE=op-cl-1-op-node-op-reth-op-kurtosis
+	$(MAKE) logs SERVICE=op-cl-1-op-node-op-geth-op-kurtosis
 
-op-reth-logs:
-	$(MAKE) logs SERVICE=op-el-1-op-reth-op-node-op-kurtosis
+op-geth-logs:
+	$(MAKE) logs SERVICE=op-el-1-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
 	kurtosis enclave rm  based-op --force
 
 restart: clean run ## 🔄 Restart
+
+# Testing
+
+test-frag:
+	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
+	--data '{ \
+		"jsonrpc": "2.0", \
+		"id": 1, \
+		"method": "based_newFrag", \
+		"params": [ \
+			{ \
+				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
+				"frag": { \
+					"blockNumber": 2, \
+					"seq": 1, \
+					"isLast": false, \
+					"txs": [], \
+					"version": 0 \
+				} \
+			} \
+		] \
+	}'
+
+test-seal:
+	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
+	--data '{ \
+		"jsonrpc": "2.0", \
+		"id": 1, \
+		"method": "based_sealFrag", \
+		"params": [ \
+			{ \
+				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
+				"seal": { \
+					"totalFrags": 2, \
+					"blockNumber": 2, \
+					"gasUsed": 0, \
+					"gasLimit": 0, \
+					"parentHash": "0x1234567890123456789012345678901234567890123456789012345678901234", \
+					"transactionsRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
+					"receiptsRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
+					"stateRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
+					"blockHash": "0x1234567890123456789012345678901234567890123456789012345678901234" \
+				} \
+			} \
+		] \
+	}'
