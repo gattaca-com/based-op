@@ -252,7 +252,7 @@ impl<Db> Default for Spine<Db> {
         let (sender_sequencer_to_blockfetch, receiver_sequencer_to_blockfetch) = crossbeam_channel::bounded(4096);
 
         // MPMC to be safe, should only be produced to by the sequencer but
-        let evm_block_params = Queue::new(4096, queue::QueueType::MPMC).expect("couldn't initialize queue");
+        let evm_block_params = Queue::new(4, queue::QueueType::MPMC).expect("couldn't initialize queue");
         Self {
             sender_simulator_to_sequencer,
             receiver_simulator_to_sequencer,

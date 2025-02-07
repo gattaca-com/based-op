@@ -25,7 +25,7 @@ deps: ## 🚀 Install all dependencies
 build: build-mux build-op-node build-op-geth ## 🏗️ Build
 
 build-mux:
-	docker build  -t bop-mux --build-context reth=./reth ./based
+	docker buildx build -t bop-mux --build-context reth=./reth ./based
 
 build-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
