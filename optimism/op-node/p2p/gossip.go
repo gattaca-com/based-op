@@ -272,8 +272,15 @@ const (
 
 func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
-		// TODO: use unmarshalling here
-		message.ValidatorData = message.GetData()
+		var signedFrag eth.SignedNewFrag
+
+		data := message.GetData()
+		if err := signedFrag.UnmarshalSSZ(uint32(len(data)), bytes.NewReader(data)); err != nil {
+			log.Warn("invalid signedFrag payload", "err", err, "peer", id)
+			return pubsub.ValidationReject
+		}
+
+		message.ValidatorData = signedFrag.Frag
 		return pubsub.ValidationAccept
 	}
 }
@@ -645,11 +652,10 @@ func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.Executio
 }
 
 func (p *publisher) PublishNewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) error {
-	// TODO: Send the new frag instead of the block number
-	data := make([]byte, 64)
-	binary.BigEndian.PutUint64(data, signedFrag.Frag.BlockNumber)
+	buf := new(bytes.Buffer)
+	signedFrag.MarshalSSZ(buf)
 
-	return p.newFragV0.topic.Publish(ctx, data)
+	return p.newFragV0.topic.Publish(ctx, buf.Bytes())
 }
 
 func (p *publisher) PublishNewSeal(ctx context.Context, signedSeal eth.SignedSeal) error {
@@ -841,10 +847,12 @@ type TopicSubscriber func(ctx context.Context, sub *pubsub.Subscription)
 type MessageHandler func(ctx context.Context, from peer.ID, msg any) error
 
 func NewFragHandler(ctx context.Context, from peer.ID, msg any) error {
-	// TODO: This won't be needed when NewFrag is parsed
-	blockNumber := binary.BigEndian.Uint64(msg.([]byte)[:8])
+	frag, ok := msg.(eth.NewFrag)
+	if !ok {
+		return fmt.Errorf("expected topic validator to parse and validate data into new frag, but got %T", msg)
+	}
 
-	log.Info("NewFrag received", "block_number", blockNumber)
+	log.Info("NewFrag received", "frag", frag)
 
 	// TODO: Call EngineAPI and pass the message to the EL
 
