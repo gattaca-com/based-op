@@ -6,15 +6,15 @@ use reqwest::Url;
 use reth_rpc_layer::JwtSecret;
 
 #[derive(Parser, Debug, Clone)]
-#[command(version, about, name = "mux")]
-pub struct MuxArgs {
-    /// The host to run mux on
-    #[arg(long = "mux.host", default_value_t = Ipv4Addr::UNSPECIFIED)]
-    pub mux_host: Ipv4Addr,
+#[command(version, about, name = "based-portal")]
+pub struct PortalArgs {
+    /// The host to run the portal on
+    #[arg(long = "portal.host", default_value_t = Ipv4Addr::UNSPECIFIED)]
+    pub portal_host: Ipv4Addr,
 
-    /// The port to run mux on
-    #[arg(long = "mux.port", default_value_t = 8080)]
-    pub mux_port: u16,
+    /// The port to run the portal on
+    #[arg(long = "portal.port", default_value_t = 8080)]
+    pub portal_port: u16,
 
     /// The URL to the fallback EngineAPI
     #[arg(long = "fallback.url")]
@@ -57,7 +57,7 @@ pub struct MuxArgs {
     pub trace: bool,
 }
 
-impl MuxArgs {
+impl PortalArgs {
     pub fn fallback_jwt(&self) -> eyre::Result<JwtSecret> {
         if let Some(jwt) = self.fallback_jwt {
             Ok(jwt)
