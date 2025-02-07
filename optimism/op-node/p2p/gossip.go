@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"sync"
@@ -273,32 +272,30 @@ const (
 
 func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
-		// TODO: Replace workaround with actual deserialization
-		dec := gob.NewDecoder(bytes.NewReader(message.GetData()))
 		var signedFrag eth.SignedNewFrag
-		if err := dec.Decode(&signedFrag); err != nil {
-			log.Warn("failed to decode signed fragment", "err", err, "peer", id)
+
+		data := message.GetData()
+		if err := signedFrag.UnmarshalSSZ(uint32(len(data)), bytes.NewReader(data)); err != nil {
+			log.Warn("invalid signedFrag payload", "err", err, "peer", id)
 			return pubsub.ValidationReject
 		}
 
 		message.ValidatorData = &signedFrag
-
 		return pubsub.ValidationAccept
 	}
 }
 
 func BuildSealFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, sealFragVersion SealFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
-		// TODO: Replace workaround with actual deserialization
-		dec := gob.NewDecoder(bytes.NewReader(message.GetData()))
 		var signedSeal eth.SignedSeal
-		if err := dec.Decode(&signedSeal); err != nil {
-			log.Warn("failed to decode signed seal", "err", err, "peer", id)
+
+		data := message.GetData()
+		if err := signedSeal.UnmarshalSSZ(uint32(len(data)), bytes.NewReader(data)); err != nil {
+			log.Warn("invalid signedFrag payload", "err", err, "peer", id)
 			return pubsub.ValidationReject
 		}
 
 		message.ValidatorData = &signedSeal
-
 		return pubsub.ValidationAccept
 	}
 }
@@ -664,27 +661,17 @@ func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.Executio
 }
 
 func (p *publisher) PublishNewFrag(ctx context.Context, from peer.ID, signedFrag *eth.SignedNewFrag) error {
-	// TODO: Replace workaround with actual serialization
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	if err := enc.Encode(signedFrag); err != nil {
-		return fmt.Errorf("failed to encode signed fragment: %w", err)
-	}
-	data := buf.Bytes()
+	buf := new(bytes.Buffer)
+	signedFrag.MarshalSSZ(buf)
 
-	return p.newFragV0.topic.Publish(ctx, data)
+	return p.newFragV0.topic.Publish(ctx, buf.Bytes())
 }
 
 func (p *publisher) PublishSealFrag(ctx context.Context, from peer.ID, signedSeal *eth.SignedSeal) error {
-	// TODO: Replace workaround with actual serialization
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	if err := enc.Encode(signedSeal); err != nil {
-		return fmt.Errorf("failed to encode signed seal: %w", err)
-	}
-	data := buf.Bytes()
+	buf := new(bytes.Buffer)
+	signedSeal.MarshalSSZ(buf)
 
-	return p.sealFragV0.topic.Publish(ctx, data)
+	return p.sealFragV0.topic.Publish(ctx, buf.Bytes())
 }
 
 func (p *publisher) Close() error {
