@@ -11,14 +11,16 @@ use bop_common::{
 use jsonrpsee::core::async_trait;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use reth_optimism_primitives::OpBlock;
-use tracing::{warn, Level};
+use tracing::{trace, warn, Level};
 
 use crate::RpcServer;
 
 #[async_trait]
 impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
-    #[tracing::instrument(skip_self, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
+        trace!(?bytes, "new request");
+
         let tx = Arc::new(Transaction::decode(bytes)?);
         let hash = tx.tx_hash();
         let _ = self.new_order_tx.send(tx.into());
@@ -28,8 +30,10 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
 
     // STORE
 
-    #[tracing::instrument(skip_self, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>> {
+        trace!(%hash, "new request");
+
         let receipt = match self.db.get_transaction_receipt(hash) {
             Ok(receipt) => Some(receipt),
             Err(err) => {
@@ -41,8 +45,10 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         Ok(receipt)
     }
 
-    #[tracing::instrument(skip_self, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>> {
+        trace!(%number, full, "new request");
+
         let block = match number {
             BlockNumberOrTag::Latest => match self.db.get_latest_block() {
                 Ok(block) => Some(convert_block(block, full)),
@@ -71,8 +77,10 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         }
     }
 
-    #[tracing::instrument(skip_self, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>> {
+        trace!(%hash, full, "new request");
+
         let block = match self.db.get_block_by_hash(hash) {
             Ok(block) => Some(convert_block(block, full)),
             Err(err) => {
@@ -86,8 +94,10 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
 
     // DB
 
-    #[tracing::instrument(skip_self, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn block_number(&self) -> RpcResult<U256> {
+        trace!("block number request");
+
         let bn = match self.db.head_block_number() {
             Ok(bn) => U256::from(bn),
             Err(err) => {
@@ -99,8 +109,9 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         Ok(bn)
     }
 
-    #[tracing::instrument(skip_self, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
+        trace!(%address, ?block_number, "new request");
         let is_latest = block_number.map(|bn| bn.is_latest()).unwrap_or(true);
         let nonce = if is_latest {
             match self.db.get_nonce(address) {
@@ -117,8 +128,10 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         Ok(nonce)
     }
 
-    #[tracing::instrument(skip_self, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
+        trace!(%address, ?block_number, "new request");
+
         let is_latest = block_number.map(|bn| bn.is_latest()).unwrap_or(true);
         let balance = if is_latest {
             match self.db.get_balance(address) {
