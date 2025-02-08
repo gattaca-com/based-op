@@ -16,7 +16,9 @@ use reth_optimism_node::OpNode;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
 use reth_provider::{
-    providers::{ConsistentDbView, StaticFileProvider}, BlockExecutionOutput, BlockNumReader, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter
+    providers::{ConsistentDbView, StaticFileProvider},
+    BlockExecutionOutput, BlockNumReader, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory, StateWriter,
+    TrieWriter,
 };
 use reth_storage_api::HashedPostStateProvider;
 use reth_trie::{StateRoot, TrieInput};
@@ -80,7 +82,6 @@ impl SequencerDB {
     pub fn reset_provider(&self) {
         *self.provider.write() = None;
     }
-
 }
 
 impl Debug for SequencerDB {

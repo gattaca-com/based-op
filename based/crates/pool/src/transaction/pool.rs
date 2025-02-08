@@ -117,10 +117,7 @@ impl TxPool {
         self.active_txs.forward(sender, nonce);
     }
 
-    pub fn remove_mined_txs<'a, T: TransactionSenderInfo + 'a>(
-        &mut self,
-        mined_txs: impl Iterator<Item = &'a T>,
-    ) {
+    pub fn remove_mined_txs<'a, T: TransactionSenderInfo + 'a>(&mut self, mined_txs: impl Iterator<Item = &'a T>) {
         // Clear all mined nonces from the pool
         for tx in mined_txs {
             let sender = tx.sender();

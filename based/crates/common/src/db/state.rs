@@ -166,7 +166,6 @@ impl<DB: DatabaseRef> State<DB> {
         self.cache.insert_account_with_storage(address, info, storage)
     }
 
-
     /// Take all transitions and merge them inside bundle state.
     /// This action will create final post state and all reverts so that
     /// we at any time revert state of bundle to the state before transition

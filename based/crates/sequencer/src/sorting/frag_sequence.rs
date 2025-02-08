@@ -32,7 +32,7 @@ pub struct FragSequence {
 }
 impl FragSequence {
     pub fn new(gas_remaining: u64, block_number: u64) -> Self {
-        Self { gas_remaining, gas_used: 0,  payment: U256::ZERO, txs: vec![], block_number, next_seq: 0 }
+        Self { gas_remaining, gas_used: 0, payment: U256::ZERO, txs: vec![], block_number, next_seq: 0 }
     }
 
     pub fn set_gas_limit(&mut self, gas_limit: u64) {
@@ -40,7 +40,7 @@ impl FragSequence {
     }
 
     pub fn apply_sorted_frag<Db>(&mut self, in_sort: SortingData<Db>) -> FragV0 {
-        let gas_used =in_sort.gas_used();
+        let gas_used = in_sort.gas_used();
         self.gas_remaining -= gas_used;
         self.gas_used += gas_used;
         self.payment += in_sort.payment();
