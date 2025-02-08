@@ -11,24 +11,23 @@ import (
 
 type UnsealedBlock struct {
 	Number             *big.Int
-	Frag               []Frag
+	Frags              []Frag
 	LastSequenceNumber uint64
 	Hash               common.Hash
 	// State              *state.StateDB
+
+	receipts Receipts
 }
 
 func NewUnsealedBlock() *UnsealedBlock {
 	return &UnsealedBlock{
 		Number:             new(big.Int),
-		Frag:               []Frag{},
+		Frags:              []Frag{},
 		LastSequenceNumber: *new(uint64),
 		Hash:               common.Hash{},
 		// State:              nil,
+		receipts: Receipts{},
 	}
-}
-
-func (ub *UnsealedBlock) InsertNewFrag(frag Frag) {
-	ub.Frag = append(ub.Frag, frag)
 }
 
 type Frag struct {
