@@ -1341,7 +1341,7 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 	}
 }
 
-func (api *ConsensusAPI) NewFragV0(frag common.SignedNewFrag) (string, error) {
+func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 	// TODO: Validations
 	// - Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
 
@@ -1379,7 +1379,7 @@ func (api *ConsensusAPI) NewFragV0(frag common.SignedNewFrag) (string, error) {
 	return api.newFragV0(frag)
 }
 
-func (api *ConsensusAPI) newFragV0(frag common.SignedNewFrag) (string, error) {
+func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) (string, error) {
 	var unsealedBlock *types.UnsealedBlock
 
 	// 1. if frag.seq == 0
@@ -1396,17 +1396,16 @@ func (api *ConsensusAPI) newFragV0(frag common.SignedNewFrag) (string, error) {
 	}
 
 	bc := api.eth.BlockChain()
-	parent := bc.GetBlockByNumber(frag.Frag.BlockNumber - 1)
+	parent := bc.GetBlockByNumber(unsealedBlock.Number.Uint64() - 1)
+	var receipts types.Receipts
+
 	statedb, _ := state.New(parent.Header().Root, bc.StateCache())
 	chainConfig := bc.Config()
-
-	blockNumber := new(big.Int).SetUint64(frag.Frag.BlockNumber)
-
 	blockContext := vm.BlockContext{
 		CanTransfer: core.CanTransfer,
 		Transfer:    core.Transfer,
 		Coinbase:    parent.Coinbase(),
-		BlockNumber: blockNumber,
+		BlockNumber: unsealedBlock.Number,
 		Time:        parent.Time(),
 		Difficulty:  parent.Difficulty(),
 		GasLimit:    parent.GasLimit(),
@@ -1421,17 +1420,23 @@ func (api *ConsensusAPI) newFragV0(frag common.SignedNewFrag) (string, error) {
 	vmConfig := bc.GetVMConfig()
 	txContext := core.NewEVMTxContext(nil)
 	evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
+	for _, tx := range frag.Frag.Txs {
+		log.Info("[engine_newFragV0] Executing transaction", "tx", tx)
 
-	
-	gp := new(core.GasPool).AddGas(0) // TODO: Replace with txs' gas limit
-	intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(blockNumber)).Bytes()
-	blockHash := common.Hash{} // Empty until it's sealed. This should be defined later.
-	signer := types.MakeSigner(bc.Config(), new(big.Int).SetUint64(frag.Frag.BlockNumber), parent.Time())
-	tx := types.Transaction{}
-	msg, _ := core.TransactionToMessage(&tx, signer, parent.BaseFee())
-	txExecutionResult, _ := core.ApplyMessage(evm, msg, gp)
-	txReceipt := core.MakeReceipt(evm, txExecutionResult, statedb, blockNumber, blockHash, &tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
-	_ = txReceipt // TODO: Complete this
+		gp := new(core.GasPool).AddGas(0) // TODO: Replace with txs' gas limit
+
+		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(unsealedBlock.Number)).Bytes()
+
+		signer := types.MakeSigner(bc.Config(), unsealedBlock.Number, parent.Time()) // TODO: Replace parent.Time()
+
+		msg, _ := core.TransactionToMessage(tx, signer, parent.BaseFee())
+
+		txExecutionResult, _ := core.ApplyMessage(evm, msg, gp)
+
+		txReceipt := core.MakeReceipt(evm, txExecutionResult, statedb, unsealedBlock.Number, unsealedBlock.Hash, tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
+
+		receipts = append(receipts, txReceipt)
+	}
 
 	// 2. Execute the frag
 	// for i, tx := range frag.Frag.Txs {
@@ -1465,7 +1470,7 @@ func (api *ConsensusAPI) newFragV0(frag common.SignedNewFrag) (string, error) {
 	return engine.VALID, nil
 }
 
-func (api *ConsensusAPI) SealFragV0(frag common.SignedSeal) error {
+func (api *ConsensusAPI) SealFragV0(frag engine.SignedSeal) error {
 	// TODO: Validations
 	// -1. Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
 	// 0. Gas used < gas limit
@@ -1482,7 +1487,7 @@ func (api *ConsensusAPI) SealFragV0(frag common.SignedSeal) error {
 	return api.sealFragV0(frag)
 }
 
-func (api *ConsensusAPI) sealFragV0(frag common.SignedSeal) error {
+func (api *ConsensusAPI) sealFragV0(frag engine.SignedSeal) error {
 	// TODO:
 	// 1. Commit the seal
 	// 2. Response (we still need to define how we'll response)
