@@ -1,20 +1,12 @@
-use std::{fmt::Display, sync::Arc};
 
-use alloy_consensus::{proofs::ordered_trie_root_with_encoder, Header, EMPTY_OMMER_ROOT_HASH};
-use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
+use alloy_consensus::proofs::ordered_trie_root_with_encoder;
+use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
-    p2p::{FragV0, SealV0},
+    p2p::FragV0,
     transaction::SimulatedTx,
 };
-use bop_db::DatabaseRead;
-use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
-use reth_evm::execute::ProviderError;
-use reth_optimism_chainspec::OpChainSpec;
-use reth_optimism_forks::OpHardfork;
-use revm::{db::states::bundle_state::BundleRetention, Database};
-use revm_primitives::{b256, hex, BlockEnv, Bytes, B256};
+use revm_primitives::{Bytes, B256};
 
 use super::SortingData;
 

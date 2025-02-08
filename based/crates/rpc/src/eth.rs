@@ -11,7 +11,7 @@ use bop_common::{
 use jsonrpsee::core::async_trait;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use reth_optimism_primitives::OpBlock;
-use tracing::{trace, warn, Level};
+use tracing::{warn, Level};
 
 use crate::RpcServer;
 

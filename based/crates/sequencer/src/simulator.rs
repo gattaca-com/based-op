@@ -18,13 +18,13 @@ use bop_common::{
     utils::last_part_of_typename,
 };
 use reth_evm::{
-    execute::{BlockExecutionError, BlockValidationError, ProviderError},
+    execute::ProviderError,
     ConfigureEvm, ConfigureEvmEnv,
 };
-use reth_optimism_evm::{ensure_create2_deployer, OpBlockExecutionError, OpEvmConfig};
+use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::OpHardfork;
-use revm::{Database, DatabaseCommit, DatabaseRef, Evm};
-use revm_primitives::{Address, EnvWithHandlerCfg, EvmState, U256};
+use revm::{Database, DatabaseRef, Evm};
+use revm_primitives::{Address, U256};
 
 /// Simulator thread.
 ///
@@ -88,9 +88,9 @@ where
 
 /// Simulates a transaction at the passed in EVM's state.
 /// Will not modify the db state after the simulation is complete.
-pub fn simulate_tx_inner<'a>(
+pub fn simulate_tx_inner(
     tx: Arc<Transaction>,
-    evm: &mut Evm<'a, (), impl Database>,
+    evm: &mut Evm<'_, (), impl Database>,
     regolith_active: bool,
     allow_zero_payment: bool,
     allow_revert: bool,

@@ -1,28 +1,24 @@
 use std::{cmp, sync::Arc};
 
-use alloy_consensus::Block;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
 };
-use block_sync::BlockSync;
 use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, EvmBlockParams, NextBlockAttributes,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi,
             SimulatorToSequencer, SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DatabaseWrite},
-    p2p::{SealV0, VersionedMessage},
-    time::Duration,
+    p2p::VersionedMessage,
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
@@ -30,7 +26,6 @@ use revm::DatabaseRef;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
-use tracing::warn;
 
 pub mod block_sync;
 pub mod config;
