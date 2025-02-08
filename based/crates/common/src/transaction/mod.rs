@@ -69,7 +69,7 @@ impl Transaction {
     /// Returns true if the transaction is valid for a block with the given base fee.
     #[inline]
     pub fn valid_for_block(&self, base_fee: u64) -> bool {
-        self.gas_price_or_max_fee().map_or(false, |price| price < base_fee as u128)
+        self.gas_price_or_max_fee().map_or(true, |price| price > base_fee as u128)
     }
 
     #[inline]

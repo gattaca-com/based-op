@@ -16,7 +16,7 @@ use reth_evm::{
     ConfigureEvm,
 };
 use reth_optimism_evm::OpBlockExecutionError;
-use revm::{Database, DatabaseCommit};
+use revm::{Database, DatabaseCommit, DatabaseRef};
 use revm_primitives::{Address, EnvWithHandlerCfg, U256};
 use tracing::error;
 
@@ -98,6 +98,7 @@ impl<Db> SortingData<Db> {
         };
 
         if self.gas_remaining < simulated_tx.gas_used() {
+            self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
         }
 
@@ -109,6 +110,7 @@ impl<Db> SortingData<Db> {
             Some(simulated_tx)
         };
         if let Some(tx) = tx_to_put_back {
+            // tracing::info!("putting back tx {}", tx.sender());
             self.tof_snapshot.put(tx)
         }
     }
@@ -121,6 +123,35 @@ impl<Db> SortingData<Db> {
         self.in_flight_sims == 0
     }
 
+}
+
+impl<Db: Clone + DatabaseRef> SortingData<Db> {
+    pub fn apply_and_send_next(
+        mut self,
+        n_sims_per_loop: usize,
+        senders: &mut SpineConnections<Db>,
+        base_fee: u64,
+    ) -> Self {
+        self.maybe_apply(base_fee);
+
+        let db = self.state();
+
+        for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
+            debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
+            let tx = t.unwrap();
+            // tracing::info!("sending sim {} for sender {}", tx.nonce_ref(), tx.sender());
+            senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
+            self.in_flight_sims += 1;
+        }
+        self
+    }
+
+    pub fn state(&self) -> DBSorting<Db> {
+        self.db.clone()
+    }
+}
+
+impl<Db: DatabaseRef>  SortingData<Db> {
     pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
         self.db.commit(tx.take_state());
 
@@ -136,31 +167,6 @@ impl<Db> SortingData<Db> {
             self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
             self.apply_tx(tx_to_apply);
         }
-    }
-}
-
-impl<Db: Clone> SortingData<Db> {
-    pub fn apply_and_send_next(
-        mut self,
-        n_sims_per_loop: usize,
-        senders: &mut SpineConnections<Db>,
-        base_fee: u64,
-    ) -> Self {
-        self.maybe_apply(base_fee);
-
-        let db = self.state();
-
-        for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
-            debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
-            let tx = t.unwrap();
-            senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
-            self.in_flight_sims += 1;
-        }
-        self
-    }
-
-    pub fn state(&self) -> DBSorting<Db> {
-        self.db.clone()
     }
 }
 

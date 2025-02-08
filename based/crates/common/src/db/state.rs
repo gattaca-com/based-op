@@ -291,8 +291,11 @@ impl<DB: DatabaseRef> Database for State<DB> {
     }
 }
 
-impl<DB> DatabaseCommit for State<DB> {
+impl<DB: DatabaseRef> DatabaseCommit for State<DB> {
     fn commit(&mut self, evm_state: HashMap<Address, Account>) {
+        for a in evm_state.keys() {
+            let _ = self.load_cache_account(*a);
+        }
         let transitions = self.cache.apply_evm_state(evm_state);
         self.apply_transition(transitions);
     }

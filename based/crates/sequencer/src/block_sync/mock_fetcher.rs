@@ -1,13 +1,12 @@
+use std::sync::Arc;
+
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_types::engine::PayloadId;
 use bop_common::{
-    actor::Actor,
-    communication::{
+    actor::Actor, communication::{
         messages::{self, BlockFetch, EngineApi},
         SpineConnections,
-    },
-    db::DatabaseRead,
-    time::Duration,
+    }, db::DatabaseRead, time::Duration, transaction::Transaction
 };
 use reqwest::Url;
 use tokio::{runtime::Runtime, sync::oneshot};
@@ -60,8 +59,18 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
         if self.next_block < self.sync_until {
             let mut block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
 
-            let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, fcu) =
+            let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, mut fcu) =
                 messages::EngineApi::messages_from_block(&block, true, None);
+
+            let EngineApi::ForkChoiceUpdatedV3 {  payload_attributes: Some(payload_attributes) , ..  }  = &mut fcu else {
+                unreachable!();
+            };
+
+            let txs_for_pool: Vec<_> = payload_attributes.transactions.as_mut().map(|t| t.split_off(t.len()/2).into_iter().map(|tx| Arc::new(Transaction::decode(tx).unwrap())).collect()).unwrap_or_default();
+            for t in txs_for_pool {
+                connections.send(t)
+            }
+
 
             // let txs = Transaction::from_block(&block);
             // for t in txs {
@@ -69,8 +78,9 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             // }
             // Duration::from_millis(100).sleep();
 
+            Duration::from_secs(1).sleep();
             connections.send(fcu);
-            Duration::from_millis(100).sleep();
+            Duration::from_secs(2).sleep();
             let (block_tx, block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 

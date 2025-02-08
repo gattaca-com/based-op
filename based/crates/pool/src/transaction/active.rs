@@ -76,7 +76,7 @@ impl Active {
 
         let tx_list = &mut self.txs[index];
         if tx_list.pending.forward(&nonce) {
-            self.remove_index(index);
+            self.remove(index, address);
             return;
         }
 
@@ -88,17 +88,17 @@ impl Active {
     }
 
     #[inline]
-    fn remove_index(&mut self, index: usize) {
-        let sender = self.txs[index].sender();
-
+    fn remove(&mut self, index: usize, address: &Address) {
         // Remove the sender from the active list.
         self.txs.swap_remove(index);
-        self.senders.remove(&sender);
+        self.senders.remove(address);
+
+        if index == self.txs.len() {
+            return;
+        }
 
         // If we swapped with a tx (wasn't the last element), update its sender's index.
-        if index < self.txs.len() {
-            let swapped_sender = self.txs[index].sender();
-            *self.senders.get_mut(&swapped_sender).unwrap() = index;
-        }
+        let swapped_sender = self.txs[index].sender();
+        *self.senders.get_mut(&swapped_sender).unwrap() = index;
     }
 }

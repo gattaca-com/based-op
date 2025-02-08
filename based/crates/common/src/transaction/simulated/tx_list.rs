@@ -65,10 +65,14 @@ impl SimulatedTxList {
     /// Returns true if all transactions for this sender have now been applied.
     pub fn pop(&mut self, base_fee: u64) -> bool {
         debug_assert!(self.current.is_some(), "Tried popping on a SimulatedTxList with current None: {self:#?}");
-        let nonce = self.current.take().unwrap().nonce();
-        self.current = None;
-
-        self.pending.is_empty() || self.pending.first_ready(nonce + 1, base_fee).is_none()
+        if self.pending.is_empty() {
+            return true;
+        }
+        if let Some(nonce) = self.current.take().map(|t| t.nonce()) {
+            self.pending.first_ready(nonce + 1, base_fee).is_none()
+        } else {
+            self.pending.peek().is_some_and(|t| t.max_fee_per_gas() as u64 > base_fee)
+        }
     }
 
     pub fn put(&mut self, tx: SimulatedTx) {
@@ -87,6 +91,14 @@ impl SimulatedTxList {
             tx.tx.sender
         } else {
             self.pending.peek().map(|t| t.sender).unwrap_or_default()
+        }
+    }
+
+    pub fn nonce(&self) -> u64 {
+        if let Some(tx) = &self.current {
+            tx.nonce()
+        } else {
+            self.pending.peek_nonce().unwrap_or_default()
         }
     }
 

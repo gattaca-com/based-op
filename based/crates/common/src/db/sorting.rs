@@ -27,7 +27,7 @@ impl<Db> DBSorting<Db> {
     }
 }
 
-impl<Db> DatabaseCommit for DBSorting<Db> {
+impl<Db: DatabaseRef> DatabaseCommit for DBSorting<Db> {
     fn commit(&mut self, state: EvmState) {
         self.db.write().commit(state);
         self.state_id = rand::random()

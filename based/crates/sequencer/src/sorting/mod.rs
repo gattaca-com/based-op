@@ -37,8 +37,9 @@ impl ActiveOrders {
         if self.is_empty() {
             return;
         }
-        for i in (0..self.len() - 1).rev() {
+        for i in (0..self.len()).rev() {
             let order = &mut self.orders[i];
+            // tracing::info!("checked from {} vs {sender}", order.sender());
             if &order.sender() == sender && order.pop(base_fee) {
                 self.orders.swap_remove(i);
                 return;

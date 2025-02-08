@@ -275,6 +275,7 @@ where
                         data.timer.start();
                         let (seq, first_frag) = data.start_sequencing(attributes, senders);
                         data.timer.stop();
+                        tracing::info!("start sorting with {} orders", first_frag.tof_snapshot.len());
                         SequencerState::Sorting(seq, first_frag)
                     }
                     None => {
@@ -388,7 +389,7 @@ where
                         // We would have already re-sent the tx for sim on the correct fragment.
                     }
                     Err(e) => {
-                        tracing::debug!("simulation error for transaction pool tx {e}");
+                        tracing::info!("simulation error for transaction pool tx {e}");
                         data.tx_pool.remove(&sender, nonce);
                     }
                 }
@@ -410,11 +411,12 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
         match self {
             Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
                 data.tx_pool.remove_mined_txs(sorting_data.txs.iter());
+                tracing::info!("sealing frag with {} txs", sorting_data.txs.len());
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
-                tracing::info!("sealing frag");
                 connections.send(VersionedMessage::from(msg));
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
 
+                tracing::info!("start sorting with {} orders", new_sort_dat.tof_snapshot.len());
                 Sorting(seq, new_sort_dat)
             }
 

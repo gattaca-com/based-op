@@ -46,6 +46,7 @@ impl TxPool {
             return;
         }
 
+        tracing::info!("got new tx {base_fee}");
         let is_next_nonce = nonce == state_nonce;
 
         // Add to pool and send to simulator if mineable
@@ -121,11 +122,13 @@ impl TxPool {
         // Clear all mined nonces from the pool
         for tx in mined_txs {
             let sender = tx.sender();
+            let nonce = tx.nonce() + 1;
             if let Some(sender_tx_list) = self.pool_data.get_mut(&sender) {
-                if sender_tx_list.forward(&tx.nonce()) {
+                if sender_tx_list.forward(&nonce) {
                     self.pool_data.remove(&sender);
                 }
             }
+            self.active_txs.forward(&sender, nonce);
         }
     }
 
@@ -141,9 +144,9 @@ impl TxPool {
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
     ) {
-        self.remove_mined_txs(mined_txs);
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
         self.active_txs.clear();
+        self.remove_mined_txs(mined_txs);
 
         // If enabled, fill the active list with non-simulated txs and send off the first tx for each sender to
         // simulator.

@@ -43,6 +43,7 @@ pub struct SequencerContext<Db> {
     pub db_frag: DBFrag<Db>,
     pub tx_pool: TxPool,
     pub block_env: BlockEnv,
+    pub base_fee: u64,
     pub block_executor: BlockSync,
     pub parent_hash: B256,
     pub parent_header: Header,
@@ -68,6 +69,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             parent_hash: Default::default(),
             parent_header: Default::default(),
             block_env: Default::default(),
+            base_fee: Default::default(),
             timer: Timer::new("OnNewBLock"),
         }
     }
@@ -122,6 +124,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
             self.db_frag.commit_flat_changes(t.take_state());
         }
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
+        // tracing::info!("state root {}", self.db_frag.calculate_state_root(&BundleState::new()));
         (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
     }
 }
@@ -139,6 +142,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         let (simulator_evm_block_params, env_with_handler_cfg) = self.new_block_params(&attributes);
         self.payload_attributes = attributes;
         self.block_env = simulator_evm_block_params.env.block.clone();
+        self.base_fee = self.block_env.basefee.to();
 
         // send new block params to simulators
         senders.send(simulator_evm_block_params).expect("should never fail");
@@ -262,13 +266,17 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// Commit new to DB, either due to syncing or due to New Payload EngineApi message.
     /// If it was based on a new payload message rather than blocksync, we pass Some(base_fee),
-    /// and clear the tx pool based on that
+    /// and clear the xstx pool based on that
     pub fn commit_block(&mut self, block: &BlockSyncMessage, base_fee: Option<u64>) {
         self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
         self.db_frag.reset();
 
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();
+
+        if let Some(base_fee) = base_fee {
+            self.base_fee = base_fee;
+        }
 
         if let Some(base_fee) = base_fee {
             self.tx_pool.handle_new_block(block.body.transactions.iter(), base_fee, &self.db_frag, false, None);
