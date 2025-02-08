@@ -120,8 +120,7 @@ impl<Db> SortingData<Db> {
     pub fn should_send_next_sims(&self) -> bool {
         self.in_flight_sims == 0
     }
-}
-impl<Db: DatabaseCommit> SortingData<Db> {
+
     pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
         self.db.commit(tx.take_state());
 
@@ -140,7 +139,7 @@ impl<Db: DatabaseCommit> SortingData<Db> {
     }
 }
 
-impl<Db: DatabaseCommit + Clone> SortingData<Db> {
+impl<Db:  Clone> SortingData<Db> {
     pub fn apply_and_send_next(
         mut self,
         n_sims_per_loop: usize,

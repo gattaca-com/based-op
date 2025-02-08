@@ -33,6 +33,10 @@ impl<Db> DBFrag<Db> {
     pub fn state_id(&self) -> u64 {
         self.state_id
     }
+
+    pub fn is_valid(&self, sim_res_state: u64) -> bool {
+        sim_res_state == self.state_id
+    }
 }
 
 impl<Db: DatabaseRef> DBFrag<Db> {

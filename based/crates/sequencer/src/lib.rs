@@ -26,6 +26,7 @@ use reth_evm::{ConfigureEvmEnv, NextBlockEnvAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
+use revm::DatabaseRef;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
@@ -81,9 +82,9 @@ where
         });
 
         // handle sim results
-        connections.receive(|msg, senders| {
+        connections.receive(|msg, _| {
             let state = std::mem::take(&mut self.state);
-            self.state = state.handle_sim_result(msg, &mut self.data, senders);
+            self.state = state.handle_sim_result(msg, &mut self.data);
         });
 
         // handle engine API messages from rpc
@@ -93,9 +94,9 @@ where
         });
 
         // handle block sync
-        connections.receive(|msg, senders| {
+        connections.receive(|msg, _| {
             let state = std::mem::take(&mut self.state);
-            self.state = state.handle_block_sync(msg, &mut self.data, senders);
+            self.state = state.handle_block_sync(msg, &mut self.data);
         });
 
         // Check for passive state changes. e.g., sealing frags, sending sims, etc.
@@ -220,7 +221,7 @@ where
                 }
             }
 
-            Sorting(_,_)  => {
+            Sorting(_, _) => {
                 // This should never happen. We have been sequencing frags but haven't had GetPayload called before
                 // NewPayload.
                 debug_assert!(false, "Received NewPayload while in the wrong state");
@@ -280,25 +281,6 @@ where
                         let (seq, first_frag) = data.start_sequencing(attributes, senders);
                         data.timer.stop();
                         SequencerState::Sorting(seq, first_frag)
-
-
-                        // if no_tx_pool {
-                        //   senders
-                        // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
-                        // .expect("couldn't send frag");
-                        // Can't sort anyway
-                        // let seal_block = data.frags.seal_block(
-                        //     &data.block_env,
-                        //     data.parent_hash,
-                        //     data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
-                        //     data.config.evm_config.chain_spec(),
-                        //     data.extra_data(),
-                        // );
-                        //   senders
-                        // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
-                        // .expect("couldn't send frag");
-                        // return SequencerState::WaitingForGetPayload(seal_block);
-                        // }
                     }
                     None => {
                         // We have got 2 FCU in a row with no attributes. This shouldn't happen?
@@ -308,7 +290,7 @@ where
                     }
                 }
             }
-            Syncing { .. } | Sorting(_, _) | WaitingForNewPayload  => {
+            Syncing { .. } | Sorting(_, _) | WaitingForNewPayload => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -333,10 +315,7 @@ where
 
         match self {
             Sorting(seq, sorting_data) => {
-                let (frag, seal, block) = data.seal_block(
-                    seq,
-                    sorting_data
-                );
+                let (frag, seal, block) = data.seal_block(seq, sorting_data);
 
                 // Gossip seal to p2p and return payload to rpc
                 let _ = senders.send(VersionedMessage::from(frag));
@@ -359,12 +338,7 @@ where
     ///
     /// When we are syncing we fetch blocks asynchronously from the rpc and send them back through a channel that gets
     /// picked up and processed here.
-    fn handle_block_sync(
-        self,
-        block: BlockSyncMessage,
-        data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db>,
-    ) -> Self {
+    fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SequencerContext<Db>) -> Self {
         use SequencerState::*;
 
         match self {
@@ -396,13 +370,9 @@ where
     ///
     /// Handles both block transaction simulations during sorting and
     /// transaction pool simulations for future inclusion.
-    fn handle_sim_result(
-        mut self,
-        result: SimulatorToSequencer,
-        data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db>,
-    ) -> Self {
+    fn handle_sim_result(mut self, result: SimulatorToSequencer, data: &mut SequencerContext<Db>) -> Self {
         let (sender, nonce) = result.sender_info;
+        let state_id = result.state_id;
         match result.msg {
             SimulatorToSequencerMsg::Tx(simulated_tx) => {
                 let SequencerState::Sorting(_, sort_data) = &mut self else {
@@ -410,14 +380,14 @@ where
                 };
 
                 // handle sim on wrong state
-                if !sort_data.is_valid(result.state_id) {
+                if !sort_data.is_valid(state_id) {
                     return self;
                 }
                 sort_data.handle_sim(simulated_tx, &sender, data.as_ref().basefee.to());
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
-                    Ok(res) if data.db_frag.db.read().nonce >= nonce => data.tx_pool.handle_simulated(res),
+                    Ok(res) if data.db_frag.is_valid(state_id) => data.tx_pool.handle_simulated(res),
                     Ok(_) => {
                         // No-op if the simulation is on a different fragment.
                         // We would have already re-sent the tx for sim on the correct fragment.
@@ -427,13 +397,12 @@ where
                         data.tx_pool.remove(&sender, nonce);
                     }
                 }
-            } /* SimulatorToSequencerMsg::TopOfBlock(top_of_block) => {
-               * } */
+            }
         }
         self
     }
 }
-impl <Db> SequencerContext<Db> {
+impl<Db: Clone + DatabaseRef> SequencerState<Db> {
     /// Performs periodic state machine updates:
     ///
     /// - Seals transaction fragments when timing threshold reached
@@ -444,15 +413,13 @@ impl <Db> SequencerContext<Db> {
         use SequencerState::*;
         let base_fee = data.as_ref().basefee.to();
         match self {
-            Sorting(mut seq, mut sorting_data) if sorting_data.should_seal_frag() => {
-                let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);                 // sorting_data.maybe_apply(base_fee);
+            Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
+                data.tx_pool.remove_mined_txs(sorting_data.txs.iter());
+                let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
-                let txs: Vec<Arc<Transaction>> = sorting_data.txs.iter().map(|tx| tx.tx.clone()).collect();
-                let sender = data.config.simulate_tof_in_pools.then_some(connections.senders());
-                data.tx_pool.remove_mined_txs(txs.iter());
 
-               Sorting(seq, new_sort_dat)
+                Sorting(seq, new_sort_dat)
             }
 
             Sorting(seq, sorting_data) if sorting_data.should_send_next_sims() => {

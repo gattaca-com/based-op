@@ -121,7 +121,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         for t in &mut sorting_data.txs {
             self.db_frag.commit_flat_changes(t.take_state());
         }
-        self.tx_pool.remove_mined_txs(sorting_data.txs.iter(), self.base_fee());
+        self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
         (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
     }
 }
@@ -147,7 +147,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         let mut sorting = SortingData::new(&seq, self);
 
         sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");
-        self.tx_pool.remove_mined_txs(sorting.txs.iter(), self.block_env.basefee.to());
+        self.tx_pool.remove_mined_txs(sorting.txs.iter());
         (seq, sorting)
     }
 
