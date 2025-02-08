@@ -416,6 +416,7 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
             Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
                 data.tx_pool.remove_mined_txs(sorting_data.txs.iter());
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
+                tracing::info!("sealing frag");
                 connections.send(VersionedMessage::from(msg));
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
 
@@ -428,9 +429,5 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
 
             _ => self,
         }
-    }
-
-    fn syncing(&self) -> bool {
-        matches!(self, SequencerState::Syncing { .. })
     }
 }

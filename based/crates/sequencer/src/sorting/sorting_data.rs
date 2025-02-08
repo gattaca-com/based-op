@@ -114,7 +114,7 @@ impl<Db> SortingData<Db> {
     }
 
     pub fn should_seal_frag(&self) -> bool {
-        self.tof_snapshot.is_empty() || self.until < Instant::now() && !self.is_empty()
+        !self.is_empty() && (self.tof_snapshot.is_empty() || self.until < Instant::now())
     }
 
     pub fn should_send_next_sims(&self) -> bool {
@@ -139,7 +139,7 @@ impl<Db> SortingData<Db> {
     }
 }
 
-impl<Db:  Clone> SortingData<Db> {
+impl<Db: Clone> SortingData<Db> {
     pub fn apply_and_send_next(
         mut self,
         n_sims_per_loop: usize,
