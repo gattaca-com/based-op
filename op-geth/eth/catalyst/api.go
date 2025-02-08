@@ -1422,6 +1422,7 @@ func (api *ConsensusAPI) newFragV0(frag common.SignedNewFrag) (string, error) {
 	txContext := core.NewEVMTxContext(nil)
 	evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
 
+	
 	gp := new(core.GasPool).AddGas(0) // TODO: Replace with txs' gas limit
 	intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(blockNumber)).Bytes()
 	blockHash := common.Hash{} // Empty until it's sealed. This should be defined later.

@@ -1861,7 +1861,7 @@ func TestNewFragV0(t *testing.T) {
 	api := NewConsensusAPI(ethservice)
 	info := common.SignedNewFrag{
 		Signature: common.Bytes65{},
-		Frag: common.NewFrag{
+		Frag: common.Frag{
 			BlockNumber: 10,
 			Seq:         0,
 			IsLast:      true,

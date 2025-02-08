@@ -421,3 +421,4 @@ func (v *ClientVersionV1) String() string {
 func SealBlock(ub *types.UnsealedBlock) (*types.Block, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+

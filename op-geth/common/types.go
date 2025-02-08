@@ -539,10 +539,10 @@ func (b Bytes32) TerminalString() string {
 
 type SignedNewFrag struct {
 	Signature Bytes65 `json:"signature"`
-	Frag      NewFrag `json:"frag"`
+	Frag      Frag    `json:"frag"`
 }
 
-type NewFrag struct {
+type Frag struct {
 	BlockNumber uint64 `json:"blockNumber"`
 	Seq         uint64 `json:"seq"`
 	IsLast      bool   `json:"isLast"`
