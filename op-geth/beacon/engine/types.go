@@ -19,6 +19,7 @@ package engine
 import (
 	"fmt"
 	"math/big"
+	"reflect"
 	"slices"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -422,3 +423,75 @@ func SealBlock(ub *types.UnsealedBlock) (*types.Block, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
+type Bytes65 [65]byte
+
+func (b *Bytes65) UnmarshalJSON(text []byte) error {
+	return hexutil.UnmarshalFixedJSON(reflect.TypeOf(b), text, b[:])
+}
+
+func (b *Bytes65) UnmarshalText(text []byte) error {
+	return hexutil.UnmarshalFixedText("Bytes65", text, b[:])
+}
+
+func (b Bytes65) MarshalText() ([]byte, error) {
+	return hexutil.Bytes(b[:]).MarshalText()
+}
+
+func (b Bytes65) String() string {
+	return hexutil.Encode(b[:])
+}
+
+// TerminalString implements log.TerminalStringer, formatting a string for console
+// output during logging.
+func (b Bytes65) TerminalString() string {
+	return fmt.Sprintf("%x..%x", b[:3], b[62:])
+}
+
+type Data = hexutil.Bytes
+
+type Bytes32 [32]byte
+
+func (b *Bytes32) UnmarshalJSON(text []byte) error {
+	return hexutil.UnmarshalFixedJSON(reflect.TypeOf(b), text, b[:])
+}
+
+func (b *Bytes32) UnmarshalText(text []byte) error {
+	return hexutil.UnmarshalFixedText("Bytes32", text, b[:])
+}
+
+func (b Bytes32) MarshalText() ([]byte, error) {
+	return hexutil.Bytes(b[:]).MarshalText()
+}
+
+func (b Bytes32) String() string {
+	return hexutil.Encode(b[:])
+}
+
+// TerminalString implements log.TerminalStringer, formatting a string for console
+// output during logging.
+func (b Bytes32) TerminalString() string {
+	return fmt.Sprintf("%x..%x", b[:3], b[29:])
+}
+
+type SignedNewFrag struct {
+	Signature Bytes65    `json:"signature"`
+	Frag      types.Frag `json:"frag"`
+}
+
+type SignedSeal struct {
+	Signature Bytes65 `json:"signature"`
+	Seal      Seal    `json:"seal"`
+}
+
+// Total frags in the block + block header fields
+type Seal struct {
+	TotalFrags       uint64  `json:"totalFrags"`
+	BlockNumber      uint64  `json:"blockNumber"`
+	GasUsed          uint64  `json:"gasUsed"`
+	GasLimit         uint64  `json:"gasLimit"`
+	ParentHash       Bytes32 `json:"parentHash"`
+	TransactionsRoot Bytes32 `json:"transactionsRoot"`
+	ReceiptsRoot     Bytes32 `json:"receiptsRoot"`
+	StateRoot        Bytes32 `json:"stateRoot"`
+	BlockHash        Bytes32 `json:"blockHash"`
+}

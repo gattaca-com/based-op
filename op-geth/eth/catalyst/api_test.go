@@ -1859,14 +1859,13 @@ func TestNewFragV0(t *testing.T) {
 	defer n.Close()
 
 	api := NewConsensusAPI(ethservice)
-	info := common.SignedNewFrag{
-		Signature: common.Bytes65{},
-		Frag: common.Frag{
+	info := engine.SignedNewFrag{
+		Signature: engine.Bytes65{},
+		Frag: types.Frag{
 			BlockNumber: 10,
 			Seq:         0,
 			IsLast:      true,
-			Txs:         make([]common.Data, 0),
-			Version:     0,
+			Txs:         []*types.Transaction{},
 		},
 	}
 	status, err := api.NewFragV0(info)
@@ -1884,18 +1883,18 @@ func TestSealFragV0(t *testing.T) {
 	defer n.Close()
 
 	api := NewConsensusAPI(ethservice)
-	info := common.SignedSeal{
-		Signature: common.Bytes65{},
-		Seal: common.Seal{
+	info := engine.SignedSeal{
+		Signature: engine.Bytes65{},
+		Seal: engine.Seal{
 			TotalFrags:       1,
 			BlockNumber:      1,
 			GasUsed:          0,
 			GasLimit:         0,
-			ParentHash:       common.Bytes32{},
-			TransactionsRoot: common.Bytes32{},
-			ReceiptsRoot:     common.Bytes32{},
-			StateRoot:        common.Bytes32{},
-			BlockHash:        common.Bytes32{},
+			ParentHash:       engine.Bytes32{},
+			TransactionsRoot: engine.Bytes32{},
+			ReceiptsRoot:     engine.Bytes32{},
+			StateRoot:        engine.Bytes32{},
+			BlockHash:        engine.Bytes32{},
 		}}
 	err := api.SealFragV0(info)
 	if err != nil {
