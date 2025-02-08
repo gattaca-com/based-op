@@ -46,7 +46,6 @@ impl TxPool {
             return;
         }
 
-        tracing::info!("got new tx {base_fee}");
         let is_next_nonce = nonce == state_nonce;
 
         // Add to pool and send to simulator if mineable

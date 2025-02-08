@@ -8,8 +8,8 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi,
-            SimulatorToSequencer, SimulatorToSequencerMsg,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
+            SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
@@ -272,9 +272,9 @@ where
             WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
-                        data.timer.start();
+                        data.timers.start_sequencing.start();
                         let (seq, first_frag) = data.start_sequencing(attributes, senders);
-                        data.timer.stop();
+                        data.timers.start_sequencing.stop();
                         tracing::info!("start sorting with {} orders", first_frag.tof_snapshot.len());
                         SequencerState::Sorting(seq, first_frag)
                     }
@@ -311,12 +311,15 @@ where
 
         match self {
             Sorting(seq, sorting_data) => {
+                data.timers.waiting_for_sims.stop();
+                data.timers.seal_block.start();
                 let (frag, seal, block) = data.seal_block(seq, sorting_data);
 
                 // Gossip seal to p2p and return payload to rpc
                 let _ = senders.send(VersionedMessage::from(frag));
                 let _ = senders.send(VersionedMessage::from(seal));
                 let _ = res.send(block);
+                data.timers.seal_block.stop();
 
                 WaitingForNewPayload
             }
@@ -379,7 +382,9 @@ where
                 if !sort_data.is_valid(state_id) {
                     return self;
                 }
+                data.timers.handle_sim.start();
                 sort_data.handle_sim(simulated_tx, &sender, data.as_ref().basefee.to());
+                data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
@@ -410,18 +415,28 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
         let base_fee = data.as_ref().basefee.to();
         match self {
             Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
+                data.timers.waiting_for_sims.stop();
+                data.timers.seal_frag.start();
                 data.tx_pool.remove_mined_txs(sorting_data.txs.iter());
                 tracing::info!("sealing frag with {} txs", sorting_data.txs.len());
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
 
+                data.timers.seal_frag.stop();
                 tracing::info!("start sorting with {} orders", new_sort_dat.tof_snapshot.len());
                 Sorting(seq, new_sort_dat)
             }
 
             Sorting(seq, sorting_data) if sorting_data.should_send_next_sims() => {
-                Sorting(seq, sorting_data.apply_and_send_next(data.config.n_per_loop, connections, base_fee))
+                data.timers.apply_and_send_next.start();
+                let new_sorting_data = sorting_data.apply_and_send_next(data.config.n_per_loop, connections, base_fee);
+                if new_sorting_data.in_flight_sims > 1 {
+                    data.timers.waiting_for_sims.stop();
+                    data.timers.apply_and_send_next.stop();
+                    data.timers.waiting_for_sims.start();
+                }
+                Sorting(seq, new_sorting_data)
             }
 
             _ => self,

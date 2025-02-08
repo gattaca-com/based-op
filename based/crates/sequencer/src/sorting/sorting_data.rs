@@ -47,6 +47,8 @@ pub struct SortingData<Db> {
     /// If when all results are back (i.e. `in_flight_sims == 0`) this is Some,
     /// we apply it to the `db` and send off the next batch of sims.
     pub next_to_be_applied: Option<SimulatedTx>,
+
+    pub start_t: Instant
 }
 
 impl<Db> SortingData<Db> {
@@ -68,6 +70,7 @@ impl<Db> SortingData<Db> {
             tof_snapshot,
             gas_remaining: seq.gas_remaining,
             txs: vec![],
+            start_t: Instant::now()
         }
     }
 
@@ -91,12 +94,14 @@ impl<Db> SortingData<Db> {
     pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx>, sender: &Address, base_fee: u64) {
         self.in_flight_sims -= 1;
 
+        tracing::trace!("handling sender {sender}");
         // handle errored sim
         let Ok(simulated_tx) = simulated_tx.inspect_err(|e| error!("simming tx for sender {sender} {e}")) else {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
         };
 
+        tracing::trace!("succesful for nonce {}", simulated_tx.nonce_ref());
         if self.gas_remaining < simulated_tx.gas_used() {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
@@ -110,7 +115,6 @@ impl<Db> SortingData<Db> {
             Some(simulated_tx)
         };
         if let Some(tx) = tx_to_put_back {
-            // tracing::info!("putting back tx {}", tx.sender());
             self.tof_snapshot.put(tx)
         }
     }
@@ -139,6 +143,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
             debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
             let tx = t.unwrap();
+            tracing::trace!("sending sender {}, nonce {}", tx.sender(), tx.nonce_ref());
             // tracing::info!("sending sim {} for sender {}", tx.nonce_ref(), tx.sender());
             senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
             self.in_flight_sims += 1;
@@ -157,6 +162,8 @@ impl<Db: DatabaseRef>  SortingData<Db> {
 
         let gas_used = tx.as_ref().result.gas_used();
         debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
+
+        tracing::trace!("applying sender {}, nonce {}", tx.sender(), tx.nonce_ref());
 
         self.gas_remaining -= gas_used;
         self.txs.push(tx);
@@ -217,11 +224,11 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
             let tx = Arc::new(Transaction::decode(tx.clone()).unwrap());
 
             // Execute transaction.
-            let simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true)
+            let mut simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true)
                 .expect("forced inclusing txs shouldn't fail");
 
             context.system_caller.on_state(&simulated_tx.result_and_state.state);
-            evm.db_mut().commit(simulated_tx.result_and_state.state.clone());
+            evm.db_mut().commit(simulated_tx.take_state());
             self.gas_remaining -= simulated_tx.gas_used();
             self.payment += simulated_tx.payment;
             self.txs.push(simulated_tx);

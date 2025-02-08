@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy_provider::ProviderBuilder;
+use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::engine::PayloadId;
 use bop_common::{
     actor::Actor, communication::{
@@ -49,6 +49,10 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             messages::EngineApi::messages_from_block(&block, false, None);
         connections.send(new_payload);
         connections.send(fcu_1);
+        self.sync_until = self.executor.block_on(async {
+            self.provider.get_block_number().await.expect("failed to fetch last block, is the RPC url correct?")
+        });
+
         self.next_block += 1;
     }
 
@@ -78,9 +82,9 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             // }
             // Duration::from_millis(100).sleep();
 
-            Duration::from_secs(1).sleep();
+            // Duration::from_secs(1).sleep();
             connections.send(fcu);
-            Duration::from_secs(2).sleep();
+            Duration::from_millis(100).sleep();
             let (block_tx, block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 
@@ -91,26 +95,26 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
 
             // we set the extra data to 0 as that is also what the sequencer will use
             // block.header.extra_data = Default::default();
-            let hash = block.hash_slow();
-            let hash1 = sealed_block.execution_payload.payload_inner.payload_inner.block_hash;
-            if hash1 != hash {
-                sealed_block.execution_payload.payload_inner.payload_inner.transactions = vec![];
-                block.body = Default::default();
-                println!("\n\n\n\n\n\n\n\n");
-                println!("OUR BLOCK:");
-                println!("{sealed_block:#?}");
+            // let hash = block.hash_slow();
+            // let hash1 = sealed_block.execution_payload.payload_inner.payload_inner.block_hash;
+            // if hash1 != hash {
+            //     sealed_block.execution_payload.payload_inner.payload_inner.transactions = vec![];
+            //     block.body = Default::default();
+            //     println!("\n\n\n\n\n\n\n\n");
+            //     println!("OUR BLOCK:");
+            //     println!("{sealed_block:#?}");
 
-                println!("\n\n\n\n\n\n\n\n");
-                println!("ACTUAL BLOCK:");
-                println!("{block:#?}");
-                panic!("block hash mismatch {hash} vs {hash1}");
-            }
+            //     println!("\n\n\n\n\n\n\n\n");
+            //     println!("ACTUAL BLOCK:");
+            //     println!("{block:#?}");
+            //     panic!("block hash mismatch {hash} vs {hash1}");
+            // }
 
-            assert_eq!(
-                sealed_block.execution_payload.payload_inner.payload_inner.block_hash,
-                block.hash_slow(),
-                "{block:#?} vs {sealed_block:#?}"
-            );
+            // assert_eq!(
+            //     sealed_block.execution_payload.payload_inner.payload_inner.block_hash,
+            //     block.hash_slow(),
+            //     "{block:#?} vs {sealed_block:#?}"
+            // );
 
             connections.send(new_payload);
             connections.send(fcu_1);

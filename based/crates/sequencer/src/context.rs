@@ -28,6 +28,32 @@ use revm_primitives::{b256, BlockEnv, Bytes, EnvWithHandlerCfg, B256, U256};
 
 use crate::{block_sync::BlockSync, sorting::SortingData, FragSequence, SequencerConfig};
 
+/// These are used to time different parts of the sequencer loop
+pub struct SequencerTimers {
+    pub start_sequencing: Timer,
+    pub block_start: Timer,
+    pub apply_and_send_next: Timer,
+    pub apply_tx: Timer,
+    pub waiting_for_sims: Timer,
+    pub handle_sim: Timer,
+    pub seal_frag: Timer,
+    pub seal_block: Timer,
+}
+impl Default for SequencerTimers {
+    fn default() -> Self {
+        Self {
+            start_sequencing: Timer::new("Sequencer-start_sequencing"),
+            block_start: Timer::new("Sequencer-block_start"),
+            apply_and_send_next: Timer::new("Sequencer-apply_and_send"),
+            apply_tx: Timer::new("Sequencer-apply_tx"),
+            waiting_for_sims: Timer::new("Sequencer-wait_for_sims"),
+            handle_sim: Timer::new("Sequencer-handle_sim"),
+            seal_frag: Timer::new("Sequencer-seal_frag"),
+            seal_block: Timer::new("Sequencer-seal_block"),
+        }
+    }
+}
+
 pub struct SequencerContext<Db> {
     pub config: SequencerConfig,
     pub db: Db,
@@ -50,7 +76,7 @@ pub struct SequencerContext<Db> {
     pub fork_choice_state: ForkchoiceState,
     pub payload_attributes: Box<OpPayloadAttributes>,
     pub system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
-    pub timer: Timer,
+    pub timers: SequencerTimers,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -70,7 +96,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             parent_header: Default::default(),
             block_env: Default::default(),
             base_fee: Default::default(),
-            timer: Timer::new("OnNewBLock"),
+            timers: Default::default(),
         }
     }
 }
@@ -121,10 +147,11 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
         for t in &mut sorting_data.txs {
-            self.db_frag.commit_flat_changes(t.take_state());
+            let state = t.take_state();
+            self.system_caller.on_state(&state);
+            self.db_frag.commit_flat_changes(state);
         }
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
-        // tracing::info!("state root {}", self.db_frag.calculate_state_root(&BundleState::new()));
         (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
     }
 }
@@ -249,7 +276,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             state_root,
             block_hash: v1.block_hash,
         };
-        tracing::info!("seal: {seal:#?}");
         (frag_msg, seal, OpExecutionPayloadEnvelopeV3 {
             execution_payload: ExecutionPayloadV3 {
                 payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },

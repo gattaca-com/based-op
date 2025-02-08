@@ -15,7 +15,6 @@ impl TxList {
     /// If a transaction already exists with the same nonce, it's overwritten.
     #[inline]
     pub fn put(&mut self, new_tx: Arc<Transaction>) {
-        println!("adding new tx to txlist");
         let new_nonce = new_tx.nonce();
 
         if self.txs.is_empty() || self.txs[self.txs.len() - 1].nonce() < new_nonce {
@@ -178,7 +177,6 @@ impl TxList {
 
 impl From<Arc<Transaction>> for TxList {
     fn from(tx: Arc<Transaction>) -> Self {
-        println!("creating txlist from tx");
         Self { txs: VecDeque::from(vec![tx]) }
     }
 }

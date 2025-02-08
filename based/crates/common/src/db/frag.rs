@@ -96,15 +96,6 @@ impl<Db: DatabaseRef> DBFrag<Db> {
     }
 }
 
-impl<Db: DatabaseRead> DBFrag<Db> {
-    pub fn state_root(&self, state_changes: HashMap<Address, Account>) -> B256 {
-        todo!();
-        // let r = self.db.read();
-        // let bundle_state = state_changes_to_bundle_state(&r.db, state_changes).expect("couldn't create bundle
-        // state"); self.calculate_state_root(&bundle_state).expect("couldn't calculate state root").0
-    }
-}
-
 impl<Db: DatabaseRef> DatabaseRef for DBFrag<Db> {
     type Error = <Db as DatabaseRef>::Error;
 

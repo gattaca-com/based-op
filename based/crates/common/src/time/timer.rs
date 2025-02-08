@@ -30,7 +30,7 @@ impl TimingMessage {
     }
 
     pub fn is_valid(&self) -> bool {
-        self.start_t.same_socket(&self.stop_t)
+        self.start_t != Instant::ZERO && self.start_t.same_socket(&self.stop_t)
     }
 }
 
@@ -131,6 +131,7 @@ impl Timer {
     fn send_business(&mut self) {
         if self.curmsg.is_valid() {
             self.timing_producer.produce(&self.curmsg);
+            self.curmsg.start_t = Instant::ZERO;
         }
     }
 
