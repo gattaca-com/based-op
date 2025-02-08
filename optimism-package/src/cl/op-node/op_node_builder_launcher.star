@@ -167,7 +167,6 @@ def get_beacon_config(
         "--rpc.addr=0.0.0.0",
         "--rpc.port={0}".format(BEACON_HTTP_PORT_NUM),
         "--rpc.enable-admin",
-        "--rpc.enable-based",
         "--l1={0}".format(l1_config_env_vars["L1_RPC_URL"]),
         "--l1.rpckind={0}".format(l1_config_env_vars["L1_RPC_KIND"]),
         "--l1.beacon={0}".format(l1_config_env_vars["CL_RPC_URL"]),

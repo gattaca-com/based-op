@@ -237,7 +237,7 @@ pub struct Spine<Db: 'static> {
     sender_sequencer_frag_broadcast: Sender<VersionedMessage>,
     receiver_sequencer_frag_broadcast: CrossBeamReceiver<VersionedMessage>,
 
-    evm_block_params: Queue<InternalMessage<EvmBlockParams<Db>>>,
+    evm_block_params: Queue<InternalMessage<EvmBlockParams>>,
 }
 
 impl<Db> Default for Spine<Db> {
@@ -338,16 +338,16 @@ from_spine!(Arc<Transaction>, eth_rpc_to_sequencer, Sender);
 from_spine!(BlockSyncMessage, blockfetch_to_sequencer, Sender);
 from_spine!(messages::BlockFetch, sequencer_to_blockfetch, Sender);
 
-impl<Db: Clone> HasSender<EvmBlockParams<Db>> for SendersSpine<Db> {
-    type Sender = Producer<InternalMessage<EvmBlockParams<Db>>>;
+impl<Db> HasSender<EvmBlockParams> for SendersSpine<Db> {
+    type Sender = Producer<InternalMessage<EvmBlockParams>>;
 
     fn get_sender(&self) -> &Self::Sender {
         &self.evm_block_params
     }
 }
 
-impl<Db> AsMut<Receiver<EvmBlockParams<Db>, Consumer<InternalMessage<EvmBlockParams<Db>>>>> for ReceiversSpine<Db> {
-    fn as_mut(&mut self) -> &mut Receiver<EvmBlockParams<Db>, Consumer<InternalMessage<EvmBlockParams<Db>>>> {
+impl<Db> AsMut<Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>>>> for ReceiversSpine<Db> {
+    fn as_mut(&mut self) -> &mut Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>>> {
         &mut self.evm_block_params
     }
 }
@@ -355,7 +355,7 @@ impl<Db> AsMut<Receiver<EvmBlockParams<Db>, Consumer<InternalMessage<EvmBlockPar
 //TODO: remove allow dead code
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct SendersSpine<Db: 'static> {
+pub struct SendersSpine<Db> {
     sequencer_to_simulator: Sender<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Sender<SequencerToExternal>,
     simulator_to_sequencer: Sender<SimulatorToSequencer>,
@@ -363,7 +363,7 @@ pub struct SendersSpine<Db: 'static> {
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     sequencer_frag_broadcast: Sender<VersionedMessage>,
-    evm_block_params: Producer<InternalMessage<EvmBlockParams<Db>>>,
+    evm_block_params: Producer<InternalMessage<EvmBlockParams>>,
     sequencer_to_blockfetch: Sender<messages::BlockFetch>,
     timestamp: IngestionTime,
 }
@@ -396,7 +396,7 @@ impl<Db> TrackedSenders for SendersSpine<Db> {
 }
 
 #[derive(Debug)]
-pub struct ReceiversSpine<Db: 'static> {
+pub struct ReceiversSpine<Db> {
     simulator_to_sequencer: Receiver<SimulatorToSequencer>,
     sequencer_to_simulator: Receiver<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Receiver<SequencerToExternal>,
@@ -404,11 +404,11 @@ pub struct ReceiversSpine<Db: 'static> {
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
     sequencer_frag_broadcast: Receiver<VersionedMessage>,
-    evm_block_params: Receiver<EvmBlockParams<Db>, Consumer<InternalMessage<EvmBlockParams<Db>>>>,
+    evm_block_params: Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>>>,
     sequencer_to_blockfetch: Receiver<messages::BlockFetch>,
 }
 
-impl<Db: Clone> ReceiversSpine<Db> {
+impl<Db> ReceiversSpine<Db> {
     pub fn attach<S: AsRef<str>>(system_name: S, spine: &Spine<Db>) -> Self {
         Self {
             simulator_to_sequencer: Receiver::new(system_name.as_ref(), spine.into()),

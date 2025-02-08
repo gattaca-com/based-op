@@ -5,8 +5,7 @@ use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
 use alloy_primitives::{Bloom, U256};
 use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
 use bop_common::{
-    communication::messages::TopOfBlockResult,
-    db::{DBFrag, DBSorting},
+    db::{flatten_state_changes, DBFrag, DBSorting},
     p2p::{FragV0, SealV0},
     transaction::SimulatedTx,
 };
@@ -15,15 +14,18 @@ use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
 use reth_evm::execute::ProviderError;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_forks::OpHardfork;
-use revm::{db::BundleState, Database};
-use revm_primitives::{hex, BlockEnv, Bytes, B256};
+use revm::{
+    db::{states::bundle_state::BundleRetention, BundleState, State},
+    Database, DatabaseCommit, DatabaseRef,
+};
+use revm_primitives::{hex, BlockEnv, Bytes, EvmState, B256};
 
 use crate::sorting::InSortFrag;
 
 /// Sequence of frags applied on the last block
 #[derive(Clone, Debug)]
 pub struct FragSequence<Db> {
-    db: DBFrag<Db>,
+    pub db: DBFrag<Db>,
     gas_remaining: u64,
     payment: U256,
     txs: Vec<SimulatedTx>,
@@ -31,10 +33,62 @@ pub struct FragSequence<Db> {
     next_seq: u64,
     /// Block number for all frags in this block
     block_number: u64,
-    top_of_block_bundle: BundleState,
+}
+impl<Db> FragSequence<Db> {
+    pub fn set_gas_limit(&mut self, gas_limit: u64) {
+        self.gas_remaining = gas_limit;
+    }
+
+    pub fn db_ref(&self) -> &DBFrag<Db> {
+        &self.db
+    }
+
+    // pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0
+    // where
+    //     Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+    // {
+    // todo!();
+    // self.gas_remaining -= top_of_block.gas_used();
+    // self.payment += top_of_block.payment();
+    // self.top_of_block_bundle = top_of_block.state;
+    // self.top_of_block_changes = top_of_block.changes;
+    // tracing::info!("###################{}",self.db.calculate_state_root(&top_of_block.state).unwrap().0);
+    // self.db.commit_flat_changes(top_of_block.flat_state_changes);
+    // self.db.commit( );
+    // let msg = FragV0::new(
+    //     self.block_number,
+    //     self.next_seq,
+    //     top_of_block.forced_inclusion_txs.iter().map(|tx| tx.tx.as_ref()),
+    //     false,
+    // );
+    // self.txs.extend(top_of_block.forced_inclusion_txs);
+    // msg
+    // }
+
+    /// When a new block is received, we clear all the temp state on the db
+    pub fn reset(&mut self, gas_limit: u64, forced_inclusion_txs: Vec<SimulatedTx>) {
+        self.gas_remaining = gas_limit - forced_inclusion_txs.iter().map(|t| t.gas_used()).sum::<u64>();
+        self.payment = forced_inclusion_txs.iter().map(|t| t.payment).sum();
+        self.txs = forced_inclusion_txs;
+        self.next_seq = 0;
+        // todo!()
+        // self.db.reset(db);
+    }
+}
+impl<Db: Clone> FragSequence<Db> {
+    /// Builds a new in-sort frag
+    pub fn create_in_sort(&self) -> InSortFrag<Db> {
+        let db_sort = DBSorting::new(self.db());
+        InSortFrag::new(db_sort, self.gas_remaining)
+    }
+
+    // TODO: remove this and move to sortign data
+    pub fn db(&self) -> DBFrag<Db> {
+        self.db.clone()
+    }
 }
 
-impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
+impl<Db: DatabaseRead> FragSequence<Db> {
     pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
         let block_number = db.head_block_number().expect("can't get block number") + 1;
         Self {
@@ -44,79 +98,34 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
             txs: vec![],
             next_seq: 0,
             block_number,
-            top_of_block_bundle: BundleState::default(),
         }
-    }
-
-    // TODO: remove this and move to sortign data
-    pub fn set_gas_limit(&mut self, gas_limit: u64) {
-        self.gas_remaining = gas_limit;
-    }
-
-    pub fn db(&self) -> DBFrag<Db> {
-        self.db.clone()
-    }
-
-    pub fn db_ref(&self) -> &DBFrag<Db> {
-        &self.db
-    }
-
-    /// Builds a new in-sort frag
-    pub fn create_in_sort(&self) -> InSortFrag<Db> {
-        let db_sort = DBSorting::new(self.db());
-        InSortFrag::new(db_sort, self.gas_remaining)
-    }
-
-    /// Creates a new frag, all subsequent frags will be built on top of this one
-    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragV0 {
-        self.gas_remaining -= in_sort.gas_used;
-        self.payment += in_sort.payment;
-
-        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
-
-        self.db.commit(in_sort.txs.iter());
-        self.txs.extend(in_sort.txs);
-        self.next_seq += 1;
-
-        msg
     }
 
     pub fn is_valid(&self, state_id: u64) -> bool {
         state_id == self.db.state_id()
     }
+}
 
-    pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0
-    where
-        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
-    {
-        self.gas_remaining -= top_of_block.gas_used();
-        self.payment += top_of_block.payment();
-        self.top_of_block_bundle = top_of_block.state;
-        // tracing::info!("###################{}",self.db.calculate_state_root(&top_of_block.state).unwrap().0);
-        // self.db.commit_flat_changes(top_of_block.flat_state_changes);
-        // self.db.commit( );
-        let msg = FragV0::new(
-            self.block_number,
-            self.next_seq,
-            top_of_block.forced_inclusion_txs.iter().map(|tx| tx.tx.as_ref()),
-            false,
-        );
-        self.txs.extend(top_of_block.forced_inclusion_txs);
+impl<Db: DatabaseRef> FragSequence<Db> {
+    /// Creates a new frag, all subsequent frags will be built on top of this one
+    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragV0 {
+        // todo!();
+        // self.gas_remaining -= in_sort.gas_used;
+        // self.payment += in_sort.payment;
+
+        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
+
+        // self.db.commit(in_sort.txs.iter());
+        // self.txs.extend(in_sort.txs);
+        // self.next_seq += 1;
+
         msg
     }
+}
 
-    /// When a new block is received, we clear all the temp state on the db
-    pub fn reset_fragdb(&mut self, db: Db) {
-        self.gas_remaining = 0;
-        self.txs.clear();
-        self.next_seq = 0;
-        self.payment = U256::ZERO;
-        self.top_of_block_bundle = Default::default();
-        self.db.reset(db);
-    }
-
+impl<Db> FragSequence<Db> {
     pub fn seal_block(
-        &self,
+        &mut self,
         block_env: &BlockEnv,
         parent_hash: B256,
         parent_beacon_block_root: B256,
@@ -126,9 +135,13 @@ impl<Db: DatabaseRead + Clone + std::fmt::Debug> FragSequence<Db> {
     where
         Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
+        self.db.db.write().merge_transitions(BundleRetention::Reverts);
+        let bundle = self.db.db.write().take_bundle();
         // self.db.commit_flat_changes(state_changes);
-        // self.db.db.write().merge_transitions(BundleRetention::Reverts);
-        let state_root = self.db.calculate_state_root(&self.top_of_block_bundle).unwrap().0;
+        // self.db.merge_transitions(BundleRetention::Reverts);
+        // let state_root = self.db.calculate_state_root(&state_changes_to_bundle_state(&self.db,
+        // flatten_state_changes(self.top_of_block_changes.clone())).unwrap()).unwrap().0;
+        let state_root = self.db.calculate_state_root(&bundle).unwrap().0;
 
         let mut receipts = Vec::with_capacity(self.txs.len());
         let mut transactions = Vec::with_capacity(self.txs.len());
@@ -232,7 +245,7 @@ mod tests {
         db::DBFrag,
     };
     use bop_db::AlloyDB;
-    use bop_simulator::Simulator;
+    use crate::Simulator;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use reqwest::{Client, Url};
     use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};

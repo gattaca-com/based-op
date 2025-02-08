@@ -14,7 +14,7 @@ use crate::sorting::{ActiveOrders, InSortFrag};
 
 /// State of the sequencer while sorting frags
 #[derive(Clone, Debug)]
-pub struct SortingData<Db: DatabaseRead> {
+pub struct SortingData<Db> {
     /// Current frag being sorted
     pub frag: InSortFrag<Db>,
     /// Deadline when to seal the current frag
@@ -27,33 +27,7 @@ pub struct SortingData<Db: DatabaseRead> {
     pub next_to_be_applied: Option<SimulatedTx>,
 }
 
-impl<Db: DatabaseRead> SortingData<Db> {
-    pub fn apply_and_send_next(
-        mut self,
-        n_sims_per_loop: usize,
-        senders: &mut SpineConnections<Db>,
-        base_fee: u64,
-    ) -> Self {
-        self.maybe_apply(base_fee);
-
-        let db = self.frag.state();
-
-        for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
-            debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
-            let tx = t.unwrap();
-            senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
-            self.in_flight_sims += 1;
-        }
-        self
-    }
-
-    pub fn maybe_apply(&mut self, base_fee: u64) {
-        if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
-            self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
-            self.frag.apply_tx(tx_to_apply);
-        }
-    }
-
+impl<Db> SortingData<Db> {
     pub fn is_valid(&self, state_id: u64) -> bool {
         state_id == self.frag.db.state_id()
     }
@@ -95,5 +69,33 @@ impl<Db: DatabaseRead> SortingData<Db> {
 
     pub fn is_empty(&self) -> bool {
         self.frag.is_empty()
+    }
+}
+
+impl<Db: Clone> SortingData<Db> {
+    pub fn apply_and_send_next(
+        mut self,
+        n_sims_per_loop: usize,
+        senders: &mut SpineConnections<Db>,
+        base_fee: u64,
+    ) -> Self {
+        self.maybe_apply(base_fee);
+
+        let db = self.frag.state();
+
+        for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
+            debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
+            let tx = t.unwrap();
+            senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
+            self.in_flight_sims += 1;
+        }
+        self
+    }
+
+    pub fn maybe_apply(&mut self, base_fee: u64) {
+        if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
+            self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
+            self.frag.apply_tx(tx_to_apply);
+        }
     }
 }
