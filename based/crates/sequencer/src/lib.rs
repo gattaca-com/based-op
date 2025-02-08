@@ -33,13 +33,13 @@ use tracing::warn;
 
 pub mod block_sync;
 pub mod config;
-pub mod simulator;
 mod context;
+pub mod simulator;
 pub(crate) mod sorting;
 
-pub use simulator::Simulator;
 pub use config::SequencerConfig;
 use context::SequencerContext;
+pub use simulator::Simulator;
 use sorting::SortingData;
 
 pub fn payload_to_block(
@@ -129,11 +129,7 @@ pub enum SequencerState<Db> {
     WaitingForForkChoiceWithAttributes,
 
     /// We've received a FCU with attributes and are now sequencing transactions into Frags.
-    Sorting(SortingData<Db>),
-
-    /// We've applied the forced inclusion txs, and weren't allowed to use any other
-    /// txs from the pool, so we sealed the block immediately and are waiting to send it
-    WaitingForGetPayload((SealV0, OpExecutionPayloadEnvelopeV3)),
+    Sorting(FragSequence, SortingData<Db>),
 }
 
 impl<Db> SequencerState<Db>
@@ -224,7 +220,7 @@ where
                 }
             }
 
-            Sorting(_) | WaitingForGetPayload(_) => {
+            Sorting(_,_)  => {
                 // This should never happen. We have been sequencing frags but haven't had GetPayload called before
                 // NewPayload.
                 debug_assert!(false, "Received NewPayload while in the wrong state");
@@ -262,8 +258,9 @@ where
                 } else {
                     // Confirm that the FCU payload is the same as the buffered payload.
                     if payload.block_hash() == fork_choice_state.head_block_hash {
+                        let basefee = payload.as_v1().base_fee_per_gas;
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
-                        SequencerState::commit_block(&block, data, senders, false);
+                        data.commit_block(&block, Some(basefee.to()));
                         data.parent_header = block.header.clone();
                         data.parent_hash = fork_choice_state.head_block_hash;
                         WaitingForForkChoiceWithAttributes
@@ -279,27 +276,29 @@ where
             WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
-                        let no_tx_pool = attributes.no_tx_pool.unwrap_or_default();
-                        data.on_new_block(attributes, senders);
+                        data.timer.start();
+                        let (seq, first_frag) = data.start_sequencing(attributes, senders);
+                        data.timer.stop();
+                        SequencerState::Sorting(seq, first_frag)
 
-                        if no_tx_pool {
-                            //   senders
-                            // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
-                            // .expect("couldn't send frag");
-                            // Can't sort anyway
-                            let seal_block = data.frags.seal_block(
-                                &data.block_env,
-                                data.parent_hash,
-                                data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
-                                data.config.evm_config.chain_spec(),
-                                data.extra_data(),
-                            );
-                            //   senders
-                            // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
-                            // .expect("couldn't send frag");
-                            return SequencerState::WaitingForGetPayload(seal_block);
-                        }
-                        SequencerState::Sorting(data.new_sorting_data())
+
+                        // if no_tx_pool {
+                        //   senders
+                        // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
+                        // .expect("couldn't send frag");
+                        // Can't sort anyway
+                        // let seal_block = data.frags.seal_block(
+                        //     &data.block_env,
+                        //     data.parent_hash,
+                        //     data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
+                        //     data.config.evm_config.chain_spec(),
+                        //     data.extra_data(),
+                        // );
+                        //   senders
+                        // .send_timeout(VersionedMessage::from(frag), Duration::from_millis(10))
+                        // .expect("couldn't send frag");
+                        // return SequencerState::WaitingForGetPayload(seal_block);
+                        // }
                     }
                     None => {
                         // We have got 2 FCU in a row with no attributes. This shouldn't happen?
@@ -309,7 +308,7 @@ where
                     }
                 }
             }
-            Syncing { .. } | Sorting(_) | WaitingForNewPayload | WaitingForGetPayload(_) => {
+            Syncing { .. } | Sorting(_, _) | WaitingForNewPayload  => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -333,36 +332,22 @@ where
         use SequencerState::*;
 
         match self {
-            Sorting(sorting_data) => {
-                // Apply final frag to db and send frag to p2p
-                let mut frag = data.frags.apply_sorted_frag(sorting_data.frag);
-                frag.is_last = true;
-                let frag_msg = VersionedMessage::from(frag);
-                let _ = senders.send(frag_msg);
-                let (seal, block) = data.frags.seal_block(
-                    &data.block_env,
-                    data.parent_hash,
-                    data.payload_attributes.payload_attributes.parent_beacon_block_root.unwrap(),
-                    data.config.evm_config.chain_spec(),
-                    data.extra_data(),
+            Sorting(seq, sorting_data) => {
+                let (frag, seal, block) = data.seal_block(
+                    seq,
+                    sorting_data
                 );
 
                 // Gossip seal to p2p and return payload to rpc
+                let _ = senders.send(VersionedMessage::from(frag));
                 let _ = senders.send(VersionedMessage::from(seal));
                 let _ = res.send(block);
 
                 WaitingForNewPayload
             }
-            WaitingForGetPayload((seal, block)) => {
-                let _ = senders.send(VersionedMessage::from(seal));
-                let _ = res.send(block);
-                WaitingForNewPayload
-            }
-            _ => {
-                debug_assert!(false, "Received GetPayload in state {}", self.as_ref());
-                tracing::warn!("Received GetPayload in state {self:?}");
-                // TODO: impl error in res
-                WaitingForNewPayload
+            s => {
+                debug_assert!(false, "Should never have gotten here");
+                s
             }
         }
     }
@@ -384,7 +369,7 @@ where
 
         match self {
             Syncing { last_block_number } => {
-                SequencerState::commit_block(&block, data, senders, self.syncing());
+                data.commit_block(&block, None);
 
                 if block.number != last_block_number {
                     Syncing { last_block_number }
@@ -404,7 +389,7 @@ where
     /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
     fn handle_new_tx(&mut self, msg: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
         let senders = data.config.simulate_tof_in_pools.then_some(senders);
-        data.tx_pool.handle_new_tx(msg, data.frags.db_ref(), data.as_ref().basefee.to(), self.syncing(), senders);
+        data.tx_pool.handle_new_tx(msg, &data.db_frag, data.as_ref().basefee.to(), false, senders);
     }
 
     /// Processes transaction simulation results from the simulator actor.
@@ -420,24 +405,19 @@ where
         let (sender, nonce) = result.sender_info;
         match result.msg {
             SimulatorToSequencerMsg::Tx(simulated_tx) => {
-                let SequencerState::Sorting(sort_data) = &mut self else {
+                let SequencerState::Sorting(_, sort_data) = &mut self else {
                     return self;
                 };
 
                 // handle sim on wrong state
                 if !sort_data.is_valid(result.state_id) {
-                    warn!(
-                        "received sim result on wrong state: {} vs {}, dropping",
-                        result.state_id,
-                        sort_data.frag.db.state_id()
-                    );
                     return self;
                 }
                 sort_data.handle_sim(simulated_tx, &sender, data.as_ref().basefee.to());
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
-                    Ok(res) if data.frags.is_valid(result.state_id) => data.tx_pool.handle_simulated(res),
+                    Ok(res) if data.db_frag.db.read().nonce >= nonce => data.tx_pool.handle_simulated(res),
                     Ok(_) => {
                         // No-op if the simulation is on a different fragment.
                         // We would have already re-sent the tx for sim on the correct fragment.
@@ -452,8 +432,10 @@ where
         }
         self
     }
-
+}
+impl <Db> SequencerContext<Db> {
     /// Performs periodic state machine updates:
+    ///
     /// - Seals transaction fragments when timing threshold reached
     /// - Triggers new transaction simulations when ready
     ///
@@ -462,28 +444,19 @@ where
         use SequencerState::*;
         let base_fee = data.as_ref().basefee.to();
         match self {
-            Sorting(mut sorting_data) if sorting_data.should_seal_frag() => {
-                sorting_data.maybe_apply(base_fee);
+            Sorting(mut seq, mut sorting_data) if sorting_data.should_seal_frag() => {
+                let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);                 // sorting_data.maybe_apply(base_fee);
+                connections.send(VersionedMessage::from(msg));
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
-                let txs: Vec<Arc<Transaction>> = sorting_data.frag.txs.iter().map(|tx| tx.tx.clone()).collect();
-
-                if !sorting_data.is_empty() {
-                    let frag = data.frags.apply_sorted_frag(sorting_data.frag);
-
-                    // broadcast to p2p
-                    connections.send(VersionedMessage::from(frag));
-                }
-                let sorting_data = data.new_sorting_data();
-
-                // Reset the tx pool
+                let txs: Vec<Arc<Transaction>> = sorting_data.txs.iter().map(|tx| tx.tx.clone()).collect();
                 let sender = data.config.simulate_tof_in_pools.then_some(connections.senders());
-                data.tx_pool.handle_new_mined_txs(txs.iter(), base_fee, data.frags.db_ref(), false, sender);
+                data.tx_pool.remove_mined_txs(txs.iter());
 
-                Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, base_fee))
+               Sorting(seq, new_sort_dat)
             }
 
-            Sorting(sorting_data) if sorting_data.should_send_next_sims() => {
-                Sorting(sorting_data.apply_and_send_next(data.config.n_per_loop, connections, base_fee))
+            Sorting(seq, sorting_data) if sorting_data.should_send_next_sims() => {
+                Sorting(seq, sorting_data.apply_and_send_next(data.config.n_per_loop, connections, base_fee))
             }
 
             _ => self,
@@ -492,28 +465,5 @@ where
 
     fn syncing(&self) -> bool {
         matches!(self, SequencerState::Syncing { .. })
-    }
-
-    /// Helper function for committing a block.
-    /// - Commits to the db.
-    /// - Resets the fragdb.
-    /// - Resets the tx pool.
-    fn commit_block(
-        block: &BlockWithSenders<Block<OpTransactionSigned>>,
-        data: &mut SequencerContext<Db>,
-        senders: &SendersSpine<Db>,
-        syncing: bool,
-    ) {
-        data.block_executor.apply_and_commit_block(block, &data.db, true).expect("couldn't commit block");
-        // todo!("reset frag");
-
-        let sender = data.config.simulate_tof_in_pools.then_some(senders);
-        data.tx_pool.handle_new_mined_txs(
-            block.body.transactions.iter(),
-            data.as_ref().basefee.to(),
-            data.frags.db_ref(),
-            syncing,
-            sender,
-        );
     }
 }

@@ -6,13 +6,13 @@ use parking_lot::RwLock;
 use rand::RngCore;
 use reth_optimism_primitives::OpBlock;
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::{BundleState, CacheDB};
+use revm::db::{states::bundle_state::BundleRetention, BundleState};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
     Account, AccountInfo, Address, Bytecode, EvmState, U256,
 };
 
-use super::{state_changes_to_bundle_state, DatabaseRead, Error, State};
+use super::{DatabaseRead, Error, State};
 use crate::transaction::SimulatedTx;
 
 /// DB That adds chunks on top of last on chain block
@@ -21,22 +21,17 @@ pub struct DBFrag<Db> {
     pub db: Arc<RwLock<State<Db>>>,
     /// Unique identifier for the state in the db
     state_id: u64,
-    // Block number for block that is currently being sorted
-    curr_block_number: u64,
 }
 
 impl<Db> DBFrag<Db> {
-    // pub fn reset(&mut self, db: Db) {
-    //     *self.db.write() = State::(db);
-    //     self.state_id = rand::rng().next_u64();
-    //     self.curr_block_number += 1;
-    // }
-    pub fn state_id(&self) -> u64 {
-        self.state_id
+    /// Used on block commit to clear State, ready for next round of Sequenced Frags
+    pub fn reset(&mut self) {
+        self.db.write().reset();
+        self.state_id = rand::rng().next_u64();
     }
 
-    pub fn curr_block_number(&self) -> Result<u64, Error> {
-        Ok(self.curr_block_number)
+    pub fn state_id(&self) -> u64 {
+        self.state_id
     }
 }
 
@@ -69,6 +64,11 @@ impl<Db: DatabaseRef> DBFrag<Db> {
         self.basic_ref(address)
             .map(|acc| acc.map(|acc| acc.balance).unwrap_or_default())
             .map_err(|_| Error::Other("failed to get nonce".to_string()))
+    }
+
+    pub fn take_state_changes(&self) -> BundleState {
+        self.db.write().merge_transitions(BundleRetention::Reverts);
+        self.db.write().take_bundle()
     }
 
     pub fn get_latest_block(&self) -> Result<OpBlock, Error> {
@@ -155,7 +155,7 @@ impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
     }
 
     fn head_block_number(&self) -> Result<u64, Error> {
-        Ok(self.curr_block_number - 1)
+        self.db.read().database.head_block_number()
     }
 
     fn head_block_hash(&self) -> Result<B256, Error> {
@@ -165,8 +165,7 @@ impl<Db: DatabaseRead> DatabaseRead for DBFrag<Db> {
 
 impl<Db: DatabaseRead + Database> From<Db> for DBFrag<Db> {
     fn from(value: Db) -> Self {
-        let curr_block_number = value.head_block_number().unwrap() + 1;
         let state = State::builder().with_database(value).with_bundle_update().without_state_clear().build();
-        Self { db: Arc::new(RwLock::new(state)), state_id: rand::random(), curr_block_number }
+        Self { db: Arc::new(RwLock::new(state)), state_id: rand::random() }
     }
 }

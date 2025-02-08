@@ -41,7 +41,7 @@ impl BlockSync {
 
     /// Executes and validates a block at the current state, committing changes to the database.
     /// Handles chain reorgs by rewinding state if parent hash mismatch is detected.
-    pub fn apply_and_commit_block<DB>(
+    pub fn commit_block<DB>(
         &mut self,
         block: &BlockWithSenders<OpBlock>,
         db: &DB,
@@ -167,7 +167,7 @@ mod tests {
         let alloydb = AlloyDB::new(provider, block.header.number, rt);
 
         // Execute the block.
-        let res = block_sync.apply_and_commit_block(&block, &alloydb, false);
+        let res = block_sync.commit_block(&block, &alloydb, false);
         info!("res: {:?}", res);
     }
 

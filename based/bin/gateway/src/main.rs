@@ -14,7 +14,7 @@ use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
     Sequencer, SequencerConfig,
 };
-use bop_sequencer::Simulator;
+use bop_simulator::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
 use tracing::{error, info};

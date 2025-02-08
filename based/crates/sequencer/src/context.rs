@@ -1,62 +1,64 @@
 use std::{fmt::Display, sync::Arc};
 
-use alloy_consensus::Header;
-use alloy_eips::eip4788::BEACON_ROOTS_ADDRESS;
-use alloy_rpc_types::engine::ForkchoiceState;
+use alloy_consensus::{Header, EMPTY_OMMER_ROOT_HASH};
+use alloy_eips::merge::BEACON_NONCE;
+use alloy_rpc_types::engine::{
+    BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
+};
 use bop_common::{
     communication::{
-        messages::{EvmBlockParams, NextBlockAttributes, SimulatorToSequencer, SimulatorToSequencerMsg},
+        messages::{BlockSyncMessage, EvmBlockParams},
         SendersSpine, TrackedSenders,
     },
-    db::{state::ensure_create2_deployer, DBFrag, State},
-    time::Instant,
-    transaction::{SimulatedTx, Transaction},
+    db::DBFrag,
+    p2p::{FragV0, SealV0},
+    time::Timer,
 };
-use bop_db::DatabaseRead;
+use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
-use op_alloy_rpc_types_engine::OpPayloadAttributes;
-use reth_chainspec::EthereumHardforks;
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{
-    env::EvmEnv,
-    execute::{BlockExecutionError, BlockValidationError, ProviderError},
-    system_calls::SystemCaller,
-    ConfigureEvm, ConfigureEvmEnv, NextBlockEnvAttributes,
+    env::EvmEnv, execute::ProviderError, system_calls::SystemCaller, ConfigureEvmEnv, NextBlockEnvAttributes,
 };
 use reth_optimism_chainspec::OpChainSpec;
-use reth_optimism_evm::{OpBlockExecutionError, OpEvmConfig};
+use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
-use revm::{
-    db::{states::bundle_state::BundleRetention, BundleState},
-    Database, DatabaseCommit, Evm,
-};
-use revm_primitives::{Address, BlockEnv, Bytes, EnvWithHandlerCfg, EvmState, B256};
+use revm::{Database, DatabaseRef};
+use revm_primitives::{b256, BlockEnv, Bytes, EnvWithHandlerCfg, B256, U256};
 
-use crate::{
-    block_sync::BlockSync, simulator::simulate_tx_inner, sorting::{ActiveOrders, SortingData}, FragSequence, SequencerConfig
-};
+use crate::{block_sync::BlockSync, sorting::SortingData, FragSequence, SequencerConfig};
 
 pub struct SequencerContext<Db> {
     pub config: SequencerConfig,
     pub db: Db,
+    /// This is a wrapper around db to tag frags onto before
+    /// sealing the block and commmiting it to db.
+    /// Each time a frag is done being sorted it gets applied and
+    /// a new DBSorting gets created around db_frag to which individual
+    /// txs will be attached
+    /// Furthermore, this db is shared with the RPC serving layer, hence it
+    /// should not be outright overwritten. Only the internal db should be
+    /// changed when a sorted frag is applied or (reset) when a block is sealed and committed to
+    /// the persisted underlying db.
+    pub db_frag: DBFrag<Db>,
     pub tx_pool: TxPool,
     pub block_env: BlockEnv,
-    pub frags: FragSequence<Db>,
     pub block_executor: BlockSync,
     pub parent_hash: B256,
     pub parent_header: Header,
     pub fork_choice_state: ForkchoiceState,
     pub payload_attributes: Box<OpPayloadAttributes>,
     pub system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
+    pub timer: Timer,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
     pub fn new(db: Db, db_frag: DBFrag<Db>, config: SequencerConfig) -> Self {
-        let frags = FragSequence::new(db_frag, 0);
         let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
         let system_caller = SystemCaller::new(config.evm_config.clone(), config.evm_config.chain_spec().clone());
         Self {
             db,
-            frags,
+            db_frag,
             block_executor,
             config,
             system_caller,
@@ -66,6 +68,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             parent_hash: Default::default(),
             parent_header: Default::default(),
             block_env: Default::default(),
+            timer: Timer::new("OnNewBLock"),
         }
     }
 }
@@ -84,16 +87,42 @@ impl<Db> SequencerContext<Db> {
             Bytes::default()
         }
     }
+
+    pub fn regolith_active(&self, timestamp: u64) -> bool {
+        self.config.evm_config.chain_spec().fork(OpHardfork::Regolith).active_at_timestamp(timestamp)
+    }
+
+    pub fn parent_beacon_block_root(&self) -> Option<B256> {
+        self.payload_attributes.payload_attributes.parent_beacon_block_root
+    }
+
+    pub fn gas_limit(&self) -> u64 {
+        self.payload_attributes.gas_limit.expect("should always be set")
+    }
+
+    pub fn block_number(&self) -> u64 {
+        self.block_env.number.to()
+    }
+
+    pub fn base_fee(&self) -> u64 {
+        self.block_env.basefee.to()
+    }
+
+    pub fn timestamp(&self) -> u64 {
+        self.block_env.timestamp.to()
+    }
 }
-impl<Db: Clone> SequencerContext<Db> {
-    pub fn new_sorting_data(&self) -> SortingData<Db> {
-        SortingData {
-            frag: self.frags.create_in_sort(),
-            until: Instant::now() + self.config.frag_duration,
-            in_flight_sims: 0,
-            next_to_be_applied: None,
-            tof_snapshot: ActiveOrders::new(self.tx_pool.clone_active()),
+impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
+    pub fn seal_frag(
+        &mut self,
+        mut sorting_data: SortingData<Db>,
+        frag_seq: &mut FragSequence,
+    ) -> (FragV0, SortingData<Db>) {
+        for t in &mut sorting_data.txs {
+            self.db_frag.commit_flat_changes(t.take_state());
         }
+        self.tx_pool.remove_mined_txs(sorting_data.txs.iter(), self.base_fee());
+        (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
     }
 }
 
@@ -102,87 +131,148 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
     /// 1. Updating EVM environments
     /// 2. Applying pre-execution changes
     /// 3. Processing forced inclusion transactions
-    pub fn on_new_block(&mut self, attributes: Box<OpPayloadAttributes>, senders: &SendersSpine<Db>) {
+    pub fn start_sequencing(
+        &mut self,
+        attributes: Box<OpPayloadAttributes>,
+        senders: &SendersSpine<Db>,
+    ) -> (FragSequence, SortingData<Db>) {
+        let (simulator_evm_block_params, env_with_handler_cfg) = self.new_block_params(&attributes);
         self.payload_attributes = attributes;
-        let forced_inclusion_txs = self.get_start_state_for_new_block(senders).expect("shouldn't fail");
-        self.tx_pool.remove_mined_txs(forced_inclusion_txs.iter(), self.block_env.basefee.to());
-        self.frags.reset(self.payload_attributes.gas_limit.unwrap(), forced_inclusion_txs);
+        self.block_env = simulator_evm_block_params.env.block.clone();
+
+        // send new block params to simulators
+        senders.send(simulator_evm_block_params).expect("should never fail");
+
+        let seq = FragSequence::new(self.gas_limit(), self.block_number());
+        let mut sorting = SortingData::new(&seq, self);
+
+        sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");
+        self.tx_pool.remove_mined_txs(sorting.txs.iter(), self.block_env.basefee.to());
+        (seq, sorting)
     }
 
-    /// Must be called each new block.
-    /// Applies pre-execution changes and must include txs from the payload attributes.
-    ///
-    /// Returns the end state and SimulatedTxs for all must include txs.
-    fn get_start_state_for_new_block(
-        &mut self,
-        senders: &SendersSpine<Db>,
-    ) -> Result<Vec<SimulatedTx>, BlockExecutionError>
-    where
-        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
-    {
-        let gas_limit = self.payload_attributes.gas_limit.unwrap();
+    fn new_block_params(&mut self, attributes: &Box<OpPayloadAttributes>) -> (EvmBlockParams, EnvWithHandlerCfg) {
         let env_attributes = NextBlockEnvAttributes {
-            timestamp: self.payload_attributes.payload_attributes.timestamp,
-            suggested_fee_recipient: self.payload_attributes.payload_attributes.suggested_fee_recipient,
-            prev_randao: self.payload_attributes.payload_attributes.prev_randao,
-            gas_limit,
+            timestamp: attributes.payload_attributes.timestamp,
+            suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
+            prev_randao: attributes.payload_attributes.prev_randao,
+            gas_limit: attributes.gas_limit.unwrap(),
         };
+
         let EvmEnv { cfg_env_with_handler_cfg, block_env } = self
             .config
             .evm_config
             .next_cfg_and_block_env(&self.parent_header, env_attributes)
             .expect("Valid block environment configuration");
-        self.block_env = block_env.clone();
+
         let env_with_handler_cfg =
             EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
+        let simulator_evm_block_params =
+            EvmBlockParams { spec_id: env_with_handler_cfg.spec_id(), env: env_with_handler_cfg.env.clone() };
+        (simulator_evm_block_params, env_with_handler_cfg)
+    }
 
-        // send new block params to simulators
-        senders
-            .send(EvmBlockParams { spec_id: env_with_handler_cfg.spec_id(), env: env_with_handler_cfg.env.clone() })
-            .expect("should never fail");
+    pub fn seal_block(
+        &mut self,
+        mut frag_seq: FragSequence,
+        last_frag: SortingData<Db>,
+    ) -> (FragV0, SealV0, OpExecutionPayloadEnvelopeV3) {
+        let (mut frag_msg, _) = self.seal_frag(last_frag, &mut frag_seq);
+        frag_msg.is_last = true;
+        let gas_used = frag_seq.gas_used;
 
-        let evm_config = self.config.evm_config.clone();
-        let chain_spec = self.config.evm_config.chain_spec().clone();
-        let regolith_active = self
-            .config
-            .evm_config
-            .chain_spec()
-            .fork(OpHardfork::Regolith)
-            .active_at_timestamp(u64::try_from(env_with_handler_cfg.block.timestamp).unwrap());
+        let state_changes = self.db_frag.take_state_changes();
+        let state_root = self.db.calculate_state_root(&state_changes).unwrap().0;
 
-        // Configure new EVM to apply pre-execution and must include txs.
-        let mut evm = evm_config.evm_with_env(&mut self.frags.db, env_with_handler_cfg);
+        let canyon_active =
+            self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(u64::try_from(self.timestamp()).unwrap());
 
-        // Apply pre-execution changes.
-        let block_number = u64::try_from(evm.block().number).unwrap();
-        let block_timestamp = u64::try_from(evm.block().timestamp).unwrap();
-        evm.db_mut().db.write().set_state_clear_flag(chain_spec.is_spurious_dragon_active_at_block(block_number));
+        let (transactions, transactions_root, receipts_root, logs_bloom) =
+            frag_seq.encoded_txs_roots_bloom(canyon_active);
 
-        self.system_caller.apply_beacon_root_contract_call(
-            block_timestamp,
-            block_number,
-            self.payload_attributes.payload_attributes.parent_beacon_block_root,
-            &mut evm,
-        )?;
-        ensure_create2_deployer(chain_spec, block_timestamp, &mut evm.db_mut().db.write())
-            .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
+        let extra_data = self.extra_data();
 
-        let forced_inclusion_txs = self.payload_attributes.transactions.as_ref().unwrap();
+        let parent_beacon_block_root = self.parent_beacon_block_root();
 
-        let mut tx_results = Vec::with_capacity(forced_inclusion_txs.len());
+        let header = Header {
+            parent_hash: self.parent_hash,
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
+            beneficiary: self.block_env.coinbase,
+            state_root,
+            transactions_root,
+            receipts_root,
+            withdrawals_root: Some(b256!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
+            logs_bloom,
+            timestamp: self.block_env.timestamp.to(),
+            mix_hash: self.block_env.prevrandao.unwrap_or_default(),
+            nonce: BEACON_NONCE.into(),
+            base_fee_per_gas: Some(self.block_env.basefee.to()),
+            number: self.block_env.number.to(),
+            gas_limit: self.block_env.gas_limit.to(),
+            difficulty: U256::ZERO,
+            gas_used,
+            extra_data: extra_data.clone(),
+            parent_beacon_block_root,
+            blob_gas_used: Some(0),
+            excess_blob_gas: Some(0),
+            requests_hash: None,
+        };
 
-        // Apply must include txs.
-        for tx in forced_inclusion_txs.iter() {
-            let tx = Arc::new(Transaction::decode(tx.clone()).unwrap());
+        let v1 = ExecutionPayloadV1 {
+            parent_hash: self.parent_hash,
+            fee_recipient: self.block_env.coinbase,
+            state_root,
+            receipts_root,
+            logs_bloom,
+            prev_randao: self.block_env.prevrandao.unwrap_or_default(),
+            block_number: self.block_env.number.to(),
+            gas_limit: self.block_env.gas_limit.to(),
+            gas_used,
+            timestamp: self.block_env.timestamp.to(),
+            extra_data,
+            base_fee_per_gas: self.block_env.basefee,
+            block_hash: header.hash_slow(),
+            transactions,
+        };
+        let seal = SealV0 {
+            total_frags: frag_seq.next_seq,
+            block_number: self.block_env.number.to(),
+            gas_used,
+            gas_limit: self.block_env.gas_limit.to(),
+            parent_hash: self.parent_hash,
+            transactions_root,
+            receipts_root,
+            state_root,
+            block_hash: v1.block_hash,
+        };
+        tracing::info!("seal: {seal:#?}");
+        (frag_msg, seal, OpExecutionPayloadEnvelopeV3 {
+            execution_payload: ExecutionPayloadV3 {
+                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                blob_gas_used: 0,
+                excess_blob_gas: 0,
+            },
+            block_value: frag_seq.payment.to(),
+            blobs_bundle: BlobsBundleV1::new(vec![]),
+            should_override_builder: false,
+            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+        })
+    }
+}
+impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
+    /// Commit new to DB, either due to syncing or due to New Payload EngineApi message.
+    /// If it was based on a new payload message rather than blocksync, we pass Some(base_fee),
+    /// and clear the tx pool based on that
+    pub fn commit_block(&mut self, block: &BlockSyncMessage, base_fee: Option<u64>) {
+        self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
+        self.db_frag.reset();
 
-            // Execute transaction.
-            let simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true).unwrap();
+        self.parent_header = block.header.clone();
+        self.parent_hash = block.hash_slow();
 
-            self.system_caller.on_state(&simulated_tx.result_and_state.state);
-            evm.db_mut().commit(simulated_tx.result_and_state.state.clone());
-            tx_results.push(simulated_tx);
+        if let Some(base_fee) = base_fee {
+            self.tx_pool.handle_new_block(block.body.transactions.iter(), base_fee, &self.db_frag, false, None);
         }
-        Ok(tx_results)
     }
 }
 

@@ -61,6 +61,32 @@ impl<Db> State<Db> {
     pub fn new(db: Db) -> Self {
         State::builder().with_database(db).with_bundle_update().without_state_clear().build()
     }
+
+    /// Apply evm transitions to transition state.
+    pub fn apply_transition(&mut self, transitions: Vec<(Address, TransitionAccount)>) {
+        // add transition to transition state.
+        if let Some(s) = self.transition_state.as_mut() {
+            s.add_transitions(transitions)
+        }
+    }
+
+    /// reset all the caches/temporary fields
+    pub fn reset(&mut self) {
+        self.cache.accounts.clear();
+        self.cache.contracts.clear();
+
+        if let Some(s) = self.transition_state.as_mut() {
+            s.transitions.clear();
+        }
+
+        self.bundle_state.state.clear();
+        self.bundle_state.contracts.clear();
+        self.bundle_state.reverts.clear();
+        self.bundle_state.state_size = 0;
+        self.bundle_state.reverts_size = 0;
+        self.use_preloaded_bundle = false;
+        self.block_hashes.clear();
+    }
 }
 
 // Have ability to call State::builder without having to specify the type.
@@ -140,13 +166,6 @@ impl<DB: DatabaseRef> State<DB> {
         self.cache.insert_account_with_storage(address, info, storage)
     }
 
-    /// Apply evm transitions to transition state.
-    pub fn apply_transition(&mut self, transitions: Vec<(Address, TransitionAccount)>) {
-        // add transition to transition state.
-        if let Some(s) = self.transition_state.as_mut() {
-            s.add_transitions(transitions)
-        }
-    }
 
     /// Take all transitions and merge them inside bundle state.
     /// This action will create final post state and all reverts so that
@@ -273,7 +292,7 @@ impl<DB: DatabaseRef> Database for State<DB> {
     }
 }
 
-impl<DB: DatabaseRef> DatabaseCommit for State<DB> {
+impl<DB> DatabaseCommit for State<DB> {
     fn commit(&mut self, evm_state: HashMap<Address, Account>) {
         let transitions = self.cache.apply_evm_state(evm_state);
         self.apply_transition(transitions);
