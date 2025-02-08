@@ -178,7 +178,7 @@ func (it *insertIterator) remaining() int {
 	return len(it.chain) - it.index
 }
 
-func (bc *BlockChain) InsertNewFrag(frag types.Frag) (types.Receipts, error) {
+func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	currentUnsealedBlock := bc.CurrentUnsealedBlock()
 
 	parent := bc.GetBlockByNumber(currentUnsealedBlock.Number.Uint64() - 1)
@@ -186,7 +186,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) (types.Receipts, error) {
 	statedb, error := state.New(parent.Header().Root, bc.StateCache()) // TODO: Replace with currentUnsealedBlock.statedb
 
 	if error != nil {
-		return nil, fmt.Errorf("could not create new state db: %w", error)
+		return fmt.Errorf("could not create new state db: %w", error)
 	}
 
 	chainConfig := bc.Config()
@@ -227,7 +227,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) (types.Receipts, error) {
 		msg, err := TransactionToMessage(tx, signer, parent.BaseFee())
 
 		if err != nil {
-			return nil, fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
+			return fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
 		}
 
 		statedb.SetTxContext(tx.Hash(), i)
@@ -235,7 +235,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) (types.Receipts, error) {
 		txExecutionResult, err := ApplyMessage(evm, msg, gp)
 
 		if err != nil {
-			return nil, fmt.Errorf("could not apply message %v: %w", tx.Hash().Hex(), err)
+			return fmt.Errorf("could not apply message %v: %w", tx.Hash().Hex(), err)
 		}
 
 		txReceipt := MakeReceipt(evm, txExecutionResult, statedb, currentUnsealedBlock.Number, currentUnsealedBlock.Hash, tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
@@ -243,8 +243,14 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) (types.Receipts, error) {
 		receipts = append(receipts, txReceipt)
 	}
 
-	// Insert the frag into the current unsealed block
-	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
+	// Update the unsealed block state:
+	// 1. Insert the frag into the current unsealed block
+	// 2. Update the last sequence number
+	// 3. Insert the receipts into the current unsealed block
 
-	return receipts, nil
+	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
+	currentUnsealedBlock.LastSequenceNumber = frag.Seq
+	currentUnsealedBlock.Receipts = append(receipts, receipts...)
+
+	return nil
 }

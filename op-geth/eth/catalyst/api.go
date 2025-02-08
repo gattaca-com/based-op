@@ -1394,16 +1394,21 @@ func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) (string, error) {
 	}
 
 	// 2. Insert frag into the unsealed block
-	api.eth.BlockChain().InsertNewFrag(frag.Frag)
+	log.Info("[engine_newFragV0] Inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
+	err := api.eth.BlockChain().InsertNewFrag(frag.Frag)
+	if err != nil {
+		return engine.INVALID, err
+	}
 
-	// 4. If frag.IsLast, seal the unsealed block
+	// 3. If frag.IsLast, seal the unsealed block
 	if frag.Frag.IsLast {
+		log.Info("[engine_newFragV0] Frag is last, sealing unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
 		engine.SealBlock(unsealedBlock)
 	}
 
-	log.Info("[engine_newFragV0] New frag added to unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
+	log.Info("[engine_newFragV0] New frag inserted into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
 
-	// 5. Response (we still need to define how we'll response)
+	// 4. Response (we still need to define how we'll response)
 	// TODO: figure out if we want to respond with more data
 	return engine.VALID, nil
 }

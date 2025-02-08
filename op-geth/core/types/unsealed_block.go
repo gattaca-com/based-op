@@ -16,7 +16,7 @@ type UnsealedBlock struct {
 	Hash               common.Hash
 	// State              *state.StateDB
 
-	receipts Receipts
+	Receipts Receipts
 }
 
 func NewUnsealedBlock() *UnsealedBlock {
@@ -26,7 +26,7 @@ func NewUnsealedBlock() *UnsealedBlock {
 		LastSequenceNumber: *new(uint64),
 		Hash:               common.Hash{},
 		// State:              nil,
-		receipts: Receipts{},
+		Receipts: Receipts{},
 	}
 }
 
