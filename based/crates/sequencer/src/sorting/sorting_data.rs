@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc};
+use std::{fmt::{self, Display}, sync::Arc};
 
 use bop_common::{
     communication::{
@@ -22,6 +22,25 @@ use tracing::error;
 
 use super::FragSequence;
 use crate::{context::SequencerContext, simulator::simulate_tx_inner, sorting::ActiveOrders};
+
+#[derive(Clone, Copy, Default)]
+pub struct SortingTelemetry {
+    n_sims_sent: usize,
+    n_sims_errored: usize,
+    n_sims_succesful: usize,
+    tot_sim_time: Duration,
+}
+
+impl fmt::Debug for SortingTelemetry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SortingTelemetry")
+            .field("n_sims_sent", &self.n_sims_sent)
+            .field("n_sims_errored", &self.n_sims_errored)
+            .field("n_sims_succesful", &self.n_sims_succesful)
+            .field("tot_sim_time", &format_args!("{}", self.tot_sim_time))
+            .finish()
+    }
+}
 
 /// Data of a being sorted frag
 #[derive(Clone, Debug)]
@@ -49,6 +68,8 @@ pub struct SortingData<Db> {
     pub next_to_be_applied: Option<SimulatedTx>,
 
     pub start_t: Instant,
+
+    pub telemetry: SortingTelemetry,
 }
 
 impl<Db> SortingData<Db> {
@@ -62,7 +83,7 @@ impl<Db> SortingData<Db> {
             ActiveOrders::new(data.tx_pool.clone_active())
         };
         let db = DBSorting::new(data.db_frag.clone());
-        let _  = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
+        let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
         Self {
             db,
             until: Instant::now() + data.config.frag_duration,
@@ -73,6 +94,7 @@ impl<Db> SortingData<Db> {
             gas_remaining: seq.gas_remaining,
             txs: vec![],
             start_t: Instant::now(),
+            telemetry: Default::default(),
         }
     }
 
@@ -93,13 +115,23 @@ impl<Db> SortingData<Db> {
     }
 
     /// Handles the result of a simulation. `simulated_tx` simulated_at_id should be pre-verified.
-    pub fn handle_sim(&mut self, simulated_tx: SimulationResult<SimulatedTx>, sender: &Address, base_fee: u64) {
+    pub fn handle_sim(
+        &mut self,
+        simulated_tx: SimulationResult<SimulatedTx>,
+        sender: &Address,
+        base_fee: u64,
+        simtime: Duration,
+    ) {
         self.in_flight_sims -= 1;
+        self.telemetry.tot_sim_time += simtime;
 
         tracing::trace!("handling sender {sender}");
         // handle errored sim
-        let Ok(simulated_tx) = simulated_tx.inspect_err(|e| error!("simming tx for sender {sender} {e}")) else {
+        let Ok(simulated_tx) = simulated_tx
+        /* .inspect_err(|e| error!("simming tx for sender {sender} {e}")) */
+        else {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
+            self.telemetry.n_sims_errored += 1;
             return;
         };
 
@@ -108,6 +140,7 @@ impl<Db> SortingData<Db> {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
         }
+        self.telemetry.n_sims_succesful += 1;
 
         let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
             self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
@@ -148,6 +181,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
             // tracing::info!("sending sim {} for sender {}", tx.nonce_ref(), tx.sender());
             senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
             self.in_flight_sims += 1;
+            self.telemetry.n_sims_sent += 1;
         }
         self
     }
@@ -162,6 +196,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
             .is_ok();
         debug_assert!(could_send, "somehow simulate queue got filled");
         self.in_flight_sims += 1;
+        self.telemetry.n_sims_sent += 1;
     }
 }
 
@@ -226,7 +261,9 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         ensure_create2_deployer(chain_spec, timestamp, &mut evm.db_mut().db.write())
             .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
 
-        let forced_inclusion_txs = context.payload_attributes.transactions.as_ref().unwrap();
+        let Some(forced_inclusion_txs) = context.payload_attributes.transactions.as_ref() else {
+            return Ok(());
+        };
 
         // Apply must include txs.
         for tx in forced_inclusion_txs.iter() {

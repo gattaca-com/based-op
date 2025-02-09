@@ -30,7 +30,7 @@ pub struct GatewayArgs {
     #[arg(long = "sequencer.frag_duration_ms", default_value_t = 200)]
     pub frag_duration_ms: u64,
     /// Number of sims per loop
-    #[arg(long = "sequencer.sim_per_loop", default_value_t = 10)]
+    #[arg(long = "sequencer.sim_per_loop", default_value_t = 14)]
     pub sim_per_loop: usize,
     /// Database location
     #[arg(long = "db.datadir")]

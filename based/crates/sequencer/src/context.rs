@@ -147,6 +147,8 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
+        tracing::info!("sealing frag with {} txs:", sorting_data.txs.len());
+        tracing::info!("{:#?}", sorting_data.telemetry);
         for t in &mut sorting_data.txs {
             let state = t.take_state();
             if state.is_empty() {
@@ -186,7 +188,18 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         (seq, sorting)
     }
 
-    fn new_block_params(&mut self, attributes: &Box<OpPayloadAttributes>) -> (EvmBlockParams, EnvWithHandlerCfg) {
+    fn redo_state_root_from_scratch(&mut self, txs: Vec<SimulatedTx>) -> B256 {
+        let (_, env_with_handler_cfg) = self.new_block_params();
+        self.payload_attributes.transactions = Some(txs.into_iter().map(|tx| tx.encode()).collect::<Vec<_>>());
+
+        let seq = FragSequence::new(self.gas_limit(), self.block_number());
+        let mut sorting = SortingData::new(&seq, self);
+
+        sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");
+        let state_changes = self.db_frag.take_state_changes();
+        self.db.calculate_state_root(&state_changes).unwrap().0
+    }
+
     fn new_block_params(&mut self) -> (EvmBlockParams, EnvWithHandlerCfg) {
         let attributes = &self.payload_attributes;
         let env_attributes = NextBlockEnvAttributes {
@@ -214,12 +227,17 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         mut frag_seq: FragSequence,
         last_frag: SortingData<Db>,
     ) -> (FragV0, SealV0, OpExecutionPayloadEnvelopeV3) {
+        tracing::info!("at seal frag had {} tx and {} in flight", last_frag.txs.len(), last_frag.in_flight_sims);
         let (mut frag_msg, _) = self.seal_frag(last_frag, &mut frag_seq);
         frag_msg.is_last = true;
         let gas_used = frag_seq.gas_used;
 
         let state_changes = self.db_frag.take_state_changes();
         let state_root = self.db.calculate_state_root(&state_changes).unwrap().0;
+
+        self.db_frag = self.db.clone().into();
+
+        debug_assert_eq!(state_root, self.redo_state_root_from_scratch(frag_seq.txs.clone()));
 
         let canyon_active =
             self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(u64::try_from(self.timestamp()).unwrap());

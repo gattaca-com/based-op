@@ -13,7 +13,7 @@ use alloy_rpc_types::engine::{
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
-use reth_optimism_primitives::OpBlock;
+use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpBlock};
 use reth_primitives::BlockWithSenders;
 use revm_primitives::{Address, Env, SpecId, U256};
 use serde::{Deserialize, Serialize};
@@ -322,18 +322,27 @@ pub enum SequencerToSimulator<Db> {
     //TODO: Db could be set on frag commit once we broadcast msgs to sims
     SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
 }
+impl<Db> SequencerToSimulator<Db> {
+    pub fn sim_info(&self) -> (Address, u64, u64) {
+        match self {
+            SequencerToSimulator::SimulateTx(t, db) => (t.sender(), t.nonce(), db.state_id()),
+            SequencerToSimulator::SimulateTxTof(t, db) => (t.sender(), t.nonce(), db.state_id()),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct SimulatorToSequencer {
     /// Sender address and nonce
     pub sender_info: (Address, u64),
     pub state_id: u64,
+    pub simtime: Duration,
     pub msg: SimulatorToSequencerMsg,
 }
 
 impl SimulatorToSequencer {
-    pub fn new(sender_info: (Address, u64), state_id: u64, msg: SimulatorToSequencerMsg) -> Self {
-        Self { sender_info, state_id, msg }
+    pub fn new(sender_info: (Address, u64), state_id: u64, simtime: Duration, msg: SimulatorToSequencerMsg) -> Self {
+        Self { sender_info, state_id, simtime, msg }
     }
 
     pub fn sender(&self) -> &Address {

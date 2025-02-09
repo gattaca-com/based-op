@@ -13,7 +13,7 @@ use bop_common::{
         SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DBSorting, DatabaseRead, State},
-    time::Duration,
+    time::{Duration, Instant},
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
@@ -144,43 +144,22 @@ where
         });
 
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
-            match msg {
-                // TODO: Cleanup: merge both functions?
-                SequencerToSimulator::SimulateTx(tx, db) => {
-                    let _ = senders.send_timeout(
-                        SimulatorToSequencer::new(
-                            (tx.sender(), tx.nonce()),
-                            db.state_id(),
-                            SimulatorToSequencerMsg::Tx(Self::simulate_transaction(
-                                tx,
-                                db,
-                                &mut self.evm_sorting,
-                                self.regolith_active,
-                                true,
-                                true,
-                            )),
-                        ),
-                        Duration::from_millis(10),
-                    );
-                }
-                SequencerToSimulator::SimulateTxTof(tx, db) => {
-                    let _ = senders.send_timeout(
-                        SimulatorToSequencer::new(
-                            (tx.sender(), tx.nonce()),
-                            db.state_id(),
-                            SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_transaction(
-                                tx,
-                                db,
-                                &mut self.evm_tof,
-                                self.regolith_active,
-                                true,
-                                true,
-                            )),
-                        ),
-                        Duration::from_millis(10),
-                    );
-                }
-            }
+            let (sender, nonce, state_id) = msg.sim_info();
+            let curt = Instant::now();
+            let msg =
+                match msg {
+                    // TODO: Cleanup: merge both functions?
+                    SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(
+                        Self::simulate_transaction(tx, db, &mut self.evm_sorting, self.regolith_active, true, true),
+                    ),
+                    SequencerToSimulator::SimulateTxTof(tx, db) => SimulatorToSequencerMsg::TxPoolTopOfFrag(
+                        Self::simulate_transaction(tx, db, &mut self.evm_tof, self.regolith_active, true, true),
+                    ),
+                };
+            let _ = senders.send_timeout(
+                SimulatorToSequencer::new((sender, nonce), state_id, curt.elapsed(), msg),
+                Duration::from_millis(10),
+            );
         });
     }
 }

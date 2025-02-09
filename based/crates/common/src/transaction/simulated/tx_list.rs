@@ -112,6 +112,9 @@ impl SimulatedTxList {
             return tx.payment;
         }
         if let Some(tx) = self.pending.peek() {
+            if tx.is_deposit() {
+                return U256::MAX;
+            } 
             return U256::from(tx.priority_fee_or_price());
         }
         U256::ZERO

@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use bop_common::transaction::{SimulatedTx, SimulatedTxList};
 use revm_primitives::Address;
@@ -70,5 +70,10 @@ impl Deref for ActiveOrders {
 
     fn deref(&self) -> &Self::Target {
         &self.orders
+    }
+}
+impl DerefMut for ActiveOrders {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.orders
     }
 }

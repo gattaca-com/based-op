@@ -270,7 +270,10 @@ where
                     }
                 }
             }
-            WaitingForForkChoiceWithAttributes => {
+
+            // Waiting for new payload should not happen, but while testing
+            // we can basically keep sequencing based on the same db state
+            WaitingForForkChoiceWithAttributes | WaitingForNewPayload => {
                 match payload_attributes {
                     Some(attributes) => {
                         data.timers.start_sequencing.start();
@@ -287,7 +290,7 @@ where
                     }
                 }
             }
-            Syncing { .. } | Sorting(_, _) | WaitingForNewPayload => {
+            Syncing { .. } | Sorting(_, _) => {
                 debug_assert!(false, "Received FCU in state {self:?}");
                 tracing::warn!("Received FCU in state {self:?}");
                 self
@@ -370,7 +373,10 @@ where
             data.config.simulate_tof_in_pools.then_some(senders),
         );
         if let SequencerState::Sorting(_, sorting_data) = self {
-            sorting_data.send_tx(tx, senders);
+            // This should ideally be not at the top but bottom of the sorted list. For now this is fastest
+            sorting_data
+                .tof_snapshot
+                .push(bop_common::transaction::SimulatedTxList { current: None, pending: tx.into() });
         }
     }
 
@@ -381,6 +387,7 @@ where
     fn handle_sim_result(mut self, result: SimulatorToSequencer, data: &mut SequencerContext<Db>) -> Self {
         let (sender, nonce) = result.sender_info;
         let state_id = result.state_id;
+        let simtime = result.simtime;
         match result.msg {
             SimulatorToSequencerMsg::Tx(simulated_tx) => {
                 let SequencerState::Sorting(_, sort_data) = &mut self else {
@@ -392,7 +399,7 @@ where
                     return self;
                 }
                 data.timers.handle_sim.start();
-                sort_data.handle_sim(simulated_tx, &sender, data.as_ref().basefee.to());
+                sort_data.handle_sim(simulated_tx, &sender, data.as_ref().basefee.to(), simtime);
                 data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
@@ -403,7 +410,7 @@ where
                         // We would have already re-sent the tx for sim on the correct fragment.
                     }
                     Err(e) => {
-                        tracing::info!("simulation error for transaction pool tx {e}");
+                        // tracing::info!("simulation error for transaction pool tx {e}");
                         data.tx_pool.remove(&sender, nonce);
                     }
                 }
@@ -427,7 +434,6 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
                 data.tx_pool.remove_mined_txs(sorting_data.txs.iter());
-                tracing::info!("sealing frag with {} txs", sorting_data.txs.len());
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
                 // Collect all transactions from the frag so we can use them to reset the tx pool.
