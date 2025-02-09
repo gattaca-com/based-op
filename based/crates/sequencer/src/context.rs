@@ -13,7 +13,7 @@ use bop_common::{
     db::DBFrag,
     p2p::{FragV0, SealV0},
     time::Timer,
-    transaction::{SimulatedTx, Transaction},
+    transaction::Transaction,
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
@@ -152,7 +152,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
         tracing::info!("sealing frag {} with {} txs:", frag_seq.next_seq, sorting_data.txs.len());
-        self.db_frag.commit_txs(sorting_data.txs.iter());
+        self.db_frag.commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
         (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
     }

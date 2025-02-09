@@ -48,8 +48,8 @@ impl MockFetcher {
             .expect("couldn't build local tokio runtime");
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
         Self {
-            mode: Mode::default(),
-            // mode: Mode::Benchmark(vec![], Default::default(), Default::default()),
+            // mode: Mode::default(),
+            mode: Mode::Benchmark(vec![], Default::default(), Default::default()),
             executor,
             next_block,
             sync_until,
@@ -202,7 +202,7 @@ impl MockFetcher {
             }
             self.next_block += 200;
         } else {
-            let t_per_tx = Duration::from_millis(1800) / txs.len() * 10usize / 9usize;
+            let t_per_tx = Duration::from_millis(1200) / txs.len() * 10usize / 9usize;
             for t in txs.iter().skip(txs.len() / 10) {
                 vsync_busy(Some(t_per_tx), || {
                     connections.send(t.clone());
@@ -210,7 +210,7 @@ impl MockFetcher {
             }
         }
 
-        while curt.elapsed() < Duration::from_millis(2000) {}
+        while curt.elapsed() < Duration::from_millis(1400) {}
         let (block_tx, block_rx) = oneshot::channel();
         connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 

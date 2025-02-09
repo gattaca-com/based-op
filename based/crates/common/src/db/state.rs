@@ -17,8 +17,7 @@ use revm::{
     DBBox, DatabaseRef,
 };
 use revm_interpreter::primitives::{
-    db::{Database, DatabaseCommit},
-    hash_map, Account, AccountInfo, Address, Bytecode, HashMap, B256, BLOCK_HASH_HISTORY, U256,
+    db::Database, hash_map, Account, AccountInfo, Address, Bytecode, HashMap, B256, BLOCK_HASH_HISTORY, U256,
 };
 use revm_primitives::{address, b256, hex, Bytes, EvmState};
 

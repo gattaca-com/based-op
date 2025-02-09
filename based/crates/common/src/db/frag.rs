@@ -9,7 +9,7 @@ use reth_trie_common::updates::TrieUpdates;
 use revm::db::{states::bundle_state::BundleRetention, BundleState};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
-    Account, AccountInfo, Address, Bytecode, EvmState, U256,
+    Account, AccountInfo, Address, Bytecode, U256,
 };
 
 use super::{DatabaseRead, Error, State};
@@ -40,11 +40,11 @@ impl<Db> DBFrag<Db> {
 }
 
 impl<Db: DatabaseRef> DBFrag<Db> {
-    pub fn commit_txs<'a>(&mut self, txs: impl Iterator<Item = &'a SimulatedTx>) {
+    pub fn commit_txs<'a>(&mut self, txs: impl Iterator<Item = &'a mut SimulatedTx>) {
         let mut guard = self.db.write();
 
         for t in txs {
-            let evm_state = &t.result_and_state.state;
+            let evm_state = std::mem::take(&mut t.result_and_state.state);
             for a in evm_state.keys() {
                 let _ = guard.load_cache_account(*a);
             }

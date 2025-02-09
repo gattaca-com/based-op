@@ -7,7 +7,7 @@ use std::{
 use bop_common::{
     communication::{
         messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg},
-        SendersSpine, SpineConnections, TrackedSenders,
+        SpineConnections,
     },
     db::{state::ensure_create2_deployer, DBSorting},
     time::{Duration, Instant},
@@ -20,7 +20,7 @@ use reth_evm::{
     ConfigureEvm,
 };
 use reth_optimism_evm::OpBlockExecutionError;
-use revm::{Database, DatabaseCommit, DatabaseRef};
+use revm::{Database, DatabaseRef};
 use revm_primitives::{Address, EnvWithHandlerCfg, U256};
 
 use super::FragSequence;
@@ -231,7 +231,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
 }
 
 impl<Db: DatabaseRef> SortingData<Db> {
-    pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
+    pub fn apply_tx(&mut self, tx: SimulatedTx) {
         self.db.commit_ref(&tx.result_and_state.state);
 
         let gas_used = tx.as_ref().result.gas_used();
@@ -300,11 +300,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
             let tx = Arc::new(Transaction::decode(tx.clone()).unwrap());
 
             // Execute transaction.
-            let simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true)
+            let mut simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true)
                 .expect("forced inclusing txs shouldn't fail");
 
             context.system_caller.on_state(&simulated_tx.result_and_state.state);
-            evm.db_mut().commit_txs(std::iter::once(&simulated_tx));
+
+            evm.db_mut().commit_txs(std::iter::once(&mut simulated_tx));
             self.gas_remaining -= simulated_tx.gas_used();
             self.payment += simulated_tx.payment;
             self.txs.push(simulated_tx);

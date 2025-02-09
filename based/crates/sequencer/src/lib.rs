@@ -278,6 +278,7 @@ where
                     // top of the same block!
                     data.tx_pool.clear();
                     data.deposits.clear();
+                    data.db_frag.reset();
                 }
                 match payload_attributes {
                     Some(attributes) => {

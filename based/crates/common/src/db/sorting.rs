@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use alloy_primitives::B256;
 use parking_lot::RwLock;
-use revm::db::{states::bundle_state::BundleRetention, BundleState};
 use revm_primitives::{
-    db::{Database, DatabaseCommit, DatabaseRef},
+    db::{Database, DatabaseRef},
     AccountInfo, Address, Bytecode, EvmState, U256,
 };
 
