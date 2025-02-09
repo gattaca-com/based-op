@@ -8,13 +8,14 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer,
             SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DatabaseWrite},
     p2p::VersionedMessage,
+    time::Duration,
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
@@ -360,9 +361,17 @@ where
 
     /// Sends a new transaction to the tx pool.
     /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
-    fn handle_new_tx(&mut self, msg: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
-        let senders = data.config.simulate_tof_in_pools.then_some(senders);
-        data.tx_pool.handle_new_tx(msg, &data.db_frag, data.as_ref().basefee.to(), false, senders);
+    fn handle_new_tx(&mut self, tx: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+        data.tx_pool.handle_new_tx(
+            tx.clone(),
+            &data.db_frag,
+            data.as_ref().basefee.to(),
+            false,
+            data.config.simulate_tof_in_pools.then_some(senders),
+        );
+        if let SequencerState::Sorting(_, sorting_data) = self {
+            sorting_data.send_tx(tx, senders);
+        }
     }
 
     /// Processes transaction simulation results from the simulator actor.

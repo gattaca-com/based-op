@@ -13,6 +13,7 @@ use bop_common::{
     db::DBFrag,
     p2p::{FragV0, SealV0},
     time::Timer,
+    transaction::SimulatedTx,
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
@@ -148,6 +149,9 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
     ) -> (FragV0, SortingData<Db>) {
         for t in &mut sorting_data.txs {
             let state = t.take_state();
+            if state.is_empty() {
+                continue;
+            }
             self.system_caller.on_state(&state);
             self.db_frag.commit_flat_changes(state);
         }
@@ -166,8 +170,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         attributes: Box<OpPayloadAttributes>,
         senders: &SendersSpine<Db>,
     ) -> (FragSequence, SortingData<Db>) {
-        let (simulator_evm_block_params, env_with_handler_cfg) = self.new_block_params(&attributes);
         self.payload_attributes = attributes;
+        let (simulator_evm_block_params, env_with_handler_cfg) = self.new_block_params();
         self.block_env = simulator_evm_block_params.env.block.clone();
         self.base_fee = self.block_env.basefee.to();
 
@@ -183,6 +187,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
     }
 
     fn new_block_params(&mut self, attributes: &Box<OpPayloadAttributes>) -> (EvmBlockParams, EnvWithHandlerCfg) {
+    fn new_block_params(&mut self) -> (EvmBlockParams, EnvWithHandlerCfg) {
+        let attributes = &self.payload_attributes;
         let env_attributes = NextBlockEnvAttributes {
             timestamp: attributes.payload_attributes.timestamp,
             suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,

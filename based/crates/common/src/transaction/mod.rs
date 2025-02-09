@@ -21,7 +21,7 @@ pub struct Transaction {
     /// The sender of the transaction.
     /// Recovered from the tx on initialisation.
     sender: Address,
-    envelope: Bytes,
+    pub envelope: Bytes,
 }
 
 impl Transaction {
@@ -211,7 +211,8 @@ impl Transaction {
     }
 
     pub fn encode(&self) -> Bytes {
-        self.tx.encoded_2718().into()
+        debug_assert_eq!(self.envelope, self.tx.encoded_2718());
+        self.envelope.clone()
     }
 
     pub fn from_block(block: &BlockSyncMessage) -> Vec<Arc<Transaction>> {

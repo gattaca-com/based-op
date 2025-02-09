@@ -16,7 +16,7 @@ pub struct FragSequence {
     pub gas_remaining: u64,
     pub gas_used: u64,
     pub payment: U256,
-    txs: Vec<SimulatedTx>,
+    pub txs: Vec<SimulatedTx>,
     /// Next frag index
     pub next_seq: u64,
     /// Block number shared by all frags of this sequence

@@ -17,10 +17,7 @@ use bop_common::{
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use reth_evm::{
-    execute::ProviderError,
-    ConfigureEvm, ConfigureEvmEnv,
-};
+use reth_evm::{execute::ProviderError, ConfigureEvm, ConfigureEvmEnv};
 use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::OpHardfork;
 use revm::{Database, DatabaseRef, Evm};
@@ -159,7 +156,7 @@ where
                                 db,
                                 &mut self.evm_sorting,
                                 self.regolith_active,
-                                false,
+                                true,
                                 true,
                             )),
                         ),
@@ -176,7 +173,7 @@ where
                                 db,
                                 &mut self.evm_tof,
                                 self.regolith_active,
-                                false,
+                                true,
                                 true,
                             )),
                         ),

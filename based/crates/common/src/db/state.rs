@@ -59,7 +59,7 @@ pub struct State<DB> {
 }
 impl<Db> State<Db> {
     pub fn new(db: Db) -> Self {
-        State::builder().with_database(db).with_bundle_update().without_state_clear().build()
+        State::builder().with_database(db).with_bundle_update().build()
     }
 
     /// Apply evm transitions to transition state.

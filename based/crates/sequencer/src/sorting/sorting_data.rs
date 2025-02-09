@@ -3,10 +3,10 @@ use std::{fmt::Display, sync::Arc};
 use bop_common::{
     communication::{
         messages::{SequencerToSimulator, SimulationResult},
-        SpineConnections,
+        SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{state::ensure_create2_deployer, DBSorting},
-    time::Instant,
+    time::{Duration, Instant},
     transaction::{SimulatedTx, Transaction},
 };
 use bop_db::DatabaseRead;
@@ -48,21 +48,23 @@ pub struct SortingData<Db> {
     /// we apply it to the `db` and send off the next batch of sims.
     pub next_to_be_applied: Option<SimulatedTx>,
 
-    pub start_t: Instant
+    pub start_t: Instant,
 }
 
 impl<Db> SortingData<Db> {
     pub fn new(seq: &FragSequence, data: &SequencerContext<Db>) -> Self
     where
-        Db: Clone,
+        Db: Clone + DatabaseRef,
     {
         let tof_snapshot = if data.payload_attributes.no_tx_pool.unwrap_or_default() {
             ActiveOrders::empty()
         } else {
             ActiveOrders::new(data.tx_pool.clone_active())
         };
+        let db = DBSorting::new(data.db_frag.clone());
+        let _  = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
         Self {
-            db: DBSorting::new(data.db_frag.clone()),
+            db,
             until: Instant::now() + data.config.frag_duration,
             in_flight_sims: 0,
             payment: U256::ZERO,
@@ -70,7 +72,7 @@ impl<Db> SortingData<Db> {
             tof_snapshot,
             gas_remaining: seq.gas_remaining,
             txs: vec![],
-            start_t: Instant::now()
+            start_t: Instant::now(),
         }
     }
 
@@ -126,7 +128,6 @@ impl<Db> SortingData<Db> {
     pub fn should_send_next_sims(&self) -> bool {
         self.in_flight_sims == 0
     }
-
 }
 
 impl<Db: Clone + DatabaseRef> SortingData<Db> {
@@ -154,9 +155,17 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
     pub fn state(&self) -> DBSorting<Db> {
         self.db.clone()
     }
+
+    pub fn send_tx(&mut self, tx: Arc<Transaction>, senders: &SendersSpine<Db>) {
+        let could_send = senders
+            .send_timeout(SequencerToSimulator::SimulateTx(tx, self.db.clone()), Duration::from_millis(10))
+            .is_ok();
+        debug_assert!(could_send, "somehow simulate queue got filled");
+        self.in_flight_sims += 1;
+    }
 }
 
-impl<Db: DatabaseRef>  SortingData<Db> {
+impl<Db: DatabaseRef> SortingData<Db> {
     pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
         self.db.commit(tx.take_state());
 

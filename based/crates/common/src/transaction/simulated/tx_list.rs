@@ -116,4 +116,14 @@ impl SimulatedTxList {
         }
         U256::ZERO
     }
+
+    pub fn payment(&self) -> alloy_primitives::Uint<256, 4> {
+        self.current.as_ref().map(|c| c.payment).unwrap_or_default()
+    }
+}
+
+impl From<SimulatedTx> for SimulatedTxList {
+    fn from(current: SimulatedTx) -> Self {
+        Self { current: Some(current), pending: TxList::default() }
+    }
 }

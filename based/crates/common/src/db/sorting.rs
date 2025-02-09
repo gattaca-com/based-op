@@ -13,7 +13,7 @@ use super::{DBFrag, State};
 /// Thread safe
 #[derive(Clone, Debug)]
 pub struct DBSorting<Db> {
-    db: Arc<RwLock<State<DBFrag<Db>>>>,
+    pub db: Arc<RwLock<State<DBFrag<Db>>>>,
     state_id: u64,
 }
 

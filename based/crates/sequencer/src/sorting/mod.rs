@@ -48,13 +48,20 @@ impl ActiveOrders {
     }
 
     pub fn put(&mut self, tx: SimulatedTx) {
+        let payment = tx.payment;
+        let mut id = self.orders.len();
         let sender = tx.sender();
-        for order in self.orders.iter_mut().rev() {
+        for (i, order) in self.orders.iter_mut().enumerate().rev() {
             if order.sender() == sender {
                 order.put(tx);
                 return;
             }
+            if payment < order.payment() {
+                id = i;
+            }
         }
+        // not found so we insert it at the id corresponding to the payment
+        self.orders.insert(id, SimulatedTxList::from(tx))
     }
 }
 
