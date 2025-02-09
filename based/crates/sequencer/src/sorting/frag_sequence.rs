@@ -1,14 +1,10 @@
-
 use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use bop_common::{
-    p2p::FragV0,
-    transaction::SimulatedTx,
-};
+use bop_common::{p2p::FragV0, transaction::SimulatedTx};
 use revm_primitives::{Bytes, B256};
 
-use super::SortingData;
+use super::{sorting_data::SortingTelemetry, SortingData};
 
 /// Sequence of frags applied on the last block
 #[derive(Clone, Debug)]
@@ -21,10 +17,20 @@ pub struct FragSequence {
     pub next_seq: u64,
     /// Block number shared by all frags of this sequence
     block_number: u64,
+
+    pub sorting_telemetry: SortingTelemetry,
 }
 impl FragSequence {
     pub fn new(gas_remaining: u64, block_number: u64) -> Self {
-        Self { gas_remaining, gas_used: 0, payment: U256::ZERO, txs: vec![], block_number, next_seq: 0 }
+        Self {
+            gas_remaining,
+            gas_used: 0,
+            payment: U256::ZERO,
+            txs: vec![],
+            block_number,
+            next_seq: 0,
+            sorting_telemetry: Default::default(),
+        }
     }
 
     pub fn set_gas_limit(&mut self, gas_limit: u64) {
@@ -40,6 +46,7 @@ impl FragSequence {
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         self.txs.extend(in_sort.txs);
         self.next_seq += 1;
+        self.sorting_telemetry += in_sort.telemetry;
         msg
     }
 

@@ -178,14 +178,14 @@ impl MockFetcher {
         };
 
         tracing::info!("sending {} txs", txs.len());
-        connections.send(fcu);
-        let curt = Instant::now();
         for t in txs.iter() {
             connections.send(t.clone());
             // Duration::from_millis(20).sleep();
         }
+        connections.send(fcu);
+        let curt = Instant::now();
 
-        if txs.len() < 70_000 {
+        if txs.len() < 80_000 {
             let blocks: Vec<BlockSyncMessage> = self.executor.block_on(async {
                 let futures = (self.next_block..(self.next_block + 100).min(self.sync_until))
                     .map(|i| fetch_block(i, &self.provider));

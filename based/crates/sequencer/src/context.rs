@@ -147,8 +147,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
-        tracing::info!("sealing frag with {} txs:", sorting_data.txs.len());
-        tracing::info!("{:#?}", sorting_data.telemetry);
+        tracing::info!("sealing frag {} with {} txs:", frag_seq.next_seq, sorting_data.txs.len());
         for t in &mut sorting_data.txs {
             let state = t.take_state();
             if state.is_empty() {
@@ -227,8 +226,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         mut frag_seq: FragSequence,
         last_frag: SortingData<Db>,
     ) -> (FragV0, SealV0, OpExecutionPayloadEnvelopeV3) {
-        tracing::info!("at seal frag had {} tx and {} in flight", last_frag.txs.len(), last_frag.in_flight_sims);
         let (mut frag_msg, _) = self.seal_frag(last_frag, &mut frag_seq);
+        tracing::info!("{:#?}", frag_seq.sorting_telemetry);
         frag_msg.is_last = true;
         let gas_used = frag_seq.gas_used;
 

@@ -1,4 +1,8 @@
-use std::{fmt::{self, Display}, sync::Arc};
+use std::{
+    fmt::{self, Display},
+    ops::AddAssign,
+    sync::Arc,
+};
 
 use bop_common::{
     communication::{
@@ -18,7 +22,6 @@ use reth_evm::{
 use reth_optimism_evm::OpBlockExecutionError;
 use revm::{Database, DatabaseCommit, DatabaseRef};
 use revm_primitives::{Address, EnvWithHandlerCfg, U256};
-use tracing::error;
 
 use super::FragSequence;
 use crate::{context::SequencerContext, simulator::simulate_tx_inner, sorting::ActiveOrders};
@@ -29,6 +32,15 @@ pub struct SortingTelemetry {
     n_sims_errored: usize,
     n_sims_succesful: usize,
     tot_sim_time: Duration,
+}
+
+impl AddAssign for SortingTelemetry {
+    fn add_assign(&mut self, rhs: Self) {
+        self.n_sims_sent += rhs.n_sims_sent;
+        self.n_sims_errored += rhs.n_sims_errored;
+        self.n_sims_succesful += rhs.n_sims_succesful;
+        self.tot_sim_time += rhs.tot_sim_time;
+    }
 }
 
 impl fmt::Debug for SortingTelemetry {
@@ -143,7 +155,7 @@ impl<Db> SortingData<Db> {
         self.telemetry.n_sims_succesful += 1;
 
         let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
-            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.is_deposit() || t.payment < simulated_tx.payment)
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
