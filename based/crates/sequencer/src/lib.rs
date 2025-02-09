@@ -73,15 +73,15 @@ where
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle new transaction
-        connections.receive(|msg, senders| {
+        while connections.receive(|msg, senders| {
             self.state.handle_new_tx(msg, &mut self.data, senders);
-        });
+        }){};
 
         // handle sim results
-        connections.receive(|msg, _| {
+        while connections.receive(|msg, _| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_sim_result(msg, &mut self.data);
-        });
+        }){};
 
         // handle engine API messages from rpc
         connections.receive(|msg: messages::EngineApi, senders| {

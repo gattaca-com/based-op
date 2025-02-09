@@ -10,7 +10,7 @@ use bop_common::{
         Connections, SpineConnections,
     },
     db::DatabaseRead,
-    time::{Duration, Instant},
+    time::{utils::vsync_busy, Duration, Instant},
     transaction::Transaction,
 };
 use core_affinity::CoreId;
@@ -178,16 +178,22 @@ impl MockFetcher {
         };
 
         tracing::info!("sending {} txs", txs.len());
-        for t in txs.iter() {
+        // first we send enough for the first frag
+        for t in txs.iter().take(txs.len()/10) {
             connections.send(t.clone());
-            // Duration::from_millis(20).sleep();
         }
-        connections.send(fcu);
+        Duration::from_millis(10).sleep();
         let curt = Instant::now();
+        connections.send(fcu);
 
-        if txs.len() < 80_000 {
+        if txs.len() < 100_000 {
+            // if we're going to be fetching more, let's send all the rest 
+            for t in txs.iter().skip(txs.len()/10) {
+                connections.send(t.clone());
+                // Duration::from_millis(20).sleep();
+            }
             let blocks: Vec<BlockSyncMessage> = self.executor.block_on(async {
-                let futures = (self.next_block..(self.next_block + 100).min(self.sync_until))
+                let futures = (self.next_block..(self.next_block + 200).min(self.sync_until))
                     .map(|i| fetch_block(i, &self.provider));
                 join_all(futures).await
             });
@@ -196,7 +202,16 @@ impl MockFetcher {
                     txs.push(Arc::new(t.into()))
                 }
             }
-            self.next_block += 100;
+            self.next_block += 200;
+        } else {
+            let t_per_tx = Duration::from_millis(1800) / txs.len()*10usize/9usize;
+            for t in txs.iter().skip(txs.len()/10) {
+                vsync_busy(Some(t_per_tx), || {
+                    connections.send(t.clone());
+                })
+                // Duration::from_millis(20).sleep();
+            }
+
         }
 
         while curt.elapsed() < Duration::from_millis(2000) {}

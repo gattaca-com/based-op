@@ -131,7 +131,6 @@ impl Timer {
     fn send_business(&mut self) {
         if self.curmsg.is_valid() {
             self.timing_producer.produce(&self.curmsg);
-            self.curmsg.start_t = Instant::ZERO;
         }
     }
 
