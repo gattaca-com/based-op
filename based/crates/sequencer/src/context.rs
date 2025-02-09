@@ -39,7 +39,7 @@ pub struct SequencerTimers {
     pub handle_sim: Timer,
     pub seal_frag: Timer,
     pub seal_block: Timer,
-    pub handle_deposits: Timer
+    pub handle_deposits: Timer,
 }
 impl Default for SequencerTimers {
     fn default() -> Self {
@@ -152,14 +152,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
         tracing::info!("sealing frag {} with {} txs:", frag_seq.next_seq, sorting_data.txs.len());
-        for t in &mut sorting_data.txs {
-            let state = t.take_state();
-            if state.is_empty() {
-                continue;
-            }
-            self.system_caller.on_state(&state);
-            self.db_frag.commit_flat_changes(state);
-        }
+        self.db_frag.commit_txs(sorting_data.txs.iter());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
         (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
     }
@@ -189,18 +182,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");
         self.tx_pool.remove_mined_txs(sorting.txs.iter());
         (seq, sorting)
-    }
-
-    fn redo_state_root_from_scratch(&mut self, txs: Vec<SimulatedTx>) -> B256 {
-        let (_, env_with_handler_cfg) = self.new_block_params();
-        self.payload_attributes.transactions = Some(txs.into_iter().map(|tx| tx.encode()).collect::<Vec<_>>());
-
-        let seq = FragSequence::new(self.gas_limit(), self.block_number());
-        let mut sorting = SortingData::new(&seq, self);
-
-        sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");
-        let state_changes = self.db_frag.take_state_changes();
-        self.db.calculate_state_root(&state_changes).unwrap().0
     }
 
     fn new_block_params(&mut self) -> (EvmBlockParams, EnvWithHandlerCfg) {
@@ -234,19 +215,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         tracing::info!("{:#?}", frag_seq.sorting_telemetry);
         frag_msg.is_last = true;
         let gas_used = frag_seq.gas_used;
+        let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
+        let (transactions, transactions_root, receipts_root, logs_bloom) =
+            frag_seq.encoded_txs_roots_bloom(canyon_active);
 
         let state_changes = self.db_frag.take_state_changes();
         let state_root = self.db.calculate_state_root(&state_changes).unwrap().0;
-
-        self.db_frag = self.db.clone().into();
-
-        debug_assert_eq!(state_root, self.redo_state_root_from_scratch(frag_seq.txs.clone()));
-
-        let canyon_active =
-            self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
-
-        let (transactions, transactions_root, receipts_root, logs_bloom) =
-            frag_seq.encoded_txs_roots_bloom(canyon_active);
 
         let extra_data = self.extra_data();
 

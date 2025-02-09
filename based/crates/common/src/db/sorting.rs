@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use alloy_primitives::B256;
 use parking_lot::RwLock;
+use revm::db::{states::bundle_state::BundleRetention, BundleState};
 use revm_primitives::{
     db::{Database, DatabaseCommit, DatabaseRef},
     AccountInfo, Address, Bytecode, EvmState, U256,
@@ -26,13 +27,15 @@ impl<Db> DBSorting<Db> {
         self.state_id
     }
 }
-
-impl<Db: DatabaseRef> DatabaseCommit for DBSorting<Db> {
-    fn commit(&mut self, state: EvmState) {
-        self.db.write().commit(state);
+impl<Db: DatabaseRef> DBSorting<Db> {
+    pub fn commit_ref(&mut self, state: &EvmState) {
+        self.db.write().commit_ref(state);
         self.state_id = rand::random()
     }
 }
+
+// impl<Db: DatabaseRef> DatabaseCommit for DBSorting<Db> {
+// }
 
 impl<Db: DatabaseRef> DatabaseRef for DBSorting<Db> {
     type Error = Db::Error;

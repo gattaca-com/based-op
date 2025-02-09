@@ -48,7 +48,8 @@ impl MockFetcher {
             .expect("couldn't build local tokio runtime");
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
         Self {
-            mode: Mode::Benchmark(vec![], Default::default(), Default::default()),
+            mode: Mode::default(),
+            // mode: Mode::Benchmark(vec![], Default::default(), Default::default()),
             executor,
             next_block,
             sync_until,
@@ -206,7 +207,6 @@ impl MockFetcher {
                 vsync_busy(Some(t_per_tx), || {
                     connections.send(t.clone());
                 })
-                // Duration::from_millis(20).sleep();
             }
         }
 

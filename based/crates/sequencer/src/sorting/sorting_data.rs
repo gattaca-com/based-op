@@ -184,14 +184,14 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
             connections.send(SequencerToSimulator::SimulateTx(deposit, self.state()));
             self.telemetry.n_sims_sent += 1;
             let mut found = false;
-            while !found  {
+            while !found {
                 connections.receive(|msg: SimulatorToSequencer, _| {
                     let state_id = msg.state_id;
                     self.telemetry.tot_sim_time += msg.simtime;
                     if !self.is_valid(state_id) {
                         return;
                     }
-                
+
                     let SimulatorToSequencerMsg::Tx(simulated_tx) = msg.msg else {
                         debug_assert!(false, "this should always be tx, is something else running?");
                         return;
@@ -202,7 +202,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
                     };
                     self.telemetry.n_sims_succesful += 1;
                     found = true;
-                    
+
                     debug_assert!(res.tx.is_deposit(), "somehow found a valid sim that wasn't a deposit");
                     self.apply_tx(res);
                 });
@@ -232,7 +232,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
 
 impl<Db: DatabaseRef> SortingData<Db> {
     pub fn apply_tx(&mut self, mut tx: SimulatedTx) {
-        self.db.commit(tx.take_state());
+        self.db.commit_ref(&tx.result_and_state.state);
 
         let gas_used = tx.as_ref().result.gas_used();
         debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
@@ -300,11 +300,11 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
             let tx = Arc::new(Transaction::decode(tx.clone()).unwrap());
 
             // Execute transaction.
-            let mut simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true)
+            let simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true)
                 .expect("forced inclusing txs shouldn't fail");
 
             context.system_caller.on_state(&simulated_tx.result_and_state.state);
-            evm.db_mut().commit(simulated_tx.take_state());
+            evm.db_mut().commit_txs(std::iter::once(&simulated_tx));
             self.gas_remaining -= simulated_tx.gas_used();
             self.payment += simulated_tx.payment;
             self.txs.push(simulated_tx);

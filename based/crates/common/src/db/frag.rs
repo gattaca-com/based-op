@@ -40,22 +40,21 @@ impl<Db> DBFrag<Db> {
 }
 
 impl<Db: DatabaseRef> DBFrag<Db> {
-    pub fn commit<'a>(&mut self, txs: impl Iterator<Item = &'a SimulatedTx>) {
+    pub fn commit_txs<'a>(&mut self, txs: impl Iterator<Item = &'a SimulatedTx>) {
         let mut guard = self.db.write();
 
         for t in txs {
-            let transitions = guard.cache.apply_evm_state(t.result_and_state.state.clone());
+            let evm_state = &t.result_and_state.state;
+            for a in evm_state.keys() {
+                let _ = guard.load_cache_account(*a);
+            }
+            let transitions = guard.cache.apply_evm_state(&evm_state);
             if let Some(s) = guard.transition_state.as_mut() {
                 s.add_transitions(transitions)
             }
         }
 
         self.state_id = rand::random()
-    }
-
-    pub fn commit_flat_changes(&mut self, flat_state: EvmState) {
-        let mut guard = self.db.write();
-        guard.commit(flat_state)
     }
 
     pub fn get_nonce(&self, address: Address) -> Result<u64, Error> {
@@ -139,7 +138,7 @@ impl<Db: DatabaseRef> Database for DBFrag<Db> {
 impl<Db: DatabaseRef> DatabaseCommit for DBFrag<Db> {
     #[doc = " Commit changes to the database."]
     fn commit(&mut self, changes: HashMap<Address, Account>) {
-        self.db.write().commit(changes)
+        self.db.write().commit_ref(&changes)
     }
 }
 
