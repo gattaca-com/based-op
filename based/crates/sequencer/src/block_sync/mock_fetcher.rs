@@ -177,12 +177,11 @@ impl MockFetcher {
 
         tracing::info!("sending {} txs", txs.len());
         // first we send enough for the first frag
+        let curt = Instant::now();
+        connections.send(fcu);
         for t in txs.iter().take(txs.len() / 10) {
             connections.send(t.clone());
         }
-        Duration::from_millis(10).sleep();
-        let curt = Instant::now();
-        connections.send(fcu);
 
         if txs.len() < 100_000 {
             // if we're going to be fetching more, let's send all the rest

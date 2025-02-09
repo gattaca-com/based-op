@@ -6,7 +6,7 @@ use std::{
 
 use bop_common::{
     communication::{
-        messages::{SequencerToSimulator, SimulationResult},
+        messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg},
         SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{state::ensure_create2_deployer, DBSorting},
@@ -139,9 +139,7 @@ impl<Db> SortingData<Db> {
 
         tracing::trace!("handling sender {sender}");
         // handle errored sim
-        let Ok(simulated_tx) = simulated_tx
-        /* .inspect_err(|e| error!("simming tx for sender {sender} {e}")) */
-        else {
+        let Ok(simulated_tx) = simulated_tx else {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             self.telemetry.n_sims_errored += 1;
             return;
@@ -155,7 +153,7 @@ impl<Db> SortingData<Db> {
         self.telemetry.n_sims_succesful += 1;
 
         let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
-            self.next_to_be_applied.as_ref().is_none_or(|t| t.is_deposit() || t.payment < simulated_tx.payment)
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
@@ -176,14 +174,43 @@ impl<Db> SortingData<Db> {
 }
 
 impl<Db: Clone + DatabaseRef> SortingData<Db> {
-    pub fn apply_and_send_next(
-        mut self,
-        n_sims_per_loop: usize,
-        senders: &mut SpineConnections<Db>,
-        base_fee: u64,
-    ) -> Self {
-        self.maybe_apply(base_fee);
+    pub fn handle_deposits(
+        &mut self,
+        deposits: &mut std::collections::VecDeque<Arc<Transaction>>,
+        connections: &mut SpineConnections<Db>,
+    ) {
+        //TODO: we should do this inline
+        while let Some(deposit) = deposits.pop_front() {
+            connections.send(SequencerToSimulator::SimulateTx(deposit, self.state()));
+            self.telemetry.n_sims_sent += 1;
+            let mut found = false;
+            while !found  {
+                connections.receive(|msg: SimulatorToSequencer, _| {
+                    let state_id = msg.state_id;
+                    self.telemetry.tot_sim_time += msg.simtime;
+                    if !self.is_valid(state_id) {
+                        return;
+                    }
+                
+                    let SimulatorToSequencerMsg::Tx(simulated_tx) = msg.msg else {
+                        debug_assert!(false, "this should always be tx, is something else running?");
+                        return;
+                    };
+                    let Ok(res) = simulated_tx else {
+                        self.telemetry.n_sims_errored += 1;
+                        return;
+                    };
+                    self.telemetry.n_sims_succesful += 1;
+                    found = true;
+                    
+                    debug_assert!(res.tx.is_deposit(), "somehow found a valid sim that wasn't a deposit");
+                    self.apply_tx(res);
+                });
+            }
+        }
+    }
 
+    pub fn send_next(mut self, n_sims_per_loop: usize, senders: &mut SpineConnections<Db>) -> Self {
         let db = self.state();
 
         for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
@@ -200,15 +227,6 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
 
     pub fn state(&self) -> DBSorting<Db> {
         self.db.clone()
-    }
-
-    pub fn send_tx(&mut self, tx: Arc<Transaction>, senders: &SendersSpine<Db>) {
-        let could_send = senders
-            .send_timeout(SequencerToSimulator::SimulateTx(tx, self.db.clone()), Duration::from_millis(10))
-            .is_ok();
-        debug_assert!(could_send, "somehow simulate queue got filled");
-        self.in_flight_sims += 1;
-        self.telemetry.n_sims_sent += 1;
     }
 }
 

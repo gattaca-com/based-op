@@ -64,7 +64,6 @@ impl SimulatedTxList {
     /// Removes the active transaction for the sender from the list.
     /// Returns true if all transactions for this sender have now been applied.
     pub fn pop(&mut self, base_fee: u64) -> bool {
-        debug_assert!(self.current.is_some(), "Tried popping on a SimulatedTxList with current None: {self:#?}");
         if self.pending.is_empty() {
             return true;
         }
@@ -112,9 +111,7 @@ impl SimulatedTxList {
             return tx.payment;
         }
         if let Some(tx) = self.pending.peek() {
-            if tx.is_deposit() {
-                return U256::MAX;
-            }
+            debug_assert!(!tx.is_deposit(), "tx should never be deposit");
             return U256::from(tx.priority_fee_or_price());
         }
         U256::ZERO

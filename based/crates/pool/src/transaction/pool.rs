@@ -194,4 +194,10 @@ impl TxPool {
     pub fn active_empty(&self) -> bool {
         self.active_txs.is_empty()
     }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.active_txs.clear();
+        self.pool_data.clear();
+    }
 }

@@ -273,6 +273,12 @@ where
             // Waiting for new payload should not happen, but while testing
             // we can basically keep sequencing based on the same db state
             WaitingForForkChoiceWithAttributes | WaitingForNewPayload => {
+                if matches!(self, WaitingForNewPayload) {
+                    //TODO: This should never happen in production but for benchmarking it allows us to keep simming on
+                    // top of the same block!
+                    data.tx_pool.clear();
+                    data.deposits.clear();
+                }
                 match payload_attributes {
                     Some(attributes) => {
                         data.timers.start_sequencing.start();
@@ -364,6 +370,10 @@ where
     /// Sends a new transaction to the tx pool.
     /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
     fn handle_new_tx(&mut self, tx: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+        if tx.is_deposit() {
+            data.deposits.push_back(tx);
+            return;
+        }
         data.tx_pool.handle_new_tx(
             tx.clone(),
             &data.db_frag,
@@ -409,7 +419,6 @@ where
                         // We would have already re-sent the tx for sim on the correct fragment.
                     }
                     Err(_e) => {
-                        // tracing::info!("simulation error for transaction pool tx {e}");
                         data.tx_pool.remove(&sender, nonce);
                     }
                 }
@@ -432,22 +441,28 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
             Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
+                // Reset the tx pool.
                 data.tx_pool.remove_mined_txs(sorting_data.txs.iter());
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
-                // Collect all transactions from the frag so we can use them to reset the tx pool.
 
                 data.timers.seal_frag.stop();
                 tracing::info!("start sorting with {} orders", new_sort_dat.tof_snapshot.len());
                 Sorting(seq, new_sort_dat)
             }
 
-            Sorting(seq, sorting_data) if sorting_data.should_send_next_sims() => {
-                data.timers.apply_and_send_next.start();
-                let new_sorting_data = sorting_data.apply_and_send_next(data.config.n_per_loop, connections, base_fee);
+            Sorting(seq, mut sorting_data) if sorting_data.should_send_next_sims() => {
+                sorting_data.maybe_apply(base_fee);
+
+                data.timers.handle_deposits.start();
+                sorting_data.handle_deposits(&mut data.deposits, connections);
+                data.timers.handle_deposits.stop();
+
+                data.timers.send_next.start();
+                let new_sorting_data = sorting_data.send_next(data.config.n_per_loop, connections);
                 if new_sorting_data.in_flight_sims > 1 {
                     data.timers.waiting_for_sims.stop();
-                    data.timers.apply_and_send_next.stop();
+                    data.timers.send_next.stop();
                     data.timers.waiting_for_sims.start();
                 }
                 Sorting(seq, new_sorting_data)

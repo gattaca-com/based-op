@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc};
+use std::{collections::VecDeque, fmt::Display, sync::Arc};
 
 use alloy_consensus::{Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::merge::BEACON_NONCE;
@@ -13,7 +13,7 @@ use bop_common::{
     db::DBFrag,
     p2p::{FragV0, SealV0},
     time::Timer,
-    transaction::SimulatedTx,
+    transaction::{SimulatedTx, Transaction},
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
@@ -33,24 +33,26 @@ use crate::{block_sync::BlockSync, sorting::SortingData, FragSequence, Sequencer
 pub struct SequencerTimers {
     pub start_sequencing: Timer,
     pub block_start: Timer,
-    pub apply_and_send_next: Timer,
+    pub send_next: Timer,
     pub apply_tx: Timer,
     pub waiting_for_sims: Timer,
     pub handle_sim: Timer,
     pub seal_frag: Timer,
     pub seal_block: Timer,
+    pub handle_deposits: Timer
 }
 impl Default for SequencerTimers {
     fn default() -> Self {
         Self {
             start_sequencing: Timer::new("Sequencer-start_sequencing"),
             block_start: Timer::new("Sequencer-block_start"),
-            apply_and_send_next: Timer::new("Sequencer-apply_and_send"),
+            send_next: Timer::new("Sequencer-send_next"),
             apply_tx: Timer::new("Sequencer-apply_tx"),
             waiting_for_sims: Timer::new("Sequencer-wait_for_sims"),
             handle_sim: Timer::new("Sequencer-handle_sim"),
             seal_frag: Timer::new("Sequencer-seal_frag"),
             seal_block: Timer::new("Sequencer-seal_block"),
+            handle_deposits: Timer::new("Sequencer-handle_deposits"),
         }
     }
 }
@@ -69,6 +71,7 @@ pub struct SequencerContext<Db> {
     /// the persisted underlying db.
     pub db_frag: DBFrag<Db>,
     pub tx_pool: TxPool,
+    pub deposits: VecDeque<Arc<Transaction>>,
     pub block_env: BlockEnv,
     pub base_fee: u64,
     pub block_executor: BlockSync,
@@ -91,6 +94,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             config,
             system_caller,
             tx_pool: Default::default(),
+            deposits: Default::default(),
             fork_choice_state: Default::default(),
             payload_attributes: Default::default(),
             parent_hash: Default::default(),
@@ -238,7 +242,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 
         debug_assert_eq!(state_root, self.redo_state_root_from_scratch(frag_seq.txs.clone()));
 
-        let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
+        let canyon_active =
+            self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
 
         let (transactions, transactions_root, receipts_root, logs_bloom) =
             frag_seq.encoded_txs_roots_bloom(canyon_active);
