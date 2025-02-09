@@ -238,8 +238,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 
         debug_assert_eq!(state_root, self.redo_state_root_from_scratch(frag_seq.txs.clone()));
 
-        let canyon_active =
-            self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(u64::try_from(self.timestamp()).unwrap());
+        let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
 
         let (transactions, transactions_root, receipts_root, logs_bloom) =
             frag_seq.encoded_txs_roots_bloom(canyon_active);

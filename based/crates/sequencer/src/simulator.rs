@@ -3,7 +3,6 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::transaction::Transaction as TransactionTrait;
 use bop_common::{
     actor::Actor,
     communication::{
@@ -17,7 +16,7 @@ use bop_common::{
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use reth_evm::{execute::ProviderError, ConfigureEvm, ConfigureEvmEnv};
+use reth_evm::{execute::ProviderError, ConfigureEvm};
 use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::OpHardfork;
 use revm::{Database, DatabaseRef, Evm};

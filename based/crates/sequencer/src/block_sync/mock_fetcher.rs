@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::sync::Arc;
 
 use alloy_consensus::BlockHeader;
 use alloy_provider::{Provider, ProviderBuilder};
@@ -7,7 +7,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{self, BlockFetch, BlockSyncMessage, EngineApi},
-        Connections, SpineConnections,
+        SpineConnections,
     },
     db::DatabaseRead,
     time::{utils::vsync_busy, Duration, Instant},
@@ -35,7 +35,6 @@ pub struct MockFetcher {
     next_block: u64,
     sync_until: u64,
     provider: AlloyProvider,
-    txs: VecDeque<Arc<Transaction>>,
 }
 impl MockFetcher {
     pub fn new(rpc_url: Url, next_block: u64, sync_until: u64) -> Self {
@@ -54,13 +53,12 @@ impl MockFetcher {
             next_block,
             sync_until,
             provider,
-            txs: Default::default(),
         }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
         match msg {
-            BlockFetch::FromTo(start, stop) => {
+            BlockFetch::FromTo(_start, _stop) => {
                 // self.next_block = start;
                 // self.sync_until = stop;
             }
@@ -165,21 +163,21 @@ impl MockFetcher {
     }
 
     fn run_benchmark_body<Db>(&mut self, connections: &mut SpineConnections<Db>) {
-        let (rx, tx) = oneshot::channel();
+        let (rx, _tx) = oneshot::channel();
         let Mode::Benchmark(txs, fcu, op_attributes) = &mut self.mode else {
             return;
         };
 
         tracing::info!("gas limit is {}", op_attributes.gas_limit.unwrap());
         let fcu = EngineApi::ForkChoiceUpdatedV3 {
-            fork_choice_state: fcu.clone(),
+            fork_choice_state: *fcu,
             payload_attributes: Some(op_attributes.clone()),
             res_tx: rx,
         };
 
         tracing::info!("sending {} txs", txs.len());
         // first we send enough for the first frag
-        for t in txs.iter().take(txs.len()/10) {
+        for t in txs.iter().take(txs.len() / 10) {
             connections.send(t.clone());
         }
         Duration::from_millis(10).sleep();
@@ -187,8 +185,8 @@ impl MockFetcher {
         connections.send(fcu);
 
         if txs.len() < 100_000 {
-            // if we're going to be fetching more, let's send all the rest 
-            for t in txs.iter().skip(txs.len()/10) {
+            // if we're going to be fetching more, let's send all the rest
+            for t in txs.iter().skip(txs.len() / 10) {
                 connections.send(t.clone());
                 // Duration::from_millis(20).sleep();
             }
@@ -204,14 +202,13 @@ impl MockFetcher {
             }
             self.next_block += 200;
         } else {
-            let t_per_tx = Duration::from_millis(1800) / txs.len()*10usize/9usize;
-            for t in txs.iter().skip(txs.len()/10) {
+            let t_per_tx = Duration::from_millis(1800) / txs.len() * 10usize / 9usize;
+            for t in txs.iter().skip(txs.len() / 10) {
                 vsync_busy(Some(t_per_tx), || {
                     connections.send(t.clone());
                 })
                 // Duration::from_millis(20).sleep();
             }
-
         }
 
         while curt.elapsed() < Duration::from_millis(2000) {}
@@ -228,7 +225,7 @@ impl MockFetcher {
         tracing::info!(
             "in {}: sequenced {n_txs} txs, {gas} ({} MGas/s)",
             curt.elapsed(),
-            (gas / 1000_000) as f64 / el.as_secs()
+            (gas / 1_000_000) as f64 / el.as_secs()
         );
     }
 }

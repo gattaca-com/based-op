@@ -8,14 +8,13 @@ use bop_common::{
     actor::Actor,
     communication::{
         messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SequencerToSimulator, SimulatorToSequencer,
+            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
             SimulatorToSequencerMsg,
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DatabaseWrite},
     p2p::VersionedMessage,
-    time::Duration,
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
@@ -75,13 +74,13 @@ where
         // handle new transaction
         while connections.receive(|msg, senders| {
             self.state.handle_new_tx(msg, &mut self.data, senders);
-        }){};
+        }) {}
 
         // handle sim results
         while connections.receive(|msg, _| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_sim_result(msg, &mut self.data);
-        }){};
+        }) {}
 
         // handle engine API messages from rpc
         connections.receive(|msg: messages::EngineApi, senders| {
@@ -409,7 +408,7 @@ where
                         // No-op if the simulation is on a different fragment.
                         // We would have already re-sent the tx for sim on the correct fragment.
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         // tracing::info!("simulation error for transaction pool tx {e}");
                         data.tx_pool.remove(&sender, nonce);
                     }

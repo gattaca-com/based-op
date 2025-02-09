@@ -1,6 +1,6 @@
 use std::{fs, path::Path, sync::Arc};
 
-use reth_db::{init_db, ClientVersion};
+use reth_db::{init_db, mdbx::MaxReadTransactionDuration, ClientVersion};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_provider::{providers::StaticFileProvider, ProviderFactory};
 use reth_storage_errors::db::LogLevel;
@@ -33,6 +33,7 @@ pub fn init_database<P: AsRef<Path>>(
         ClientVersion { version: "V1".into(), git_sha: "GITSHA1".into(), build_timestamp: "now".to_string() };
     let db_args = reth_db::mdbx::DatabaseArguments::new(default_client_version)
         .with_log_level(Some(LogLevel::Error))
+        .with_max_read_transaction_duration(Some(MaxReadTransactionDuration::Unbounded))
         .with_exclusive(Some(false));
     let db = Arc::new(init_db(db_dir, db_args).map_err(|e| Error::DatabaseInitialisationError(e.to_string()))?);
 
