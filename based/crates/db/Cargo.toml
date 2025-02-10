@@ -34,6 +34,7 @@ reth-optimism-node.workspace = true
 reth-optimism-primitives.workspace = true
 reth-primitives.workspace = true
 reth-db.workspace = true
+reth-db-common.workspace = true
 reth-storage-api.workspace = true
 reth-storage-errors.workspace = true
 reth-trie-common.workspace = true
@@ -44,6 +45,8 @@ reth-node-types.workspace = true
 reth-trie.workspace = true
 reth-trie-db.workspace = true
 reth-trie-parallel.workspace = true
+reth-stages-types.workspace = true
 
 # Networking
 reqwest.workspace = true
+eyre.workspace = true

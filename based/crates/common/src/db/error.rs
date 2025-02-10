@@ -23,6 +23,8 @@ pub enum Error {
     RethStateRootError(#[from] reth_execution_errors::StateRootError),
     #[error("Parallel state root error: {0}")]
     ParallelStateRootError(#[from] reth_trie_parallel::root::ParallelStateRootError),
+    #[error("Block not found: {0}")]
+    BlockNotFound(BlockNumber),
 }
 
 impl From<Error> for ProviderError {
@@ -37,6 +39,7 @@ impl From<Error> for ProviderError {
             Error::StateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
             Error::RethStateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
             Error::ParallelStateRootError(e) => ProviderError::Database(DatabaseError::Other(e.to_string())),
+            Error::BlockNotFound(_) => ProviderError::Database(DatabaseError::Other(value.to_string())),
         }
     }
 }

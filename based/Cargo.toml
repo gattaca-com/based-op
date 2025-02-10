@@ -66,6 +66,7 @@ reth-primitives = { path = "../reth/crates/primitives" }
 reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
 reth-consensus = { path = "../reth/crates/consensus/consensus" }
 reth-db = { path = "../reth/crates/storage/db" }
+reth-db-common = { path = "../reth/crates/storage/db-common" }
 reth-storage-api = { path = "../reth/crates/storage/storage-api" }
 reth-storage-errors = { path = "../reth/crates/storage/errors" }
 reth-trie-common = { path = "../reth/crates/trie/common", features = [
@@ -84,6 +85,7 @@ reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
 ] }
 reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
 reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
+reth-stages-types = { path = "../reth/crates/stages/types" }
 
 # reth-db
 reth-revm = { path = "../reth/crates/revm" }
