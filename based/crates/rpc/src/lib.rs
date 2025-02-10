@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use bop_common::{
-    actor::{Actor, ActorConfig},
     api::{EngineApiServer, EthApiServer},
     communication::{messages::EngineApi, Sender, Spine},
     config::GatewayArgs,
@@ -10,14 +9,13 @@ use bop_common::{
     time::Duration,
     transaction::Transaction,
 };
-use engine_mock::MockEngineRpcServer;
 use jsonrpsee::{client_transport::ws::Url, http_client::HttpClient as RpcClient, server::ServerBuilder};
 use tokio::runtime::Runtime;
 use tracing::{error, info};
 
 mod engine;
-mod engine_mock;
 mod eth;
+pub mod gossiper;
 
 pub fn start_rpc<Db: DatabaseRead>(
     config: &GatewayArgs,
@@ -72,9 +70,4 @@ impl<Db: DatabaseRead> RpcServer<Db> {
 
         error!("server stopped");
     }
-}
-
-pub fn start_mock_engine_rpc<Db: DatabaseRead>(spine: &Spine<Db>, last_block_number: u64) {
-    let server = MockEngineRpcServer::new(last_block_number);
-    server.run(spine.to_connections("MockEngineRpc"), ActorConfig::default());
 }
