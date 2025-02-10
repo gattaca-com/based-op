@@ -13,8 +13,10 @@ use bop_common::{
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{DBFrag, DatabaseWrite},
-    p2p::VersionedMessage,
+    db::DatabaseWrite,
+    p2p::{EnvV0, VersionedMessage},
+    shared::SharedState,
+    time::Duration,
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
@@ -59,8 +61,8 @@ pub struct Sequencer<Db> {
 }
 
 impl<Db: DatabaseRead> Sequencer<Db> {
-    pub fn new(db: Db, db_frag: DBFrag<Db>, config: SequencerConfig) -> Self {
-        Self { state: SequencerState::default(), data: SequencerContext::new(db, db_frag, config) }
+    pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
+        Self { state: SequencerState::default(), data: SequencerContext::new(db, shared_state, config) }
     }
 }
 
@@ -71,27 +73,27 @@ where
     const CORE_AFFINITY: Option<usize> = Some(0);
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
-        // handle new transaction
-        while connections.receive(|msg, senders| {
-            self.state.handle_new_tx(msg, &mut self.data, senders);
-        }) {}
-
-        // handle sim results
-        while connections.receive(|msg, _| {
+        // handle block sync
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             let state = std::mem::take(&mut self.state);
-            self.state = state.handle_sim_result(msg, &mut self.data);
-        }) {}
-
-        // handle engine API messages from rpc
-        connections.receive(|msg: messages::EngineApi, senders| {
-            let state = std::mem::take(&mut self.state);
-            self.state = state.handle_engine_api(msg, &mut self.data, senders);
+            self.state = state.handle_block_sync(msg, &mut self.data, senders);
         });
 
-        // handle block sync
-        connections.receive(|msg, _| {
+        // handle new transaction
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
+            self.state.handle_new_tx(msg, &mut self.data, senders);
+        });
+
+        // handle sim results
+        connections.receive_for(Duration::from_millis(10), |msg, _| {
             let state = std::mem::take(&mut self.state);
-            self.state = state.handle_block_sync(msg, &mut self.data);
+            self.state = state.handle_sim_result(msg, &mut self.data);
+        });
+
+        // handle engine API messages from rpc
+        connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
+            let state = std::mem::take(&mut self.state);
+            self.state = state.handle_engine_api(msg, &mut self.data, senders);
         });
 
         // Check for passive state changes. e.g., sealing frags, sending sims, etc.
@@ -111,17 +113,12 @@ pub enum SequencerState<Db> {
         /// while syncing
         last_block_number: u64,
     },
-    /// Synced and waiting for the next new payload message
+
+    /// Synced and waiting for the next new payload message.
     #[default]
     WaitingForNewPayload,
-    /// We've received a `NewPayload` message and are waiting for the fork choice to confirm the payload
-    /// The two fields in this state are the payload and the sidecar.
-    WaitingForForkChoice(ExecutionPayload, ExecutionPayloadSidecar),
-    /// We've received a `NewPayload` and the FCU confirming that payload. We now get two potential messages after:
-    /// - `ForkChoiceUpdatedV3 { payload_attributes: Some(attributes), .. }` This means we are the sequencer and we can
-    ///   start building.
-    /// - `NewPayloadV3 { .. }` This means we were not the sequencer for that block, and now need to sync this new
-    ///   block and start the loop again.
+
+    /// Wait for a FCU with attributes. This means we are the sequencer and we can start building.
     WaitingForForkChoiceWithAttributes,
 
     /// We've received a FCU with attributes and are now sequencing transactions into Frags.
@@ -144,7 +141,7 @@ where
     fn handle_engine_api(
         self,
         msg: EngineApi,
-        data: &mut SequencerContext<Db>,
+        ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use EngineApi::*;
@@ -153,12 +150,12 @@ where
 
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
-                self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
+                self.handle_new_payload_engine_api(ctx, senders, payload, versioned_hashes, parent_beacon_block_root)
             }
             ForkChoiceUpdatedV3 { fork_choice_state, payload_attributes, .. } => {
-                self.handle_fork_choice_updated_engine_api(fork_choice_state, payload_attributes, data, senders)
+                self.handle_fork_choice_updated_engine_api(fork_choice_state, payload_attributes, ctx, senders)
             }
-            GetPayloadV3 { res, .. } => self.handle_get_payload_engine_api(res, data, senders),
+            GetPayloadV3 { res, .. } => self.handle_get_payload_engine_api(res, ctx, senders),
         }
     }
 
@@ -170,6 +167,8 @@ where
     /// - Ignores if duplicate/old payload
     fn handle_new_payload_engine_api(
         self,
+        ctx: &mut SequencerContext<Db>,
+        senders: &SendersSpine<Db>,
         payload: ExecutionPayloadV3,
         versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
@@ -177,53 +176,51 @@ where
         use SequencerState::*;
 
         match self {
-            // Default path once synced. If `WaitingForNewPayload` we were the sequencer, if
-            // `WaitingForForkChoiceWithAttributes` we were not the sequencer.
-            WaitingForNewPayload | WaitingForForkChoiceWithAttributes => WaitingForForkChoice(
-                ExecutionPayload::V3(payload),
-                ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes)),
-            ),
             // We are syncing and just got a new payload. Ignore it, we will bulk fetch this once we get a NewPayload
             // after this initial sync.
             Syncing { last_block_number } => {
                 // TODO: buffer the payload
                 Syncing { last_block_number }
             }
-            WaitingForForkChoice(ref buffered_payload, _) => {
-                match payload.payload_inner.payload_inner.block_number.cmp(&buffered_payload.block_number()) {
-                    cmp::Ordering::Less => {
-                        tracing::debug!("New Payload for an old block. Ignoring.");
-                        self
+
+            // Default path once synced. Apply and commit the payload.
+            WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
+                let head_bn = ctx.db.head_block_number().expect("couldn't get db");
+                let payload = ExecutionPayload::V3(payload);
+                let sidecar =
+                    ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes));
+
+                // NewPayload skipped some blocks. Signal to fetch them all and set state to syncing.
+                if payload.block_number() > head_bn + 1 {
+                    let last_block_number = payload.block_number() - 1;
+                    let _ = senders.send(BlockFetch::FromTo(head_bn + 1, last_block_number));
+                    Syncing { last_block_number }
+                } else {
+                    let payload_hash = payload.block_hash();
+                    // Check if we have already committed this payload.
+                    if payload_hash == ctx.db.head_block_hash().expect("couldn't get db head block hash") {
+                        return WaitingForForkChoiceWithAttributes;
                     }
-                    cmp::Ordering::Equal => {
-                        if buffered_payload.block_hash() == payload.payload_inner.payload_inner.block_hash {
-                            tracing::debug!("Received 2 payloads with the same block hash. Ignoring latest.");
-                            self
-                        } else {
-                            // We got 2 payloads for the same block. This shouldn't happen. TODO: handle this
-                            // gracefully.
-                            debug_assert!(false, "Received 2 payloads for the same block but different hashes.");
-                            tracing::error!(
-                                "Received 2 payloads for the same block but different hashes. Ignoring latest."
-                            );
-                            self
-                        }
-                    }
-                    cmp::Ordering::Greater => {
-                        // We are behind the head. Switch to syncing.
-                        Syncing { last_block_number: buffered_payload.block_number() }
+
+                    let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
+
+                    // Update sorting context
+                    ctx.parent_header = block.header.clone();
+                    ctx.parent_hash = payload_hash;
+
+                    // Commit the block
+                    if let Some(block_fetch) = ctx.commit_block(&block) {
+                        let fetching_to = block_fetch.fetch_to();
+                        let _ = senders.send(block_fetch);
+                        Syncing { last_block_number: fetching_to }
+                    } else {
+                        WaitingForForkChoiceWithAttributes
                     }
                 }
             }
-
             Sorting(_, _) => {
-                // This should never happen. We have been sequencing frags but haven't had GetPayload called before
-                // NewPayload.
-                debug_assert!(false, "Received NewPayload while in the wrong state");
-                WaitingForForkChoice(
-                    ExecutionPayload::V3(payload),
-                    ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes)),
-                )
+                tracing::warn!("Received NewPayload when state is Sorting {self:?}");
+                self
             }
         }
     }
@@ -237,69 +234,58 @@ where
         self,
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<Box<OpPayloadAttributes>>,
-        data: &mut SequencerContext<Db>,
+        ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
 
         match self {
-            WaitingForForkChoice(payload, sidecar) => {
-                let head_bn = data.db.head_block_number().expect("couldn't get db");
-
-                // FCU has skipped some blocks. Signal to fetch them all and set state to syncing.
-                if payload.block_number() > head_bn + 1 {
-                    let last_block_number = payload.block_number() - 1;
-                    let _ = senders.send(BlockFetch::FromTo(head_bn + 1, last_block_number));
-                    Syncing { last_block_number }
-                } else {
-                    // Confirm that the FCU payload is the same as the buffered payload.
-                    if payload.block_hash() == fork_choice_state.head_block_hash {
-                        let basefee = payload.as_v1().base_fee_per_gas;
-                        let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
-                        data.commit_block(&block, Some(basefee.to()));
-                        data.parent_header = block.header.clone();
-                        data.parent_hash = fork_choice_state.head_block_hash;
-                        WaitingForForkChoiceWithAttributes
-                    } else {
-                        // We have received the wrong ExecutionPayload. Need to re-sync with the new head.
-                        // TODO: should fetch bn from the FCU head hash
-                        tracing::warn!("Received wrong ExecutionPayload. Need to re-sync with the new head.");
-                        let _ = senders.send(BlockFetch::FromTo(payload.block_number(), payload.block_number()));
-                        Syncing { last_block_number: payload.block_number() }
-                    }
-                }
-            }
-
             // Waiting for new payload should not happen, but while testing
             // we can basically keep sequencing based on the same db state
             WaitingForForkChoiceWithAttributes | WaitingForNewPayload => {
                 if matches!(self, WaitingForNewPayload) {
                     //TODO: This should never happen in production but for benchmarking it allows us to keep simming on
                     // top of the same block!
-                    data.tx_pool.clear();
-                    data.deposits.clear();
-                    data.db_frag.reset();
+                    ctx.tx_pool.clear();
+                    ctx.deposits.clear();
+                    ctx.shared_state.as_mut().reset();
                 }
+
                 match payload_attributes {
                     Some(attributes) => {
-                        data.timers.start_sequencing.start();
-                        let (seq, first_frag) = data.start_sequencing(attributes, senders);
-                        data.timers.start_sequencing.stop();
+                        ctx.timers.start_sequencing.start();
+                        let (seq, first_frag) = ctx.start_sequencing(attributes, senders);
+                        ctx.timers.start_sequencing.stop();
+
+                        let env_msg: EnvV0 = (&ctx.block_env).into();
+                        let _ = senders.send(VersionedMessage::from(env_msg));
+
                         tracing::info!("start sorting with {} orders", first_frag.tof_snapshot.len());
                         SequencerState::Sorting(seq, first_frag)
                     }
                     None => {
-                        // We have got 2 FCU in a row with no attributes. This shouldn't happen?
-                        debug_assert!(false, "Received 2 FCU in a row with no attributes");
-                        tracing::warn!("Received 2 FCU in a row with no attributes");
-                        self
+                        // Check that we are at this head.
+                        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
+                        if fork_choice_state.head_block_hash != head_block_hash {
+                            // We are on the wrong head. Switch to syncing and request the head block.
+                            let head_block_number =
+                                ctx.db.head_block_number().expect("couldn't get db head block number");
+                            let _ = senders.send(BlockFetch::FromTo(head_block_number, head_block_number));
+                            Syncing { last_block_number: head_block_number }
+                        } else {
+                            WaitingForForkChoiceWithAttributes
+                        }
                     }
                 }
             }
-            Syncing { .. } | Sorting(_, _) => {
-                debug_assert!(false, "Received FCU in state {self:?}");
-                tracing::warn!("Received FCU in state {self:?}");
-                self
+
+            Syncing { last_block_number } => Syncing { last_block_number },
+
+            Sorting(_, _) => {
+                tracing::warn!("Received FCU when sorting {self:?}. Syncing to new head.");
+                Syncing {
+                    last_block_number: ctx.db.head_block_number().expect("couldn't get db head block number") + 1,
+                }
             }
         }
     }
@@ -314,29 +300,42 @@ where
     fn handle_get_payload_engine_api(
         self,
         res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
-        data: &mut SequencerContext<Db>,
+        ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
 
         match self {
-            Sorting(seq, sorting_data) => {
-                data.timers.waiting_for_sims.stop();
-                data.timers.seal_block.start();
-                let (frag, seal, block) = data.seal_block(seq, sorting_data);
+            Sorting(mut seq, sorting_data) => {
+                ctx.timers.waiting_for_sims.stop();
+                ctx.timers.seal_block.start();
+
+                // Gossip last frag before sealing
+                let last_frag = ctx.seal_last_frag(&mut seq, sorting_data);
+                let s = senders.send_timeout(VersionedMessage::from(last_frag), Duration::from_millis(10));
+                debug_assert!(s.is_ok(), "couldn't send last frag for 10 millis");
+
+                let (seal, block) = ctx.seal_block(seq);
 
                 // Gossip seal to p2p and return payload to rpc
-                let _ = senders.send(VersionedMessage::from(frag));
-                let _ = senders.send(VersionedMessage::from(seal));
-                let _ = res.send(block);
-                data.timers.seal_block.stop();
+                let s = senders.send_timeout(VersionedMessage::from(seal), Duration::from_millis(10));
+                debug_assert!(s.is_ok(), "couldn't send seal for 10 millis");
+                let s = res.send(block.clone());
+                debug_assert!(s.is_ok(), "couldn't send block envelope to rpc");
+                ctx.timers.seal_block.stop();
+
+                // Commit the block to the db
+                if ctx.config.commit_sealed_frags_to_db {
+                    let sidecar =
+                        ExecutionPayloadSidecar::v3(CancunPayloadFields::new(block.parent_beacon_block_root, vec![]));
+                    let block = payload_to_block(ExecutionPayload::V3(block.execution_payload), sidecar)
+                        .expect("couldn't get block from payload");
+                    ctx.commit_block(&block);
+                }
 
                 WaitingForNewPayload
             }
-            s => {
-                debug_assert!(false, "Should never have gotten here");
-                s
-            }
+            s => s,
         }
     }
 
@@ -347,19 +346,31 @@ where
     ///
     /// When we are syncing we fetch blocks asynchronously from the rpc and send them back through a channel that gets
     /// picked up and processed here.
-    fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SequencerContext<Db>) -> Self {
+    fn handle_block_sync(
+        self,
+        block: BlockSyncMessage,
+        ctx: &mut SequencerContext<Db>,
+        senders: &SendersSpine<Db>,
+    ) -> Self {
         use SequencerState::*;
 
         match self {
             Syncing { last_block_number } => {
-                data.commit_block(&block, None);
-
-                if block.number != last_block_number {
+                if let Some(blocks_to_fetch) = ctx.commit_block(&block) {
+                    let fetching_to = blocks_to_fetch.fetch_to();
+                    let _ = senders.send(blocks_to_fetch);
+                    Syncing { last_block_number: fetching_to.max(last_block_number) }
+                } else if block.number != last_block_number {
                     Syncing { last_block_number }
                 } else {
                     // Wait until the next payload and attributes arrive
                     WaitingForNewPayload
                 }
+            }
+
+            WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
+                ctx.commit_block(&block);
+                WaitingForNewPayload
             }
             _ => {
                 debug_assert!(false, "Should not have received block sync update while in state {self:?}");
@@ -370,23 +381,23 @@ where
 
     /// Sends a new transaction to the tx pool.
     /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
-    fn handle_new_tx(&mut self, tx: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+    fn handle_new_tx(&mut self, tx: Arc<Transaction>, ctx: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
         if tx.is_deposit() {
-            data.deposits.push_back(tx);
+            ctx.deposits.push_back(tx);
             return;
         }
-        data.tx_pool.handle_new_tx(
+        ctx.tx_pool.handle_new_tx(
             tx.clone(),
-            &data.db_frag,
-            data.as_ref().basefee.to(),
+            ctx.shared_state.as_ref(),
+            ctx.as_ref().basefee.to(),
             false,
-            data.config.simulate_tof_in_pools.then_some(senders),
+            ctx.config.simulate_tof_in_pools.then_some(senders),
         );
         if let SequencerState::Sorting(_, sorting_data) = self {
             // This should ideally be not at the top but bottom of the sorted list. For now this is fastest
             sorting_data
                 .tof_snapshot
-                .push(bop_common::transaction::SimulatedTxList { current: None, pending: tx.into() });
+                .push_front(bop_common::transaction::SimulatedTxList { current: None, pending: tx.into() });
         }
     }
 
@@ -414,7 +425,7 @@ where
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
-                    Ok(res) if data.db_frag.is_valid(state_id) => data.tx_pool.handle_simulated(res),
+                    Ok(res) if data.shared_state.as_ref().is_valid(state_id) => data.tx_pool.handle_simulated(res),
                     Ok(_) => {
                         // No-op if the simulation is on a different fragment.
                         // We would have already re-sent the tx for sim on the correct fragment.

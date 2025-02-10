@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use core_affinity::CoreId;
-use tracing::{info, span, warn, Level};
+use tracing::{debug, span, warn, Level};
 
 use crate::{
     communication::SpineConnections,
@@ -52,21 +52,21 @@ pub trait Actor<Db>: Sized {
     fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {}
 
     fn _on_init(&mut self, connections: &mut SpineConnections<Db>) {
-        info!("initializing...");
+        debug!("initializing...");
         self.on_init(connections);
-        info!("initialized...");
+        debug!("initialized...");
     }
 
     fn on_exit(self, _connections: &mut SpineConnections<Db>) {}
     fn _on_exit(self, connections: &mut SpineConnections<Db>) {
-        info!("running final tasks before stopping...");
+        debug!("running final tasks before stopping...");
         self.on_exit(connections);
-        info!("finalized");
+        debug!("finalized");
     }
 
     fn run(mut self, mut connections: SpineConnections<Db>, actor_config: ActorConfig) {
         let name = self.name();
-        let _s = span!(Level::INFO, "", actor = name).entered();
+        let _s = span!(Level::INFO, "", id = name).entered();
 
         actor_config.maybe_bind_to_core(Self::CORE_AFFINITY);
 

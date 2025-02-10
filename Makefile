@@ -48,6 +48,10 @@ run-follower: ## 🚀 Run a single follower node with RPC enabled.
 logs: ## 📜 Show logs
 	kurtosis service logs -f based-op $(SERVICE)
 
+dump:
+	bash -c 'kurtosis files download based-op $$(kurtosis enclave inspect based-op | grep op-deployer-configs | awk "{print \$$1}") ./genesis'
+
+
 based-portal-logs:
 	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
 
@@ -58,7 +62,7 @@ op-geth-logs:
 	$(MAKE) logs SERVICE=op-el-1-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
-	kurtosis enclave rm  based-op --force
+	rm -rf ./genesis && kurtosis enclave rm  based-op --force
 
 restart: clean run ## 🔄 Restart
 
