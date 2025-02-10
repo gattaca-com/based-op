@@ -217,7 +217,6 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
             debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
             let tx = t.unwrap();
             tracing::trace!("sending sender {}, nonce {}", tx.sender(), tx.nonce_ref());
-            // tracing::info!("sending sim {} for sender {}", tx.nonce_ref(), tx.sender());
             senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
             self.in_flight_sims += 1;
             self.telemetry.n_sims_sent += 1;

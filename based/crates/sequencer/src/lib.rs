@@ -15,6 +15,7 @@ use bop_common::{
     },
     db::{DBFrag, DatabaseWrite},
     p2p::{EnvV0, VersionedMessage},
+    shared::SharedState,
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
@@ -59,8 +60,8 @@ pub struct Sequencer<Db> {
 }
 
 impl<Db: DatabaseRead> Sequencer<Db> {
-    pub fn new(db: Db, db_frag: DBFrag<Db>, config: SequencerConfig) -> Self {
-        Self { state: SequencerState::default(), data: SequencerContext::new(db, db_frag, config) }
+    pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
+        Self { state: SequencerState::default(), data: SequencerContext::new(db, shared_state, config) }
     }
 }
 

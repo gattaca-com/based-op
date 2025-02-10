@@ -1,10 +1,14 @@
-use alloy_consensus::proofs::ordered_trie_root_with_encoder;
+use alloy_consensus::{proofs::ordered_trie_root_with_encoder, Eip658Value, Receipt, ReceiptWithBloom, Transaction};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
+use alloy_rpc_types::TransactionReceipt;
 use bop_common::{p2p::FragV0, transaction::SimulatedTx};
+use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};
+use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use revm_primitives::{Bytes, B256};
 
 use super::{sorting_data::SortingTelemetry, SortingData};
+use crate::context::SequencerContext;
 
 /// Sequence of frags applied on the last block
 #[derive(Clone, Debug)]
@@ -15,19 +19,21 @@ pub struct FragSequence {
     pub txs: Vec<SimulatedTx>,
     /// Next frag index
     pub next_seq: u64,
-    /// Block number shared by all frags of this sequence
+    /// Block number and timestamp shared by all frags of this sequence
     block_number: u64,
+    block_timestamp: u64,
 
     pub sorting_telemetry: SortingTelemetry,
 }
 impl FragSequence {
-    pub fn new(gas_remaining: u64, block_number: u64) -> Self {
+    pub fn new(gas_remaining: u64, block_number: u64, block_timestamp: u64) -> Self {
         Self {
             gas_remaining,
             gas_used: 0,
             payment: U256::ZERO,
             txs: vec![],
             block_number,
+            block_timestamp,
             next_seq: 0,
             sorting_telemetry: Default::default(),
         }
@@ -37,25 +43,83 @@ impl FragSequence {
         self.gas_remaining = gas_limit;
     }
 
-    pub fn apply_sorted_frag<Db>(&mut self, in_sort: SortingData<Db>) -> FragV0 {
+    pub fn apply_sorted_frag<Db>(&mut self, in_sort: SortingData<Db>, ctx: &mut SequencerContext<Db>) -> FragV0 {
         let gas_used = in_sort.gas_used();
         self.gas_remaining -= gas_used;
-        self.gas_used += gas_used;
         self.payment += in_sort.payment();
 
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
-        self.txs.extend(in_sort.txs);
+        for tx in in_sort.txs {
+            self.gas_used += tx.gas_used();
+            let hash = tx.tx_hash();
+            let logs_bloom = alloy_primitives::logs_bloom(tx.result_and_state.result.logs().iter());
+            let logs = tx
+                .result_and_state
+                .result
+                .logs()
+                .iter()
+                .enumerate()
+                .map(|(i, t)| alloy_rpc_types::Log {
+                    inner: t.clone(),
+                    block_hash: None,
+                    block_number: Some(self.block_number),
+                    block_timestamp: Some(self.block_timestamp),
+                    transaction_hash: Some(hash),
+                    transaction_index: Some(self.txs.len() as u64),
+                    log_index: Some(i as u64),
+                    removed: false,
+                })
+                .collect();
+
+            let inner_receipt = Receipt { status: Eip658Value::Eip658(true), cumulative_gas_used: self.gas_used, logs };
+            let receipt = match tx.tx_type() {
+                OpTxType::Legacy => OpReceiptEnvelope::Legacy(ReceiptWithBloom { receipt: inner_receipt, logs_bloom }),
+                OpTxType::Eip2930 => {
+                    OpReceiptEnvelope::Eip2930(ReceiptWithBloom { receipt: inner_receipt, logs_bloom })
+                }
+                OpTxType::Eip1559 => {
+                    OpReceiptEnvelope::Eip1559(ReceiptWithBloom { receipt: inner_receipt, logs_bloom })
+                }
+                OpTxType::Eip7702 => {
+                    OpReceiptEnvelope::Eip7702(ReceiptWithBloom { receipt: inner_receipt, logs_bloom })
+                }
+                OpTxType::Deposit => {
+                    let inner = OpDepositReceiptWithBloom {
+                        receipt: OpDepositReceipt {
+                            inner: inner_receipt,
+                            deposit_nonce: tx.deposit_nonce,
+                            deposit_receipt_version: None,
+                        },
+                        logs_bloom,
+                    };
+                    OpReceiptEnvelope::Deposit(inner)
+                }
+            };
+            let receipt = OpTransactionReceipt {
+                inner: TransactionReceipt {
+                    inner: receipt,
+                    transaction_hash: hash,
+                    transaction_index: Some(self.txs.len() as u64),
+                    block_hash: None,
+                    block_number: Some(self.block_number),
+                    gas_used: tx.gas_used(),
+                    effective_gas_price: tx.effective_gas_price(Some(ctx.base_fee())),
+                    blob_gas_used: Some(0),
+                    blob_gas_price: Some(0),
+                    from: tx.sender(),
+                    to: tx.to(),
+                    contract_address: None,
+                    authorization_list: None,
+                },
+                l1_block_info: L1BlockInfo::default(),
+            };
+            ctx.shared_state.insert_receipt(tx.tx_hash(), receipt);
+            self.txs.push(tx);
+        }
+
         self.next_seq += 1;
         self.sorting_telemetry += in_sort.telemetry;
         msg
-    }
-
-    /// When a new block is received, we clear all the temp state on the db
-    pub fn reset(&mut self, gas_limit: u64, forced_inclusion_txs: Vec<SimulatedTx>) {
-        self.gas_remaining = gas_limit - forced_inclusion_txs.iter().map(|t| t.gas_used()).sum::<u64>();
-        self.payment = forced_inclusion_txs.iter().map(|t| t.payment).sum();
-        self.txs = forced_inclusion_txs;
-        self.next_seq = 0;
     }
 
     /// Returns encoded_2718 txs, transactions root, receipts root, and receipts bloom
@@ -65,9 +129,9 @@ impl FragSequence {
         let mut logs_bloom = Bloom::ZERO;
         let mut gas_used = 0;
         for t in self.txs.iter() {
-            gas_used += t.result_and_state.result.gas_used();
+            gas_used += t.gas_used();
             let receipt = t.receipt(gas_used, canyon_active);
-            logs_bloom |= receipt.logs_bloom;
+            logs_bloom |= *receipt.bloom();
             receipts.push(receipt);
             transactions.push(t.tx.encode());
         }

@@ -19,7 +19,7 @@ pub struct SimulatedTx {
     pub payment: U256,
     /// Cache the depositor account prior to the state transition for the deposit nonce.
     /// Note: this is only used for deposit transactions.
-    deposit_nonce: Option<u64>,
+    pub deposit_nonce: Option<u64>,
 }
 
 impl SimulatedTx {
