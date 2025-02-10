@@ -22,7 +22,7 @@ impl SequencerConfig {
 
         Self {
             frag_duration: Duration::from_millis(200),
-            n_per_loop: 10,
+            n_per_loop: 200,
             rpc_url: Url::parse(TEST_BASE_RPC_URL).unwrap(),
             simulate_tof_in_pools: false,
             evm_config,

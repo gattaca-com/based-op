@@ -46,7 +46,7 @@ impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
             self.provider.get_block_number().await.expect("failed to fetch last block, is the RPC url correct?")
         });
 
-        self.next_block = head_block_number;
+        self.sync_until = head_block_number;
     }
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {

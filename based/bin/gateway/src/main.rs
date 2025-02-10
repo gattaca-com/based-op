@@ -12,9 +12,8 @@ use bop_db::{init_database, DatabaseRead};
 use bop_rpc::start_rpc;
 use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
-    Sequencer, SequencerConfig,
+    Sequencer, SequencerConfig, Simulator,
 };
-use bop_sequencer::Simulator;
 use clap::Parser;
 use tokio::runtime::Runtime;
 use tracing::{error, info};
@@ -61,7 +60,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
-            .worker_threads(10)
+            .worker_threads(2)
             .enable_all()
             .build()
             .expect("failed to create runtime")
@@ -95,7 +94,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             });
         }
 
-        for core in 2..5 {
+        for core in 2..16 {
             let connections = spine.to_connections(format!("sim-{core}"));
             s.spawn({
                 let db_frag = db_frag.clone();
