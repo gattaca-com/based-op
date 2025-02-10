@@ -400,6 +400,14 @@ pub enum BlockFetch {
     FromTo(u64, u64),
 }
 
+impl BlockFetch {
+    pub fn fetch_to(&self) -> u64 {
+        match self {
+            BlockFetch::FromTo(_, to) => *to,
+        }
+    }
+}
+
 /// Represents the parameters required to configure the next block.
 #[derive(Clone, Debug)]
 pub struct EvmBlockParams {

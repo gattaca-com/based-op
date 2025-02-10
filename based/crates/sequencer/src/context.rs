@@ -7,7 +7,7 @@ use alloy_rpc_types::engine::{
 };
 use bop_common::{
     communication::{
-        messages::{BlockSyncMessage, EvmBlockParams},
+        messages::{BlockFetch, BlockSyncMessage, EvmBlockParams},
         SendersSpine, TrackedSenders,
     },
     p2p::{FragV0, SealV0},
@@ -287,18 +287,17 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// Commit new to DB, either due to syncing or due to New Payload EngineApi message.
     /// If it was based on a new payload message rather than blocksync, we pass Some(base_fee),
     /// and clear the xstx pool based on that
-    pub fn commit_block(&mut self, block: &BlockSyncMessage, base_fee: Option<u64>) {
-        self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
+    /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
+    pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<BlockFetch> {
+        let blocks_to_fetch = self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
         self.shared_state.as_mut().reset();
 
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();
 
-        if let Some(base_fee) = base_fee {
+        if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
-        }
 
-        if let Some(base_fee) = base_fee {
             self.tx_pool.handle_new_block(
                 block.body.transactions.iter(),
                 base_fee,
@@ -307,6 +306,8 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
                 None,
             );
         }
+
+        blocks_to_fetch
     }
 }
 

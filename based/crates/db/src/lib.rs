@@ -6,7 +6,8 @@ use std::{
 
 use parking_lot::RwLock;
 use reth_db::{
-    cursor::DbCursorRO,
+    cursor::{DbCursorRO, DbCursorRW, DbDupCursorRO},
+    models::BlockNumberAddress,
     tables,
     transaction::{DbTx, DbTxMut},
     Bytecodes, CanonicalHeaders, DatabaseEnv,
@@ -14,12 +15,12 @@ use reth_db::{
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
-use reth_primitives::BlockWithSenders;
+use reth_primitives::{BlockWithSenders, StorageEntry};
 use reth_provider::{
     providers::ConsistentDbView, BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory,
     StateWriter, TrieWriter,
 };
-use reth_storage_api::HashedPostStateProvider;
+use reth_storage_api::{DBProvider, HashedPostStateProvider};
 use reth_trie::{StateRoot, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
@@ -183,6 +184,70 @@ impl DatabaseWrite for SequencerDB {
             after_header_write.duration_since(after_trie_updates),
             after_commit.duration_since(after_header_write),
         );
+
+        Ok(())
+    }
+
+    /// Removes the last block of state from the database.
+    fn roll_back_head(&self) -> Result<(), Error> {
+        let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
+
+        let head_block_number = self.head_block_number()?;
+        let range = head_block_number..=head_block_number;
+        let storage_range = BlockNumberAddress::range(range.clone());
+
+        // Trie
+        rw_provider.unwind_trie_state_range(range.clone())?;
+
+        // Flat state
+        let storage_changeset = rw_provider.take::<tables::StorageChangeSets>(storage_range.clone())?;
+        let account_changeset = rw_provider.take::<tables::AccountChangeSets>(range)?;
+
+        let mut plain_accounts_cursor = rw_provider.tx_ref().cursor_write::<tables::PlainAccountState>()?;
+        let mut plain_storage_cursor = rw_provider.tx_ref().cursor_dup_write::<tables::PlainStorageState>()?;
+
+        let (state, _) = rw_provider.populate_bundle_state(
+            account_changeset,
+            storage_changeset,
+            &mut plain_accounts_cursor,
+            &mut plain_storage_cursor,
+        )?;
+
+        // iterate over local plain state remove all account and all storages.
+        for (address, (old_account, new_account, storage)) in &state {
+            // revert account if needed.
+            if old_account != new_account {
+                let existing_entry = plain_accounts_cursor.seek_exact(*address)?;
+                if let Some(account) = old_account {
+                    plain_accounts_cursor.upsert(*address, *account)?;
+                } else if existing_entry.is_some() {
+                    plain_accounts_cursor.delete_current()?;
+                }
+            }
+
+            // revert storages
+            for (storage_key, (old_storage_value, _new_storage_value)) in storage {
+                let storage_entry = StorageEntry { key: *storage_key, value: *old_storage_value };
+                // delete previous value
+                if plain_storage_cursor
+                    .seek_by_key_subkey(*address, *storage_key)?
+                    .filter(|s| s.key == *storage_key)
+                    .is_some()
+                {
+                    plain_storage_cursor.delete_current()?
+                }
+
+                // insert value if needed
+                if !old_storage_value.is_zero() {
+                    plain_storage_cursor.upsert(*address, storage_entry)?;
+                }
+            }
+        }
+
+        rw_provider.tx_ref().delete::<tables::CanonicalHeaders>(head_block_number, None).unwrap();
+
+        rw_provider.commit()?;
+        self.reset_provider();
 
         Ok(())
     }

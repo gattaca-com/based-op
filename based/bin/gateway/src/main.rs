@@ -9,7 +9,7 @@ use bop_common::{
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{init_database, DatabaseRead};
-use bop_rpc::{gossiper::Gossiper, start_rpc};
+use bop_rpc::start_rpc;
 use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
     Sequencer, SequencerConfig, Simulator,
@@ -85,7 +85,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         if args.test {
             s.spawn(|| {
                 MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone).run(
-                    spine.to_connections("BlockFetch"),
+                    spine.to_connections("MockFetcher"),
                     ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
                 );
             });
