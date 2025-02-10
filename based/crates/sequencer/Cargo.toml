@@ -48,9 +48,7 @@ op-alloy-rpc-types-engine.workspace = true
 # async
 tokio.workspace = true
 futures.workspace = true
-
 tracing.workspace = true
-core_affinity.workspace = true
 
 # networking
 reqwest.workspace = true

@@ -28,7 +28,7 @@ op-alloy-network.workspace = true
 #revm
 revm-primitives.workspace = true
 revm.workspace = true
-revm-interpreter.workspace =  true
+revm-interpreter.workspace = true
 
 reth-cli.workspace = true
 
@@ -72,7 +72,6 @@ shared_memory.workspace = true
 
 
 jsonrpsee.workspace = true
-core_affinity.workspace = true
 signal-hook.workspace = true
 parking_lot.workspace = true
 moka.workspace = true

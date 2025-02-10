@@ -144,7 +144,6 @@ impl<Db: DatabaseRef> Database for DBFrag<Db> {
 }
 
 impl<Db: DatabaseRef> DatabaseCommit for DBFrag<Db> {
-    #[doc = " Commit changes to the database."]
     fn commit(&mut self, changes: HashMap<Address, Account>) {
         self.db.write().commit_ref(&changes)
     }
