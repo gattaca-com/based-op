@@ -1,5 +1,6 @@
-use alloy_primitives::B256;
+use alloy_primitives::{Address, B256, U256};
 use alloy_signer::Signature as ECDSASignature;
+use revm_primitives::BlockEnv;
 use ssz_types::{typenum, VariableList};
 use tree_hash_derive::TreeHash;
 
@@ -11,6 +12,7 @@ use crate::transaction::Transaction as BuilderTransaction;
 pub enum VersionedMessage {
     FragV0(FragV0),
     SealV0(SealV0),
+    EnvV0(EnvV0),
 }
 
 impl From<FragV0> for VersionedMessage {
@@ -22,6 +24,38 @@ impl From<FragV0> for VersionedMessage {
 impl From<SealV0> for VersionedMessage {
     fn from(value: SealV0) -> Self {
         Self::SealV0(value)
+    }
+}
+
+impl From<EnvV0> for VersionedMessage {
+    fn from(value: EnvV0) -> Self {
+        Self::EnvV0(value)
+    }
+}
+
+/// Initial message to set the block environment for the current block
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
+pub struct EnvV0 {
+    number: U256,
+    coinbase: Address,
+    timestamp: U256,
+    gas_limit: U256,
+    basefee: U256,
+    difficulty: U256,
+    prevrandao: B256,
+}
+
+impl From<&BlockEnv> for EnvV0 {
+    fn from(env: &BlockEnv) -> Self {
+        Self {
+            number: env.number,
+            coinbase: env.coinbase,
+            timestamp: env.timestamp,
+            gas_limit: env.gas_limit,
+            basefee: env.basefee,
+            difficulty: env.difficulty,
+            prevrandao: env.prevrandao.unwrap_or_default(),
+        }
     }
 }
 
