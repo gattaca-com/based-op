@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use bop_common::{
-    actor::{Actor, ActorConfig},
     api::{EngineApiServer, EthApiServer},
     communication::{messages::EngineApi, Sender, Spine},
     config::GatewayArgs,

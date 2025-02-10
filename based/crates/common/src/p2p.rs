@@ -1,9 +1,9 @@
 use alloy_primitives::{Address, B256, U256};
 use alloy_signer::Signature as ECDSASignature;
 use revm_primitives::BlockEnv;
+use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, VariableList};
 use tree_hash_derive::TreeHash;
-use serde::{Serialize, Deserialize};
 
 use crate::transaction::Transaction as BuilderTransaction;
 
