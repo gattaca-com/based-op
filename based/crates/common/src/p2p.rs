@@ -116,10 +116,27 @@ pub struct SignedMessage {
 
 #[cfg(test)]
 mod tests {
-    use revm_primitives::b256;
+    use alloy_primitives::{address, b256};
     use tree_hash::TreeHash;
 
     use super::*;
+
+    #[test]
+    fn test_env_v0() {
+        let env = EnvV0 {
+            number: 1,
+            beneficiary: address!("1234567890123456789012345678901234567890"),
+            timestamp: 2,
+            gas_limit: 3,
+            basefee: 4,
+            difficulty: U256::from(5),
+            prevrandao: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+        };
+
+        let message = VersionedMessage::from(env);
+        let hash = message.tree_hash_root();
+        assert_eq!(hash, b256!("6805e5742eae056f663f11d87044022f19a38bde3ba41c41ce9078c3406326c3"));
+    }
 
     #[test]
     fn test_frag_v0() {
@@ -127,10 +144,9 @@ mod tests {
         let txs = Transactions::from(vec![tx]);
 
         let frag = FragV0 { block_number: 1, seq: 0, is_last: true, txs };
+
         let message = VersionedMessage::from(frag);
-
         let hash = message.tree_hash_root();
-
         assert_eq!(hash, b256!("2a5ebad20a81878e5f229928e5c2043580051673b89a7a286008d30f62b10963"));
     }
 
@@ -147,10 +163,9 @@ mod tests {
             state_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             block_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
         };
+
         let message = VersionedMessage::from(sealed);
-
         let hash = message.tree_hash_root();
-
         assert_eq!(hash, b256!("e86afda21ddc7338c7e84561681fde45e2ab55cce8cde3163e0ae5f1c378439e"));
     }
 }
