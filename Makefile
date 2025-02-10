@@ -64,8 +64,12 @@ restart: clean run ## 🔄 Restart
 
 # Testing
 
+FOLLOWER_NODE_HOST?=http://localhost
+BLOCK_NUMBER?=$(shell echo $$(( $$(cast block-number --rpc-url http://localhost:$(BOP_EL_PORT)) + 1 )))
+
 test-frag:
-	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
+	echo "BLOCK_NUMBER: $(BLOCK_NUMBER)";
+	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
 	--data '{ \
 		"jsonrpc": "2.0", \
 		"id": 1, \
@@ -85,7 +89,7 @@ test-frag:
 	}'
 
 test-seal:
-	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
+	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
 	--data '{ \
 		"jsonrpc": "2.0", \
 		"id": 1, \
@@ -95,7 +99,7 @@ test-seal:
 				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
 				"seal": { \
 					"totalFrags": 2, \
-					"blockNumber": 2, \
+					"blockNumber": $(BLOCK_NUMBER), \
 					"gasUsed": 0, \
 					"gasLimit": 0, \
 					"parentHash": "0x1234567890123456789012345678901234567890123456789012345678901234", \
