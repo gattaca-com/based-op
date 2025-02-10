@@ -2,8 +2,11 @@ optimism_package:
   chains:
     - participants:
         - el_type: op-geth
+          el_image: based_op_geth
           cl_type: op-node
-          # cl_extra_params: [--rpc.based]
+          cl_image: based_op_node
+          cl_extra_params:
+            - --rpc.enable-based
       mev_type: based-portal
       mev_params:
         based_portal_image: based_portal_local

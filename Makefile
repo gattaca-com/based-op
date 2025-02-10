@@ -42,6 +42,9 @@ build-op-geth: ## 🏗️ Build OP geth from op-eth directory
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op
 
+run-follower: ## 🚀 Run a single follower node with RPC enabled.
+	kurtosis run optimism-package --args-file config-geth-cluster.yml --enclave based-op
+
 logs: ## 📜 Show logs
 	kurtosis service logs -f based-op $(SERVICE)
 
