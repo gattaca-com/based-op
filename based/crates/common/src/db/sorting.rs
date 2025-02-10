@@ -33,9 +33,6 @@ impl<Db: DatabaseRef> DBSorting<Db> {
     }
 }
 
-// impl<Db: DatabaseRef> DatabaseCommit for DBSorting<Db> {
-// }
-
 impl<Db: DatabaseRef> DatabaseRef for DBSorting<Db> {
     type Error = Db::Error;
 
