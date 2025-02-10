@@ -206,14 +206,15 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         (simulator_evm_block_params, env_with_handler_cfg)
     }
 
-    pub fn seal_block(
-        &mut self,
-        mut frag_seq: FragSequence,
-        last_frag: SortingData<Db>,
-    ) -> (FragV0, SealV0, OpExecutionPayloadEnvelopeV3) {
-        let (mut frag_msg, _) = self.seal_frag(last_frag, &mut frag_seq);
-        tracing::info!("{:#?}", frag_seq.sorting_telemetry);
+    pub fn seal_last_frag(&mut self, frag_seq: &mut FragSequence, last_frag: SortingData<Db>) -> FragV0 {
+        let (mut frag_msg, _) = self.seal_frag(last_frag, frag_seq);
         frag_msg.is_last = true;
+        frag_msg
+    }
+
+    /// Finalize the block after the last frag has been sealed
+    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV3) {
+        tracing::info!("{:#?}", frag_seq.sorting_telemetry);
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
         let (transactions, transactions_root, receipts_root, logs_bloom) =
@@ -277,7 +278,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             state_root,
             block_hash: v1.block_hash,
         };
-        (frag_msg, seal, OpExecutionPayloadEnvelopeV3 {
+        (seal, OpExecutionPayloadEnvelopeV3 {
             execution_payload: ExecutionPayloadV3 {
                 payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
                 blob_gas_used: 0,
