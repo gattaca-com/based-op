@@ -207,7 +207,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 
 	var receipts types.Receipts
 	for i, tx := range frag.Txs {
-		gp := new(GasPool).AddGas(math.MaxUint64) // TODO: Replace with txs' gas limit
+		gp := new(GasPool).AddGas(tx.Gas())
 
 		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(currentUnsealedBlock.Number)).Bytes()
 
