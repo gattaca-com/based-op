@@ -187,6 +187,22 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 
     #[inline]
+    pub fn receive_for<T, F, RR>(&mut self, duration: Duration, mut f: F)
+    where
+        RR: NonBlockingReceiver<InternalMessage<T>>,
+        R: AsMut<Receiver<T, RR>>,
+        F: FnMut(T, &S),
+    {
+        let receiver = self.receivers.as_mut();
+        let curt = Instant::now();
+        loop {
+            if !receiver.receive(&mut self.senders, &mut f) || duration < curt.elapsed() {
+                break;
+            }
+        }
+    }
+
+    #[inline]
     pub fn receive_timestamp<T, F, RR>(&mut self, mut f: F) -> bool
     where
         RR: NonBlockingReceiver<InternalMessage<T>>,
