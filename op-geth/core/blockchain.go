@@ -240,6 +240,7 @@ type BlockChain struct {
 	currentFinalBlock    atomic.Pointer[types.Header] // Latest (consensus) finalized block
 	currentSafeBlock     atomic.Pointer[types.Header] // Latest (consensus) safe block
 	currentUnsealedBlock *types.UnsealedBlock         // Current unsealed block
+	unsealedBlockDbState *state.StateDB               // StateDB for the current unsealed block
 
 	bodyCache     *lru.Cache[common.Hash, *types.Body]
 	bodyRLPCache  *lru.Cache[common.Hash, rlp.RawValue]
@@ -635,8 +636,15 @@ func (bc *BlockChain) SetSafe(header *types.Header) {
 	}
 }
 
-func (bc *BlockChain) SetCurrentUnsealedBlock(block *types.UnsealedBlock) {
+func (bc *BlockChain) SetCurrentUnsealedBlock(block *types.UnsealedBlock) error {
+	new_state, err := state.New(bc.CurrentBlock().Root, bc.statedb)
+	if err != nil {
+		return err
+	}
+	bc.unsealedBlockDbState = new_state
 	bc.currentUnsealedBlock = block
+
+	return nil
 }
 
 // rewindHashHead implements the logic of rewindHead in the context of hash scheme.

@@ -6,7 +6,6 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	// "github.com/ethereum/go-ethereum/core/state"
 )
 
 type UnsealedBlock struct {
@@ -14,7 +13,6 @@ type UnsealedBlock struct {
 	Frags              []Frag
 	LastSequenceNumber uint64
 	Hash               common.Hash
-	// State              *state.StateDB
 
 	Receipts Receipts
 }
@@ -25,7 +23,6 @@ func NewUnsealedBlock() *UnsealedBlock {
 		Frags:              []Frag{},
 		LastSequenceNumber: *new(uint64),
 		Hash:               common.Hash{},
-		// State:              nil,
 		Receipts: Receipts{},
 	}
 }

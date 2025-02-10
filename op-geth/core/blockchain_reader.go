@@ -67,6 +67,10 @@ func (bc *BlockChain) CurrentUnsealedBlock() *types.UnsealedBlock {
 	return bc.currentUnsealedBlock
 }
 
+func (bc *BlockChain) CurrentUnsealedBlockState() *state.StateDB {
+	return bc.unsealedBlockDbState
+}
+
 // HasHeader checks if a block header is present in the database or not, caching
 // it if present.
 func (bc *BlockChain) HasHeader(hash common.Hash, number uint64) bool {

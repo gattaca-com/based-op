@@ -22,7 +22,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
@@ -183,10 +182,10 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 
 	parent := bc.GetBlockByNumber(currentUnsealedBlock.Number.Uint64() - 1)
 
-	statedb, error := state.New(parent.Header().Root, bc.StateCache()) // TODO: Replace with currentUnsealedBlock.statedb
+	statedb := bc.unsealedBlockDbState
 
-	if error != nil {
-		return fmt.Errorf("could not create new state db: %w", error)
+	if statedb == nil {
+		return fmt.Errorf("unsealed block state db not set")
 	}
 
 	chainConfig := bc.Config()

@@ -1343,9 +1343,11 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 	// TODO: Validations
 	// - Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
 
+	log.Info("NewFrag received", "frag", frag)
 	if frag.Frag.Seq == 0 {
 		// Check there's no unsealed block in progress.
 		if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
+			log.Error("NewFrag received with seq 0 but there's an unsealed block in progress")
 			return engine.INVALID, errors.New("current block was not sealed")
 		}
 
@@ -1353,6 +1355,7 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 		expected_block_number := new(big.Int)
 		expected_block_number.Add(api.eth.BlockChain().CurrentBlock().Number, big.NewInt(1))
 		if new(big.Int).SetUint64(frag.Frag.BlockNumber) != expected_block_number {
+			log.Error("NewFrag received with seq 0 but unexpected block number", "expected", expected_block_number)
 			return engine.INVALID, errors.New("unexpected block number")
 		}
 	} else {
@@ -1360,20 +1363,24 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 
 		// Check that the current last frag does not have the IsLast flag set.
 		if currentUnsealedBlock == nil {
+			log.Error("NewFrag received with seq > 0 but there's no unsealed block in progress")
 			return engine.INVALID, errors.New("current block was not started")
 		}
 
 		// Check frag block number matches the current unsealed block number
 		if new(big.Int).SetUint64(frag.Frag.BlockNumber) != currentUnsealedBlock.Number {
+			log.Error("NewFrag received with seq > 0 but unexpected block number", "expected", currentUnsealedBlock.Number, "received", frag.Frag.BlockNumber)
 			return engine.INVALID, errors.New("unexpected block number")
 		}
 
 		// Check frag sequence number == latest_frag_seq_in_current_unsealed_block + 1.
 		if frag.Frag.Seq != currentUnsealedBlock.LastSequenceNumber+1 {
+			log.Error("NewFrag received with unexpected sequence number", "expected", currentUnsealedBlock.LastSequenceNumber+1, "received", frag.Frag.Seq)
 			return engine.INVALID, errors.New("unexpected sequence number")
 		}
 	}
 
+	log.Info("NewFrag is valid")
 	return api.newFragV0(frag)
 }
 
@@ -1397,6 +1404,7 @@ func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) (string, error) {
 	log.Info("[engine_newFragV0] Inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
 	err := api.eth.BlockChain().InsertNewFrag(frag.Frag)
 	if err != nil {
+		log.Error("[engine_newFragV0] Error inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock, "error", err)
 		return engine.INVALID, err
 	}
 
