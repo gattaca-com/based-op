@@ -71,6 +71,12 @@ where
     const CORE_AFFINITY: Option<usize> = Some(0);
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
+        // handle block sync
+        while connections.receive(|msg, _| {
+            let state = std::mem::take(&mut self.state);
+            self.state = state.handle_block_sync(msg, &mut self.data);
+        }) {}
+
         // handle new transaction
         while connections.receive(|msg, senders| {
             self.state.handle_new_tx(msg, &mut self.data, senders);
@@ -86,12 +92,6 @@ where
         connections.receive(|msg: messages::EngineApi, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
-        });
-
-        // handle block sync
-        connections.receive(|msg, _| {
-            let state = std::mem::take(&mut self.state);
-            self.state = state.handle_block_sync(msg, &mut self.data);
         });
 
         // Check for passive state changes. e.g., sealing frags, sending sims, etc.
@@ -144,7 +144,7 @@ where
     fn handle_engine_api(
         self,
         msg: EngineApi,
-        data: &mut SequencerContext<Db>,
+        ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use EngineApi::*;
@@ -156,9 +156,9 @@ where
                 self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
             }
             ForkChoiceUpdatedV3 { fork_choice_state, payload_attributes, .. } => {
-                self.handle_fork_choice_updated_engine_api(fork_choice_state, payload_attributes, data, senders)
+                self.handle_fork_choice_updated_engine_api(fork_choice_state, payload_attributes, ctx, senders)
             }
-            GetPayloadV3 { res, .. } => self.handle_get_payload_engine_api(res, data, senders),
+            GetPayloadV3 { res, .. } => self.handle_get_payload_engine_api(res, ctx, senders),
         }
     }
 
@@ -237,14 +237,14 @@ where
         self,
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<Box<OpPayloadAttributes>>,
-        data: &mut SequencerContext<Db>,
+        ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
 
         match self {
             WaitingForForkChoice(payload, sidecar) => {
-                let head_bn = data.db.head_block_number().expect("couldn't get db");
+                let head_bn = ctx.db.head_block_number().expect("couldn't get db");
 
                 // FCU has skipped some blocks. Signal to fetch them all and set state to syncing.
                 if payload.block_number() > head_bn + 1 {
@@ -256,9 +256,9 @@ where
                     if payload.block_hash() == fork_choice_state.head_block_hash {
                         let basefee = payload.as_v1().base_fee_per_gas;
                         let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
-                        data.commit_block(&block, Some(basefee.to()));
-                        data.parent_header = block.header.clone();
-                        data.parent_hash = fork_choice_state.head_block_hash;
+                        ctx.commit_block(&block, Some(basefee.to()));
+                        ctx.parent_header = block.header.clone();
+                        ctx.parent_hash = fork_choice_state.head_block_hash;
                         WaitingForForkChoiceWithAttributes
                     } else {
                         // We have received the wrong ExecutionPayload. Need to re-sync with the new head.
@@ -276,17 +276,17 @@ where
                 if matches!(self, WaitingForNewPayload) {
                     //TODO: This should never happen in production but for benchmarking it allows us to keep simming on
                     // top of the same block!
-                    data.tx_pool.clear();
-                    data.deposits.clear();
-                    data.db_frag.reset();
+                    ctx.tx_pool.clear();
+                    ctx.deposits.clear();
+                    ctx.db_frag.reset();
                 }
                 match payload_attributes {
                     Some(attributes) => {
-                        data.timers.start_sequencing.start();
-                        let (seq, first_frag) = data.start_sequencing(attributes, senders);
-                        data.timers.start_sequencing.stop();
+                        ctx.timers.start_sequencing.start();
+                        let (seq, first_frag) = ctx.start_sequencing(attributes, senders);
+                        ctx.timers.start_sequencing.stop();
 
-                        let env_msg: EnvV0 = (&data.block_env).into();
+                        let env_msg: EnvV0 = (&ctx.block_env).into();
                         let _ = senders.send(VersionedMessage::from(env_msg));
 
                         tracing::info!("start sorting with {} orders", first_frag.tof_snapshot.len());
@@ -318,30 +318,30 @@ where
     fn handle_get_payload_engine_api(
         self,
         res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
-        data: &mut SequencerContext<Db>,
+        ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
 
         match self {
             Sorting(mut seq, sorting_data) => {
-                data.timers.waiting_for_sims.stop();
-                data.timers.seal_block.start();
+                ctx.timers.waiting_for_sims.stop();
+                ctx.timers.seal_block.start();
 
                 // Gossip last frag before sealing
-                let last_frag = data.seal_last_frag(&mut seq, sorting_data);
+                let last_frag = ctx.seal_last_frag(&mut seq, sorting_data);
                 let _ = senders.send(VersionedMessage::from(last_frag));
 
-                let (seal, block) = data.seal_block(seq);
+                let (seal, block) = ctx.seal_block(seq);
                 // Gossip seal to p2p and return payload to rpc
                 let _ = senders.send(VersionedMessage::from(seal));
                 let _ = res.send(block);
-                data.timers.seal_block.stop();
+                ctx.timers.seal_block.stop();
 
                 WaitingForNewPayload
             }
             s => {
-                debug_assert!(false, "Should never have gotten here");
+                //debug_assert!(false, "Should never have gotten here");
                 s
             }
         }
@@ -354,12 +354,12 @@ where
     ///
     /// When we are syncing we fetch blocks asynchronously from the rpc and send them back through a channel that gets
     /// picked up and processed here.
-    fn handle_block_sync(self, block: BlockSyncMessage, data: &mut SequencerContext<Db>) -> Self {
+    fn handle_block_sync(self, block: BlockSyncMessage, ctx: &mut SequencerContext<Db>) -> Self {
         use SequencerState::*;
 
         match self {
             Syncing { last_block_number } => {
-                data.commit_block(&block, None);
+                ctx.commit_block(&block, None);
 
                 if block.number != last_block_number {
                     Syncing { last_block_number }
@@ -367,6 +367,11 @@ where
                     // Wait until the next payload and attributes arrive
                     WaitingForNewPayload
                 }
+            }
+
+            WaitingForNewPayload => {
+                ctx.commit_block(&block, None);
+                WaitingForNewPayload
             }
             _ => {
                 debug_assert!(false, "Should not have received block sync update while in state {self:?}");
@@ -377,17 +382,17 @@ where
 
     /// Sends a new transaction to the tx pool.
     /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
-    fn handle_new_tx(&mut self, tx: Arc<Transaction>, data: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+    fn handle_new_tx(&mut self, tx: Arc<Transaction>, ctx: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
         if tx.is_deposit() {
-            data.deposits.push_back(tx);
+            ctx.deposits.push_back(tx);
             return;
         }
-        data.tx_pool.handle_new_tx(
+        ctx.tx_pool.handle_new_tx(
             tx.clone(),
-            &data.db_frag,
-            data.as_ref().basefee.to(),
+            &ctx.db_frag,
+            ctx.as_ref().basefee.to(),
             false,
-            data.config.simulate_tof_in_pools.then_some(senders),
+            ctx.config.simulate_tof_in_pools.then_some(senders),
         );
         if let SequencerState::Sorting(_, sorting_data) = self {
             // This should ideally be not at the top but bottom of the sorted list. For now this is fastest
