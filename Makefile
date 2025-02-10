@@ -33,10 +33,11 @@ build-op-node: ## 🏗️ Build OP node from optimism directory
 	PLATFORMS="linux/arm64" \
 	docker buildx bake \
 	-f docker-bake.hcl \
+	--set op-node.tags=based_op_node \
 	op-node
 
 build-op-geth: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth ./op-geth
+	docker build -t based_op_geth ./op-geth
 
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op
@@ -70,7 +71,7 @@ test-frag:
 			{ \
 				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
 				"frag": { \
-					"blockNumber": 2, \
+					"blockNumber": 1, \
 					"seq": $(SEQ), \
 					"isLast": false, \
 					"txs": [], \
