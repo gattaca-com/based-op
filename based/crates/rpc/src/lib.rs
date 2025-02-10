@@ -1,7 +1,14 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use bop_common::{
-    actor::{Actor, ActorConfig}, api::{EngineApiServer, EthApiServer}, communication::{messages::EngineApi, Sender, Spine}, config::GatewayArgs, db::{DBFrag, DatabaseRead}, shared::SharedState, time::Duration, transaction::Transaction
+    actor::{Actor, ActorConfig},
+    api::{EngineApiServer, EthApiServer},
+    communication::{messages::EngineApi, Sender, Spine},
+    config::GatewayArgs,
+    db::DatabaseRead,
+    shared::SharedState,
+    time::Duration,
+    transaction::Transaction,
 };
 use engine_mock::MockEngineRpcServer;
 use jsonrpsee::{client_transport::ws::Url, http_client::HttpClient as RpcClient, server::ServerBuilder};
@@ -12,7 +19,12 @@ mod engine;
 mod engine_mock;
 mod eth;
 
-pub fn start_rpc<Db: DatabaseRead>(config: &GatewayArgs, spine: &Spine<Db>, shared_state: SharedState<Db>, rt: &Runtime) {
+pub fn start_rpc<Db: DatabaseRead>(
+    config: &GatewayArgs,
+    spine: &Spine<Db>,
+    shared_state: SharedState<Db>,
+    rt: &Runtime,
+) {
     let addr = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
     let server = RpcServer::new(spine, shared_state, config.rpc_fallback_url.clone());
     rt.spawn(server.run(addr));

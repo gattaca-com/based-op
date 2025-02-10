@@ -146,7 +146,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         tracing::info!("sealing frag {} with {} txs:", frag_seq.next_seq, sorting_data.txs.len());
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
-        (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
+        (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
     }
 }
 
@@ -168,7 +168,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         // send new block params to simulators
         senders.send(simulator_evm_block_params).expect("should never fail");
 
-        let seq = FragSequence::new(self.gas_limit(), self.block_number());
+        let seq = FragSequence::new(self.gas_limit(), self.block_number(), self.timestamp());
         let mut sorting = SortingData::new(&seq, self);
 
         sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");

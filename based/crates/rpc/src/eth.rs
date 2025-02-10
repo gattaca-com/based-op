@@ -36,9 +36,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
 
         let receipt = match self.shared_state.receipt(&hash) {
             Some(receipt) => Some(receipt),
-            None => {
-                self.fallback.transaction_receipt(hash).await?
-            }
+            None => self.fallback.transaction_receipt(hash).await?,
         };
 
         Ok(receipt)
