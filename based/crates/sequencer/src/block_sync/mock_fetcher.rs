@@ -92,10 +92,11 @@ impl MockFetcher {
             }
 
             Duration::from_millis(2000).sleep();
-            let (block_tx, block_rx) = oneshot::channel();
+            let (block_tx, mut block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
+            Duration::from_millis(100).sleep();
 
-            let Ok(mut sealed_block) = block_rx.blocking_recv() else {
+            let Ok(mut sealed_block) = block_rx.try_recv() else {
                 warn!("issue getting blocq");
                 return;
             };

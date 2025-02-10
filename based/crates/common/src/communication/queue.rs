@@ -426,30 +426,7 @@ impl<T: Clone> From<Queue<T>> for ConsumerBare<T> {
 #[derive(Clone, Copy, Debug)]
 pub struct Consumer<T: 'static> {
     consumer: ConsumerBare<T>,
-    message: T,
     should_log: bool,
-}
-
-impl<T: 'static + Copy> Consumer<T> {
-    /// Maybe consume one message in a queue with error recovery and logging,
-    /// and return whether one was read
-    #[inline]
-    pub fn consume<F>(&mut self, mut f: F) -> bool
-    where
-        F: FnMut(&mut T),
-    {
-        match self.consumer.try_consume(&mut self.message) {
-            Ok(()) => {
-                f(&mut self.message);
-                true
-            }
-            Err(ReadError::SpedPast) => {
-                self.log_and_recover();
-                self.consume(f)
-            }
-            Err(ReadError::Empty) => false,
-        }
-    }
 }
 
 impl<T: 'static + Clone> Consumer<T> {
@@ -491,7 +468,7 @@ impl<T: 'static + Clone> Consumer<T> {
 impl<T: Clone, Q: Into<ConsumerBare<T>>> From<Q> for Consumer<T> {
     #[allow(clippy::uninit_assumed_init)]
     fn from(queue: Q) -> Self {
-        Self { consumer: queue.into(), message: unsafe { MaybeUninit::uninit().assume_init() }, should_log: true }
+        Self { consumer: queue.into(), should_log: true }
     }
 }
 
