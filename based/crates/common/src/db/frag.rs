@@ -15,7 +15,15 @@ use revm_primitives::{
 use super::{DatabaseRead, Error, State};
 use crate::transaction::SimulatedTx;
 
-/// DB That adds chunks on top of last on chain block
+/// This is a wrapper around db to tag frags onto before
+/// sealing the block and commmiting it to db.
+/// Each time a frag is done being sorted it gets applied and
+/// a new DBSorting gets created around db_frag to which individual
+/// txs will be attached
+/// Furthermore, this db is shared with the RPC serving layer, hence it
+/// should not be outright overwritten. Only the internal db should be
+/// changed when a sorted frag is applied or (reset) when a block is sealed and committed to
+/// the persisted underlying db.
 #[derive(Clone, Debug)]
 pub struct DBFrag<Db> {
     pub db: Arc<RwLock<State<Db>>>,

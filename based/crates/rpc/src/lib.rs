@@ -5,7 +5,8 @@ use bop_common::{
     api::{EngineApiServer, EthApiServer},
     communication::{messages::EngineApi, Sender, Spine},
     config::GatewayArgs,
-    db::{DBFrag, DatabaseRead},
+    db::DatabaseRead,
+    shared::SharedState,
     time::Duration,
     transaction::Transaction,
 };
@@ -18,9 +19,14 @@ mod engine;
 mod engine_mock;
 mod eth;
 
-pub fn start_rpc<Db: DatabaseRead>(config: &GatewayArgs, spine: &Spine<Db>, db: DBFrag<Db>, rt: &Runtime) {
+pub fn start_rpc<Db: DatabaseRead>(
+    config: &GatewayArgs,
+    spine: &Spine<Db>,
+    shared_state: SharedState<Db>,
+    rt: &Runtime,
+) {
     let addr = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
-    let server = RpcServer::new(spine, db, config.rpc_fallback_url.clone());
+    let server = RpcServer::new(spine, shared_state, config.rpc_fallback_url.clone());
     rt.spawn(server.run(addr));
 }
 
@@ -29,7 +35,7 @@ pub fn start_rpc<Db: DatabaseRead>(config: &GatewayArgs, spine: &Spine<Db>, db: 
 #[derive(Debug, Clone)]
 struct RpcServer<Db> {
     new_order_tx: Sender<Arc<Transaction>>,
-    db: DBFrag<Db>,
+    shared_state: SharedState<Db>,
     // TODO: this is a temporary fallback while we dont have a gossip to share state, in practice we should not serve
     // state directly from the gateway, and should only receive transactions
     fallback: RpcClient,
@@ -38,11 +44,11 @@ struct RpcServer<Db> {
 }
 
 impl<Db: DatabaseRead> RpcServer<Db> {
-    pub fn new(spine: &Spine<Db>, db: DBFrag<Db>, fallback_url: Url) -> Self {
+    pub fn new(spine: &Spine<Db>, shared_state: SharedState<Db>, fallback_url: Url) -> Self {
         let fallback = RpcClient::builder().build(fallback_url).expect("failed building fallback rpc client");
         Self {
             new_order_tx: spine.into(),
-            db,
+            shared_state,
             fallback,
             engine_rpc_tx: spine.into(),
             engine_timeout: Duration::from_secs(1),
