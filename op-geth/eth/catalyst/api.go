@@ -1393,7 +1393,7 @@ func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) (string, error) {
 	//     a. fetch the current unsealed block
 	if frag.Frag.Seq == 0 {
 		log.Info("[engine_newFragV0] Frag sequence is 0, starting a new unsealed block", "frag", frag.Frag)
-		unsealedBlock = types.NewUnsealedBlock()
+		unsealedBlock = types.NewUnsealedBlock(new(big.Int).SetUint64(frag.Frag.BlockNumber))
 		api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
 	} else {
 		log.Info("[engine_newFragV0] Fetching current unsealed block", "frag", frag.Frag)

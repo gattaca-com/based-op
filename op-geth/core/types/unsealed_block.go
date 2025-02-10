@@ -17,13 +17,13 @@ type UnsealedBlock struct {
 	Receipts Receipts
 }
 
-func NewUnsealedBlock() *UnsealedBlock {
+func NewUnsealedBlock(blockNumber *big.Int) *UnsealedBlock {
 	return &UnsealedBlock{
-		Number:             new(big.Int),
+		Number:             blockNumber,
 		Frags:              []Frag{},
 		LastSequenceNumber: *new(uint64),
 		Hash:               common.Hash{},
-		Receipts: Receipts{},
+		Receipts:           Receipts{},
 	}
 }
 
