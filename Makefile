@@ -66,9 +66,10 @@ restart: clean run ## 🔄 Restart
 
 FOLLOWER_NODE_HOST?=http://localhost
 BLOCK_NUMBER?=$(shell echo $$(( $$(cast block-number --rpc-url http://localhost:$(BOP_EL_PORT)) + 1 )))
+DUMMY_RICH_WALLET_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+DUMMY_TX=$(shell cast mktx --rpc-url  $(FOLLOWER_NODE_HOST):$(BOP_EL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a | xxd -r -p | base64)
 
 test-frag:
-	echo "BLOCK_NUMBER: $(BLOCK_NUMBER)";
 	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
 	--data '{ \
 		"jsonrpc": "2.0", \
@@ -81,7 +82,7 @@ test-frag:
 					"blockNumber": $(BLOCK_NUMBER), \
 					"seq": $(SEQ), \
 					"isLast": false, \
-					"txs": ["AvhpgyDV5IABhDvId0uCUgiUfdzHxJ1WKZemjJiue7Yu0ejkSIoBgMABoOC3AC0ftbeCBzwsQi2z3n2m66o4iudDIOyXll5IAHJ/oBVgtLknoWKDukJXeKvntitk2PYhEE1gDwEl9GzjYRs3"], \
+					"txs": ["$(DUMMY_TX)"], \
 					"version": 0 \
 				} \
 			} \
