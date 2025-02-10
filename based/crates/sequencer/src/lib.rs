@@ -366,7 +366,7 @@ where
                 }
             }
 
-            WaitingForNewPayload => {
+            WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
                 ctx.commit_block(&block);
                 WaitingForNewPayload
             }
