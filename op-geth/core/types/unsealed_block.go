@@ -9,7 +9,7 @@ import (
 )
 
 type UnsealedBlock struct {
-	Number             *big.Int
+	Env                *Env
 	Frags              []Frag
 	LastSequenceNumber uint64
 	Hash               common.Hash
@@ -17,9 +17,9 @@ type UnsealedBlock struct {
 	Receipts Receipts
 }
 
-func NewUnsealedBlock(blockNumber *big.Int) *UnsealedBlock {
+func NewUnsealedBlock(e *Env) *UnsealedBlock {
 	return &UnsealedBlock{
-		Number:             blockNumber,
+		Env:                e,
 		Frags:              []Frag{},
 		LastSequenceNumber: *new(uint64),
 		Hash:               common.Hash{},
@@ -36,7 +36,7 @@ func (ub *UnsealedBlock) IsNextFrag(f *Frag) bool {
 }
 
 type Frag struct {
-	blockNumber uint64         `json:"blockNumber"`
+	BlockNumber uint64         `json:"blockNumber"`
 	Seq         uint64         `json:"seq"`
 	IsLast      bool           `json:"isLast"`
 	Txs         []*Transaction `json:"txs"`
@@ -44,10 +44,6 @@ type Frag struct {
 
 func (f *Frag) IsFirst() bool {
 	return f.Seq == 0
-}
-
-func (f *Frag) BlockNumber() *big.Int {
-	return new(big.Int).SetUint64(f.blockNumber)
 }
 
 func (f *Frag) UnmarshalJSON(data []byte) error {
@@ -63,7 +59,7 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	f.blockNumber = frag.BlockNumber
+	f.BlockNumber = frag.BlockNumber
 	f.Seq = frag.Seq
 	f.IsLast = frag.IsLast
 
@@ -74,4 +70,14 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+type Env struct {
+	Number      uint64         `json:number`
+	Beneficiary common.Address `json:beneficiary`
+	Timestamp   uint64         `json:timestamp`
+	GasLimit    uint64         `json:gas_limit`
+	Basefee     uint64         `json:basefee`
+	Difficulty  *hexutil.Big   `json:difficulty`
+	Prevrandao  common.Hash    `json:prevrandao`
 }
