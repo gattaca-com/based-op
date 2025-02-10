@@ -3,10 +3,11 @@ use alloy_signer::Signature as ECDSASignature;
 use revm_primitives::BlockEnv;
 use ssz_types::{typenum, VariableList};
 use tree_hash_derive::TreeHash;
+use serde::{Serialize, Deserialize};
 
 use crate::transaction::Transaction as BuilderTransaction;
 
-#[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
 #[tree_hash(enum_behaviour = "union")]
 #[non_exhaustive]
 pub enum VersionedMessage {
@@ -34,7 +35,7 @@ impl From<EnvV0> for VersionedMessage {
 }
 
 /// Initial message to set the block environment for the current block
-#[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
 pub struct EnvV0 {
     number: u64,
     beneficiary: Address,
@@ -67,7 +68,7 @@ pub type Transactions = VariableList<Transaction, MaxTransactionsPerPayload>;
 
 /// A _fragment_ of a block, containing a sequenced set of transactions that will be eventually included in the next
 /// block in this order
-#[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
 pub struct FragV0 {
     /// Block in which this frag will be included
     block_number: u64,
@@ -92,7 +93,7 @@ impl FragV0 {
 }
 
 /// A message sealing a sequence of frags, with fields from the block header
-#[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
 pub struct SealV0 {
     /// How many frags for this block were in this sequence
     pub total_frags: u64,
