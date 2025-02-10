@@ -579,3 +579,13 @@ func (ea *L2EngineAPI) sealFragV0(_ context.Context, _ *eth.SignedSeal) (*string
 	log.Info("sealFragV0")
 	return &engine.VALID, nil
 }
+
+func (ea *L2EngineAPI) EnvV0(ctx context.Context, frag *eth.SignedEnv) (*string, error) {
+	log.Info("EnvV0")
+	return ea.envV0(ctx, frag)
+}
+
+func (ea *L2EngineAPI) envV0(_ context.Context, _ *eth.SignedEnv) (*string, error) {
+	log.Info("envV0")
+	return &engine.VALID, nil
+}

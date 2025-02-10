@@ -257,6 +257,22 @@ type Seal struct {
 	BlockHash        Bytes32 `json:"blockHash" ssz-size:"32"`
 }
 
+type SignedEnv struct {
+	Signature Bytes65 `json:"signature"`
+	Env       Env     `json:"env"`
+}
+
+// Initial message to set the block environment for the current block
+type Env struct {
+	Number      uint64         `json:number`
+	Beneficiary common.Address `json:beneficiary`
+	Timestamp   uint64         `json:timestamp`
+	GasLimit    uint64         `json:gas_limit`
+	Basefee     uint64         `json:basefee`
+	Difficulty  *hexutil.Big   `json:difficulty`
+	Prevrandao  common.Hash    `json:prevrandao`
+}
+
 type ExecutionPayloadEnvelope struct {
 	ParentBeaconBlockRoot *common.Hash      `json:"parentBeaconBlockRoot,omitempty"`
 	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
@@ -675,4 +691,5 @@ const (
 
 	NewFragV0  EngineAPIMethod = "engine_newFragV0"
 	SealFragV0 EngineAPIMethod = "engine_sealFragV0"
+	EnvV0      EngineAPIMethod = "engine_envV0"
 )

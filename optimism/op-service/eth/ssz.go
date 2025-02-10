@@ -631,3 +631,42 @@ func (signedSeal *SignedSeal) MarshalSSZ(w io.Writer) error {
 
 	return nil
 }
+
+func (signedEnv *SignedEnv) UnmarshalSSZ(scope uint32, r io.Reader) error {
+	signature := make([]byte, SignatureSize)
+	n, err := r.Read(signature)
+	if err != nil {
+		return err
+	}
+	if n != SignatureSize {
+		return fmt.Errorf("failed to unmarshal SignedEnv, not enough bytes (%d) to cover the signature", n)
+	}
+
+	copy(signedEnv.Signature[:], signature)
+
+	var env Env
+
+	err = ssz.DecodeFromStream(r, &env, scope-SignatureSize)
+
+	if err != nil {
+		return err
+	}
+
+	signedEnv.Env = env
+	return nil
+}
+
+func (signedEnv *SignedEnv) MarshalSSZ(w io.Writer) error {
+	n, err := w.Write(signedEnv.Signature[:])
+	if err != nil || n != SignatureSize {
+		return errors.New("unable to write signature")
+	}
+
+	err = ssz.EncodeToStream(w, &signedEnv.Env)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
