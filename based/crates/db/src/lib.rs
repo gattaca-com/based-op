@@ -206,7 +206,8 @@ impl DatabaseRef for SequencerDB {
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
         let hash = self.provider()?.tx_ref().get::<CanonicalHeaders>(number).map_err(Error::ReadTransactionError)?;
-        Ok(hash.unwrap_or_default())
+        let hash = hash.ok_or(Error::BlockNotFound(number))?;
+        Ok(hash)
     }
 }
 

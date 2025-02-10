@@ -18,7 +18,7 @@ pub struct BlockFetcher {
     provider: AlloyProvider,
 }
 impl BlockFetcher {
-    pub fn new(rpc_url: Url) -> Self {
+    pub fn new(rpc_url: Url, db_block: u64) -> Self {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
@@ -27,7 +27,7 @@ impl BlockFetcher {
 
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
 
-        Self { executor, next_block: 0, sync_until: 0, batch_size: 20, provider }
+        Self { executor, next_block: db_block + 1, sync_until: db_block + 1, batch_size: 20, provider }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
@@ -50,9 +50,6 @@ impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
     }
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
-        connections.receive(|msg, _| {
-            self.handle_fetch(msg);
-        });
         if self.next_block < self.sync_until {
             let stop = (self.next_block + self.batch_size).min(self.sync_until);
             self.executor.block_on(async_fetch_blocks_and_send_sequentially(
@@ -63,5 +60,9 @@ impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
             ));
             self.next_block = stop + 1;
         }
+
+        connections.receive(|msg, _| {
+            self.handle_fetch(msg);
+        });
     }
 }

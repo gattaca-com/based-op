@@ -51,7 +51,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         args.chain_spec.clone(),
     )?;
 
-    tracing::info!("Starting gateway at block {}", db_bop.head_block_number().expect("couldn't get head block number"));
+    let db_block = db_bop.head_block_number()?;
+    let db_hash = db_bop.head_block_hash()?;
+
+    info!(db_block, ?db_hash, "starting gateway");
 
     let db_frag: DBFrag<_> = db_bop.clone().into();
     let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
@@ -87,7 +90,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             });
         } else {
             s.spawn(|| {
-                BlockFetcher::new(args.rpc_fallback_url).run(
+                BlockFetcher::new(args.rpc_fallback_url, db_block).run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
                 );
