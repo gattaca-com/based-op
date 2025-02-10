@@ -10,8 +10,8 @@ use bop_common::{
         messages::{BlockSyncMessage, EvmBlockParams},
         SendersSpine, TrackedSenders,
     },
-    db::DBFrag,
     p2p::{FragV0, SealV0},
+    shared::SharedState,
     time::Timer,
     transaction::Transaction,
 };
@@ -60,16 +60,7 @@ impl Default for SequencerTimers {
 pub struct SequencerContext<Db> {
     pub config: SequencerConfig,
     pub db: Db,
-    /// This is a wrapper around db to tag frags onto before
-    /// sealing the block and commmiting it to db.
-    /// Each time a frag is done being sorted it gets applied and
-    /// a new DBSorting gets created around db_frag to which individual
-    /// txs will be attached
-    /// Furthermore, this db is shared with the RPC serving layer, hence it
-    /// should not be outright overwritten. Only the internal db should be
-    /// changed when a sorted frag is applied or (reset) when a block is sealed and committed to
-    /// the persisted underlying db.
-    pub db_frag: DBFrag<Db>,
+    pub shared_state: SharedState<Db>,
     pub tx_pool: TxPool,
     pub deposits: VecDeque<Arc<Transaction>>,
     pub block_env: BlockEnv,
@@ -84,12 +75,12 @@ pub struct SequencerContext<Db> {
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
-    pub fn new(db: Db, db_frag: DBFrag<Db>, config: SequencerConfig) -> Self {
+    pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
         let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
         let system_caller = SystemCaller::new(config.evm_config.clone(), config.evm_config.chain_spec().clone());
         Self {
             db,
-            db_frag,
+            shared_state,
             block_executor,
             config,
             system_caller,
@@ -145,6 +136,7 @@ impl<Db> SequencerContext<Db> {
         self.block_env.timestamp.to()
     }
 }
+
 impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
     pub fn seal_frag(
         &mut self,
@@ -152,9 +144,9 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
         tracing::info!("sealing frag {} with {} txs:", frag_seq.next_seq, sorting_data.txs.len());
-        self.db_frag.commit_txs(sorting_data.txs.iter_mut());
+        self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
-        (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
+        (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
     }
 }
 
@@ -176,7 +168,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         // send new block params to simulators
         senders.send(simulator_evm_block_params).expect("should never fail");
 
-        let seq = FragSequence::new(self.gas_limit(), self.block_number());
+        let seq = FragSequence::new(self.gas_limit(), self.block_number(), self.timestamp());
         let mut sorting = SortingData::new(&seq, self);
 
         sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");
@@ -220,7 +212,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         let (transactions, transactions_root, receipts_root, logs_bloom) =
             frag_seq.encoded_txs_roots_bloom(canyon_active);
 
-        let state_changes = self.db_frag.take_state_changes();
+        let state_changes = self.shared_state.as_mut().take_state_changes();
         let state_root = self.db.calculate_state_root(&state_changes).unwrap().0;
 
         let extra_data = self.extra_data();
@@ -297,7 +289,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// and clear the xstx pool based on that
     pub fn commit_block(&mut self, block: &BlockSyncMessage, base_fee: Option<u64>) {
         self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
-        self.db_frag.reset();
+        self.shared_state.as_mut().reset();
 
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();
@@ -307,7 +299,13 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         }
 
         if let Some(base_fee) = base_fee {
-            self.tx_pool.handle_new_block(block.body.transactions.iter(), base_fee, &self.db_frag, false, None);
+            self.tx_pool.handle_new_block(
+                block.body.transactions.iter(),
+                base_fee,
+                self.shared_state.as_ref(),
+                false,
+                None,
+            );
         }
     }
 }

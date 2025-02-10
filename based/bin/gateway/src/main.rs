@@ -4,7 +4,7 @@ use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{verify_or_remove_queue_files, Spine},
     config::GatewayArgs,
-    db::DBFrag,
+    shared::SharedState,
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
@@ -56,7 +56,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
     info!(db_block, ?db_hash, "starting gateway");
 
-    let db_frag: DBFrag<_> = db_bop.clone().into();
+    let shared_state = SharedState::new(db_bop.clone().into());
     let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
@@ -70,14 +70,14 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             .into();
 
         s.spawn({
-            let db_frag = db_frag.clone();
             let rt = rt.clone();
-            start_rpc(&args, &spine, db_frag, &rt);
+            start_rpc(&args, &spine, shared_state.clone(), &rt);
             move || rt.block_on(wait_for_signal())
         });
 
+        let state_clone = shared_state.clone();
         s.spawn(|| {
-            Sequencer::new(db_bop, db_frag.clone(), sequencer_config)
+            Sequencer::new(db_bop, state_clone, sequencer_config)
                 .run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
@@ -99,11 +99,11 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         for core in 2..16 {
             let connections = spine.to_connections(format!("sim-{core}"));
+            let shared_clone = (&shared_state).into();
             s.spawn({
-                let db_frag = db_frag.clone();
                 let evm_config_c = evm_config.clone();
                 move || {
-                    let simulator = Simulator::new(db_frag, &evm_config_c, core);
+                    let simulator = Simulator::new(shared_clone, &evm_config_c, core);
                     simulator.run(connections, ActorConfig::default().with_core(core));
                 }
             });

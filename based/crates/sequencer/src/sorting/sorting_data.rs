@@ -94,7 +94,7 @@ impl<Db> SortingData<Db> {
         } else {
             ActiveOrders::new(data.tx_pool.clone_active())
         };
-        let db = DBSorting::new(data.db_frag.clone());
+        let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
         Self {
             db,
@@ -217,7 +217,6 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
             debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
             let tx = t.unwrap();
             tracing::trace!("sending sender {}, nonce {}", tx.sender(), tx.nonce_ref());
-            // tracing::info!("sending sim {} for sender {}", tx.nonce_ref(), tx.sender());
             senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
             self.in_flight_sims += 1;
             self.telemetry.n_sims_sent += 1;
@@ -277,7 +276,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         let evm_config = context.config.evm_config.clone();
         let chain_spec = context.config.evm_config.chain_spec().clone();
         // Configure new EVM to apply pre-execution and must include txs.
-        let mut evm = evm_config.evm_with_env(&mut context.db_frag, env_with_handler_cfg);
+        let mut evm = evm_config.evm_with_env(context.shared_state.as_mut(), env_with_handler_cfg);
 
         // Apply pre-execution changes.
         evm.db_mut().db.write().set_state_clear_flag(should_set_state_clear_flag);
