@@ -74,10 +74,10 @@ test-frag:
 			{ \
 				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
 				"frag": { \
-					"blockNumber": 1, \
+					"blockNumber": $(BLOCK_NUMBER), \
 					"seq": $(SEQ), \
 					"isLast": false, \
-					"txs": [], \
+					"txs": ["AvhpgyDV5IABhDvId0uCUgiUfdzHxJ1WKZemjJiue7Yu0ejkSIoBgMABoOC3AC0ftbeCBzwsQi2z3n2m66o4iudDIOyXll5IAHJ/oBVgtLknoWKDukJXeKvntitk2PYhEE1gDwEl9GzjYRs3"], \
 					"version": 0 \
 				} \
 			} \
