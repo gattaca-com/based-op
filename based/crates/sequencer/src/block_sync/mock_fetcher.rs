@@ -27,11 +27,54 @@ use super::{
     fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block},
     AlloyProvider,
 };
+
+#[derive(Clone, Debug)]
+pub struct BenchmarkData {
+    // to be used by the mocker itself
+    txs: Vec<Arc<Transaction>>,
+    fcu: ForkchoiceState,
+    attributes: Box<OpPayloadAttributes>,
+
+    // config
+    max_txs: usize,
+    batch: u64,
+    send_duration: Duration,
+    get_payload_delay: Duration, //If we do 2s we will take longer due to state root
+}
+impl Default for BenchmarkData {
+    fn default() -> Self {
+        Self {
+            txs: Default::default(),
+            fcu: Default::default(),
+            attributes: Default::default(),
+            max_txs: 100_000,
+            batch: 200,
+            send_duration: Duration::from_millis(1400),
+            get_payload_delay: Duration::from_millis(1800),
+        }
+    }
+}
+
+/// Different modes to run the Mocker with
+///
+/// Verification: Performs sequential block sync, creating `EngineApi` messages, and Txs corresponding to each block.
+///               It then sends these in the right order to the Sequencer, with enough delay between the txs so they
+///               hopefully get sequenced in the same order as the incoming block (otherwise we'd greedily sort them).
+///               The produced block is then verified against the incoming block for equality.
+/// Benchmark:    Gradually fetches more blocks in the future from the current last node in the db, until gathering up
+///               a target number of (for us still) in-the-future sequenced txs. Meanwhile every 2s it sends
+///               a `ForkChoiceUpdated` `EngineApi` message signalling that the `Sequencer` should start sequencing,
+///               and sends the future txs over the next 2s, before sending the `GetPayload` and logging how
+///               many txs were sorted and Mgas/s was reached. This process repeats on top of the current block
+///               until stopped.
+/// Spammer:      Will first sync as usual. Afterwards it will start spamming new txs similar to a normal node would
+/// receive.               No `EngineApi` messages are mocked, hence the system works as in a standard prod situation.
+/// Ideally used with               kurtosis
 #[derive(Default, Debug, Clone)]
 pub enum Mode {
     #[default]
     Verification,
-    Benchmark(Vec<Arc<Transaction>>, ForkchoiceState, Box<OpPayloadAttributes>),
+    Benchmark(BenchmarkData),
     Spammer,
 }
 
@@ -45,30 +88,25 @@ pub struct MockFetcher<Db> {
     db: DBFrag<Db>,
 }
 impl<Db> MockFetcher<Db> {
-    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64, db: DBFrag<Db>) -> Self {
+    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64, db: DBFrag<Db>, mode: Mode) -> Self {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
             .build()
             .expect("couldn't build local tokio runtime");
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
-        Self {
-            // mode: Mode::default(),
-            // mode: Mode::Benchmark(vec![], Default::default(), Default::default()),
-            mode: Mode::Spammer,
-            executor,
-            next_block,
-            sync_until,
-            provider,
-            db,
-        }
+        Self { mode, executor, next_block, sync_until, provider, db }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
+        if !matches!(self.mode, Mode::Spammer) {
+            return;
+        }
         match msg {
-            BlockFetch::FromTo(_start, _stop) => {
-                // self.next_block = start;
-                // self.sync_until = stop;
+            BlockFetch::FromTo(start, finish) => {
+                debug_assert!(start <= finish, "can't fetch with start > finish: {start} > {finish}");
+                self.next_block = start.min(self.next_block);
+                self.sync_until = finish.max(self.sync_until);
             }
         }
     }
@@ -80,8 +118,7 @@ impl<Db> MockFetcher<Db> {
         if self.next_block < self.sync_until {
             let mut block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
 
-            let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, mut fcu) =
-                messages::EngineApi::messages_from_block(&block, true, None);
+            let (new_payload, fcu_1, mut fcu) = messages::EngineApi::messages_from_block(&block, true, None);
 
             let EngineApi::ForkChoiceUpdatedV3 { payload_attributes: Some(payload_attributes), .. } = &mut fcu else {
                 unreachable!();
@@ -95,17 +132,22 @@ impl<Db> MockFetcher<Db> {
             connections.send(fcu);
             for t in txs_for_pool {
                 connections.send(t);
-                Duration::from_millis(20).sleep();
+                Duration::from_millis(10).sleep();
             }
 
             Duration::from_millis(2000).sleep();
             let (block_tx, mut block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
             Duration::from_millis(100).sleep();
-
-            let Ok(mut sealed_block) = block_rx.try_recv() else {
-                warn!("issue getting blocq");
-                return;
+            let curt = Instant::now();
+            let mut sealed_block = loop {
+                if let Ok(sealed_block) = block_rx.try_recv() {
+                    break sealed_block;
+                }
+                if curt.elapsed() > Duration::from_secs(2) {
+                    tracing::warn!("coun't get block");
+                    return;
+                }
             };
 
             let hash = block.hash_slow();
@@ -139,11 +181,7 @@ impl<Db> MockFetcher<Db> {
                     debug_assert!(false, "state_root doesn't match");
                 };
 
-                // println!("OUR BLOCK:");
-                // println!("{sealed_block:#?}");
                 println!("ACTUAL BLOCK:");
-                // println!("{block:#?}");
-                // panic!("block hash mismatch {hash} vs {hash1}");
             }
 
             assert_eq!(
@@ -155,34 +193,20 @@ impl<Db> MockFetcher<Db> {
             connections.send(new_payload);
             connections.send(fcu_1);
 
-            // let Ok(r) = new_payload_status_rx.blocking_recv() else {
-            //     tracing::error!("issue with getting payload status");
-            //     return;
-            // };
-            // info!("got {r:?} status for new_payload_status, sending fcu");
-
-            // let Ok(r) = fcu_status_rx.blocking_recv() else {
-            //     tracing::error!("issue with getting payload status");
-            //     return;
-            // };
-            // info!("got {r:?} status for fcu");
-
             self.next_block += 1;
         }
     }
 
     fn run_benchmark_body(&mut self, connections: &mut SpineConnections<Db>) {
-        let (rx, _tx) = oneshot::channel();
-        let Mode::Benchmark(txs, fcu, op_attributes) = &mut self.mode else {
+        let Mode::Benchmark(BenchmarkData { txs, fcu, attributes, max_txs, batch, send_duration, get_payload_delay }) =
+            &mut self.mode
+        else {
             return;
         };
 
-        info!("gas limit is {}", op_attributes.gas_limit.unwrap());
-        let fcu = EngineApi::ForkChoiceUpdatedV3 {
-            fork_choice_state: *fcu,
-            payload_attributes: Some(op_attributes.clone()),
-            res_tx: rx,
-        };
+        info!("gas limit is {}", attributes.gas_limit.unwrap());
+        let fcu =
+            EngineApi::ForkChoiceUpdatedV3 { fork_choice_state: *fcu, payload_attributes: Some(attributes.clone()) };
 
         info!("sending {} txs", txs.len());
         // first we send enough for the first frag
@@ -192,14 +216,14 @@ impl<Db> MockFetcher<Db> {
             connections.send(t.clone());
         }
 
-        if txs.len() < 100_000 {
+        if txs.len() < *max_txs {
             // if we're going to be fetching more, let's send all the rest
             for t in txs.iter().skip(txs.len() / 10) {
                 connections.send(t.clone());
                 // Duration::from_millis(20).sleep();
             }
             let blocks: Vec<BlockSyncMessage> = self.executor.block_on(async {
-                let futures = (self.next_block..(self.next_block + 200).min(self.sync_until))
+                let futures = (self.next_block..(self.next_block + *batch).min(self.sync_until))
                     .map(|i| fetch_block(i, &self.provider));
                 join_all(futures).await
             });
@@ -208,9 +232,9 @@ impl<Db> MockFetcher<Db> {
                     txs.push(Arc::new(t.into()))
                 }
             }
-            self.next_block += 200;
+            self.next_block += *batch;
         } else {
-            let t_per_tx = Duration::from_millis(1200) / txs.len() * 10usize / 9usize;
+            let t_per_tx = *send_duration / txs.len() * 10usize / 9usize;
             for t in txs.iter().skip(txs.len() / 10) {
                 vsync_busy(Some(t_per_tx), || {
                     connections.send(t.clone());
@@ -218,7 +242,7 @@ impl<Db> MockFetcher<Db> {
             }
         }
 
-        while curt.elapsed() < Duration::from_millis(1400) {}
+        while curt.elapsed() < *get_payload_delay {}
         let (block_tx, block_rx) = oneshot::channel();
         connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 
@@ -282,23 +306,22 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             connections.senders(),
             &self.provider,
         ));
-        self.next_block = stop + 1;
+        self.next_block = self.sync_until.min(stop + 1);
     }
 }
 
 impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
     fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
         let block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
-        let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, _fcu) =
-            messages::EngineApi::messages_from_block(&block, false, None);
+        let (new_payload, fcu_1, _fcu) = messages::EngineApi::messages_from_block(&block, false, None);
         connections.send(new_payload);
         connections.send(fcu_1);
         self.sync_until = self.executor.block_on(async {
             self.provider.get_block_number().await.expect("failed to fetch last block, is the RPC url correct?")
         });
-        self.next_block += 1;
+        self.next_block = (self.next_block + 1).min(self.sync_until);
 
-        let Mode::Benchmark(bench_txs, bench_forkchoice_state, bench_op_attributes) = &mut self.mode else {
+        let Mode::Benchmark(BenchmarkData { txs, fcu, attributes, .. }) = &mut self.mode else {
             return;
         };
 
@@ -310,17 +333,17 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
 
         let EngineApi::ForkChoiceUpdatedV3 {
             payload_attributes: Some(mut payload_attributes), fork_choice_state, ..
-        } = messages::EngineApi::messages_from_block(&blocks[0], false, None).4
+        } = messages::EngineApi::messages_from_block(&blocks[0], false, None).2
         else {
             unreachable!();
         };
-        *bench_forkchoice_state = fork_choice_state;
+        *fcu = fork_choice_state;
         payload_attributes.gas_limit = payload_attributes.gas_limit.map(|t| t * 1000);
-        *bench_op_attributes = payload_attributes;
+        *attributes = payload_attributes;
 
         for b in blocks {
             for t in b.into_transactions() {
-                bench_txs.push(Arc::new(t.into()))
+                txs.push(Arc::new(t.into()))
             }
         }
     }
@@ -328,7 +351,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
         match &mut self.mode {
             Mode::Verification => self.run_verification_body(connections),
-            Mode::Benchmark(_, _, _) => {
+            Mode::Benchmark(_) => {
                 self.run_benchmark_body(connections);
             }
             Mode::Spammer => {
