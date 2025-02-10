@@ -34,12 +34,9 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>> {
         trace!(%hash, "new request");
 
-        let receipt = match self.db.get_transaction_receipt(hash) {
-            Ok(receipt) => Some(receipt),
-            Err(err) => {
-                warn!(%err, "failed db fetch");
-                self.fallback.transaction_receipt(hash).await?
-            }
+        let receipt = match self.shared_state.receipt(&hash) {
+            Some(receipt) => Some(receipt),
+            None => self.fallback.transaction_receipt(hash).await?,
         };
 
         Ok(receipt)
@@ -50,14 +47,14 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         trace!(%number, full, "new request");
 
         let block = match number {
-            BlockNumberOrTag::Latest => match self.db.get_latest_block() {
+            BlockNumberOrTag::Latest => match self.shared_state.as_ref().get_latest_block() {
                 Ok(block) => Some(convert_block(block, full)),
                 Err(err) => {
                     warn!(%err, "failed latest db fetch");
                     None
                 }
             },
-            BlockNumberOrTag::Number(bn) => match self.db.get_block_by_number(bn) {
+            BlockNumberOrTag::Number(bn) => match self.shared_state.as_ref().get_block_by_number(bn) {
                 Ok(block) => Some(convert_block(block, full)),
                 Err(err) => {
                     warn!(%err, "failed by number db fetch");
@@ -81,7 +78,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>> {
         trace!(%hash, full, "new request");
 
-        let block = match self.db.get_block_by_hash(hash) {
+        let block = match self.shared_state.as_ref().get_block_by_hash(hash) {
             Ok(block) => Some(convert_block(block, full)),
             Err(err) => {
                 warn!(%err, "failed db fetch");
@@ -98,7 +95,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     async fn block_number(&self) -> RpcResult<U256> {
         trace!("block number request");
 
-        let bn = match self.db.head_block_number() {
+        let bn = match self.shared_state.as_ref().head_block_number() {
             Ok(bn) => U256::from(bn),
             Err(err) => {
                 warn!(%err, "failed db fetch");
@@ -114,7 +111,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         trace!(%address, ?block_number, "new request");
         let is_latest = block_number.map(|bn| bn.is_latest()).unwrap_or(true);
         let nonce = if is_latest {
-            match self.db.get_nonce(address) {
+            match self.shared_state.as_ref().get_nonce(address) {
                 Ok(nonce) => U256::from(nonce),
                 Err(err) => {
                     warn!(%err, "failed db fetch");
@@ -134,7 +131,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
 
         let is_latest = block_number.map(|bn| bn.is_latest()).unwrap_or(true);
         let balance = if is_latest {
-            match self.db.get_balance(address) {
+            match self.shared_state.as_ref().get_balance(address) {
                 Ok(balance) => U256::from(balance),
                 Err(err) => {
                     warn!(%err, "failed db fetch");

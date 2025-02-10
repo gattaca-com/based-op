@@ -13,8 +13,10 @@ use bop_common::{
         },
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
-    db::{DBFrag, DatabaseWrite},
+    db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
+    shared::SharedState,
+    time::Duration,
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
@@ -59,8 +61,8 @@ pub struct Sequencer<Db> {
 }
 
 impl<Db: DatabaseRead> Sequencer<Db> {
-    pub fn new(db: Db, db_frag: DBFrag<Db>, config: SequencerConfig) -> Self {
-        Self { state: SequencerState::default(), data: SequencerContext::new(db, db_frag, config) }
+    pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
+        Self { state: SequencerState::default(), data: SequencerContext::new(db, shared_state, config) }
     }
 }
 
@@ -278,7 +280,7 @@ where
                     // top of the same block!
                     ctx.tx_pool.clear();
                     ctx.deposits.clear();
-                    ctx.db_frag.reset();
+                    ctx.shared_state.as_mut().reset();
                 }
                 match payload_attributes {
                     Some(attributes) => {
@@ -330,12 +332,15 @@ where
 
                 // Gossip last frag before sealing
                 let last_frag = ctx.seal_last_frag(&mut seq, sorting_data);
-                let _ = senders.send(VersionedMessage::from(last_frag));
+                let s = senders.send_timeout(VersionedMessage::from(last_frag), Duration::from_millis(10));
+                debug_assert!(s.is_ok(), "couldn't send last frag for 10 millis");
 
                 let (seal, block) = ctx.seal_block(seq);
                 // Gossip seal to p2p and return payload to rpc
-                let _ = senders.send(VersionedMessage::from(seal));
-                let _ = res.send(block);
+                let s = senders.send_timeout(VersionedMessage::from(seal), Duration::from_millis(10));
+                debug_assert!(s.is_ok(), "couldn't send seal for 10 millis");
+                let s = res.send(block);
+                debug_assert!(s.is_ok(), "couldn't send block for 10 millis");
                 ctx.timers.seal_block.stop();
 
                 WaitingForNewPayload
@@ -389,7 +394,7 @@ where
         }
         ctx.tx_pool.handle_new_tx(
             tx.clone(),
-            &ctx.db_frag,
+            ctx.shared_state.as_ref(),
             ctx.as_ref().basefee.to(),
             false,
             ctx.config.simulate_tof_in_pools.then_some(senders),
@@ -426,7 +431,7 @@ where
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
-                    Ok(res) if data.db_frag.is_valid(state_id) => data.tx_pool.handle_simulated(res),
+                    Ok(res) if data.shared_state.as_ref().is_valid(state_id) => data.tx_pool.handle_simulated(res),
                     Ok(_) => {
                         // No-op if the simulation is on a different fragment.
                         // We would have already re-sent the tx for sim on the correct fragment.
