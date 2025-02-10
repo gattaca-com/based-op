@@ -214,11 +214,11 @@ impl<T: Statisticable> Statistics<T> {
         let mut c = 0;
         // loops until either a full datapoint was captured or no messages are pending
         while !done {
-            done |= !consumer.consume(|&mut msg| {
+            done |= consumer.try_consume().is_some_and(|msg| {
                 captured_one = true;
                 self.track(msg.into());
                 c += 1;
-                done = c == self.samples_per_median;
+                c == self.samples_per_median
             });
         }
     }

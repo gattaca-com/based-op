@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use alloy_consensus::{BlockHeader, TxEip1559};
-use alloy_eips::eip2718::{Decodable2718, Encodable2718};
+use alloy_eips::eip2718::Encodable2718;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::engine::{ForkchoiceState, PayloadId};
 use bop_common::{
@@ -254,11 +254,10 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             let value = U256::from_limbs([1, 0, 0, 0]);
             let chain_id = 2151908;
             let to_account = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-            let max_gas_units = 50;
-            let max_fee_per_gas = 50;
+            let max_gas_units = 10000000;
+            let max_fee_per_gas = 100000000;
             let max_priority_fee_per_gas = 1000;
-            for _ in 0..100 {
-                nonce += 1;
+            for _ in 0..1000 {
                 let tx = TxEip1559 {
                     chain_id,
                     nonce,
@@ -275,6 +274,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
                 let tx = Arc::new(Transaction::new(tx, from_account, envelope));
 
                 connections.send(tx);
+                nonce += 1;
             }
             return;
         }

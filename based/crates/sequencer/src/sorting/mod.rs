@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    collections::VecDeque,
+    ops::{Deref, DerefMut},
+};
 
 use bop_common::transaction::{SimulatedTx, SimulatedTxList};
 use revm_primitives::Address;
@@ -11,7 +14,7 @@ pub(crate) use frag_sequence::FragSequence;
 
 #[derive(Clone, Debug, Default)]
 pub struct ActiveOrders {
-    orders: Vec<SimulatedTxList>,
+    orders: VecDeque<SimulatedTxList>,
 }
 
 impl ActiveOrders {
@@ -20,11 +23,11 @@ impl ActiveOrders {
         // re-simulated all forwarded txlists top of last applied frag in the pool Activelist.
         // This is currently the situation
         orders.sort_unstable_by_key(|t| t.weight());
-        Self { orders }
+        Self { orders: orders.into() }
     }
 
     pub fn empty() -> Self {
-        Self { orders: vec![] }
+        Self { orders: Default::default() }
     }
 
     fn len(&self) -> usize {
@@ -41,7 +44,7 @@ impl ActiveOrders {
             let order = &mut self.orders[i];
             // tracing::info!("checked from {} vs {sender}", order.sender());
             if &order.sender() == sender && order.pop(base_fee) {
-                self.orders.swap_remove(i);
+                self.orders.swap_remove_back(i);
                 return;
             }
         }
@@ -66,7 +69,7 @@ impl ActiveOrders {
 }
 
 impl Deref for ActiveOrders {
-    type Target = Vec<SimulatedTxList>;
+    type Target = VecDeque<SimulatedTxList>;
 
     fn deref(&self) -> &Self::Target {
         &self.orders

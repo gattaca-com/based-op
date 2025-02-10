@@ -74,24 +74,24 @@ where
 
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle block sync
-        while connections.receive(|msg, _| {
+        connections.receive_for(Duration::from_millis(10), |msg, _| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_block_sync(msg, &mut self.data);
-        }) {}
+        });
 
         // handle new transaction
-        while connections.receive(|msg, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             self.state.handle_new_tx(msg, &mut self.data, senders);
-        }) {}
+        });
 
         // handle sim results
-        while connections.receive(|msg, _| {
+        connections.receive_for(Duration::from_millis(10), |msg, _| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_sim_result(msg, &mut self.data);
-        }) {}
+        });
 
         // handle engine API messages from rpc
-        connections.receive(|msg: messages::EngineApi, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
         });
@@ -403,7 +403,7 @@ where
             // This should ideally be not at the top but bottom of the sorted list. For now this is fastest
             sorting_data
                 .tof_snapshot
-                .push(bop_common::transaction::SimulatedTxList { current: None, pending: tx.into() });
+                .push_front(bop_common::transaction::SimulatedTxList { current: None, pending: tx.into() });
         }
     }
 
