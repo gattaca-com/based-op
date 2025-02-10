@@ -23,8 +23,13 @@ impl Instant {
     }
 
     #[inline]
+    pub fn socket(&self) -> u64 {
+        self.0 & 0xc000000000000000
+    }
+
+    #[inline]
     pub fn same_socket(&self, other: &Self) -> bool {
-        (self.0 & 0xc000000000000000) == (other.0 & 0xc000000000000000)
+        self.socket() == other.socket()
     }
 
     #[inline]

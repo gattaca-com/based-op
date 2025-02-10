@@ -96,9 +96,9 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn block_number(&self) -> RpcResult<U256> {
-        trace!("new request");
+        trace!("block number request");
 
-        let bn = match self.db.curr_block_number() {
+        let bn = match self.db.head_block_number() {
             Ok(bn) => U256::from(bn),
             Err(err) => {
                 warn!(%err, "failed db fetch");
