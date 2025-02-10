@@ -322,11 +322,13 @@ where
                 ctx.timers.seal_block.stop();
 
                 // Commit the block to the db
-                let sidecar =
-                    ExecutionPayloadSidecar::v3(CancunPayloadFields::new(block.parent_beacon_block_root, vec![]));
-                let block = payload_to_block(ExecutionPayload::V3(block.execution_payload), sidecar)
-                    .expect("couldn't get block from payload");
-                ctx.commit_block(&block);
+                if ctx.config.commit_sealed_frags_to_db {
+                    let sidecar =
+                        ExecutionPayloadSidecar::v3(CancunPayloadFields::new(block.parent_beacon_block_root, vec![]));
+                    let block = payload_to_block(ExecutionPayload::V3(block.execution_payload), sidecar)
+                        .expect("couldn't get block from payload");
+                    ctx.commit_block(&block);
+                }
 
                 WaitingForNewPayload
             }
@@ -363,7 +365,7 @@ where
                 }
             }
 
-            WaitingForNewPayload => {
+            WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
                 ctx.commit_block(&block);
                 WaitingForNewPayload
             }
