@@ -374,7 +374,7 @@ where
                 }
             }
 
-            WaitingForNewPayload => {
+            WaitingForNewPayload | Self::WaitingForForkChoiceWithAttributes => {
                 ctx.commit_block(&block, None);
                 WaitingForNewPayload
             }

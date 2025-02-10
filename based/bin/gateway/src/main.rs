@@ -81,9 +81,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 .run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
         });
 
+        let fragdb_clone = shared_state.as_ref().clone();
         if args.test {
             s.spawn(|| {
-                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100).run(
+                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone).run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
                 );
