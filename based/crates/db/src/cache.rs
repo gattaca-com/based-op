@@ -36,7 +36,7 @@ impl ReadCaches {
                     .map_err(Error::ReadTransactionError)
             })
             .map(|entry| entry.into_value())
-            .map_err(|e| Arc::into_inner(e).unwrap())
+            .map_err(|e| Arc::into_inner(e).unwrap_or_else(|| Error::Other("Couldn't unwrap Arced error".to_string())))
     }
 
     pub(super) fn storage(&self, key: &(Address, U256), tx: &Tx<RO>) -> Result<U256, Error> {

@@ -33,7 +33,11 @@ impl SimulatedTx {
     }
 
     pub fn take_state(&mut self) -> EvmState {
-        std::mem::take(&mut self.result_and_state.state)
+        if cfg!(debug_assertions) {
+            self.result_and_state.state.clone()
+        } else {
+            std::mem::take(&mut self.result_and_state.state)
+        }
     }
 
     pub fn clone_state(&self) -> EvmState {
