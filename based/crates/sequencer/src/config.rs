@@ -13,6 +13,8 @@ pub struct SequencerConfig {
     pub evm_config: OpEvmConfig,
     /// If true, we will simulate txs at the top of each frag in the pools.
     pub simulate_tof_in_pools: bool,
+    /// If true will commit locally sequenced blocks to the db before getting payload from the engine api.
+    pub commit_sealed_frags_to_db: bool,
 }
 
 impl SequencerConfig {
@@ -26,6 +28,7 @@ impl SequencerConfig {
             rpc_url: Url::parse(TEST_BASE_RPC_URL).unwrap(),
             simulate_tof_in_pools: false,
             evm_config,
+            commit_sealed_frags_to_db: false,
         }
     }
 
@@ -39,6 +42,7 @@ impl SequencerConfig {
             rpc_url: Url::parse(TEST_BASE_SEPOLIA_RPC_URL).unwrap(),
             simulate_tof_in_pools: false,
             evm_config,
+            commit_sealed_frags_to_db: false,
         }
     }
 }
@@ -51,6 +55,7 @@ impl From<&GatewayArgs> for SequencerConfig {
             rpc_url: args.rpc_fallback_url.clone(),
             simulate_tof_in_pools: false,
             evm_config: OpEvmConfig::new(args.chain_spec.clone()),
+            commit_sealed_frags_to_db: args.commit_sealed_frags_to_db,
         }
     }
 }
