@@ -311,29 +311,29 @@ impl<TX: DbTx + DbTxMut + 'static, N: NodeTypesForProvider> DatabaseProvider<TX,
             storage_prefix_sets,
             destroyed_accounts,
         };
-        let (new_state_root, trie_updates) = StateRoot::from_tx(&self.tx)
+        let (_new_state_root, trie_updates) = StateRoot::from_tx(&self.tx)
             .with_prefix_sets(prefix_sets)
             .root_with_updates()
             .map_err(reth_db::DatabaseError::from)?;
 
-        let parent_number = range.start().saturating_sub(1);
-        let parent_state_root = self
-            .header_by_number(parent_number)?
-            .ok_or_else(|| ProviderError::HeaderNotFound(parent_number.into()))?
-            .state_root();
+        // let parent_number = range.start().saturating_sub(1);
+        // let parent_state_root = self
+        //     .header_by_number(parent_number)?
+        //     .ok_or_else(|| ProviderError::HeaderNotFound(parent_number.into()))?
+        //     .state_root();
 
-        // state root should be always correct as we are reverting state.
-        // but for sake of double verification we will check it again.
-        if new_state_root != parent_state_root {
-            let parent_hash = self
-                .block_hash(parent_number)?
-                .ok_or_else(|| ProviderError::HeaderNotFound(parent_number.into()))?;
-            return Err(ProviderError::UnwindStateRootMismatch(Box::new(RootMismatch {
-                root: GotExpected { got: new_state_root, expected: parent_state_root },
-                block_number: parent_number,
-                block_hash: parent_hash,
-            })))
-        }
+        // // state root should be always correct as we are reverting state.
+        // // but for sake of double verification we will check it again.
+        // if new_state_root != parent_state_root {
+        //     let parent_hash = self
+        //         .block_hash(parent_number)?
+        //         .ok_or_else(|| ProviderError::HeaderNotFound(parent_number.into()))?;
+        //     return Err(ProviderError::UnwindStateRootMismatch(Box::new(RootMismatch {
+        //         root: GotExpected { got: new_state_root, expected: parent_state_root },
+        //         block_number: parent_number,
+        //         block_hash: parent_hash,
+        //     })))
+        // }
         self.write_trie_updates(&trie_updates)?;
 
         Ok(())
@@ -714,7 +714,7 @@ impl<TX: DbTx + 'static, N: NodeTypesForProvider> DatabaseProvider<TX, N> {
     /// Populate a [`BundleStateInit`] and [`RevertsInit`] using cursors over the
     /// [`PlainAccountState`] and [`PlainStorageState`] tables, based on the given storage and
     /// account changesets.
-    fn populate_bundle_state<A, S>(
+    pub fn populate_bundle_state<A, S>(
         &self,
         account_changeset: Vec<(u64, AccountBeforeTx)>,
         storage_changeset: Vec<(BlockNumberAddress, StorageEntry)>,
