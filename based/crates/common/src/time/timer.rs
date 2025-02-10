@@ -30,7 +30,7 @@ impl TimingMessage {
     }
 
     pub fn is_valid(&self) -> bool {
-        self.start_t.same_socket(&self.stop_t)
+        self.start_t != Instant::ZERO && self.start_t.same_socket(&self.stop_t)
     }
 }
 

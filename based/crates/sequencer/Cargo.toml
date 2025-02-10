@@ -50,6 +50,7 @@ tokio.workspace = true
 futures.workspace = true
 
 tracing.workspace = true
+core_affinity.workspace = true
 
 # networking
 reqwest.workspace = true

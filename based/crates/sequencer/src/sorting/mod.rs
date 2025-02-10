@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use bop_common::transaction::{SimulatedTx, SimulatedTxList};
 use revm_primitives::Address;
@@ -6,10 +6,8 @@ use revm_primitives::Address;
 pub(crate) mod sorting_data;
 pub(crate) use sorting_data::SortingData;
 pub(crate) mod frag_sequence;
-pub(crate) mod in_sort_frag;
 
 pub(crate) use frag_sequence::FragSequence;
-pub(crate) use in_sort_frag::InSortFrag;
 
 #[derive(Clone, Debug, Default)]
 pub struct ActiveOrders {
@@ -25,6 +23,10 @@ impl ActiveOrders {
         Self { orders }
     }
 
+    pub fn empty() -> Self {
+        Self { orders: vec![] }
+    }
+
     fn len(&self) -> usize {
         self.orders.len()
     }
@@ -35,8 +37,9 @@ impl ActiveOrders {
         if self.is_empty() {
             return;
         }
-        for i in (0..self.len() - 1).rev() {
+        for i in (0..self.len()).rev() {
             let order = &mut self.orders[i];
+            // tracing::info!("checked from {} vs {sender}", order.sender());
             if &order.sender() == sender && order.pop(base_fee) {
                 self.orders.swap_remove(i);
                 return;
@@ -45,13 +48,20 @@ impl ActiveOrders {
     }
 
     pub fn put(&mut self, tx: SimulatedTx) {
+        let payment = tx.payment;
+        let mut id = self.orders.len();
         let sender = tx.sender();
-        for order in self.orders.iter_mut().rev() {
+        for (i, order) in self.orders.iter_mut().enumerate().rev() {
             if order.sender() == sender {
                 order.put(tx);
                 return;
             }
+            if payment < order.payment() {
+                id = i;
+            }
         }
+        // not found so we insert it at the id corresponding to the payment
+        self.orders.insert(id, SimulatedTxList::from(tx))
     }
 }
 
@@ -60,5 +70,10 @@ impl Deref for ActiveOrders {
 
     fn deref(&self) -> &Self::Target {
         &self.orders
+    }
+}
+impl DerefMut for ActiveOrders {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.orders
     }
 }

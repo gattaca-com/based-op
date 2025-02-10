@@ -1,69 +1,54 @@
-use std::{fmt::Display, sync::Arc};
-
-use alloy_consensus::{proofs::ordered_trie_root_with_encoder, Header, EMPTY_OMMER_ROOT_HASH};
-use alloy_eips::{eip2718::Encodable2718, merge::BEACON_NONCE};
+use alloy_consensus::proofs::ordered_trie_root_with_encoder;
+use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use alloy_rpc_types::engine::{BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
-use bop_common::{
-    db::{flatten_state_changes, DBFrag, DBSorting},
-    p2p::{FragV0, SealV0},
-    transaction::SimulatedTx,
-};
-use bop_db::DatabaseRead;
-use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelopeV3;
-use reth_evm::execute::ProviderError;
-use reth_optimism_chainspec::OpChainSpec;
-use reth_optimism_forks::OpHardfork;
-use revm::{
-    db::{states::bundle_state::BundleRetention, BundleState, State},
-    Database, DatabaseCommit, DatabaseRef,
-};
-use revm_primitives::{hex, BlockEnv, Bytes, EvmState, B256};
+use bop_common::{p2p::FragV0, transaction::SimulatedTx};
+use revm_primitives::{Bytes, B256};
 
-use crate::sorting::InSortFrag;
+use super::{sorting_data::SortingTelemetry, SortingData};
 
 /// Sequence of frags applied on the last block
 #[derive(Clone, Debug)]
-pub struct FragSequence<Db> {
-    pub db: DBFrag<Db>,
-    gas_remaining: u64,
-    payment: U256,
-    txs: Vec<SimulatedTx>,
+pub struct FragSequence {
+    pub gas_remaining: u64,
+    pub gas_used: u64,
+    pub payment: U256,
+    pub txs: Vec<SimulatedTx>,
     /// Next frag index
-    next_seq: u64,
-    /// Block number for all frags in this block
+    pub next_seq: u64,
+    /// Block number shared by all frags of this sequence
     block_number: u64,
+
+    pub sorting_telemetry: SortingTelemetry,
 }
-impl<Db> FragSequence<Db> {
+impl FragSequence {
+    pub fn new(gas_remaining: u64, block_number: u64) -> Self {
+        Self {
+            gas_remaining,
+            gas_used: 0,
+            payment: U256::ZERO,
+            txs: vec![],
+            block_number,
+            next_seq: 0,
+            sorting_telemetry: Default::default(),
+        }
+    }
+
     pub fn set_gas_limit(&mut self, gas_limit: u64) {
         self.gas_remaining = gas_limit;
     }
 
-    pub fn db_ref(&self) -> &DBFrag<Db> {
-        &self.db
-    }
+    pub fn apply_sorted_frag<Db>(&mut self, in_sort: SortingData<Db>) -> FragV0 {
+        let gas_used = in_sort.gas_used();
+        self.gas_remaining -= gas_used;
+        self.gas_used += gas_used;
+        self.payment += in_sort.payment();
 
-    // pub fn apply_top_of_block(&mut self, top_of_block: TopOfBlockResult) -> FragV0
-    // where
-    //     Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
-    // {
-    // todo!();
-    // self.gas_remaining -= top_of_block.gas_used();
-    // self.payment += top_of_block.payment();
-    // self.top_of_block_bundle = top_of_block.state;
-    // self.top_of_block_changes = top_of_block.changes;
-    // tracing::info!("###################{}",self.db.calculate_state_root(&top_of_block.state).unwrap().0);
-    // self.db.commit_flat_changes(top_of_block.flat_state_changes);
-    // self.db.commit( );
-    // let msg = FragV0::new(
-    //     self.block_number,
-    //     self.next_seq,
-    //     top_of_block.forced_inclusion_txs.iter().map(|tx| tx.tx.as_ref()),
-    //     false,
-    // );
-    // self.txs.extend(top_of_block.forced_inclusion_txs);
-    // msg
-    // }
+        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
+        self.txs.extend(in_sort.txs);
+        self.next_seq += 1;
+        self.sorting_telemetry += in_sort.telemetry;
+        msg
+    }
 
     /// When a new block is received, we clear all the temp state on the db
     pub fn reset(&mut self, gas_limit: u64, forced_inclusion_txs: Vec<SimulatedTx>) {
@@ -71,85 +56,14 @@ impl<Db> FragSequence<Db> {
         self.payment = forced_inclusion_txs.iter().map(|t| t.payment).sum();
         self.txs = forced_inclusion_txs;
         self.next_seq = 0;
-        // todo!()
-        // self.db.reset(db);
-    }
-}
-impl<Db: Clone> FragSequence<Db> {
-    /// Builds a new in-sort frag
-    pub fn create_in_sort(&self) -> InSortFrag<Db> {
-        let db_sort = DBSorting::new(self.db());
-        InSortFrag::new(db_sort, self.gas_remaining)
     }
 
-    // TODO: remove this and move to sortign data
-    pub fn db(&self) -> DBFrag<Db> {
-        self.db.clone()
-    }
-}
-
-impl<Db: DatabaseRead> FragSequence<Db> {
-    pub fn new(db: DBFrag<Db>, max_gas: u64) -> Self {
-        let block_number = db.head_block_number().expect("can't get block number") + 1;
-        Self {
-            db,
-            gas_remaining: max_gas,
-            payment: U256::ZERO,
-            txs: vec![],
-            next_seq: 0,
-            block_number,
-        }
-    }
-
-    pub fn is_valid(&self, state_id: u64) -> bool {
-        state_id == self.db.state_id()
-    }
-}
-
-impl<Db: DatabaseRef> FragSequence<Db> {
-    /// Creates a new frag, all subsequent frags will be built on top of this one
-    pub fn apply_sorted_frag(&mut self, in_sort: InSortFrag<Db>) -> FragV0 {
-        // todo!();
-        // self.gas_remaining -= in_sort.gas_used;
-        // self.payment += in_sort.payment;
-
-        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
-
-        // self.db.commit(in_sort.txs.iter());
-        // self.txs.extend(in_sort.txs);
-        // self.next_seq += 1;
-
-        msg
-    }
-}
-
-impl<Db> FragSequence<Db> {
-    pub fn seal_block(
-        &mut self,
-        block_env: &BlockEnv,
-        parent_hash: B256,
-        parent_beacon_block_root: B256,
-        chain_spec: &Arc<OpChainSpec>,
-        extra_data: Bytes,
-    ) -> (SealV0, OpExecutionPayloadEnvelopeV3)
-    where
-        Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
-    {
-        self.db.db.write().merge_transitions(BundleRetention::Reverts);
-        let bundle = self.db.db.write().take_bundle();
-        // self.db.commit_flat_changes(state_changes);
-        // self.db.merge_transitions(BundleRetention::Reverts);
-        // let state_root = self.db.calculate_state_root(&state_changes_to_bundle_state(&self.db,
-        // flatten_state_changes(self.top_of_block_changes.clone())).unwrap()).unwrap().0;
-        let state_root = self.db.calculate_state_root(&bundle).unwrap().0;
-
+    /// Returns encoded_2718 txs, transactions root, receipts root, and receipts bloom
+    pub fn encoded_txs_roots_bloom(&self, canyon_active: bool) -> (Vec<Bytes>, B256, B256, Bloom) {
         let mut receipts = Vec::with_capacity(self.txs.len());
         let mut transactions = Vec::with_capacity(self.txs.len());
         let mut logs_bloom = Bloom::ZERO;
         let mut gas_used = 0;
-
-        let canyon_active =
-            chain_spec.fork(OpHardfork::Canyon).active_at_timestamp(u64::try_from(block_env.timestamp).unwrap());
         for t in self.txs.iter() {
             gas_used += t.result_and_state.result.gas_used();
             let receipt = t.receipt(gas_used, canyon_active);
@@ -162,73 +76,10 @@ impl<Db> FragSequence<Db> {
             r.encode_2718(buf);
         });
 
-        let transactions_root = ordered_trie_root_with_encoder(&self.txs, |tx, buf| tx.encode_2718(buf));
-        let header = Header {
-            parent_hash,
-            ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            beneficiary: block_env.coinbase,
-            state_root,
-            transactions_root,
-            receipts_root,
-            withdrawals_root: Some(hex!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421").into()),
-            logs_bloom,
-            timestamp: block_env.timestamp.to(),
-            mix_hash: block_env.prevrandao.unwrap_or_default(),
-            nonce: BEACON_NONCE.into(),
-            base_fee_per_gas: Some(block_env.basefee.to()),
-            number: block_env.number.to(),
-            gas_limit: block_env.gas_limit.to(),
-            difficulty: U256::ZERO,
-            gas_used,
-            extra_data: extra_data.clone(),
-            parent_beacon_block_root: Some(parent_beacon_block_root),
-            blob_gas_used: Some(0),
-            excess_blob_gas: Some(0),
-            requests_hash: None,
-        };
-
-        let v1 = ExecutionPayloadV1 {
-            parent_hash,
-            fee_recipient: block_env.coinbase,
-            state_root,
-            receipts_root,
-            logs_bloom,
-            prev_randao: block_env.prevrandao.unwrap_or_default(),
-            block_number: block_env.number.to(),
-            gas_limit: block_env.gas_limit.to(),
-            gas_used,
-            timestamp: block_env.timestamp.to(),
-            extra_data,
-            base_fee_per_gas: block_env.basefee,
-            block_hash: header.hash_slow(),
-            transactions,
-        };
-        let seal = SealV0 {
-            total_frags: self.next_seq,
-            block_number: block_env.number.to(),
-            gas_used,
-            gas_limit: block_env.gas_limit.to(),
-            parent_hash,
-            transactions_root,
-            receipts_root,
-            state_root,
-            block_hash: v1.block_hash,
-        };
-        tracing::info!("seal: {seal:#?}");
-        (seal, OpExecutionPayloadEnvelopeV3 {
-            execution_payload: ExecutionPayloadV3 {
-                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                blob_gas_used: 0,
-                excess_blob_gas: 0,
-            },
-            block_value: self.payment,
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root,
-        })
+        let transactions_root = ordered_trie_root_with_encoder(&transactions, |tx, buf| *buf = tx.clone().into());
+        (transactions, transactions_root, receipts_root, logs_bloom)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -245,7 +96,7 @@ mod tests {
         db::DBFrag,
     };
     use bop_db::AlloyDB;
-    use crate::Simulator;
+    use bop_simulator::Simulator;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use reqwest::{Client, Url};
     use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
