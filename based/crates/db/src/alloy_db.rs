@@ -1,4 +1,11 @@
-use std::{fmt::Debug, future::IntoFuture, sync::Arc};
+use std::{
+    fmt::Debug,
+    future::IntoFuture,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 
 use alloy_consensus::BlockHeader;
 use alloy_eips::BlockId;
@@ -31,7 +38,7 @@ pub struct AlloyDB {
     /// The provider to fetch the data from.
     provider: AlloyProvider,
     /// The block number on which the queries will be based on.
-    block_number: BlockId,
+    block_number: Arc<AtomicU64>,
     /// handle to the tokio runtime
     rt: Arc<Runtime>,
 }
@@ -40,15 +47,21 @@ impl AlloyDB {
     /// Create a new AlloyDB instance, with a [Provider] and a block.
     /// We subtract 1 from the block number, as the state we want to fetch is the end of the previous block.
     pub fn new(provider: AlloyProvider, block_number: u64, rt: Arc<Runtime>) -> Self {
-        let block_number = BlockId::from(block_number.saturating_sub(1));
+        let block_number = Arc::new(AtomicU64::new(block_number.saturating_sub(1)));
         Self { provider, block_number, rt }
     }
 
     /// Set the block number on which the queries will be based on.
-    ///
-    /// We subtract 1 from the block number, as the state we want to fetch is the end of the previous block.
-    pub fn set_block_number(&mut self, block_number: u64) {
-        self.block_number = BlockId::from(block_number.saturating_sub(1));
+    pub fn set_block_number(&self, block_number: u64) {
+        self.block_number.store(block_number, Ordering::Relaxed);
+    }
+
+    pub fn block_id(&self) -> BlockId {
+        BlockId::from(self.block_number.load(Ordering::Relaxed))
+    }
+
+    pub fn block_number(&self) -> u64 {
+        self.block_number.load(Ordering::Relaxed)
     }
 }
 
@@ -56,13 +69,15 @@ impl DatabaseRef for AlloyDB {
     type Error = ProviderError;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        let block_id = self.block_id();
+
         let (nonce, balance, code) = self
             .rt
             .block_on(async {
                 let (nonce, balance, code) = tokio::join!(
-                    self.provider.get_transaction_count(address).block_id(self.block_number).into_future(),
-                    self.provider.get_balance(address).block_id(self.block_number).into_future(),
-                    self.provider.get_code_at(address).block_id(self.block_number).into_future()
+                    self.provider.get_transaction_count(address).block_id(block_id).into_future(),
+                    self.provider.get_balance(address).block_id(block_id).into_future(),
+                    self.provider.get_code_at(address).block_id(block_id).into_future()
                 );
                 Result::<_, TransportError>::Ok((nonce?, balance?, code?))
             })
@@ -93,7 +108,7 @@ impl DatabaseRef for AlloyDB {
     }
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        let f = self.provider.get_storage_at(address, index).block_id(self.block_number);
+        let f = self.provider.get_storage_at(address, index).block_id(self.block_id());
         let slot_val = self
             .rt
             .block_on(f.into_future())
@@ -135,9 +150,7 @@ impl DatabaseCommit for AlloyDB {
 impl DatabaseRead for AlloyDB {
     /// Fetches the state
     fn calculate_state_root(&self, _: &BundleState) -> Result<(B256, TrieUpdates), Error> {
-        debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
-
-        let next_block = self.block_number.as_u64().expect("block number is valid") + 1;
+        let next_block = self.block_number() + 1;
 
         let root = self
             .rt
@@ -152,13 +165,11 @@ impl DatabaseRead for AlloyDB {
 
     /// Returns the current block head number.
     fn head_block_number(&self) -> Result<u64, Error> {
-        debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
-        Ok(self.block_number.as_u64().unwrap())
+        Ok(self.block_number())
     }
 
     fn head_block_hash(&self) -> Result<B256, Error> {
-        debug_assert!(matches!(self.block_number, BlockId::Number(_)), "block_number should always be a number");
-        Ok(self.block_hash_ref(self.block_number.as_u64().unwrap())?)
+        Ok(self.block_hash_ref(self.block_number())?)
     }
 }
 
@@ -179,6 +190,11 @@ impl DatabaseWrite for AlloyDB {
         _trie_updates: TrieUpdates,
     ) -> Result<(), Error> {
         // No-op
+        Ok(())
+    }
+
+    fn roll_back_head(&self) -> Result<(), Error> {
+        self.set_block_number(self.block_number().saturating_sub(1));
         Ok(())
     }
 }

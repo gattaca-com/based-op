@@ -3,7 +3,7 @@
 use std::{fmt::Display, sync::Arc, time::Instant};
 
 use bop_common::{
-    communication::messages::BlockSyncError,
+    communication::messages::{BlockFetch, BlockSyncError},
     db::{DatabaseRead, DatabaseWrite},
 };
 use reth_consensus::ConsensusError;
@@ -30,24 +30,26 @@ pub type AlloyProvider =
 pub struct BlockSync {
     chain_spec: Arc<OpChainSpec>,
     execution_factory: OpExecutionStrategyFactory,
+    /// Blocks that we have received from the provider but require a prior block to be applied before this can be.
+    /// Sorted list in reverse order by block number.
+    pending_blocks: Vec<BlockWithSenders<OpBlock>>,
 }
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
     pub fn new(chain_spec: Arc<OpChainSpec>) -> Self {
         let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
-        Self { chain_spec, execution_factory }
+        Self { chain_spec, execution_factory, pending_blocks: vec![] }
     }
 
-    /// Executes and validates a block at the current state, committing changes to the database.
-    /// Handles chain reorgs by rewinding state if parent hash mismatch is detected.
+    /// Returns block numbers to fetch, start to end. This will be used in the case of a reorg.
     #[tracing::instrument(skip_all, fields(block = %block.header.number))]
     pub fn commit_block<DB>(
         &mut self,
         block: &BlockWithSenders<OpBlock>,
         db: &DB,
         commit_block: bool,
-    ) -> Result<(), BlockSyncError>
+    ) -> Result<Option<BlockFetch>, BlockSyncError>
     where
         DB: DatabaseWrite + DatabaseRead,
     {
@@ -56,18 +58,44 @@ impl BlockSync {
 
         debug_assert!(block_number == db_head + 1, "can only apply blocks sequentially");
 
-        // Reorg check
-        if let Ok(db_parent_hash) = db.block_hash_ref(block.header.number.saturating_sub(1)) {
-            if db_parent_hash != block.header.parent_hash {
-                warn!(
-                    "reorg detected at: {}. db_parent_hash: {db_parent_hash:?}, block_hash: {:?}",
-                    block.header.number,
-                    block.header.hash_slow()
-                );
+        // If the block number is greater than the head, we can apply it directly.
+        if block_number > db_head + 1 {
+            warn!("got a block with a number greater than the head. Block number: {block_number}. Head block number: {db_head}. Inserting into pending blocks.");
+            self.insert_pending_block(block);
+            return Ok(Some(BlockFetch::FromTo(db_head + 1, block_number - 1)));
+        }
 
-                // TODO: re-wind the state to the last known good state and sync
-                panic!("reorg should be impossible on L2");
+        // Check if we committed a different block with the same number and rewind the database if so.
+        if block_number <= db_head {
+            let new_block_hash = block.header.hash_slow();
+
+            // Check if the block has already been committed.
+            let db_block_hash = db.block_hash_ref(block_number).expect("failed to get block hash"); // TODO: handle DatabaseRef errors
+            if db_block_hash == new_block_hash {
+                return Ok(None);
             }
+
+            // Roll back the database until we reach new_block_number-1.
+            warn!("got a block with previously committed number and different hash to the one committed. Rolling back database. Block number: {block_number}. Block hash: {new_block_hash:?}. DB head block number: {block_number}. DB head block hash: {db_block_hash:?}");
+            while db.head_block_number()? >= block_number {
+                db.roll_back_head()?;
+            }
+        }
+
+        let db_head_hash = db.head_block_hash().expect("failed to get head block hash");
+        if db_head_hash != block.header.parent_hash {
+            warn!(
+                "reorg detected. new block parent doesn't match db head. Block number: {}. Block parent hash: {:?}, db_head_hash: {:?}",
+                block.header.number,
+                block.header.parent_hash,
+                db_head_hash
+            );
+
+            // Roll back head and request missing blocks.
+            db.roll_back_head()?;
+            self.insert_pending_block(block);
+
+            return Ok(Some(BlockFetch::FromTo(db.head_block_number().unwrap() + 1, block.header.number)));
         }
 
         let (execution_output, trie_updates) = self.execute(block, db)?;
@@ -76,7 +104,38 @@ impl BlockSync {
             db.commit_block_unchecked(block, execution_output, trie_updates)?;
         }
 
-        Ok(())
+        // Process any pending blocks that can now be applied
+        while let Some(last_pending) = self.pending_blocks.last() {
+            // Check if the next block can be applied
+            if last_pending.header.number != db.head_block_number()? + 1 {
+                break;
+            }
+
+            let pending_block = self.pending_blocks.pop().unwrap();
+
+            // Verify block links to current chain head
+            if pending_block.header.parent_hash != db.head_block_hash().expect("failed to get head block hash") {
+                warn!(
+                    "pending block parent hash mismatch. Block number: {}, Expected parent: {:?}, Got: {:?}",
+                    pending_block.header.number,
+                    db.head_block_hash().expect("failed to get head block hash"),
+                    pending_block.header.parent_hash
+                );
+                debug_assert!(false, "pending block parent hash doesn't match db head hash");
+
+                db.roll_back_head()?;
+                // Request to re-fetch rolled back block and the pending block.
+                return Ok(Some(BlockFetch::FromTo(pending_block.header.number - 1, pending_block.header.number)));
+            }
+
+            // Apply block
+            let (execution_output, trie_updates) = self.execute(&pending_block, db)?;
+            if commit_block {
+                db.commit_block_unchecked(&pending_block, execution_output, trie_updates)?;
+            }
+        }
+
+        Ok(None)
     }
 
     /// Executes a block and validates its state root and receipts.
@@ -90,6 +149,10 @@ impl BlockSync {
         DB: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
         let start = Instant::now();
+        debug_assert!(
+            block.header.parent_hash == db.head_block_hash().expect("failed to get head block hash"),
+            "can only apply blocks sequentially"
+        );
 
         // Apply the block.
         let mut executor = self.execution_factory.create_strategy(db.clone());
@@ -128,10 +191,21 @@ impl BlockSync {
 
         Ok((BlockExecutionOutput { state, receipts, requests, gas_used }, trie_updates))
     }
+
+    fn insert_pending_block(&mut self, block: &BlockWithSenders<OpBlock>) {
+        let index = self
+            .pending_blocks
+            .binary_search_by(|pending_block| pending_block.header.number.cmp(&block.header.number).reverse())
+            .unwrap_or_else(|i| i);
+        self.pending_blocks.insert(index, block.clone());
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use alloy_primitives::B256;
     use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
     use bop_db::{init_database, AlloyDB};
@@ -174,7 +248,8 @@ mod tests {
         initialize_test_tracing(LevelFilter::INFO);
 
         // Initialise the on disk db.
-        let db_location = std::env::var("DB_LOCATION").unwrap_or_else(|_| "/tmp/base_sepolia".to_string());
+        let db_location = std::env::var("DB_LOCATION")
+            .unwrap_or_else(|_| "/Users/georgedavies/gattaca-com/rust/based-op/based/base_sepolia".to_string());
         let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000, BASE_SEPOLIA.clone()).unwrap();
         let db_head_block_number = db.head_block_number().unwrap();
         println!("DB Head Block Number: {:?}", db_head_block_number);
@@ -191,6 +266,117 @@ mod tests {
         let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &provider).await });
 
         // Execute the block.
-        assert!(block_sync.execute(&block, &db).is_ok());
+        assert!(block_sync.commit_block(&block, &db, true).is_ok());
+    }
+
+    #[test]
+    fn test_block_sync_reorgs() {
+        initialize_test_tracing(LevelFilter::INFO);
+
+        // Setup test environment
+        let db_location = std::env::var("DB_LOCATION")
+            .unwrap_or_else(|_| "/Users/georgedavies/gattaca-com/rust/based-op/based/base_sepolia".to_string());
+        let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000, BASE_SEPOLIA.clone()).unwrap();
+        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let rpc_url = Url::parse(TEST_BASE_SEPOLIA_RPC_URL).unwrap();
+        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+
+        let mut block_sync = BlockSync::new(BASE_SEPOLIA.clone());
+
+        // Get initial block number from db
+        let start_block = db.head_block_number().unwrap();
+
+        // Fetch a sequence of blocks for testing
+        let mut blocks = HashMap::new();
+        for i in 0..5 {
+            let block = rt.block_on(async { fetch_block(start_block - 1 + i, &provider).await });
+            blocks.insert(block.header.number, block);
+        }
+
+        for block in blocks.values() {
+            tracing::info!("Header: {:?}", block.header);
+        }
+
+        let state_root = db.state_root().unwrap();
+        let block = blocks.get(&start_block).unwrap();
+        tracing::info!(
+            "State Root: {:?}, Block Number: {:?}, Block State Root: {:?}",
+            state_root,
+            start_block,
+            block.header.state_root
+        );
+
+        // Test Case 1: reorg at depth 2
+        {
+            // Apply first block normally
+            let block = blocks.get(&(start_block + 1)).unwrap();
+            let result = block_sync.commit_block(block, &db, true);
+            tracing::info!("Result: {:?}", result);
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_none());
+
+            // Create a competing block at same height
+            let mut competing_block = block.clone();
+            competing_block.header.parent_hash = B256::random(); // Force different parent hash - we don't commit the header to the db so this won't affect the db.
+
+            // Apply competing block - should trigger reorg but won't ask for new blocks as the height is the same.
+            let result = block_sync.commit_block(&competing_block, &db, true);
+            assert!(result.is_ok());
+            let fetch_request = result.unwrap().expect("should request reorg blocks");
+
+            // Verify correct blocks requested
+            match fetch_request {
+                BlockFetch::FromTo(from, to) => {
+                    assert_eq!(from, competing_block.header.number - 1);
+                    assert_eq!(to, competing_block.header.number);
+                }
+            }
+
+            // Verify db state after reorg has gone past db.
+            assert_eq!(db.head_block_number().unwrap(), start_block - 1);
+        }
+
+        let head_block = db.head_block_number().unwrap();
+        let state_root = db.state_root().unwrap();
+        tracing::info!("Head Block Number after first reorg: {:?} | State Root: {:?}", head_block, state_root);
+
+        // Test Case 2: Reorg with missing intermediate block
+        {
+            // Apply blocks from head_block+1 to head_block + 3, skipping head_block + 2
+            let block1 = blocks.get(&(head_block + 1)).unwrap();
+            tracing::info!("Block 1: {:?}", block1.header.number);
+            let result = block_sync.commit_block(block1, &db, true);
+            tracing::info!("Result: {:?}", result);
+            assert!(result.is_ok());
+
+            let block3 = blocks.get(&(head_block + 3)).unwrap();
+            let result = block_sync.commit_block(block3, &db, true);
+            assert!(result.is_ok());
+            let fetch_request = result.unwrap().expect("should request missing blocks");
+
+            // Verify correct range requested
+            match fetch_request {
+                BlockFetch::FromTo(from, to) => {
+                    assert_eq!(from, head_block + 2);
+                    assert_eq!(to, head_block + 2);
+                }
+            }
+
+            // Verify block is in pending queue
+            assert_eq!(block_sync.pending_blocks.len(), 1);
+            assert_eq!(block_sync.pending_blocks[0].header.number, head_block + 3);
+        }
+
+        // Test Case 3: Apply pending blocks after gap is filled
+        {
+            let block2 = blocks.get(&(head_block + 2)).unwrap();
+            let result = block_sync.commit_block(block2, &db, true);
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_none()); // No more blocks needed
+
+            // Verify pending block was processed
+            assert_eq!(block_sync.pending_blocks.len(), 0);
+            assert_eq!(db.head_block_number().unwrap(), head_block + 3);
+        }
     }
 }

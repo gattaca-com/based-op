@@ -4,7 +4,7 @@ use bop_common::{
     actor::{Actor, ActorConfig},
     communication::{verify_or_remove_queue_files, Spine},
     config::GatewayArgs,
-    db::DBFrag,
+    shared::SharedState,
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
@@ -55,7 +55,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
     info!(db_block, %db_hash, "starting gateway");
 
-    let db_frag: DBFrag<_> = db_bop.clone().into();
+    let shared_state = SharedState::new(db_bop.clone().into());
     let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
@@ -69,20 +69,21 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             .into();
 
         s.spawn({
-            let db_frag = db_frag.clone();
             let rt = rt.clone();
-            start_rpc(&args, &spine, db_frag, &rt);
+            start_rpc(&args, &spine, shared_state.clone(), &rt);
             move || rt.block_on(wait_for_signal())
         });
 
+        let state_clone = shared_state.clone();
         s.spawn(|| {
-            Sequencer::new(db_bop, db_frag.clone(), sequencer_config)
+            Sequencer::new(db_bop, state_clone, sequencer_config)
                 .run(spine.to_connections("Sequencer"), ActorConfig::default());
         });
 
+        let fragdb_clone = shared_state.as_ref().clone();
         if args.test {
             s.spawn(|| {
-                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100).run(
+                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone).run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
                 );
@@ -95,14 +96,21 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 );
             });
         }
+        // let root_peer_url = args.root_peer_url.clone();
+        // s.spawn(|| {
+        //     Gossiper::new(None).run(
+        //         spine.to_connections("Gossiper"),
+        //         ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(1)),
+        //     );
+        // });
 
         for id in 0..args.sim_threads {
             s.spawn({
-                let db_frag = db_frag.clone();
-                let evm_config_c = evm_config.clone();
+                let evm_config = evm_config.clone();
                 let connections = spine.to_connections(format!("Simulator-{id}"));
+                let db_frag = (&shared_state).into();
                 move || {
-                    let simulator = Simulator::new(db_frag, &evm_config_c, id);
+                    let simulator = Simulator::new(db_frag, &evm_config, id);
                     simulator.run(connections, ActorConfig::default());
                 }
             });

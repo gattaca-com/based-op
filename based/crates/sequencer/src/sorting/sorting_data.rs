@@ -95,7 +95,7 @@ impl<Db> SortingData<Db> {
         } else {
             ActiveOrders::new(data.tx_pool.clone_active())
         };
-        let db = DBSorting::new(data.db_frag.clone());
+        let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
 
         Self {
@@ -141,7 +141,7 @@ impl<Db> SortingData<Db> {
 
         trace!("handling sender {sender}");
         // handle errored sim
-        let Ok(simulated_tx) = simulated_tx else {
+        let Ok(simulated_tx) = simulated_tx.inspect_err(|e| tracing::trace!("error {e} for tx: {}", sender)) else {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             self.telemetry.n_sims_errored += 1;
             return;
@@ -167,7 +167,7 @@ impl<Db> SortingData<Db> {
     }
 
     pub fn should_seal_frag(&self) -> bool {
-        !self.is_empty() && (self.tof_snapshot.is_empty() || self.until < Instant::now())
+        !self.is_empty() && self.until < Instant::now()
     }
 
     pub fn should_send_next_sims(&self) -> bool {
@@ -275,7 +275,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         let evm_config = context.config.evm_config.clone();
         let chain_spec = context.config.evm_config.chain_spec().clone();
         // Configure new EVM to apply pre-execution and must include txs.
-        let mut evm = evm_config.evm_with_env(&mut context.db_frag, env_with_handler_cfg);
+        let mut evm = evm_config.evm_with_env(context.shared_state.as_mut(), env_with_handler_cfg);
 
         // Apply pre-execution changes.
         evm.db_mut().db.write().set_state_clear_flag(should_set_state_clear_flag);
