@@ -209,10 +209,6 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 
 	vmConfig := bc.GetVMConfig()
 
-	txContext := NewEVMTxContext(nil)
-
-	evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
-
 	var receipts types.Receipts
 	for i, tx := range frag.Txs {
 		log.Info("[engine_newFragV0] Executing transaction", "tx", tx)
@@ -224,6 +220,10 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		signer := types.MakeSigner(bc.Config(), currentUnsealedBlock.Number, parent.Time()) // TODO: Replace parent.Time()
 
 		msg, err := TransactionToMessage(tx, signer, parent.BaseFee())
+
+		txContext := NewEVMTxContext(msg)
+
+		evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
 
 		if err != nil {
 			return fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
