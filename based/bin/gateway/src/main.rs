@@ -9,7 +9,7 @@ use bop_common::{
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{init_database, DatabaseRead};
-use bop_rpc::start_rpc;
+use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
     Sequencer, SequencerConfig, Simulator,
@@ -96,6 +96,13 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 );
             });
         }
+        let root_peer_url = args.root_peer_url.clone();
+        s.spawn(|| {
+            Gossiper::new(root_peer_url).run(
+                spine.to_connections("Gossiper"),
+                ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(1)),
+            );
+        });
 
         for core in 2..16 {
             let connections = spine.to_connections(format!("sim-{core}"));
