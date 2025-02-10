@@ -97,13 +97,13 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 );
             });
         }
-        let root_peer_url = args.root_peer_url.clone();
-        s.spawn(|| {
-            Gossiper::new(root_peer_url).run(
-                spine.to_connections("Gossiper"),
-                ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(1)),
-            );
-        });
+        // let root_peer_url = args.root_peer_url.clone();
+        // s.spawn(|| {
+        //     Gossiper::new(None).run(
+        //         spine.to_connections("Gossiper"),
+        //         ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(1)),
+        //     );
+        // });
 
         for core in 2..16 {
             let connections = spine.to_connections(format!("sim-{core}"));

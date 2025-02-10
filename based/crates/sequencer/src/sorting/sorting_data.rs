@@ -139,7 +139,7 @@ impl<Db> SortingData<Db> {
 
         tracing::trace!("handling sender {sender}");
         // handle errored sim
-        let Ok(simulated_tx) = simulated_tx else {
+        let Ok(simulated_tx) = simulated_tx.inspect_err(|e| tracing::debug!("error {e} for tx: {}", sender)) else {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             self.telemetry.n_sims_errored += 1;
             return;
