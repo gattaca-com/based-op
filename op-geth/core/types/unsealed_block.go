@@ -27,11 +27,27 @@ func NewUnsealedBlock(blockNumber *big.Int) *UnsealedBlock {
 	}
 }
 
+func IsOpened(ub *UnsealedBlock) bool {
+	return ub != nil
+}
+
+func (ub *UnsealedBlock) IsNextFrag(f *Frag) bool {
+	return ub.LastSequenceNumber+1 == f.Seq
+}
+
 type Frag struct {
-	BlockNumber uint64         `json:"blockNumber"`
+	blockNumber uint64         `json:"blockNumber"`
 	Seq         uint64         `json:"seq"`
 	IsLast      bool           `json:"isLast"`
 	Txs         []*Transaction `json:"txs"`
+}
+
+func (f *Frag) IsFirst() bool {
+	return f.Seq == 0
+}
+
+func (f *Frag) BlockNumber() *big.Int {
+	return new(big.Int).SetUint64(f.blockNumber)
 }
 
 func (f *Frag) UnmarshalJSON(data []byte) error {
@@ -47,7 +63,7 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	f.BlockNumber = frag.BlockNumber
+	f.blockNumber = frag.BlockNumber
 	f.Seq = frag.Seq
 	f.IsLast = frag.IsLast
 
