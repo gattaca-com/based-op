@@ -14,7 +14,7 @@ use bop_common::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DatabaseWrite},
-    p2p::VersionedMessage,
+    p2p::{EnvV0, VersionedMessage},
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
@@ -285,6 +285,10 @@ where
                         ctx.timers.start_sequencing.start();
                         let (seq, first_frag) = ctx.start_sequencing(attributes, senders);
                         ctx.timers.start_sequencing.stop();
+
+                        let env_msg: EnvV0 = (&ctx.block_env).into();
+                        let _ = senders.send(VersionedMessage::from(env_msg));
+
                         tracing::info!("start sorting with {} orders", first_frag.tof_snapshot.len());
                         SequencerState::Sorting(seq, first_frag)
                     }
@@ -320,13 +324,16 @@ where
         use SequencerState::*;
 
         match self {
-            Sorting(seq, sorting_data) => {
+            Sorting(mut seq, sorting_data) => {
                 ctx.timers.waiting_for_sims.stop();
                 ctx.timers.seal_block.start();
-                let (frag, seal, block) = ctx.seal_block(seq, sorting_data);
 
+                // Gossip last frag before sealing
+                let last_frag = ctx.seal_last_frag(&mut seq, sorting_data);
+                let _ = senders.send(VersionedMessage::from(last_frag));
+
+                let (seal, block) = ctx.seal_block(seq);
                 // Gossip seal to p2p and return payload to rpc
-                let _ = senders.send(VersionedMessage::from(frag));
                 let _ = senders.send(VersionedMessage::from(seal));
                 let _ = res.send(block);
                 ctx.timers.seal_block.stop();
