@@ -1,10 +1,7 @@
-use alloy_consensus::{proofs::ordered_trie_root_with_encoder, Eip658Value, Receipt, ReceiptWithBloom, Transaction};
+use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use alloy_rpc_types::TransactionReceipt;
 use bop_common::{p2p::FragV0, transaction::SimulatedTx};
-use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};
-use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use revm_primitives::{Bytes, B256};
 
 use super::{sorting_data::SortingTelemetry, SortingData};
@@ -52,68 +49,14 @@ impl FragSequence {
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
             let hash = tx.tx_hash();
-            let logs_bloom = alloy_primitives::logs_bloom(tx.result_and_state.result.logs().iter());
-            let logs = tx
-                .result_and_state
-                .result
-                .logs()
-                .iter()
-                .enumerate()
-                .map(|(i, t)| alloy_rpc_types::Log {
-                    inner: t.clone(),
-                    block_hash: None,
-                    block_number: Some(self.block_number),
-                    block_timestamp: Some(self.block_timestamp),
-                    transaction_hash: Some(hash),
-                    transaction_index: Some(self.txs.len() as u64),
-                    log_index: Some(i as u64),
-                    removed: false,
-                })
-                .collect();
-
-            let inner_receipt = Receipt { status: Eip658Value::Eip658(true), cumulative_gas_used: self.gas_used, logs };
-            let receipt = match tx.tx_type() {
-                OpTxType::Legacy => OpReceiptEnvelope::Legacy(ReceiptWithBloom { receipt: inner_receipt, logs_bloom }),
-                OpTxType::Eip2930 => {
-                    OpReceiptEnvelope::Eip2930(ReceiptWithBloom { receipt: inner_receipt, logs_bloom })
-                }
-                OpTxType::Eip1559 => {
-                    OpReceiptEnvelope::Eip1559(ReceiptWithBloom { receipt: inner_receipt, logs_bloom })
-                }
-                OpTxType::Eip7702 => {
-                    OpReceiptEnvelope::Eip7702(ReceiptWithBloom { receipt: inner_receipt, logs_bloom })
-                }
-                OpTxType::Deposit => {
-                    let inner = OpDepositReceiptWithBloom {
-                        receipt: OpDepositReceipt {
-                            inner: inner_receipt,
-                            deposit_nonce: tx.deposit_nonce,
-                            deposit_receipt_version: None,
-                        },
-                        logs_bloom,
-                    };
-                    OpReceiptEnvelope::Deposit(inner)
-                }
-            };
-            let receipt = OpTransactionReceipt {
-                inner: TransactionReceipt {
-                    inner: receipt,
-                    transaction_hash: hash,
-                    transaction_index: Some(self.txs.len() as u64),
-                    block_hash: None,
-                    block_number: Some(self.block_number),
-                    gas_used: tx.gas_used(),
-                    effective_gas_price: tx.effective_gas_price(Some(ctx.base_fee())),
-                    blob_gas_used: Some(0),
-                    blob_gas_price: Some(0),
-                    from: tx.sender(),
-                    to: tx.to(),
-                    contract_address: None,
-                    authorization_list: None,
-                },
-                l1_block_info: L1BlockInfo::default(),
-            };
-            ctx.shared_state.insert_receipt(tx.tx_hash(), receipt);
+            let receipt = tx.op_tx_receipt(
+                self.gas_used,
+                self.block_number,
+                self.block_timestamp,
+                ctx.base_fee(),
+                self.txs.len() as u64,
+            );
+            ctx.shared_state.insert_receipt(hash, receipt);
             self.txs.push(tx);
         }
 
@@ -139,6 +82,10 @@ impl FragSequence {
         let receipts_root = ordered_trie_root_with_encoder(&receipts, |r, buf| {
             r.encode_2718(buf);
         });
+        debug_assert_eq!(
+            self.gas_used, gas_used,
+            "somehow gas used tracked by frag seq is not identical to total gas used by txs"
+        );
 
         let transactions_root = ordered_trie_root_with_encoder(&transactions, |tx, buf| *buf = tx.clone().into());
         (transactions, transactions_root, receipts_root, logs_bloom)
