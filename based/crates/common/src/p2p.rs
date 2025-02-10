@@ -36,23 +36,24 @@ impl From<EnvV0> for VersionedMessage {
 /// Initial message to set the block environment for the current block
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash)]
 pub struct EnvV0 {
-    number: U256,
-    coinbase: Address,
-    timestamp: U256,
-    gas_limit: U256,
-    basefee: U256,
+    number: u64,
+    beneficiary: Address,
+    timestamp: u64,
+    gas_limit: u64,
+    basefee: u64,
     difficulty: U256,
     prevrandao: B256,
 }
 
 impl From<&BlockEnv> for EnvV0 {
     fn from(env: &BlockEnv) -> Self {
+        // unwraps are safe because u64 is large enough
         Self {
-            number: env.number,
-            coinbase: env.coinbase,
-            timestamp: env.timestamp,
-            gas_limit: env.gas_limit,
-            basefee: env.basefee,
+            number: env.number.try_into().unwrap(),
+            beneficiary: env.coinbase,
+            timestamp: env.timestamp.try_into().unwrap(),
+            gas_limit: env.gas_limit.try_into().unwrap(),
+            basefee: env.basefee.try_into().unwrap(),
             difficulty: env.difficulty,
             prevrandao: env.prevrandao.unwrap_or_default(),
         }
