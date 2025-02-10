@@ -1,7 +1,7 @@
 use std::{
     alloc::Layout,
     borrow::Borrow,
-    mem::{size_of, MaybeUninit},
+    mem::size_of,
     ops::Deref,
     path::Path,
     sync::atomic::{AtomicUsize, Ordering},
