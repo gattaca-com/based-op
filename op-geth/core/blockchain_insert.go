@@ -18,6 +18,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -197,29 +198,22 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		BlockNumber: currentUnsealedBlock.Number,
 		Time:        parent.Time(),
 		Difficulty:  parent.Difficulty(),
-		GasLimit:    parent.GasLimit(),
+		GasLimit:    math.MaxUint64,
 		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
-		// Coinbase:    pre.Env.Coinbase,
-		// BlockNumber: new(big.Int).SetUint64(pre.Env.Number),
-		// Time:        pre.Env.Timestamp,
-		// Difficulty:  pre.Env.Difficulty,
-		// GasLimit:    pre.Env.GasLimit,
-		// GetHash: getHash,
+		BaseFee:     parent.BaseFee(),
 	}
 
 	vmConfig := bc.GetVMConfig()
 
 	var receipts types.Receipts
 	for i, tx := range frag.Txs {
-		log.Info("[engine_newFragV0] Executing transaction", "tx", tx)
-
-		gp := new(GasPool).AddGas(0) // TODO: Replace with txs' gas limit
+		gp := new(GasPool).AddGas(math.MaxUint64) // TODO: Replace with txs' gas limit
 
 		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(currentUnsealedBlock.Number)).Bytes()
 
 		signer := types.MakeSigner(bc.Config(), currentUnsealedBlock.Number, parent.Time()) // TODO: Replace parent.Time()
 
-		msg, err := TransactionToMessage(tx, signer, parent.BaseFee())
+		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
 
 		txContext := NewEVMTxContext(msg)
 
@@ -249,7 +243,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 
 	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
 	currentUnsealedBlock.LastSequenceNumber = frag.Seq
-	currentUnsealedBlock.Receipts = append(receipts, receipts...)
+	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, receipts...)
 
 	return nil
 }
