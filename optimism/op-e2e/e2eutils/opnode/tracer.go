@@ -17,6 +17,8 @@ type FnTracer struct {
 	OnPublishNewFragFn   func(ctx context.Context, from peer.ID, frag *eth.SignedNewFrag)
 	OnSealFn             func(ctx context.Context, from peer.ID, frag *eth.SignedSeal)
 	OnPublishSealFn      func(ctx context.Context, from peer.ID, frag *eth.SignedSeal)
+	OnEnvFn              func(ctx context.Context, from peer.ID, frag *eth.SignedEnv)
+	OnPublishEnvFn       func(ctx context.Context, from peer.ID, frag *eth.SignedEnv)
 }
 
 func (n *FnTracer) OnNewL1Head(ctx context.Context, sig eth.L1BlockRef) {
@@ -58,6 +60,18 @@ func (n *FnTracer) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.Signe
 func (n *FnTracer) OnPublishSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedSeal) {
 	if n.OnPublishSealFn != nil {
 		n.OnPublishSealFn(ctx, from, seal)
+	}
+}
+
+func (n *FnTracer) OnEnv(ctx context.Context, from peer.ID, env *eth.SignedEnv) {
+	if n.OnEnv != nil {
+		n.OnEnvFn(ctx, from, env)
+	}
+}
+
+func (n *FnTracer) OnPublishEnv(ctx context.Context, from peer.ID, env *eth.SignedEnv) {
+	if n.OnPublishEnvFn != nil {
+		n.OnPublishEnvFn(ctx, from, env)
 	}
 }
 

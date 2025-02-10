@@ -499,3 +499,19 @@ type Seal struct {
 	StateRoot        Bytes32 `json:"stateRoot"`
 	BlockHash        Bytes32 `json:"blockHash"`
 }
+
+type SignedEnv struct {
+	Signature Bytes65 `json:"signature"`
+	Env       Env     `json:"env"`
+}
+
+// Initial message to set the block environment for the current block
+type Env struct {
+	Number      uint64         `json:number`
+	Beneficiary common.Address `json:beneficiary`
+	Timestamp   uint64         `json:timestamp`
+	GasLimit    uint64         `json:gas_limit`
+	Basefee     uint64         `json:basefee`
+	Difficulty  *hexutil.Big   `json:difficulty`
+	Prevrandao  common.Hash    `json:prevrandao`
+}

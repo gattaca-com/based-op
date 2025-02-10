@@ -114,6 +114,7 @@ var caps = []string{
 	"engine_getClientVersionV1",
 	"engine_newFragV0",
 	"engine_sealFragV0",
+	"engine_envV0",
 }
 
 type ConsensusAPI struct {
@@ -160,6 +161,7 @@ type ConsensusAPI struct {
 
 	newFragLock  sync.Mutex // Lock for the NewFrag method
 	sealFragLock sync.Mutex // Lock for the SealFrag method
+	envLock      sync.Mutex // Lock for the env method
 }
 
 // NewConsensusAPI creates a new consensus api for the given backend.
@@ -1351,13 +1353,24 @@ func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) error {
 	return nil
 }
 
-func (api *ConsensusAPI) SealFragV0(frag engine.SignedSeal) error {
+func (api *ConsensusAPI) SealFragV0(seal engine.SignedSeal) error {
 	// TODO: Perform validations
-	return api.sealFragV0(frag)
+	return api.sealFragV0(seal)
 }
 
-func (api *ConsensusAPI) sealFragV0(frag engine.SignedSeal) error {
+func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) error {
 	// TODO: Implement
-	log.Info("(api *ConsensusAPI) sealFragV0", frag)
+	log.Info("(api *ConsensusAPI) sealFragV0", seal)
+	return nil
+}
+
+func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) error {
+	// TODO: Perform validations
+	return api.envV0(env)
+}
+
+func (api *ConsensusAPI) envV0(env engine.SignedEnv) error {
+	// TODO: Implement
+	log.Info("(api *ConsensusAPI) envV0", env)
 	return nil
 }
