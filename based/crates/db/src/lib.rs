@@ -36,6 +36,7 @@ mod init;
 pub use alloy_db::AlloyDB;
 pub use bop_common::db::{DatabaseRead, DatabaseWrite, Error};
 pub use init::init_database;
+use tracing::debug;
 
 use crate::cache::ReadCaches;
 
@@ -173,8 +174,8 @@ impl DatabaseWrite for SequencerDB {
 
         self.reset_provider();
 
-        tracing::info!(
-            "Commit block took: {:?} (caches: {:?}, state_reverts: {:?}, state_changes: {:?}, trie_updates: {:?}, header_write: {:?}, commit: {:?})",
+        debug!(
+            "commit block took: {:?} (caches: {:?}, state_reverts: {:?}, state_changes: {:?}, trie_updates: {:?}, header_write: {:?}, commit: {:?})",
             start.elapsed(),
             after_caches_update.duration_since(start),
             after_state_reverts.duration_since(after_caches_update),

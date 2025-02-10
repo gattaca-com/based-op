@@ -26,6 +26,7 @@ use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use revm::{Database, DatabaseRef};
 use revm_primitives::{b256, BlockEnv, Bytes, EnvWithHandlerCfg, B256, U256};
+use tracing::info;
 
 use crate::{block_sync::BlockSync, sorting::SortingData, FragSequence, SequencerConfig};
 
@@ -151,7 +152,13 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
-        tracing::info!("sealing frag {} with {} txs:", frag_seq.next_seq, sorting_data.txs.len());
+        info!(
+            frag_id = frag_seq.next_seq,
+            txs = sorting_data.txs.len(),
+            frag_time =% sorting_data.start_t.elapsed(),
+            "sealing frag"
+        );
+
         self.db_frag.commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
         (frag_seq.apply_sorted_frag(sorting_data), SortingData::new(frag_seq, self))
@@ -212,7 +219,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         last_frag: SortingData<Db>,
     ) -> (FragV0, SealV0, OpExecutionPayloadEnvelopeV3) {
         let (mut frag_msg, _) = self.seal_frag(last_frag, &mut frag_seq);
-        tracing::info!("{:#?}", frag_seq.sorting_telemetry);
         frag_msg.is_last = true;
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
@@ -277,6 +283,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             state_root,
             block_hash: v1.block_hash,
         };
+
         (frag_msg, seal, OpExecutionPayloadEnvelopeV3 {
             execution_payload: ExecutionPayloadV3 {
                 payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
@@ -292,8 +299,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// Commit new to DB, either due to syncing or due to New Payload EngineApi message.
-    /// If it was based on a new payload message rather than blocksync, we pass Some(base_fee),
-    /// and clear the xstx pool based on that
+    /// If it was based on a new payload message rather than blocksync, we pass the base_fee,
+    /// and clear the existing pool based on that
     pub fn commit_block(&mut self, block: &BlockSyncMessage, base_fee: Option<u64>) {
         self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
         self.db_frag.reset();

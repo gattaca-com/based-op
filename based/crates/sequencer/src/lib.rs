@@ -37,6 +37,7 @@ pub use config::SequencerConfig;
 use context::SequencerContext;
 pub use simulator::Simulator;
 use sorting::SortingData;
+use tracing::{debug, error, warn};
 
 pub fn payload_to_block(
     payload: ExecutionPayload,
@@ -68,13 +69,10 @@ impl<Db> Actor<Db> for Sequencer<Db>
 where
     Db: DatabaseWrite + DatabaseRead,
 {
-    const CORE_AFFINITY: Option<usize> = Some(0);
-
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle block sync
         while connections.receive(|msg, _| {
-            let state = std::mem::take(&mut self.state);
-            self.state = state.handle_block_sync(msg, &mut self.data);
+            self.state.handle_block_sync(msg, &mut self.data);
         }) {}
 
         // handle new transaction
@@ -149,8 +147,6 @@ where
     ) -> SequencerState<Db> {
         use EngineApi::*;
 
-        tracing::info!("NewEngineApi: {:?}", msg.as_ref());
-
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
                 self.handle_new_payload_engine_api(payload, versioned_hashes, parent_beacon_block_root)
@@ -192,20 +188,18 @@ where
             WaitingForForkChoice(ref buffered_payload, _) => {
                 match payload.payload_inner.payload_inner.block_number.cmp(&buffered_payload.block_number()) {
                     cmp::Ordering::Less => {
-                        tracing::debug!("New Payload for an old block. Ignoring.");
+                        debug!("New Payload for an old block. Ignoring.");
                         self
                     }
                     cmp::Ordering::Equal => {
                         if buffered_payload.block_hash() == payload.payload_inner.payload_inner.block_hash {
-                            tracing::debug!("Received 2 payloads with the same block hash. Ignoring latest.");
+                            debug!("Received 2 payloads with the same block hash. Ignoring latest.");
                             self
                         } else {
                             // We got 2 payloads for the same block. This shouldn't happen. TODO: handle this
                             // gracefully.
                             debug_assert!(false, "Received 2 payloads for the same block but different hashes.");
-                            tracing::error!(
-                                "Received 2 payloads for the same block but different hashes. Ignoring latest."
-                            );
+                            error!("Received 2 payloads for the same block but different hashes. Ignoring latest.");
                             self
                         }
                     }
@@ -263,7 +257,7 @@ where
                     } else {
                         // We have received the wrong ExecutionPayload. Need to re-sync with the new head.
                         // TODO: should fetch bn from the FCU head hash
-                        tracing::warn!("Received wrong ExecutionPayload. Need to re-sync with the new head.");
+                        warn!("Received wrong ExecutionPayload. Need to re-sync with the new head.");
                         let _ = senders.send(BlockFetch::FromTo(payload.block_number(), payload.block_number()));
                         Syncing { last_block_number: payload.block_number() }
                     }
@@ -291,14 +285,14 @@ where
                     None => {
                         // We have got 2 FCU in a row with no attributes. This shouldn't happen?
                         debug_assert!(false, "Received 2 FCU in a row with no attributes");
-                        tracing::warn!("Received 2 FCU in a row with no attributes");
+                        warn!("Received 2 FCU in a row with no attributes");
                         self
                     }
                 }
             }
             Syncing { .. } | Sorting(_, _) => {
                 debug_assert!(false, "Received FCU in state {self:?}");
-                tracing::warn!("Received FCU in state {self:?}");
+                warn!("Received FCU in state {self:?}");
                 self
             }
         }
@@ -347,28 +341,28 @@ where
     ///
     /// When we are syncing we fetch blocks asynchronously from the rpc and send them back through a channel that gets
     /// picked up and processed here.
-    fn handle_block_sync(self, block: BlockSyncMessage, ctx: &mut SequencerContext<Db>) -> Self {
+    fn handle_block_sync(&mut self, block: BlockSyncMessage, ctx: &mut SequencerContext<Db>) {
         use SequencerState::*;
 
         match self {
             Syncing { last_block_number } => {
+                let last_block_number = *last_block_number;
                 ctx.commit_block(&block, None);
 
                 if block.number != last_block_number {
-                    Syncing { last_block_number }
+                    *self = Syncing { last_block_number };
                 } else {
                     // Wait until the next payload and attributes arrive
-                    WaitingForNewPayload
+                    *self = WaitingForNewPayload;
                 }
             }
 
             WaitingForNewPayload => {
                 ctx.commit_block(&block, None);
-                WaitingForNewPayload
+                *self = WaitingForNewPayload;
             }
             _ => {
                 debug_assert!(false, "Should not have received block sync update while in state {self:?}");
-                self
             }
         }
     }

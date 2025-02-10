@@ -41,6 +41,7 @@ impl BlockSync {
 
     /// Executes and validates a block at the current state, committing changes to the database.
     /// Handles chain reorgs by rewinding state if parent hash mismatch is detected.
+    #[tracing::instrument(skip_all, fields(block = %block.header.number))]
     pub fn commit_block<DB>(
         &mut self,
         block: &BlockWithSenders<OpBlock>,
@@ -53,7 +54,6 @@ impl BlockSync {
         let db_head = db.head_block_number()?;
         let block_number = block.header.number;
 
-        info!(db_head, block_number, "applying and committing block");
         debug_assert!(block_number == db_head + 1, "can only apply blocks sequentially");
 
         // Reorg check
@@ -71,6 +71,7 @@ impl BlockSync {
         }
 
         let (execution_output, trie_updates) = self.execute(block, db)?;
+
         if commit_block {
             db.commit_block_unchecked(block, execution_output, trie_updates)?;
         }
@@ -99,7 +100,6 @@ impl BlockSync {
 
         // Validate receipts/ gas used
         reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &receipts)?;
-        let after_light_validation = Instant::now();
 
         // Merge transitions and take bundle state.
         let state = executor.finish();
@@ -109,6 +109,7 @@ impl BlockSync {
         let (state_root, trie_updates) = db
             .calculate_state_root(&state)
             .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::Other(e.into())))?;
+
         if state_root != block.header.state_root {
             return Err(BlockExecutionError::Consensus(ConsensusError::BodyStateRootDiff(
                 GotExpected::new(state_root, block.header.state_root).into(),
@@ -117,15 +118,12 @@ impl BlockSync {
         let after_state_root = Instant::now();
 
         info!(
-            block_number = %block.header.number,
-            parent_hash = ?block.header.parent_hash,
-            state_root = ?state_root,
-            total_latency = ?start.elapsed(),
-            block_apply_latency = ?after_block_apply.duration_since(start),
-            light_validation_latency = ?after_light_validation.duration_since(after_block_apply),
-            bundle_state_finish_latency = ?after_bundle_state_finish.duration_since(after_light_validation),
-            state_root_latency = ?after_state_root.duration_since(after_bundle_state_finish),
-            "BlockSync::execute finished"
+            n_txs = block.body.transactions.len(),
+            %state_root,
+            total_t = ?start.elapsed(),
+            block_apply_t = ?after_block_apply.duration_since(start),
+            state_root_t = ?after_state_root.duration_since(after_bundle_state_finish),
+            "committed"
         );
 
         Ok((BlockExecutionOutput { state, receipts, requests, gas_used }, trie_updates))
