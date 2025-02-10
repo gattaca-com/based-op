@@ -1,4 +1,4 @@
-use std::{cmp, sync::Arc};
+use std::sync::Arc;
 
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
@@ -39,6 +39,7 @@ pub use config::SequencerConfig;
 use context::SequencerContext;
 pub use simulator::Simulator;
 use sorting::SortingData;
+use tracing::{info, warn};
 
 pub fn payload_to_block(
     payload: ExecutionPayload,
@@ -70,8 +71,6 @@ impl<Db> Actor<Db> for Sequencer<Db>
 where
     Db: DatabaseWrite + DatabaseRead,
 {
-    const CORE_AFFINITY: Option<usize> = Some(0);
-
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle block sync
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
@@ -146,8 +145,6 @@ where
     ) -> SequencerState<Db> {
         use EngineApi::*;
 
-        tracing::info!("NewEngineApi: {:?}", msg.as_ref());
-
         match msg {
             NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
                 self.handle_new_payload_engine_api(ctx, senders, payload, versioned_hashes, parent_beacon_block_root)
@@ -219,7 +216,7 @@ where
                 }
             }
             Sorting(_, _) => {
-                tracing::warn!("Received NewPayload when state is Sorting {self:?}");
+                warn!("Received NewPayload when state is Sorting {self:?}");
                 self
             }
         }
@@ -260,7 +257,7 @@ where
                         let env_msg: EnvV0 = (&ctx.block_env).into();
                         let _ = senders.send(VersionedMessage::from(env_msg));
 
-                        tracing::info!("start sorting with {} orders", first_frag.tof_snapshot.len());
+                        info!("start sorting with {} orders", first_frag.tof_snapshot.len());
                         SequencerState::Sorting(seq, first_frag)
                     }
                     None => {
@@ -282,7 +279,7 @@ where
             Syncing { last_block_number } => Syncing { last_block_number },
 
             Sorting(_, _) => {
-                tracing::warn!("Received FCU when sorting {self:?}. Syncing to new head.");
+                warn!("received FCU when sorting {self:?}. Syncing to new head.");
                 Syncing {
                     last_block_number: ctx.db.head_block_number().expect("couldn't get db head block number") + 1,
                 }
@@ -459,7 +456,7 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
                 connections.send(VersionedMessage::from(msg));
 
                 data.timers.seal_frag.stop();
-                tracing::info!("start sorting with {} orders", new_sort_dat.tof_snapshot.len());
+                info!("start sorting with {} orders", new_sort_dat.tof_snapshot.len());
                 Sorting(seq, new_sort_dat)
             }
 
