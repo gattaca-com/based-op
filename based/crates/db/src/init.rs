@@ -44,11 +44,11 @@ pub fn init_database<P: AsRef<Path>>(
 
     let db = SequencerDB::new(factory, max_cached_accounts, max_cached_storages);
 
-    // Write the genesis header to the database explicitly. 
+    // Write the genesis header to the database explicitly.
     // This is because the `init_genesis` function does not write the genesis header to the database.
     let hash = chain_spec.genesis_hash();
     db.write_canonical_header(0, hash)?;
-    
+
     // check_init_genesis(&db, &chain_spec)?;
 
     Ok(db)
