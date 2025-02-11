@@ -1356,16 +1356,6 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 		return engine.INVALID, fmt.Errorf("frag block number doesn't match opened unsealed block number, expected %d, received %d", currentUnsealedBlock.Env.Number, frag.Frag.BlockNumber)
 	}
 
-	// Check that the unsealed block is empty for the first frag
-	if frag.Frag.IsFirst() && !currentUnsealedBlock.IsEmpty() {
-		return engine.INVALID, errors.New("unsealed block is not empty and frag is the first one")
-	}
-
-	// Check that the unsealed block is not empty for the following frags
-	if !frag.Frag.IsFirst() && currentUnsealedBlock.IsEmpty() {
-		return engine.INVALID, errors.New("unsealed block is empty and frag is not the first one")
-	}
-
 	// Check that the frag sequence number is the next one
 	if !currentUnsealedBlock.IsNextFrag(&frag.Frag) {
 		return engine.INVALID, fmt.Errorf("frag sequence number is not the next one, expected %d, received %d", *currentUnsealedBlock.LastSequenceNumber+1, frag.Frag.Seq)
