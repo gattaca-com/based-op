@@ -56,8 +56,6 @@ impl BlockSync {
         let db_head = db.head_block_number()?;
         let block_number = block.header.number;
 
-        debug_assert!(block_number == db_head + 1, "can only apply blocks sequentially");
-
         // If the block number is greater than the head, we can apply it directly.
         if block_number > db_head + 1 {
             warn!("got a block with a number greater than the head. Block number: {block_number}. Head block number: {db_head}. Inserting into pending blocks.");
