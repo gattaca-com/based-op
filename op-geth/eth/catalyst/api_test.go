@@ -1901,3 +1901,26 @@ func TestSealFragV0(t *testing.T) {
 		t.Fatalf("error sealing frag: %v", err)
 	}
 }
+
+func TestEnvV0(t *testing.T) {
+	genesis, preMergeBlocks := generateMergeChain(10, false)
+	n, ethservice := startEthService(t, genesis, preMergeBlocks)
+	defer n.Close()
+
+	api := NewConsensusAPI(ethservice)
+	info := engine.SignedEnv{
+		Signature: engine.Bytes65{},
+		Env: engine.Env{
+			Number:      1,
+			Beneficiary: common.HexToAddress("0x0102030405060708091011121314151617181920"),
+			Timestamp:   2,
+			GasLimit:    3,
+			Basefee:     4,
+			Difficulty:  (*hexutil.Big)(new(big.Int).SetUint64(123123123123123)),
+			Prevrandao:  common.HexToHash("0x0102030405060708091011121314151617181920212223242526272829303132"),
+		}}
+	err := api.EnvV0(info)
+	if err != nil {
+		t.Fatalf("error adding block env: %v", err)
+	}
+}
