@@ -1348,17 +1348,23 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 
 	// Check that there's an unsealed block in progress
 	if !types.IsOpened(currentUnsealedBlock) {
-		return engine.INVALID, errors.New("new frag sent but no unsealed block was opened")
+		error := errors.New("new frag sent but no unsealed block was opened")
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	// Check that the block number matches the unsealed block
 	if frag.Frag.BlockNumber != currentUnsealedBlock.Env.Number {
-		return engine.INVALID, fmt.Errorf("frag block number doesn't match opened unsealed block number, expected %d, received %d", currentUnsealedBlock.Env.Number, frag.Frag.BlockNumber)
+		error := fmt.Errorf("frag block number doesn't match opened unsealed block number, expected %d, received %d", currentUnsealedBlock.Env.Number, frag.Frag.BlockNumber)
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	// Check that the frag sequence number is the next one
 	if !currentUnsealedBlock.IsNextFrag(&frag.Frag) {
-		return engine.INVALID, fmt.Errorf("frag sequence number is not the next one, expected %d, received %d", *currentUnsealedBlock.LastSequenceNumber+1, frag.Frag.Seq)
+		error := fmt.Errorf("frag sequence number is not the next one, expected %d, received %d", *currentUnsealedBlock.LastSequenceNumber+1, frag.Frag.Seq)
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	return api.newFragV0(frag, currentUnsealedBlock)
@@ -1368,7 +1374,8 @@ func (api *ConsensusAPI) newFragV0(f engine.SignedNewFrag, ub *types.UnsealedBlo
 	err := api.eth.BlockChain().InsertNewFrag(f.Frag)
 
 	if err != nil {
-		return engine.INVALID, fmt.Errorf("failed to insert new frag: %w", err)
+		error := fmt.Errorf("failed to insert new frag: %w", err)
+		return engine.INVALID, error
 	}
 
 	if f.Frag.IsLast {
@@ -1409,24 +1416,32 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 	parent := api.eth.BlockChain().CurrentBlock()
 
 	if parent == nil {
-		return engine.INVALID, errors.New("there's no parent block")
+		error := errors.New("there's no parent block")
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	// Check that there's no unsealed block in progress
 	if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
-		return engine.INVALID, errors.New("cannot open a new unsealed block while there's one already in progress")
+		error := errors.New("cannot open a new unsealed block while there's one already in progress")
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	expectedBlockNumber := parent.Number.Uint64() + 1
 
 	// Check the block number
 	if env.Env.Number != expectedBlockNumber {
-		return engine.INVALID, fmt.Errorf("env block number doesn't match expected block number, expected %d, received %d", expectedBlockNumber, env.Env.Number)
+		error := fmt.Errorf("env block number doesn't match expected block number, expected %d, received %d", expectedBlockNumber, env.Env.Number)
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	// Check the timestamp
 	if env.Env.Timestamp < parent.Time {
-		return engine.INVALID, fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
+		error := fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	return api.envV0(env)
@@ -1435,12 +1450,16 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
 	blockEnv := (*types.Env)(&env.Env)
 	if blockEnv == nil {
-		return engine.INVALID, errors.New("nil env")
+		error := errors.New("nil env")
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	unsealedBlock := types.NewUnsealedBlock((*types.Env)(&env.Env))
 	if unsealedBlock == nil {
-		return engine.INVALID, errors.New("nil unsealed block")
+		error := errors.New("nil unsealed block")
+		log.Error(error.Error())
+		return engine.INVALID, error
 	}
 
 	err := api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
