@@ -61,6 +61,7 @@ type EngineVersionProvider interface {
 	GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod
 	NewFragVersion(timestamp uint64) eth.EngineAPIMethod
 	SealFragVersion(timestamp uint64) eth.EngineAPIMethod
+	EnvVersion(timestamp uint64) eth.EngineAPIMethod
 }
 
 func NewEngineAPIClient(rpc client.RPC, l log.Logger, evp EngineVersionProvider) *EngineAPIClient {
@@ -187,5 +188,19 @@ func (s *EngineAPIClient) SealFrag(ctx context.Context, seal *eth.SignedSeal) (*
 		return nil, err
 	}
 	e.Trace("Sent seal frag")
+	return &result, nil
+}
+
+func (s *EngineAPIClient) Env(ctx context.Context, env *eth.SignedEnv) (*string, error) {
+	e := s.log.New("env", env)
+	e.Trace("sending env")
+	var result string
+	method := s.evp.EnvVersion(0)
+	err := s.RPC.CallContext(ctx, &result, string(method), env)
+	if err != nil {
+		e.Warn("Failed to send env", "env", env, "err", err)
+		return nil, err
+	}
+	e.Trace("Sent env")
 	return &result, nil
 }

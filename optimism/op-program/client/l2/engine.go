@@ -175,3 +175,12 @@ func (o *OracleEngine) SealFrag(ctx context.Context, frag *eth.SignedSeal) (*str
 		return nil, fmt.Errorf("unsupported SealFrag version: %s", method)
 	}
 }
+
+func (o *OracleEngine) Env(ctx context.Context, env *eth.SignedEnv) (*string, error) {
+	switch method := o.rollupCfg.EnvVersion(uint64(0)); method {
+	case eth.EnvV0:
+		return o.api.EnvV0(ctx, env)
+	default:
+		return nil, fmt.Errorf("unsupported Env version: %s", method)
+	}
+}

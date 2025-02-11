@@ -43,6 +43,7 @@ type ExecEngine interface {
 	L2BlockRefByLabel(ctx context.Context, label eth.BlockLabel) (eth.L2BlockRef, error)
 	NewFrag(ctx context.Context, frag *eth.SignedNewFrag) (*string, error)
 	SealFrag(ctx context.Context, seal *eth.SignedSeal) (*string, error)
+	Env(ctx context.Context, env *eth.SignedEnv) (*string, error)
 }
 
 type EngineController struct {

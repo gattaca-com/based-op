@@ -626,6 +626,21 @@ func (n *OpNode) PublishSealFrag(ctx context.Context, from peer.ID, seal *eth.Si
 	return nil
 }
 
+func (n *OpNode) PublishEnv(ctx context.Context, from peer.ID, env *eth.SignedEnv) error {
+	n.tracer.OnPublishEnv(ctx, from, env)
+
+	// publish to p2p, if we are running p2p at all
+	if n.p2pEnabled() {
+		if n.p2pSigner == nil {
+			return fmt.Errorf("node has no p2p signer, env", env, "cannot be published")
+		}
+		n.log.Info("Publishing env on p2p", "env", env)
+		return n.p2pNode.GossipOut().PublishEnv(ctx, from, env)
+	}
+	// if p2p is not enabled then we just don't publish the env
+	return nil
+}
+
 func (n *OpNode) OnUnsafeL2Payload(ctx context.Context, from peer.ID, envelope *eth.ExecutionPayloadEnvelope) error {
 	// ignore if it's from ourselves
 	if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
@@ -687,6 +702,28 @@ func (n *OpNode) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedS
 
 	if err := n.l2Driver.OnSealFrag(ctx, seal); err != nil {
 		n.log.Warn("failed to notify engine driver of new seal", seal, "err", err)
+	}
+
+	return nil
+}
+
+func (n *OpNode) OnEnv(ctx context.Context, from peer.ID, env *eth.SignedEnv) error {
+	// FIXME: Uncomment this
+	// // ignore if it's from ourselves
+	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
+	// 	return nil
+	// }
+
+	n.tracer.OnEnv(ctx, from, env)
+
+	n.log.Info("Received new env", "env", env)
+
+	// Pass on the event to the L2 Engine
+	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+
+	if err := n.l2Driver.OnEnv(ctx, env); err != nil {
+		n.log.Warn("failed to notify engine driver of new env", env, "err", err)
 	}
 
 	return nil

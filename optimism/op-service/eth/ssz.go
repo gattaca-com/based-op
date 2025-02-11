@@ -579,12 +579,30 @@ func (f *NewFrag) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineSliceOfDynamicBytesContent(codec, &f.Txs, MaxTxAmount, MaxTxsSize)
 }
 
+const EnvSize = 8 + 20 + 8 + 8 + 8 + 32 + 32
+
+func (e *Env) SizeSSZ(siz *ssz.Sizer) uint32 { return EnvSize }
+
+func (e *Env) DefineSSZ(codec *ssz.Codec) {
+	ssz.DefineUint64(codec, &e.Number)
+	ssz.DefineStaticBytes(codec, &e.Beneficiary)
+	ssz.DefineUint64(codec, &e.Timestamp)
+	ssz.DefineUint64(codec, &e.GasLimit)
+	ssz.DefineUint64(codec, &e.Basefee)
+	ssz.DefineUint256BigInt(codec, &e.Difficulty)
+	ssz.DefineStaticBytes(codec, &e.Prevrandao)
+}
+
 func (f *NewFrag) Root() Bytes32 {
 	return unionRoot(ssz.HashSequential(f), 0)
 }
 
 func (s *Seal) Root() Bytes32 {
 	return unionRoot(ssz.HashSequential(s), 1)
+}
+
+func (e *Env) Root() Bytes32 {
+	return unionRoot(ssz.HashSequential(e), 2)
 }
 
 func unionRoot(valueRoot Bytes32, typeIndex uint64) Bytes32 {
@@ -624,6 +642,45 @@ func (signedSeal *SignedSeal) MarshalSSZ(w io.Writer) error {
 	}
 
 	err = ssz.EncodeToStream(w, &signedSeal.Seal)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (signedEnv *SignedEnv) UnmarshalSSZ(scope uint32, r io.Reader) error {
+	signature := make([]byte, SignatureSize)
+	n, err := r.Read(signature)
+	if err != nil {
+		return err
+	}
+	if n != SignatureSize {
+		return fmt.Errorf("failed to unmarshal SignedEnv, not enough bytes (%d) to cover the signature", n)
+	}
+
+	copy(signedEnv.Signature[:], signature)
+
+	var env Env
+
+	err = ssz.DecodeFromStream(r, &env, scope-SignatureSize)
+
+	if err != nil {
+		return err
+	}
+
+	signedEnv.Env = env
+	return nil
+}
+
+func (signedEnv *SignedEnv) MarshalSSZ(w io.Writer) error {
+	n, err := w.Write(signedEnv.Signature[:])
+	if err != nil || n != SignatureSize {
+		return errors.New("unable to write signature")
+	}
+
+	err = ssz.EncodeToStream(w, &signedEnv.Env)
 
 	if err != nil {
 		return err
