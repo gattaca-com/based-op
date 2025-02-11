@@ -690,7 +690,7 @@ func (api *BlockChainAPI) GetBalance(ctx context.Context, address common.Address
 		return nil, err
 	}
 	b := state.GetBalance(address).ToBig()
-	log.Info("Balance of requested block", "b", b)
+
 	return (*hexutil.Big)(b), state.Error()
 }
 
