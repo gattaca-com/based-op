@@ -1345,7 +1345,6 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 
 	currentUnsealedBlock := api.eth.BlockChain().CurrentUnsealedBlock()
 
-	log.Info("NewFrag received", "frag", frag)
 	if frag.Frag.IsFirst() {
 		// Check there's no unsealed block in progress.
 		if types.IsOpened(currentUnsealedBlock) {
@@ -1380,7 +1379,6 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 		}
 	}
 
-	log.Info("NewFrag is valid")
 	return api.newFragV0(frag)
 }
 
@@ -1392,29 +1390,23 @@ func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) (string, error) {
 	//    else
 	//     a. fetch the current unsealed block
 	if frag.Frag.Seq == 0 {
-		log.Info("[engine_newFragV0] Frag sequence is 0, starting a new unsealed block", "frag", frag.Frag)
 		unsealedBlock = types.NewUnsealedBlock(frag.Frag.BlockNumber())
 		api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
 	} else {
-		log.Info("[engine_newFragV0] Fetching current unsealed block", "frag", frag.Frag)
 		unsealedBlock = api.eth.BlockChain().CurrentUnsealedBlock()
 	}
 
 	// 2. Insert frag into the unsealed block
-	log.Info("[engine_newFragV0] Inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
 	err := api.eth.BlockChain().InsertNewFrag(frag.Frag)
 	if err != nil {
-		log.Error("[engine_newFragV0] Error inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock, "error", err)
+		log.Error("Error inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock, "error", err)
 		return engine.INVALID, err
 	}
 
 	// 3. If frag.IsLast, seal the unsealed block
 	if frag.Frag.IsLast {
-		log.Info("[engine_newFragV0] Frag is last, sealing unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
 		engine.SealBlock(unsealedBlock)
 	}
-
-	log.Info("[engine_newFragV0] New frag inserted into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
 
 	// 4. Response (we still need to define how we'll response)
 	// TODO: figure out if we want to respond with more data
