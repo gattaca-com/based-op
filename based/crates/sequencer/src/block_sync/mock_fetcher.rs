@@ -15,21 +15,20 @@ use bop_common::{
     time::{utils::vsync_busy, Duration, Instant},
     transaction::Transaction,
 };
-use core_affinity::CoreId;
 use futures::future::join_all;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reqwest::Url;
 use revm_primitives::{address, b256, TxKind, U256};
 use tokio::{runtime::Runtime, sync::oneshot};
-use tracing::warn;
+use tracing::{info, warn};
 
 use super::{
     fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block},
     AlloyProvider,
 };
 #[derive(Default, Debug, Clone)]
-enum Mode {
+pub enum Mode {
     #[default]
     Verification,
     Benchmark(Vec<Arc<Transaction>>, ForkchoiceState, Box<OpPayloadAttributes>),
@@ -50,9 +49,6 @@ impl<Db> MockFetcher<Db> {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
-            .on_thread_start(|| {
-                core_affinity::set_for_current(CoreId { id: 1 });
-            })
             .build()
             .expect("couldn't build local tokio runtime");
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
@@ -119,27 +115,27 @@ impl<Db> MockFetcher<Db> {
                 block.body = Default::default();
                 let receipt = sealed_block.execution_payload.payload_inner.payload_inner.receipts_root;
                 if receipt == block.receipts_root {
-                    tracing::info!("receipts match");
+                    info!("receipts match");
                 } else {
-                    tracing::info!(our=%receipt, block = %block.receipts_root, "receipts don't match");
+                    info!(our=%receipt, block = %block.receipts_root, "receipts don't match");
                     debug_assert!(false, "receipts don't match");
                 };
 
                 let gas_used = sealed_block.execution_payload.payload_inner.payload_inner.gas_used;
 
                 if gas_used == block.gas_used() {
-                    tracing::info!("gas_used matches")
+                    info!("gas_used matches")
                 } else {
-                    tracing::info!(our=%gas_used, block = %block.gas_used(), "gas_used doesn't match");
+                    info!(our=%gas_used, block = %block.gas_used(), "gas_used doesn't match");
                     debug_assert!(false, "gas_used doesn't match");
                 };
 
                 let state_root = sealed_block.execution_payload.payload_inner.payload_inner.state_root;
 
                 if state_root == block.state_root() {
-                    tracing::info!("state_root matches")
+                    info!("state_root matches")
                 } else {
-                    tracing::info!(our=%state_root, block = %block.state_root(), "state_root doesn't match");
+                    info!(our=%state_root, block = %block.state_root(), "state_root doesn't match");
                     debug_assert!(false, "state_root doesn't match");
                 };
 
@@ -163,13 +159,13 @@ impl<Db> MockFetcher<Db> {
             //     tracing::error!("issue with getting payload status");
             //     return;
             // };
-            // tracing::info!("got {r:?} status for new_payload_status, sending fcu");
+            // info!("got {r:?} status for new_payload_status, sending fcu");
 
             // let Ok(r) = fcu_status_rx.blocking_recv() else {
             //     tracing::error!("issue with getting payload status");
             //     return;
             // };
-            // tracing::info!("got {r:?} status for fcu");
+            // info!("got {r:?} status for fcu");
 
             self.next_block += 1;
         }
@@ -181,14 +177,14 @@ impl<Db> MockFetcher<Db> {
             return;
         };
 
-        tracing::info!("gas limit is {}", op_attributes.gas_limit.unwrap());
+        info!("gas limit is {}", op_attributes.gas_limit.unwrap());
         let fcu = EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: *fcu,
             payload_attributes: Some(op_attributes.clone()),
             res_tx: rx,
         };
 
-        tracing::info!("sending {} txs", txs.len());
+        info!("sending {} txs", txs.len());
         // first we send enough for the first frag
         let curt = Instant::now();
         connections.send(fcu);
@@ -233,7 +229,7 @@ impl<Db> MockFetcher<Db> {
         let gas = sealed_block.execution_payload.payload_inner.payload_inner.gas_used;
         let n_txs = sealed_block.execution_payload.payload_inner.payload_inner.transactions.len();
         let el = curt.elapsed();
-        tracing::info!(
+        info!(
             "in {}: sequenced {n_txs} txs, {gas} ({} MGas/s)",
             curt.elapsed(),
             (gas / 1_000_000) as f64 / el.as_secs()
@@ -291,8 +287,6 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
 }
 
 impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
-    const CORE_AFFINITY: Option<usize> = Some(1);
-
     fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
         let block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
         let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, _fcu) =

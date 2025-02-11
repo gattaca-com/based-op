@@ -1,167 +1,118 @@
 [workspace]
-members = ["crates/*", "bin/*"]
+members = ["bin/*", "crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
-rust-version = "1.83.0"
 edition = "2021"
 repository = "https://github.com/gattaca-com/based-op"
+rust-version = "1.83.0"
+version = "0.1.0"
 
-# Used to build the production release profile.
-# Optimised exclusively for speed, build time will be longer so use only for prod releases.
 [profile.release-prod]
+codegen-units = 1
+debug = false
 inherits = "release"
 lto = true
 opt-level = 3
-codegen-units = 1
-debug = false
 split-debuginfo = "off"
 
 [profile.dev]
 panic = "abort"
+
 [profile.release]
 panic = "abort"
 
-# Relase profile used when running locally.
-# Build optimised, but with all debug checks enabled.
+
 [profile.release-with-debug]
 inherits = "dev"
 opt-level = 3
 
 [workspace.dependencies]
-bop-common = { path = "crates/common" }
-bop-rpc = { path = "crates/rpc" }
-bop-pool = { path = "crates/pool" }
-bop-sequencer = { path = "crates/sequencer" }
-bop-db = { path = "crates/db" }
-
-# alloy
 alloy-consensus = "0.9.2"
 alloy-eips = "0.9.2"
-alloy-primitives = { version = "0.8.15", default-features = false, features = [
-    "getrandom",
-] }
-alloy-rpc-types = { version = "0.9.2", features = ["engine"] }
-alloy-rlp = "0.3.11"
+alloy-network = "0.9.2"
+alloy-primitives = { version = "0.8.15", default-features = false, features = ["getrandom"] }
 alloy-provider = "0.9.2"
+alloy-rlp = "0.3.11"
+alloy-rpc-types = { version = "0.9.2", features = ["engine"] }
 alloy-signer = "0.9.2"
 alloy-signer-local = "0.9.2"
-alloy-network = "0.9.2"
-alloy-transport-http = "0.9.2"
 alloy-transport = "0.9.2"
-
-# op
-op-alloy-rpc-types-engine = { version = "0.9.0", default-features = false }
-op-alloy-consensus = { version = "=0.9.0", default-features = false, features = [
-    "k256",
-] }
-op-alloy-rpc-types = "0.9.0"
+alloy-transport-http = "0.9.2"
+auto_impl = "1.2.1"
+axum = { version = "0.8.1", features = ["macros"] }
+bop-common = { path = "crates/common" }
+bop-db = { path = "crates/db" }
+bop-pool = { path = "crates/pool" }
+bop-rpc = { path = "crates/rpc" }
+bop-sequencer = { path = "crates/sequencer" }
+chrono = "0.4.23"
+clap = { version = "4.5.27", features = ["derive", "env"] }
+crossbeam-channel = "0.5.14"
+directories = "5.0.1"
+ethereum_ssz = "0.8.3"
+eyre = "0.6.12"
+futures = "0.3.31"
+hyper = "1.5.2"
+jsonrpsee = { version = "0.24", features = ["http-client", "macros", "server"] }
+moka = "0.12.10"
+op-alloy-consensus = { version = "=0.9.0", default-features = false, features = ["k256"] }
 op-alloy-network = "0.9.0"
-
-# reth
-reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
-reth-evm = { path = "../reth/crates/evm" }
-reth-primitives = { path = "../reth/crates/primitives" }
-reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
+op-alloy-rpc-types = "0.9.0"
+op-alloy-rpc-types-engine = { version = "0.9.0", default-features = false }
+parking_lot = "0.12.3"
+paste = "0.1.18"
+quanta = "0.12.3"
+rand = "0.9.0"
+reqwest = { version = "0.12.12", features = ["blocking", "json"] }
+reth-chain-state = { path = "../reth/crates/chain-state" }
+reth-chainspec = { path = "../reth/crates/chainspec" }
+reth-cli = { path = "../reth/crates/cli/cli" }
 reth-consensus = { path = "../reth/crates/consensus/consensus" }
 reth-db = { path = "../reth/crates/storage/db" }
+reth-db-api = { path = "../reth/crates/storage/db-api" }
 reth-db-common = { path = "../reth/crates/storage/db-common" }
+reth-evm = { path = "../reth/crates/evm" }
+reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
+reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = ["test-utils"] }
+reth-node-types = { path = "../reth/crates/node/types" }
+reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
+reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = ["optimism"] }
+reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
+reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
+reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
+reth-optimism-node = { path = "../reth/crates/optimism/node", features = ["optimism"] }
+reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
+reth-primitives = { path = "../reth/crates/primitives" }
+reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
+reth-provider = { path = "../reth/crates/storage/provider", features = ["test-utils"] }
+reth-revm = { path = "../reth/crates/revm" }
+reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
+reth-stages-types = { path = "../reth/crates/stages/types" }
 reth-storage-api = { path = "../reth/crates/storage/storage-api" }
 reth-storage-errors = { path = "../reth/crates/storage/errors" }
-reth-trie-common = { path = "../reth/crates/trie/common", features = [
-    "test-utils",
-] }
 reth-trie = { path = "../reth/crates/trie/trie" }
+reth-trie-common = { path = "../reth/crates/trie/common", features = ["test-utils"] }
 reth-trie-db = { path = "../reth/crates/trie/db" }
-reth-provider = { path = "../reth/crates/storage/provider", features = [
-    "test-utils",
-] }
-reth-chainspec = { path = "../reth/crates/chainspec" }
-reth-db-api = { path = "../reth/crates/storage/db-api" }
-reth-node-types = { path = "../reth/crates/node/types" }
-reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
-    "test-utils",
-] }
-reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
 reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
-reth-stages-types = { path = "../reth/crates/stages/types" }
-
-# reth-db
-reth-revm = { path = "../reth/crates/revm" }
-reth-chain-state = { path = "../reth/crates/chain-state" }
-reth-cli = { path = "../reth/crates/cli/cli" }
-
-# reth op
-reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
-reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
-reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
-reth-optimism-node = { path = "../reth/crates/optimism/node", features = [
-    "optimism",
-] }
-reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = [
-    "optimism",
-] }
-reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
-reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
-
-# revm
-revm-primitives = { version = "15.1.0", features = [
-    "std",
-], default-features = false }
+revm = { version = "19.2.0", features = ["optional_balance_check", "secp256k1", "std"], default-features = false }
 revm-interpreter = "15.1.0"
-revm = { version = "19.2.0", features = [
-    "std",
-    "secp256k1",
-    "optional_balance_check",
-], default-features = false }
-
-# web
-axum = { version = "0.8.1", features = ["macros"] }
-tokio = { version = "1.43.0", features = ["full"] }
-reqwest = { version = "0.12.12", features = ["json"] }
-jsonrpsee = { version = "0.24", features = ["http-client", "server", "macros"] }
-tower = "0.4"
-hyper = "1.5.2"
-
-# data structures
+revm-primitives = { version = "15.1.0", features = ["std"], default-features = false }
 rustc-hash = "2.0.0"
-
-# logging
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.137"
+shared_memory = "^0.12"
+signal-hook = "0.3.17"
+ssz_types = "0.10.0"
+strum = "0.24"
+strum_macros = "0.24"
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", features = ["full"] }
+toml = "0.8.19"
+tower = "0.4"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-
-# Time
-chrono = "0.4.23"
-quanta = "0.12.3"
-
-# ipc
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.137"
-toml = "0.8.19"
-shared_memory = "^0.12"
-
-# threading
-core_affinity = "0.8.1"
-crossbeam-channel = "0.5.14"
-signal-hook = "0.3.17"
-futures = "0.3.31"
-parking_lot = "0.12.3"
-moka = "0.12.10"
-
-# misc
-eyre = "0.6.12"
-uuid = { version = "1.12.1", features = ["v4"] }
-thiserror = "2.0.11"
-rand = "0.9.0"
-directories = "5.0.1"
-clap = { version = "4.5.27", features = ["derive", "env"] }
-strum = "0.24"
-strum_macros = "0.24"
-paste = "0.1.18"
-auto_impl = "1.2.1"
-ethereum_ssz = "0.8.3"
-ssz_types = "0.10.0"
 tree_hash = "0.9.1"
 tree_hash_derive = "0.9.1"
+uuid = { version = "1.12.1", features = ["v4"] }

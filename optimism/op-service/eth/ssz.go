@@ -579,12 +579,30 @@ func (f *NewFrag) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineSliceOfDynamicBytesContent(codec, &f.Txs, MaxTxAmount, MaxTxsSize)
 }
 
+const EnvSize = 8 + 20 + 8 + 8 + 8 + 32 + 32
+
+func (e *Env) SizeSSZ(siz *ssz.Sizer) uint32 { return EnvSize }
+
+func (e *Env) DefineSSZ(codec *ssz.Codec) {
+	ssz.DefineUint64(codec, &e.Number)
+	ssz.DefineStaticBytes(codec, &e.Beneficiary)
+	ssz.DefineUint64(codec, &e.Timestamp)
+	ssz.DefineUint64(codec, &e.GasLimit)
+	ssz.DefineUint64(codec, &e.Basefee)
+	ssz.DefineUint256BigInt(codec, &e.Difficulty)
+	ssz.DefineStaticBytes(codec, &e.Prevrandao)
+}
+
 func (f *NewFrag) Root() Bytes32 {
 	return unionRoot(ssz.HashSequential(f), 0)
 }
 
 func (s *Seal) Root() Bytes32 {
 	return unionRoot(ssz.HashSequential(s), 1)
+}
+
+func (e *Env) Root() Bytes32 {
+	return unionRoot(ssz.HashSequential(e), 2)
 }
 
 func unionRoot(valueRoot Bytes32, typeIndex uint64) Bytes32 {

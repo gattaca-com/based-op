@@ -1890,11 +1890,11 @@ func TestSealFragV0(t *testing.T) {
 			BlockNumber:      1,
 			GasUsed:          0,
 			GasLimit:         0,
-			ParentHash:       engine.Bytes32{},
-			TransactionsRoot: engine.Bytes32{},
-			ReceiptsRoot:     engine.Bytes32{},
-			StateRoot:        engine.Bytes32{},
-			BlockHash:        engine.Bytes32{},
+			ParentHash:       common.Hash{},
+			TransactionsRoot: common.Hash{},
+			ReceiptsRoot:     common.Hash{},
+			StateRoot:        common.Hash{},
+			BlockHash:        common.Hash{},
 		}}
 	err := api.SealFragV0(info)
 	if err != nil {
@@ -1910,7 +1910,7 @@ func TestEnvV0(t *testing.T) {
 	api := NewConsensusAPI(ethservice)
 	info := engine.SignedEnv{
 		Signature: engine.Bytes65{},
-		Env: engine.Env{
+		Env: types.Env{
 			Number:      1,
 			Beneficiary: common.HexToAddress("0x0102030405060708091011121314151617181920"),
 			Timestamp:   2,
@@ -1919,8 +1919,13 @@ func TestEnvV0(t *testing.T) {
 			Difficulty:  (*hexutil.Big)(new(big.Int).SetUint64(123123123123123)),
 			Prevrandao:  common.HexToHash("0x0102030405060708091011121314151617181920212223242526272829303132"),
 		}}
-	err := api.EnvV0(info)
+	string, err := api.EnvV0(info)
+
 	if err != nil {
-		t.Fatalf("error sealing frag: %v", err)
+		t.Fatalf("error adding block env: %v", err)
+	}
+
+	if string != engine.VALID {
+		t.Fatalf("invalid: %v", string)
 	}
 }

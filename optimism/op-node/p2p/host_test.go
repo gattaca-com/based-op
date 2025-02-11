@@ -101,6 +101,13 @@ func (m *mockGossipIn) OnEnv(ctx context.Context, from peer.ID, msg *eth.SignedE
 	return nil
 }
 
+func (m *mockGossipIn) OnEnv(ctx context.Context, from peer.ID, msg *eth.SignedEnv) error {
+	if m.OnEnvFn != nil {
+		return m.OnEnvFn(ctx, from, msg)
+	}
+	return nil
+}
+
 // Full setup, using negotiated transport security and muxes
 func TestP2PFull(t *testing.T) {
 	pA, _, err := crypto.GenerateSecp256k1Key(rand.Reader)

@@ -23,18 +23,13 @@ use revm::{Database, DatabaseRef, Evm};
 use revm_primitives::{Address, U256};
 
 /// Simulator thread.
-///
-/// TODO: need to impl fn to use system caller and return changes for that.
 pub struct Simulator<'a, Db: DatabaseRef> {
     /// Top of frag evm.
     evm_tof: Evm<'a, (), State<DBFrag<Db>>>,
-
     /// Evm on top of partially built frag
     evm_sorting: Evm<'a, (), State<DBSorting<Db>>>,
-
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
-
     /// How to create an EVM.
     evm_config: OpEvmConfig,
     id: usize,
@@ -136,8 +131,6 @@ impl<Db: DatabaseRef + Clone> Actor<Db> for Simulator<'_, Db>
 where
     Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
 {
-    const CORE_AFFINITY: Option<usize> = None;
-
     fn name(&self) -> String {
         let name = last_part_of_typename::<Self>();
         format!("{}-{}", name, self.id)
@@ -154,7 +147,6 @@ where
             let curt = Instant::now();
             let msg =
                 match msg {
-                    // TODO: Cleanup: merge both functions?
                     SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(
                         Self::simulate_transaction(tx, db, &mut self.evm_sorting, self.regolith_active, true, true),
                     ),

@@ -1,20 +1,16 @@
 [package]
-name = "bop-pool"
-version.workspace = true
 edition.workspace = true
+name = "bop-pool"
 rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
-bop-common.workspace = true
+alloy-consensus.workspace = true
 alloy-primitives.workspace = true
+bop-common.workspace = true
 reth-optimism-primitives.workspace = true
 reth-primitives-traits.workspace = true
-alloy-consensus.workspace = true
-tracing.workspace = true
-
-# revm
-revm-primitives.workspace = true
 revm.workspace = true
-
-# data structures
+revm-primitives.workspace = true
 rustc-hash.workspace = true
+tracing.workspace = true

@@ -37,6 +37,7 @@ mod init;
 pub use alloy_db::AlloyDB;
 pub use bop_common::db::{DatabaseRead, DatabaseWrite, Error};
 pub use init::init_database;
+use tracing::debug;
 
 use crate::cache::ReadCaches;
 
@@ -81,6 +82,14 @@ impl SequencerDB {
     /// Should be called when a new block is committed.
     pub fn reset_provider(&self) {
         *self.provider.write() = None;
+    }
+
+    /// Puts a canonical header into the database and commits the changes.
+    pub fn write_canonical_header(&self, number: u64, hash: B256) -> Result<(), Error> {
+        let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
+        rw_provider.tx_ref().put::<tables::CanonicalHeaders>(number, hash).unwrap();
+        rw_provider.commit()?;
+        Ok(())
     }
 }
 
@@ -174,8 +183,8 @@ impl DatabaseWrite for SequencerDB {
 
         self.reset_provider();
 
-        tracing::info!(
-            "Commit block took: {:?} (caches: {:?}, state_reverts: {:?}, state_changes: {:?}, trie_updates: {:?}, header_write: {:?}, commit: {:?})",
+        debug!(
+            "commit block took: {:?} (caches: {:?}, state_reverts: {:?}, state_changes: {:?}, trie_updates: {:?}, header_write: {:?}, commit: {:?})",
             start.elapsed(),
             after_caches_update.duration_since(start),
             after_state_reverts.duration_since(after_caches_update),

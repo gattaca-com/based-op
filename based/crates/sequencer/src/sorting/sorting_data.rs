@@ -22,6 +22,7 @@ use reth_evm::{
 use reth_optimism_evm::OpBlockExecutionError;
 use revm::{Database, DatabaseRef};
 use revm_primitives::{Address, EnvWithHandlerCfg, U256};
+use tracing::trace;
 
 use super::FragSequence;
 use crate::{context::SequencerContext, simulator::simulate_tx_inner, sorting::ActiveOrders};
@@ -96,6 +97,7 @@ impl<Db> SortingData<Db> {
         };
         let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
+
         Self {
             db,
             until: Instant::now() + data.config.frag_duration,
@@ -137,7 +139,7 @@ impl<Db> SortingData<Db> {
         self.in_flight_sims -= 1;
         self.telemetry.tot_sim_time += simtime;
 
-        tracing::trace!("handling sender {sender}");
+        trace!("handling sender {sender}");
         // handle errored sim
         let Ok(simulated_tx) = simulated_tx.inspect_err(|e| tracing::trace!("error {e} for tx: {}", sender)) else {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
@@ -145,7 +147,7 @@ impl<Db> SortingData<Db> {
             return;
         };
 
-        tracing::trace!("succesful for nonce {}", simulated_tx.nonce_ref());
+        trace!("succesful for nonce {}", simulated_tx.nonce_ref());
         if self.gas_remaining < simulated_tx.gas_used() {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
@@ -216,7 +218,6 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
             debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
             let tx = t.unwrap();
-            tracing::trace!("sending sender {}, nonce {}", tx.sender(), tx.nonce_ref());
             senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
             self.in_flight_sims += 1;
             self.telemetry.n_sims_sent += 1;
@@ -235,8 +236,6 @@ impl<Db: DatabaseRef> SortingData<Db> {
 
         let gas_used = tx.as_ref().result.gas_used();
         debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
-
-        tracing::trace!("applying sender {}, nonce {}", tx.sender(), tx.nonce_ref());
 
         self.gas_remaining -= gas_used;
         self.txs.push(tx);
