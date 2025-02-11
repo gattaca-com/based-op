@@ -120,6 +120,12 @@ impl SimulatedTxList {
     pub fn payment(&self) -> alloy_primitives::Uint<256, 4> {
         self.current.as_ref().map(|c| c.payment).unwrap_or_default()
     }
+
+    pub fn gas_limit(&self) -> Option<u64> {
+        let o = self.current.as_ref().map(|c| c.gas_limit()).or_else(|| self.pending.peek().map(|t| t.gas_limit()));
+        debug_assert!(o.is_some(), "both current and pending have no gas limit, this should mean that this should have been removed from the orders before");
+        o
+    }
 }
 
 impl From<SimulatedTx> for SimulatedTxList {

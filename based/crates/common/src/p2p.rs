@@ -3,11 +3,12 @@ use alloy_signer::Signature as ECDSASignature;
 use revm_primitives::BlockEnv;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, VariableList};
+use strum_macros::AsRefStr;
 use tree_hash_derive::TreeHash;
 
 use crate::transaction::Transaction as BuilderTransaction;
 
-#[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize, AsRefStr)]
 #[tree_hash(enum_behaviour = "union")]
 #[non_exhaustive]
 pub enum VersionedMessage {

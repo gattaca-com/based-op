@@ -7,8 +7,8 @@ use alloy_consensus::BlockHeader;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
-    ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes,
-    PayloadError, PayloadId, PayloadStatus,
+    ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, PayloadAttributes, PayloadError,
+    PayloadId,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
@@ -19,7 +19,7 @@ use revm_primitives::{Address, Env, SpecId, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
-use tokio::sync::oneshot::{self, Receiver};
+use tokio::sync::oneshot::{self};
 
 use crate::{
     db::{DBFrag, DBSorting},
@@ -162,29 +162,16 @@ impl<T> From<InternalMessage<T>> for Nanos {
 /// Supported Engine API RPC methods
 #[derive(Debug, AsRefStr)]
 pub enum EngineApi {
-    ForkChoiceUpdatedV3 {
-        fork_choice_state: ForkchoiceState,
-        payload_attributes: Option<Box<OpPayloadAttributes>>,
-        res_tx: oneshot::Sender<ForkchoiceUpdated>,
-    },
-    NewPayloadV3 {
-        payload: ExecutionPayloadV3,
-        versioned_hashes: Vec<B256>,
-        parent_beacon_block_root: B256,
-        res_tx: oneshot::Sender<PayloadStatus>,
-    },
-    GetPayloadV3 {
-        payload_id: PayloadId,
-        res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
-    },
+    ForkChoiceUpdatedV3 { fork_choice_state: ForkchoiceState, payload_attributes: Option<Box<OpPayloadAttributes>> },
+    NewPayloadV3 { payload: ExecutionPayloadV3, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
+    GetPayloadV3 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV3> },
 }
 impl EngineApi {
     pub fn messages_from_block(
         block: &BlockSyncMessage,
         txs_in_attributes: bool,
         no_tx_pool: Option<bool>,
-    ) -> (Receiver<PayloadStatus>, EngineApi, Receiver<ForkchoiceUpdated>, EngineApi, EngineApi) {
-        let (new_payload_tx, new_payload_rx) = oneshot::channel();
+    ) -> (EngineApi, EngineApi, EngineApi) {
         let block_hash = block.hash_slow();
         let transactions = block
             .body
@@ -238,9 +225,7 @@ impl EngineApi {
             parent_beacon_block_root: block
                 .parent_beacon_block_root()
                 .expect("parent beacon root should always be set"),
-            res_tx: new_payload_tx,
         };
-        let (fcu_tx, _fcu_rx) = oneshot::channel();
 
         let fcu_1 = EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: ForkchoiceState {
@@ -249,9 +234,7 @@ impl EngineApi {
                 finalized_block_hash: Default::default(),
             },
             payload_attributes: None,
-            res_tx: fcu_tx,
         };
-        let (fcu_tx, fcu_rx) = oneshot::channel();
         let fcu = EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: ForkchoiceState {
                 head_block_hash: block_hash,
@@ -259,9 +242,8 @@ impl EngineApi {
                 finalized_block_hash: Default::default(),
             },
             payload_attributes: op_payload_attributes,
-            res_tx: fcu_tx,
         };
-        (new_payload_rx, new_payload, fcu_rx, fcu_1, fcu)
+        (new_payload, fcu_1, fcu)
     }
 }
 
@@ -289,6 +271,9 @@ pub enum RpcError {
 
     #[error("db error: {0}")]
     Db(#[from] crate::db::Error),
+
+    #[error("no return")]
+    NoReturn,
 }
 
 impl From<RpcError> for RpcErrorObject<'static> {
@@ -299,7 +284,8 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::ChannelClosed(_) |
             RpcError::Jsonrpsee(_) |
             RpcError::TokioJoin(_) |
-            RpcError::Db(_) => internal_error(),
+            RpcError::Db(_) |
+            RpcError::NoReturn => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),

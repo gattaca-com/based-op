@@ -3,7 +3,7 @@
 use std::{fmt::Display, sync::Arc, time::Instant};
 
 use bop_common::{
-    communication::messages::{BlockFetch, BlockSyncError},
+    communication::messages::BlockSyncError,
     db::{DatabaseRead, DatabaseWrite},
 };
 use reth_consensus::ConsensusError;
@@ -49,7 +49,7 @@ impl BlockSync {
         block: &BlockWithSenders<OpBlock>,
         db: &DB,
         commit_block: bool,
-    ) -> Result<Option<BlockFetch>, BlockSyncError>
+    ) -> Result<Option<(u64, u64)>, BlockSyncError>
     where
         DB: DatabaseWrite + DatabaseRead,
     {
@@ -60,7 +60,7 @@ impl BlockSync {
         if block_number > db_head + 1 {
             warn!("got a block with a number greater than the head. Block number: {block_number}. Head block number: {db_head}. Inserting into pending blocks.");
             self.insert_pending_block(block);
-            return Ok(Some(BlockFetch::FromTo(db_head + 1, block_number - 1)));
+            return Ok(Some((db_head + 1, block_number - 1)));
         }
 
         // Check if we committed a different block with the same number and rewind the database if so.
@@ -93,7 +93,7 @@ impl BlockSync {
             db.roll_back_head()?;
             self.insert_pending_block(block);
 
-            return Ok(Some(BlockFetch::FromTo(db.head_block_number().unwrap() + 1, block.header.number)));
+            return Ok(Some((db.head_block_number().unwrap() + 1, block.header.number)));
         }
 
         let (execution_output, trie_updates) = self.execute(block, db)?;
@@ -123,7 +123,7 @@ impl BlockSync {
 
                 db.roll_back_head()?;
                 // Request to re-fetch rolled back block and the pending block.
-                return Ok(Some(BlockFetch::FromTo(pending_block.header.number - 1, pending_block.header.number)));
+                return Ok(Some((pending_block.header.number - 1, pending_block.header.number)));
             }
 
             // Apply block
