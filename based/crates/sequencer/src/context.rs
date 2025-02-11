@@ -7,7 +7,7 @@ use alloy_rpc_types::engine::{
 };
 use bop_common::{
     communication::{
-        messages::{BlockFetch, BlockSyncMessage, EvmBlockParams},
+        messages::{BlockSyncMessage, EvmBlockParams},
         SendersSpine, TrackedSenders,
     },
     p2p::{FragV0, SealV0},
@@ -157,6 +157,20 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
 }
 
 impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SequencerContext<Db> {
+    pub fn handle_tx(&mut self, tx: Arc<Transaction>, senders: &SendersSpine<Db>) {
+        if tx.is_deposit() {
+            self.deposits.push_back(tx);
+            return;
+        }
+        self.tx_pool.handle_new_tx(
+            tx.clone(),
+            self.shared_state.as_ref(),
+            self.as_ref().basefee.to(),
+            false,
+            self.config.simulate_tof_in_pools.then_some(senders),
+        );
+    }
+
     /// Processes a new block from the sequencer by:
     /// 1. Updating EVM environments
     /// 2. Applying pre-execution changes
@@ -212,7 +226,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 
     /// Finalize the block after the last frag has been sealed
     pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV3) {
-        tracing::info!("{:#?}", frag_seq.sorting_telemetry);
+        frag_seq.sorting_telemetry.report();
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
         let (transactions, transactions_root, receipts_root, logs_bloom) =
@@ -294,7 +308,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// If it was based on a new payload message rather than blocksync, we pass the base_fee,
     /// and clear the existing pool based on that
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
-    pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<BlockFetch> {
+    pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
         let blocks_to_fetch = self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
         self.shared_state.as_mut().reset();
 

@@ -27,6 +27,9 @@ pub struct GatewayArgs {
     /// Url to a full node for syncing and eth_ fallback requests
     #[arg(long = "rpc.fallback_url", default_value = "https://base-sepolia-rpc.publicnode.com")]
     pub rpc_fallback_url: Url,
+    /// Url to the root peer gossip node
+    #[arg(long = "gossip.root_peer_url", default_value = "None")]
+    pub gossip_root_peer_url: Option<Url>,
     /// Duration of a frag in ms
     #[arg(long = "sequencer.frag_duration_ms", default_value_t = 200)]
     pub frag_duration_ms: u64,

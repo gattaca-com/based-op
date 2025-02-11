@@ -1,7 +1,7 @@
 optimism_package:
   chains:
     - participants:
-        # Vanilla Stack (OP-Node, OP-EL)
+        # Vanilla Stack (OP-Node, OP-EL) for the Sequencer
         - el_type: op-reth
           cl_type: op-node
           cl_image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:latest

@@ -364,10 +364,12 @@ def launch(
                     el_builder_context,
                 )
 
+                # use sidecar RPC in place of the sequencer RPC to broadcast txs
+                # (this will be remove at some point)
+                all_el_contexts.append(sidecar_context)
                 all_el_contexts.append(el_builder_context)
             elif mev_type:
-                # fail(f"UNSUPPORTED MEV TYPE: {mev_type}")
-                fail("unsupported mev type")
+                fail("UNSUPPORTED MEV TYPE: {0}".format(mev_type))
 
         else:
             sidecar_context = None
@@ -407,7 +409,7 @@ def launch(
         all_el_contexts.append(el_context)
         all_cl_contexts.append(cl_context)
 
-        if (rollup_boost_enabled or based_portal_enabled) and sequencer_enabled:
+        if rollup_boost_enabled and sequencer_enabled:
             cl_builder_context = cl_builder_launch_method(
                 plan,
                 cl_builder_launcher,
@@ -426,5 +428,4 @@ def launch(
             )
             all_cl_contexts.append(cl_builder_context)
 
-    plan.print("Successfully added {0} EL/CL participants".format(num_participants))
     return all_el_contexts, all_cl_contexts
