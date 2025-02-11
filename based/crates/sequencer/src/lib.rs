@@ -257,6 +257,12 @@ where
 
                 match payload_attributes {
                     Some(attributes) => {
+
+                        // Don't start sequencing until we have a parent hash.
+                        if ctx.parent_header.parent_hash == B256::ZERO {
+                            return self;
+                        }
+
                         ctx.timers.start_sequencing.start();
                         let (seq, first_frag) = ctx.start_sequencing(attributes, senders);
                         ctx.timers.start_sequencing.stop();
