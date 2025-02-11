@@ -658,6 +658,10 @@ func (api *BlockChainAPI) ChainId() *hexutil.Big {
 
 // BlockNumber returns the block number of the chain head.
 func (api *BlockChainAPI) BlockNumber() hexutil.Uint64 {
+	if unsealed := api.b.GetUnsealedBlock(); unsealed != nil {
+		return hexutil.Uint64(unsealed.Env.Number)
+	}
+
 	header, _ := api.b.HeaderByNumber(context.Background(), rpc.LatestBlockNumber) // latest header should always be available
 	return hexutil.Uint64(header.Number.Uint64())
 }
@@ -1934,29 +1938,32 @@ func (api *TransactionAPI) GetRawTransactionByBlockHashAndIndex(ctx context.Cont
 // GetTransactionCount returns the number of transactions the given address has sent for the given block number
 func (api *TransactionAPI) GetTransactionCount(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Uint64, error) {
 	// Ask transaction pool for the nonce which includes pending transactions
-	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr == rpc.PendingBlockNumber {
+	blockNr, ok := blockNrOrHash.Number()
+	if ok && blockNr == rpc.PendingBlockNumber {
 		nonce, err := api.b.GetPoolNonce(ctx, address)
 		if err != nil {
 			return nil, err
 		}
 		return (*hexutil.Uint64)(&nonce), nil
 	}
-	// Resolve block number and use its state to ask for the nonce
-	header, err := headerByNumberOrHash(ctx, api.b, blockNrOrHash)
-	if err != nil {
-		return nil, err
-	}
+	if !ok || blockNr != rpc.LatestBlockNumber {
+		// Resolve block number and use its state to ask for the nonce
+		header, err := headerByNumberOrHash(ctx, api.b, blockNrOrHash)
+		if err != nil {
+			return nil, err
+		}
 
-	if api.b.ChainConfig().IsOptimismPreBedrock(header.Number) {
-		if api.b.HistoricalRPCService() != nil {
-			var res hexutil.Uint64
-			err := api.b.HistoricalRPCService().CallContext(ctx, &res, "eth_getTransactionCount", address, blockNrOrHash)
-			if err != nil {
-				return nil, fmt.Errorf("historical backend error: %w", err)
+		if api.b.ChainConfig().IsOptimismPreBedrock(header.Number) {
+			if api.b.HistoricalRPCService() != nil {
+				var res hexutil.Uint64
+				err := api.b.HistoricalRPCService().CallContext(ctx, &res, "eth_getTransactionCount", address, blockNrOrHash)
+				if err != nil {
+					return nil, fmt.Errorf("historical backend error: %w", err)
+				}
+				return &res, nil
+			} else {
+				return nil, rpc.ErrNoHistoricalFallback
 			}
-			return &res, nil
-		} else {
-			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
 

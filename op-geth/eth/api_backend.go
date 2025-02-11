@@ -477,3 +477,7 @@ func (b *EthAPIBackend) HistoricalRPCService() *rpc.Client {
 func (b *EthAPIBackend) Genesis() *types.Block {
 	return b.eth.blockchain.Genesis()
 }
+
+func (b *EthAPIBackend) GetUnsealedBlock() *types.UnsealedBlock {
+	return b.eth.blockchain.CurrentUnsealedBlock()
+}
