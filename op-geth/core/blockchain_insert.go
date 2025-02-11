@@ -194,6 +194,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	blockContext := vm.BlockContext{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
+		L1CostFunc:  types.NewL1CostFunc(bc.Config(), statedb),
 		Coinbase:    currentUnsealedBlock.Env.Beneficiary,
 		BlockNumber: new(big.Int).SetUint64(currentUnsealedBlock.Env.Number),
 		Time:        currentUnsealedBlock.Env.Timestamp,
