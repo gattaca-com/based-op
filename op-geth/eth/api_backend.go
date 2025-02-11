@@ -200,6 +200,16 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 			number = rpc.LatestBlockNumber // fall back to latest state
 		}
 	}
+
+	// Latest state is the current open unselaed block
+	if number == rpc.LatestBlockNumber {
+		stateDb := b.eth.BlockChain().CurrentUnsealedBlockState()
+		if stateDb == nil {
+			return nil, nil, fmt.Errorf("state doesn't exist")
+		}
+		return stateDb, nil, nil
+	}
+
 	// Otherwise resolve the block number and return its state
 	header, err := b.HeaderByNumber(ctx, number)
 	if err != nil {
