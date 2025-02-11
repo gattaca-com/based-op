@@ -1,0 +1,9 @@
+optimism_package:
+  chains:
+    - participants:
+        - el_type: op-geth
+          el_image: based_op_geth
+          cl_type: op-node
+          cl_image: based_op_node
+          cl_extra_params:
+            - --rpc.enable-based
