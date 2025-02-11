@@ -214,7 +214,7 @@ impl<T: Statisticable> Statistics<T> {
         let mut c = 0;
         // loops until either a full datapoint was captured or no messages are pending
         while !done {
-            done |= consumer.try_consume().is_some_and(|msg| {
+            done |= consumer.try_consume().is_none_or(|msg| {
                 captured_one = true;
                 self.track(msg.into());
                 c += 1;
