@@ -1415,13 +1415,45 @@ func (api *ConsensusAPI) sealFragV0(frag engine.SignedSeal) error {
 	return nil
 }
 
-func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) error {
-	// TODO: Perform validations
+func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
+	parent := api.eth.BlockChain().CurrentBlock()
+
+	if parent == nil {
+		return engine.INVALID, errors.New("there's no parent block")
+	}
+
+	// Check that there's no unsealed block in progress
+	if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
+		return engine.INVALID, errors.New("cannot open a new unsealed block while there's one already in progress")
+	}
+
+	expectedBlockNumber := parent.Number.Uint64() + 1
+
+	// Check the block number
+	if env.Env.Number != expectedBlockNumber {
+		return engine.INVALID, fmt.Errorf("env block number doesn't match expected block number, expected %d, received %d", expectedBlockNumber, env.Env.Number)
+	}
+
+	// Check the timestamp
+	if env.Env.Timestamp < parent.Time {
+		return engine.INVALID, fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
+	}
+
 	return api.envV0(env)
 }
 
-func (api *ConsensusAPI) envV0(env engine.SignedEnv) error {
-	// TODO: Implement
-	log.Info("(api *ConsensusAPI) envV0", env)
-	return nil
+func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
+	blockEnv := (*types.Env)(&env.Env)
+	if blockEnv == nil {
+		return engine.INVALID, errors.New("nil env")
+	}
+
+	unsealedBlock := types.NewUnsealedBlock((*types.Env)(&env.Env))
+	if unsealedBlock == nil {
+		return engine.INVALID, errors.New("nil unsealed block")
+	}
+
+	err := api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
+
+	return engine.VALID, err
 }
