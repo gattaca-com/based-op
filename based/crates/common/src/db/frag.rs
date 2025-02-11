@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
 use alloy_primitives::{map::HashMap, B256};
-use op_alloy_rpc_types::OpTransactionReceipt;
 use parking_lot::RwLock;
 use rand::RngCore;
-use reth_optimism_primitives::OpBlock;
 use reth_trie_common::updates::TrieUpdates;
 use revm::db::{states::bundle_state::BundleRetention, BundleState};
 use revm_primitives::{
@@ -80,26 +78,6 @@ impl<Db: DatabaseRef> DBFrag<Db> {
     pub fn take_state_changes(&self) -> BundleState {
         self.db.write().merge_transitions(BundleRetention::Reverts);
         self.db.write().take_bundle()
-    }
-
-    pub fn get_latest_block(&self) -> Result<OpBlock, Error> {
-        todo!()
-    }
-
-    pub fn get_latest_block_hash(&self) -> Result<B256, Error> {
-        todo!()
-    }
-
-    pub fn get_block_by_number(&self, _number: u64) -> Result<OpBlock, Error> {
-        todo!()
-    }
-
-    pub fn get_block_by_hash(&self, _hash: B256) -> Result<OpBlock, Error> {
-        todo!()
-    }
-
-    pub fn get_transaction_receipt(&self, _hash: B256) -> Result<OpTransactionReceipt, Error> {
-        todo!()
     }
 }
 

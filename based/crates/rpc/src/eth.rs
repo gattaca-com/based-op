@@ -34,7 +34,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>> {
         trace!(%hash, "new request");
 
-        let receipt = match self.shared_state.receipt(&hash) {
+        let receipt = match self.shared_state.get_receipt(&hash) {
             Some(receipt) => Some(receipt),
             None => self.fallback.transaction_receipt(hash).await?,
         };
@@ -47,24 +47,11 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         trace!(%number, full, "new request");
 
         let block = match number {
-            BlockNumberOrTag::Latest => match self.shared_state.as_ref().get_latest_block() {
-                Ok(block) => Some(convert_block(block, full)),
-                Err(err) => {
-                    warn!(%err, "failed latest db fetch");
-                    None
-                }
-            },
-            BlockNumberOrTag::Number(bn) => match self.shared_state.as_ref().get_block_by_number(bn) {
-                Ok(block) => Some(convert_block(block, full)),
-                Err(err) => {
-                    warn!(%err, "failed by number db fetch");
-                    None
-                }
-            },
-            BlockNumberOrTag::Finalized |
-            BlockNumberOrTag::Safe |
-            BlockNumberOrTag::Earliest |
-            BlockNumberOrTag::Pending => None,
+            BlockNumberOrTag::Latest => self.shared_state.get_latest_block().map(|block| convert_block(block, full)),
+            BlockNumberOrTag::Number(bn) => {
+                self.shared_state.get_block_by_number(bn).map(|block| convert_block(block, full))
+            }
+            _ => None,
         };
 
         if block.is_none() {
@@ -78,29 +65,27 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>> {
         trace!(%hash, full, "new request");
 
-        let block = match self.shared_state.as_ref().get_block_by_hash(hash) {
-            Ok(block) => Some(convert_block(block, full)),
-            Err(err) => {
-                warn!(%err, "failed db fetch");
-                self.fallback.block_by_hash(hash, full).await?
-            }
+        let block = match self.shared_state.get_block_by_hash(hash) {
+            Some(block) => Some(convert_block(block, full)),
+            None => self.fallback.block_by_hash(hash, full).await?,
         };
 
         Ok(block)
     }
 
-    // DB
-
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn block_number(&self) -> RpcResult<U256> {
         trace!("block number request");
 
-        let bn = match self.shared_state.as_ref().head_block_number() {
-            Ok(bn) => U256::from(bn),
-            Err(err) => {
-                warn!(%err, "failed db fetch");
-                self.fallback.block_number().await?
-            }
+        let bn = match self.shared_state.get_latest_block_number() {
+            Some(bn) => U256::from(bn),
+            None => match self.shared_state.as_ref().head_block_number() {
+                Ok(bn) => U256::from(bn),
+                Err(err) => {
+                    warn!(%err, "failed db fetch");
+                    self.fallback.block_number().await?
+                }
+            },
         };
 
         Ok(bn)
