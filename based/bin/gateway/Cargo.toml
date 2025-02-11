@@ -1,20 +1,20 @@
 [package]
-name = "bop-gateway"
-version.workspace = true
 edition.workspace = true
+name = "bop-gateway"
 rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
+alloy-eips.workspace = true
+alloy-provider.workspace = true
 bop-common.workspace = true
+bop-db.workspace = true
 bop-rpc.workspace = true
 bop-sequencer.workspace = true
-bop-db.workspace = true
-tokio.workspace = true
 clap.workspace = true
-reqwest.workspace = true
 eyre.workspace = true
-tracing.workspace = true
-alloy-provider.workspace = true
-alloy-eips.workspace = true
-revm-primitives.workspace = true
+reqwest.workspace = true
 reth-optimism-chainspec.workspace = true
+revm-primitives.workspace = true
+tokio.workspace = true
+tracing.workspace = true
