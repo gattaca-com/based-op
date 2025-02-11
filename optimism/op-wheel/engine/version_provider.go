@@ -50,3 +50,7 @@ func (v StaticVersionProvider) NewFragVersion(uint64) eth.EngineAPIMethod {
 func (v StaticVersionProvider) SealFragVersion(uint64) eth.EngineAPIMethod {
 	return eth.SealFragV0
 }
+
+func (v StaticVersionProvider) EnvVersion(uint64) eth.EngineAPIMethod {
+	return eth.EnvV0
+}

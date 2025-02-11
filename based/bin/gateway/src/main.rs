@@ -9,9 +9,12 @@ use bop_common::{
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{init_database, DatabaseRead};
-use bop_rpc::start_rpc;
+use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
-    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
+    block_sync::{
+        block_fetcher::BlockFetcher,
+        mock_fetcher::{MockFetcher, Mode},
+    },
     Sequencer, SequencerConfig, Simulator,
 };
 use clap::Parser;
@@ -83,10 +86,11 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         let fragdb_clone = shared_state.as_ref().clone();
         if args.test {
             s.spawn(|| {
-                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone).run(
-                    spine.to_connections("BlockFetch"),
-                    ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
-                );
+                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone, Mode::Spammer)
+                    .run(
+                        spine.to_connections("BlockFetch"),
+                        ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
+                    );
             });
         } else {
             s.spawn(|| {
@@ -96,13 +100,13 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 );
             });
         }
-        // let root_peer_url = args.root_peer_url.clone();
-        // s.spawn(|| {
-        //     Gossiper::new(None).run(
-        //         spine.to_connections("Gossiper"),
-        //         ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(1)),
-        //     );
-        // });
+        let root_peer_url = args.gossip_root_peer_url.clone();
+        s.spawn(|| {
+            Gossiper::new(root_peer_url).run(
+                spine.to_connections("Gossiper"),
+                ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
+            );
+        });
 
         for id in 0..args.sim_threads {
             s.spawn({
