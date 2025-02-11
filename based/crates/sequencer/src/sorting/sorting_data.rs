@@ -40,7 +40,7 @@ impl SortingTelemetry {
         tracing::info!(
             "{} total sims: {}% success, tot simtime {}",
             self.n_sims_sent,
-            (self.n_sims_succesful * 10000 / self.n_sims_errored) as f64 / 100.0,
+            (self.n_sims_succesful * 10000 / self.n_sims_errored.max(1)) as f64 / 100.0,
             self.tot_sim_time
         );
     }
