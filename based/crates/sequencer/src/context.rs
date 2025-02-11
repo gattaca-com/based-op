@@ -290,6 +290,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             state_root,
             block_hash: v1.block_hash,
         };
+        let mgas = (gas_used / 10_000) as f64 / 100.0;
+        info!(
+            "sealed block with {} txs, {mgas} MGas ({:.2} MGas/s)",
+            frag_seq.txs.len(),
+            mgas / frag_seq.start_t.elapsed().as_secs()
+        );
         (seal, OpExecutionPayloadEnvelopeV3 {
             execution_payload: ExecutionPayloadV3 {
                 payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },

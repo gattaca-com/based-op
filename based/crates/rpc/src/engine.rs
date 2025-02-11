@@ -48,7 +48,7 @@ impl<Db: DatabaseRead> EngineApiServer for RpcServer<Db> {
         Err(RpcError::NoReturn)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    #[tracing::instrument(skip_all, ret(level = Level::TRACE))]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         trace!(%payload_id, "new request");
 
