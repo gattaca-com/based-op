@@ -1489,13 +1489,6 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 }
 
 func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
-	blockEnv := (*types.Env)(&env.Env)
-	if blockEnv == nil {
-		error := errors.New("nil env")
-		log.Error("envV0 failed", "error", error.Error())
-		return engine.INVALID, error
-	}
-
 	unsealedBlock := types.NewUnsealedBlock((*types.Env)(&env.Env))
 	if unsealedBlock == nil {
 		error := errors.New("nil unsealed block")
