@@ -112,9 +112,9 @@ impl<Db> MockFetcher<Db> {
     }
 
     fn run_verification_body(&mut self, connections: &mut SpineConnections<Db>) {
-        connections.receive(|msg, _| {
+        while connections.receive(|msg, _| {
             self.handle_fetch(msg);
-        });
+        }) {}
         if self.next_block < self.sync_until {
             let mut block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
 
