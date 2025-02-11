@@ -1919,13 +1919,13 @@ func TestEnvV0(t *testing.T) {
 			Difficulty:  (*hexutil.Big)(new(big.Int).SetUint64(123123123123123)),
 			Prevrandao:  common.HexToHash("0x0102030405060708091011121314151617181920212223242526272829303132"),
 		}}
-	string, err := api.EnvV0(info)
+	result, err := api.EnvV0(info)
 
 	if err != nil {
 		t.Fatalf("error adding block env: %v", err)
 	}
 
-	if string != engine.VALID {
-		t.Fatalf("invalid: %v", string)
+	if result != engine.VALID {
+		t.Fatalf("invalid: %v", result)
 	}
 }

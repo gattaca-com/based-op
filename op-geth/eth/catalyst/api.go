@@ -1349,21 +1349,21 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 	// Check that there's an unsealed block in progress
 	if !types.IsOpened(currentUnsealedBlock) {
 		error := errors.New("new frag received but no unsealed block was opened")
-		log.Error(error.Error())
+		log.Error("NewFragV0 failed", "error", error.Error())
 		return engine.INVALID, error
 	}
 
 	// Check that the block number matches the unsealed block
 	if frag.Frag.BlockNumber != currentUnsealedBlock.Env.Number {
 		error := fmt.Errorf("frag block number doesn't match opened unsealed block number, expected %d, received %d", currentUnsealedBlock.Env.Number, frag.Frag.BlockNumber)
-		log.Error(error.Error())
+		log.Error("NewFragV0 failed", "error", error.Error())
 		return engine.INVALID, error
 	}
 
 	// Check that the frag sequence number is the next one
 	if !currentUnsealedBlock.IsNextFrag(&frag.Frag) {
 		error := fmt.Errorf("frag sequence number is not the next one, expected %d, received %d", *currentUnsealedBlock.LastSequenceNumber+1, frag.Frag.Seq)
-		log.Error(error.Error())
+		log.Error("NewFragV0 failed", "error", error.Error())
 		return engine.INVALID, error
 	}
 
@@ -1375,6 +1375,7 @@ func (api *ConsensusAPI) newFragV0(f engine.SignedNewFrag, ub *types.UnsealedBlo
 
 	if err != nil {
 		error := fmt.Errorf("failed to insert new frag: %w", err)
+		log.Error("newFragV0 failed", "error", error)
 		return engine.INVALID, error
 	}
 
@@ -1457,14 +1458,14 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 
 	if parent == nil {
 		error := errors.New("there's no parent block")
-		log.Error(error.Error())
+		log.Error("EnvV0 failed", "error", error.Error())
 		return engine.INVALID, error
 	}
 
 	// Check that there's no unsealed block in progress
 	if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
 		error := errors.New("cannot open a new unsealed block while there's one already in progress")
-		log.Error(error.Error())
+		log.Error("EnvV0 failed", "error", error.Error())
 		return engine.INVALID, error
 	}
 
@@ -1473,14 +1474,14 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 	// Check the block number
 	if env.Env.Number != expectedBlockNumber {
 		error := fmt.Errorf("env block number doesn't match expected block number, expected %d, received %d", expectedBlockNumber, env.Env.Number)
-		log.Error(error.Error())
+		log.Error("EnvV0 failed", "error", error.Error())
 		return engine.INVALID, error
 	}
 
 	// Check the timestamp
 	if env.Env.Timestamp < parent.Time {
 		error := fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
-		log.Error(error.Error())
+		log.Error("EnvV0 failed", "error", error.Error())
 		return engine.INVALID, error
 	}
 
@@ -1488,17 +1489,10 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 }
 
 func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
-	blockEnv := (*types.Env)(&env.Env)
-	if blockEnv == nil {
-		error := errors.New("nil env")
-		log.Error(error.Error())
-		return engine.INVALID, error
-	}
-
 	unsealedBlock := types.NewUnsealedBlock((*types.Env)(&env.Env))
 	if unsealedBlock == nil {
 		error := errors.New("nil unsealed block")
-		log.Error(error.Error())
+		log.Error("envV0 failed", "error", error.Error())
 		return engine.INVALID, error
 	}
 

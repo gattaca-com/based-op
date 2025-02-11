@@ -112,9 +112,9 @@ impl<Db> MockFetcher<Db> {
     }
 
     fn run_verification_body(&mut self, connections: &mut SpineConnections<Db>) {
-        connections.receive(|msg, _| {
+        while connections.receive(|msg, _| {
             self.handle_fetch(msg);
-        });
+        }) {}
         if self.next_block < self.sync_until {
             let mut block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
 
@@ -247,14 +247,14 @@ impl<Db> MockFetcher<Db> {
         connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 
         let Ok(sealed_block) = block_rx.blocking_recv() else {
-            warn!("issue getting blocq");
+            warn!("issue getting block");
             return;
         };
         let gas = sealed_block.execution_payload.payload_inner.payload_inner.gas_used;
         let n_txs = sealed_block.execution_payload.payload_inner.payload_inner.transactions.len();
         let el = curt.elapsed();
         info!(
-            "in {}: sequenced {n_txs} txs, {gas} ({} MGas/s)",
+            "in {}: sequenced {n_txs} txs, {gas} ({:.3} MGas/s)",
             curt.elapsed(),
             (gas / 1_000_000) as f64 / el.as_secs()
         );
@@ -262,10 +262,10 @@ impl<Db> MockFetcher<Db> {
 }
 impl<Db: DatabaseRead> MockFetcher<Db> {
     fn run_spam_body(&mut self, connections: &mut SpineConnections<Db>) {
+        while connections.receive(|msg, _| {
+            self.handle_fetch(msg);
+        }) {}
         if self.next_block >= self.sync_until {
-            connections.receive(|msg, _| {
-                self.handle_fetch(msg);
-            });
             let from_account = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
             let signing_wallet = ECDSASigner::try_from_secret(
                 b256!("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80").as_ref(),
@@ -275,9 +275,9 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             let value = U256::from_limbs([1, 0, 0, 0]);
             let chain_id = 2151908;
             let to_account = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-            let max_gas_units = 10000000;
-            let max_fee_per_gas = 100000000;
-            let max_priority_fee_per_gas = 1000;
+            let max_gas_units = 21000;
+            let max_fee_per_gas = 1_258_615_255_000;
+            let max_priority_fee_per_gas = 1_000;
             for _ in 0..1000 {
                 let tx = TxEip1559 {
                     chain_id,

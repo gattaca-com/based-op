@@ -38,8 +38,14 @@ func (ub *UnsealedBlock) IsEmpty() bool {
 func (ub *UnsealedBlock) IsNextFrag(f *Frag) bool {
 	if ub.LastSequenceNumber == nil {
 		return f.IsFirst()
+	}
+
+	lastKnownFrag := ub.Frags[*ub.LastSequenceNumber]
+
+	if lastKnownFrag.IsLast {
+		return false
 	} else {
-		return *ub.LastSequenceNumber+1 == f.Seq
+		return lastKnownFrag.Seq+1 == f.Seq
 	}
 }
 

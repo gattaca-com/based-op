@@ -181,8 +181,6 @@ func (it *insertIterator) remaining() int {
 func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	currentUnsealedBlock := bc.CurrentUnsealedBlock()
 
-	parent := bc.GetBlockByNumber(currentUnsealedBlock.Env.Number - 1)
-
 	statedb := bc.unsealedBlockDbState
 
 	if statedb == nil {
@@ -194,6 +192,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	blockContext := vm.BlockContext{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
+		L1CostFunc:  types.NewL1CostFunc(bc.Config(), statedb),
 		Coinbase:    currentUnsealedBlock.Env.Beneficiary,
 		BlockNumber: new(big.Int).SetUint64(currentUnsealedBlock.Env.Number),
 		Time:        currentUnsealedBlock.Env.Timestamp,
@@ -212,7 +211,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 
 		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(blockContext.BlockNumber)).Bytes()
 
-		signer := types.MakeSigner(bc.Config(), blockContext.BlockNumber, parent.Time()) // TODO: Replace parent.Time()
+		signer := types.MakeSigner(bc.Config(), blockContext.BlockNumber, blockContext.Time)
 
 		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
 

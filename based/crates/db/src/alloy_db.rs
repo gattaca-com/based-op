@@ -16,6 +16,7 @@ use alloy_provider::{
 };
 use alloy_transport::TransportError;
 use alloy_transport_http::Http;
+use bop_common::time::BlockSyncTimers;
 use op_alloy_network::Optimism;
 use reth_db::DatabaseError;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
@@ -174,20 +175,12 @@ impl DatabaseRead for AlloyDB {
 }
 
 impl DatabaseWrite for AlloyDB {
-    fn commit_block(
-        &self,
-        _block: &BlockWithSenders<OpBlock>,
-        _block_execution_output: BlockExecutionOutput<OpReceipt>,
-    ) -> Result<(), Error> {
-        // No-op
-        Ok(())
-    }
-
     fn commit_block_unchecked(
         &self,
         _block: &BlockWithSenders<OpBlock>,
         _block_execution_output: BlockExecutionOutput<OpReceipt>,
         _trie_updates: TrieUpdates,
+        _timers: &mut BlockSyncTimers,
     ) -> Result<(), Error> {
         // No-op
         Ok(())
