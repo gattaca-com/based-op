@@ -116,3 +116,26 @@ test-seal:
 			} \
 		] \
 	}'
+
+test-env:
+	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
+	--data '{ \
+		"jsonrpc": "2.0", \
+		"id": 1, \
+		"method": "based_env", \
+		"params": [ \
+			{ \
+				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
+				"env": { \
+					"totalFrags": 2, \
+					"number": $(BLOCK_NUMBER), \
+					"beneficiary": "0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a", \
+					"timestamp": 2739281173, \
+					"gasLimit": 0, \
+					"baseFee": 0, \
+					"difficulty": 0, \
+					"prevrandao": "0x1234567890123456789012345678901234567890123456789012345678901234" \
+				} \
+			} \
+		] \
+	}'

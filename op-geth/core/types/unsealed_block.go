@@ -9,19 +9,19 @@ import (
 )
 
 type UnsealedBlock struct {
-	Number             *big.Int
+	Env                *Env
 	Frags              []Frag
-	LastSequenceNumber uint64
+	LastSequenceNumber *uint64
 	Hash               common.Hash
 
 	Receipts Receipts
 }
 
-func NewUnsealedBlock(blockNumber *big.Int) *UnsealedBlock {
+func NewUnsealedBlock(e *Env) *UnsealedBlock {
 	return &UnsealedBlock{
-		Number:             blockNumber,
+		Env:                e,
 		Frags:              []Frag{},
-		LastSequenceNumber: *new(uint64),
+		LastSequenceNumber: nil,
 		Hash:               common.Hash{},
 		Receipts:           Receipts{},
 	}
@@ -31,12 +31,26 @@ func IsOpened(ub *UnsealedBlock) bool {
 	return ub != nil
 }
 
+func (ub *UnsealedBlock) IsEmpty() bool {
+	return len(ub.Frags) == 0
+}
+
 func (ub *UnsealedBlock) IsNextFrag(f *Frag) bool {
-	return ub.LastSequenceNumber+1 == f.Seq
+	if ub.LastSequenceNumber == nil {
+		return f.IsFirst()
+	}
+
+	lastKnownFrag := ub.Frags[*ub.LastSequenceNumber]
+
+	if lastKnownFrag.IsLast {
+		return false
+	} else {
+		return lastKnownFrag.Seq+1 == f.Seq
+	}
 }
 
 type Frag struct {
-	blockNumber uint64         `json:"blockNumber"`
+	BlockNumber uint64         `json:"blockNumber"`
 	Seq         uint64         `json:"seq"`
 	IsLast      bool           `json:"isLast"`
 	Txs         []*Transaction `json:"txs"`
@@ -44,10 +58,6 @@ type Frag struct {
 
 func (f *Frag) IsFirst() bool {
 	return f.Seq == 0
-}
-
-func (f *Frag) BlockNumber() *big.Int {
-	return new(big.Int).SetUint64(f.blockNumber)
 }
 
 func (f *Frag) UnmarshalJSON(data []byte) error {
@@ -63,7 +73,7 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	f.blockNumber = frag.BlockNumber
+	f.BlockNumber = frag.BlockNumber
 	f.Seq = frag.Seq
 	f.IsLast = frag.IsLast
 
@@ -74,4 +84,14 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+type Env struct {
+	Number      uint64         `json:number`
+	Beneficiary common.Address `json:beneficiary`
+	Timestamp   uint64         `json:timestamp`
+	GasLimit    uint64         `json:gas_limit`
+	Basefee     uint64         `json:basefee`
+	Difficulty  *big.Int       `json:difficulty`
+	Prevrandao  common.Hash    `json:prevrandao`
 }
