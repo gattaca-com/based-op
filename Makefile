@@ -5,6 +5,21 @@
 
 .DEFAULT_GOAL := help
 
+# Variables
+
+# The following port variables are:
+#
+# - OP_EL_PORT: This is the port of the Sequencer's OP-Node.
+# - BOP_NODE_PORT: This is the port of the Follower's BOP-Node.
+# - BOP_EL_PORT: This is the port of the Follower's BOP-Node.
+#
+# Note: The Kurtosis enclave must be running for these to work.
+OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+
+# Recipes
+
 help: ## 📚 Show help for each of the Makefile recipes
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
