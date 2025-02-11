@@ -235,10 +235,12 @@ type BlockChain struct {
 	// Readers don't need to take it, they can just read the database.
 	chainmu *syncx.ClosableMutex
 
-	currentBlock      atomic.Pointer[types.Header] // Current head of the chain
-	currentSnapBlock  atomic.Pointer[types.Header] // Current head of snap-sync
-	currentFinalBlock atomic.Pointer[types.Header] // Latest (consensus) finalized block
-	currentSafeBlock  atomic.Pointer[types.Header] // Latest (consensus) safe block
+	currentBlock         atomic.Pointer[types.Header] // Current head of the chain
+	currentSnapBlock     atomic.Pointer[types.Header] // Current head of snap-sync
+	currentFinalBlock    atomic.Pointer[types.Header] // Latest (consensus) finalized block
+	currentSafeBlock     atomic.Pointer[types.Header] // Latest (consensus) safe block
+	currentUnsealedBlock *types.UnsealedBlock         // Current unsealed block
+	unsealedBlockDbState *state.StateDB               // StateDB for the current unsealed block
 
 	bodyCache     *lru.Cache[common.Hash, *types.Body]
 	bodyRLPCache  *lru.Cache[common.Hash, rlp.RawValue]
@@ -327,6 +329,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	bc.currentSnapBlock.Store(nil)
 	bc.currentFinalBlock.Store(nil)
 	bc.currentSafeBlock.Store(nil)
+
+	bc.currentUnsealedBlock = nil
 
 	// Update chain info data metrics
 	chainInfoGauge.Update(metrics.GaugeInfoValue{"chain_id": bc.chainConfig.ChainID.String()})
@@ -630,6 +634,17 @@ func (bc *BlockChain) SetSafe(header *types.Header) {
 	} else {
 		headSafeBlockGauge.Update(0)
 	}
+}
+
+func (bc *BlockChain) SetCurrentUnsealedBlock(block *types.UnsealedBlock) error {
+	new_state, err := state.New(bc.CurrentBlock().Root, bc.statedb)
+	if err != nil {
+		return err
+	}
+	bc.unsealedBlockDbState = new_state
+	bc.currentUnsealedBlock = block
+
+	return nil
 }
 
 // rewindHashHead implements the logic of rewindHead in the context of hash scheme.

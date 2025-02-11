@@ -33,13 +33,17 @@ build-op-node: ## 🏗️ Build OP node from optimism directory
 	PLATFORMS="linux/arm64" \
 	docker buildx bake \
 	-f docker-bake.hcl \
+	--set op-node.tags=based_op_node \
 	op-node
 
 build-op-geth: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth ./op-geth
+	docker build -t based_op_geth ./op-geth
 
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op
+
+run-follower: ## 🚀 Run a single follower node with RPC enabled.
+	kurtosis run optimism-package --args-file config-geth-cluster.yml --enclave based-op
 
 logs: ## 📜 Show logs
 	kurtosis service logs -f based-op $(SERVICE)
@@ -64,8 +68,13 @@ restart: clean run ## 🔄 Restart
 
 # Testing
 
+FOLLOWER_NODE_HOST?=http://localhost
+BLOCK_NUMBER?=$(shell echo $$(( $$(cast block-number --rpc-url http://localhost:$(BOP_EL_PORT)) + 1 )))
+DUMMY_RICH_WALLET_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+DUMMY_TX=$(shell cast mktx --rpc-url  $(FOLLOWER_NODE_HOST):$(BOP_EL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a | xxd -r -p | base64)
+
 test-frag:
-	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
+	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
 	--data '{ \
 		"jsonrpc": "2.0", \
 		"id": 1, \
@@ -74,10 +83,10 @@ test-frag:
 			{ \
 				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
 				"frag": { \
-					"blockNumber": 2, \
-					"seq": 1, \
+					"blockNumber": $(BLOCK_NUMBER), \
+					"seq": $(SEQ), \
 					"isLast": false, \
-					"txs": [], \
+					"txs": ["$(DUMMY_TX)"], \
 					"version": 0 \
 				} \
 			} \
@@ -85,7 +94,7 @@ test-frag:
 	}'
 
 test-seal:
-	curl --request POST   --url http://localhost:$(PORT) --header 'Content-Type: application/json' \
+	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
 	--data '{ \
 		"jsonrpc": "2.0", \
 		"id": 1, \
@@ -95,7 +104,7 @@ test-seal:
 				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
 				"seal": { \
 					"totalFrags": 2, \
-					"blockNumber": 2, \
+					"blockNumber": $(BLOCK_NUMBER), \
 					"gasUsed": 0, \
 					"gasLimit": 0, \
 					"parentHash": "0x1234567890123456789012345678901234567890123456789012345678901234", \
