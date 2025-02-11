@@ -23,18 +23,13 @@ use revm::{Database, DatabaseRef, Evm};
 use revm_primitives::{Address, U256};
 
 /// Simulator thread.
-///
-/// TODO: need to impl fn to use system caller and return changes for that.
 pub struct Simulator<'a, Db: DatabaseRef> {
     /// Top of frag evm.
     evm_tof: Evm<'a, (), State<DBFrag<Db>>>,
-
     /// Evm on top of partially built frag
     evm_sorting: Evm<'a, (), State<DBSorting<Db>>>,
-
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
-
     /// How to create an EVM.
     evm_config: OpEvmConfig,
     id: usize,
@@ -63,7 +58,10 @@ where
         regolith_active: bool,
         allow_zero_payment: bool,
         allow_revert: bool,
-    ) -> Result<SimulatedTx, SimulationError> {
+    ) -> Result<SimulatedTx, SimulationError>
+    where
+        SimulateTxDb::Error: std::fmt::Debug,
+    {
         let _ = std::mem::replace(evm.db_mut(), State::new(db));
         simulate_tx_inner(tx, evm, regolith_active, allow_zero_payment, allow_revert)
     }
@@ -84,13 +82,17 @@ where
 
 /// Simulates a transaction at the passed in EVM's state.
 /// Will not modify the db state after the simulation is complete.
-pub fn simulate_tx_inner(
+pub fn simulate_tx_inner<Db>(
     tx: Arc<Transaction>,
-    evm: &mut Evm<'_, (), impl Database>,
+    evm: &mut Evm<'_, (), Db>,
     regolith_active: bool,
     allow_zero_payment: bool,
     allow_revert: bool,
-) -> Result<SimulatedTx, SimulationError> {
+) -> Result<SimulatedTx, SimulationError>
+where
+    Db: Database,
+    Db::Error: std::fmt::Debug,
+{
     let coinbase = evm.block().coinbase;
     // Cache some values pre-simulation.
     let start_balance = balance_from_db(evm.db_mut(), coinbase);
@@ -98,7 +100,7 @@ pub fn simulate_tx_inner(
 
     // Prepare and execute the tx.
     tx.fill_tx_env(evm.tx_mut());
-    let result_and_state = evm.transact().map_err(|_e| SimulationError::EvmError("TODO".to_string()))?;
+    let result_and_state = evm.transact().map_err(|e| SimulationError::EvmError(format!("{e:?}")))?;
 
     if !allow_revert && !result_and_state.result.is_success() {
         return Err(SimulationError::RevertWithDisallowedRevert);
@@ -129,8 +131,6 @@ impl<Db: DatabaseRef + Clone> Actor<Db> for Simulator<'_, Db>
 where
     Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
 {
-    const CORE_AFFINITY: Option<usize> = None;
-
     fn name(&self) -> String {
         let name = last_part_of_typename::<Self>();
         format!("{}-{}", name, self.id)
@@ -147,7 +147,6 @@ where
             let curt = Instant::now();
             let msg =
                 match msg {
-                    // TODO: Cleanup: merge both functions?
                     SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(
                         Self::simulate_transaction(tx, db, &mut self.evm_sorting, self.regolith_active, true, true),
                     ),

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use alloy_consensus::BlockHeader;
+use alloy_consensus::{BlockHeader, TxEip1559};
+use alloy_eips::eip2718::Encodable2718;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::engine::{ForkchoiceState, PayloadId};
 use bop_common::{
@@ -9,51 +10,57 @@ use bop_common::{
         messages::{self, BlockFetch, BlockSyncMessage, EngineApi},
         SpineConnections,
     },
-    db::DatabaseRead,
+    db::{DBFrag, DatabaseRead},
+    signing::ECDSASigner,
     time::{utils::vsync_busy, Duration, Instant},
     transaction::Transaction,
 };
-use core_affinity::CoreId;
 use futures::future::join_all;
+use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reqwest::Url;
+use revm_primitives::{address, b256, TxKind, U256};
 use tokio::{runtime::Runtime, sync::oneshot};
-use tracing::warn;
+use tracing::{info, warn};
 
-use super::{fetch_blocks::fetch_block, AlloyProvider};
+use super::{
+    fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block},
+    AlloyProvider,
+};
 #[derive(Default, Debug, Clone)]
-enum Mode {
+pub enum Mode {
     #[default]
     Verification,
     Benchmark(Vec<Arc<Transaction>>, ForkchoiceState, Box<OpPayloadAttributes>),
+    Spammer,
 }
 
 #[derive(Debug)]
-pub struct MockFetcher {
+pub struct MockFetcher<Db> {
     mode: Mode,
     executor: Runtime,
     next_block: u64,
     sync_until: u64,
     provider: AlloyProvider,
+    db: DBFrag<Db>,
 }
-impl MockFetcher {
-    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64) -> Self {
+impl<Db> MockFetcher<Db> {
+    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64, db: DBFrag<Db>) -> Self {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
-            .on_thread_start(|| {
-                core_affinity::set_for_current(CoreId { id: 1 });
-            })
             .build()
             .expect("couldn't build local tokio runtime");
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
         Self {
-            mode: Mode::default(),
+            // mode: Mode::default(),
             // mode: Mode::Benchmark(vec![], Default::default(), Default::default()),
+            mode: Mode::Spammer,
             executor,
             next_block,
             sync_until,
             provider,
+            db,
         }
     }
 
@@ -66,7 +73,7 @@ impl MockFetcher {
         }
     }
 
-    fn run_verification_body<Db>(&mut self, connections: &mut SpineConnections<Db>) {
+    fn run_verification_body(&mut self, connections: &mut SpineConnections<Db>) {
         connections.receive(|msg, _| {
             self.handle_fetch(msg);
         });
@@ -92,10 +99,11 @@ impl MockFetcher {
             }
 
             Duration::from_millis(2000).sleep();
-            let (block_tx, block_rx) = oneshot::channel();
+            let (block_tx, mut block_rx) = oneshot::channel();
             connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
+            Duration::from_millis(100).sleep();
 
-            let Ok(mut sealed_block) = block_rx.blocking_recv() else {
+            let Ok(mut sealed_block) = block_rx.try_recv() else {
                 warn!("issue getting blocq");
                 return;
             };
@@ -107,27 +115,27 @@ impl MockFetcher {
                 block.body = Default::default();
                 let receipt = sealed_block.execution_payload.payload_inner.payload_inner.receipts_root;
                 if receipt == block.receipts_root {
-                    tracing::info!("receipts match");
+                    info!("receipts match");
                 } else {
-                    tracing::info!(our=%receipt, block = %block.receipts_root, "receipts don't match");
+                    info!(our=%receipt, block = %block.receipts_root, "receipts don't match");
                     debug_assert!(false, "receipts don't match");
                 };
 
                 let gas_used = sealed_block.execution_payload.payload_inner.payload_inner.gas_used;
 
                 if gas_used == block.gas_used() {
-                    tracing::info!("gas_used matches")
+                    info!("gas_used matches")
                 } else {
-                    tracing::info!(our=%gas_used, block = %block.gas_used(), "gas_used doesn't match");
+                    info!(our=%gas_used, block = %block.gas_used(), "gas_used doesn't match");
                     debug_assert!(false, "gas_used doesn't match");
                 };
 
                 let state_root = sealed_block.execution_payload.payload_inner.payload_inner.state_root;
 
                 if state_root == block.state_root() {
-                    tracing::info!("state_root matches")
+                    info!("state_root matches")
                 } else {
-                    tracing::info!(our=%state_root, block = %block.state_root(), "state_root doesn't match");
+                    info!(our=%state_root, block = %block.state_root(), "state_root doesn't match");
                     debug_assert!(false, "state_root doesn't match");
                 };
 
@@ -151,32 +159,32 @@ impl MockFetcher {
             //     tracing::error!("issue with getting payload status");
             //     return;
             // };
-            // tracing::info!("got {r:?} status for new_payload_status, sending fcu");
+            // info!("got {r:?} status for new_payload_status, sending fcu");
 
             // let Ok(r) = fcu_status_rx.blocking_recv() else {
             //     tracing::error!("issue with getting payload status");
             //     return;
             // };
-            // tracing::info!("got {r:?} status for fcu");
+            // info!("got {r:?} status for fcu");
 
             self.next_block += 1;
         }
     }
 
-    fn run_benchmark_body<Db>(&mut self, connections: &mut SpineConnections<Db>) {
+    fn run_benchmark_body(&mut self, connections: &mut SpineConnections<Db>) {
         let (rx, _tx) = oneshot::channel();
         let Mode::Benchmark(txs, fcu, op_attributes) = &mut self.mode else {
             return;
         };
 
-        tracing::info!("gas limit is {}", op_attributes.gas_limit.unwrap());
+        info!("gas limit is {}", op_attributes.gas_limit.unwrap());
         let fcu = EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: *fcu,
             payload_attributes: Some(op_attributes.clone()),
             res_tx: rx,
         };
 
-        tracing::info!("sending {} txs", txs.len());
+        info!("sending {} txs", txs.len());
         // first we send enough for the first frag
         let curt = Instant::now();
         connections.send(fcu);
@@ -221,17 +229,64 @@ impl MockFetcher {
         let gas = sealed_block.execution_payload.payload_inner.payload_inner.gas_used;
         let n_txs = sealed_block.execution_payload.payload_inner.payload_inner.transactions.len();
         let el = curt.elapsed();
-        tracing::info!(
+        info!(
             "in {}: sequenced {n_txs} txs, {gas} ({} MGas/s)",
             curt.elapsed(),
             (gas / 1_000_000) as f64 / el.as_secs()
         );
     }
 }
+impl<Db: DatabaseRead> MockFetcher<Db> {
+    fn run_spam_body(&mut self, connections: &mut SpineConnections<Db>) {
+        if self.next_block >= self.sync_until {
+            connections.receive(|msg, _| {
+                self.handle_fetch(msg);
+            });
+            let from_account = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+            let signing_wallet = ECDSASigner::try_from_secret(
+                b256!("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80").as_ref(),
+            )
+            .unwrap();
+            let mut nonce = self.db.get_nonce(from_account).unwrap();
+            let value = U256::from_limbs([1, 0, 0, 0]);
+            let chain_id = 2151908;
+            let to_account = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+            let max_gas_units = 10000000;
+            let max_fee_per_gas = 100000000;
+            let max_priority_fee_per_gas = 1000;
+            for _ in 0..1000 {
+                let tx = TxEip1559 {
+                    chain_id,
+                    nonce,
+                    gas_limit: max_gas_units,
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                    to: TxKind::Call(to_account),
+                    value,
+                    ..Default::default()
+                };
+                let signed_tx = signing_wallet.sign_tx(tx).unwrap();
+                let tx = OpTxEnvelope::Eip1559(signed_tx);
+                let envelope = tx.encoded_2718().into();
+                let tx = Arc::new(Transaction::new(tx, from_account, envelope));
 
-impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
-    const CORE_AFFINITY: Option<usize> = Some(1);
+                connections.send(tx);
+                nonce += 1;
+            }
+            return;
+        }
+        let stop = (self.next_block + 50).min(self.sync_until);
+        self.executor.block_on(async_fetch_blocks_and_send_sequentially(
+            self.next_block,
+            stop,
+            connections.senders(),
+            &self.provider,
+        ));
+        self.next_block = stop + 1;
+    }
+}
 
+impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
     fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
         let block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
         let (_new_payload_status_rx, new_payload, _fcu_status_rx, fcu_1, _fcu) =
@@ -275,6 +330,9 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher {
             Mode::Verification => self.run_verification_body(connections),
             Mode::Benchmark(_, _, _) => {
                 self.run_benchmark_body(connections);
+            }
+            Mode::Spammer => {
+                self.run_spam_body(connections);
             }
         }
     }

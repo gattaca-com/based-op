@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"sync"
 	"time"
@@ -1340,27 +1341,102 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 	}
 }
 
-// TODO: We must define the responses for the following methods
+func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
+	// TODO: Validations
+	// - Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
 
-func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) error {
-	// TODO: Perform validations
+	currentUnsealedBlock := api.eth.BlockChain().CurrentUnsealedBlock()
+
+	if frag.Frag.IsFirst() {
+		// Check there's no unsealed block in progress.
+		if types.IsOpened(currentUnsealedBlock) {
+			log.Error("NewFrag received with seq 0 but there's an unsealed block in progress")
+			return engine.INVALID, errors.New("current block was not sealed")
+		}
+
+		// Check frag block number == current_head_block_number + 1.
+		expected_block_number := new(big.Int)
+		expected_block_number.Add(api.eth.BlockChain().CurrentBlock().Number, big.NewInt(1))
+		if frag.Frag.BlockNumber().Cmp(expected_block_number) != 0 {
+			log.Error("NewFrag received with seq 0 but unexpected block number", "expected", expected_block_number, "received", frag.Frag.BlockNumber)
+			return engine.INVALID, errors.New("unexpected block number")
+		}
+	} else {
+		// Check that the current last frag does not have the IsLast flag set.
+		if !types.IsOpened(currentUnsealedBlock) {
+			log.Error("NewFrag received with seq > 0 but there's no unsealed block in progress")
+			return engine.INVALID, errors.New("current block was not started")
+		}
+
+		// Check frag block number matches the current unsealed block number
+		if frag.Frag.BlockNumber().Cmp(currentUnsealedBlock.Number) != 0 {
+			log.Error("NewFrag received with seq > 0 but unexpected block number", "expected", currentUnsealedBlock.Number, "received", frag.Frag.BlockNumber)
+			return engine.INVALID, errors.New("unexpected block number")
+		}
+
+		// Check frag sequence number == latest_frag_seq_in_current_unsealed_block + 1.
+		if !currentUnsealedBlock.IsNextFrag(&frag.Frag) {
+			log.Error("NewFrag received with unexpected sequence number", "expected", currentUnsealedBlock.LastSequenceNumber+1, "received", frag.Frag.Seq)
+			return engine.INVALID, errors.New("unexpected sequence number")
+		}
+	}
+
 	return api.newFragV0(frag)
 }
 
-func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) error {
-	// TODO: Implement
-	log.Info("(api *ConsensusAPI) newFragV0", frag)
-	return nil
+func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) (string, error) {
+	var unsealedBlock *types.UnsealedBlock
+
+	// 1. if frag.seq == 0
+	//     a. start an unsealed block.
+	//    else
+	//     a. fetch the current unsealed block
+	if frag.Frag.Seq == 0 {
+		unsealedBlock = types.NewUnsealedBlock(frag.Frag.BlockNumber())
+		api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
+	} else {
+		unsealedBlock = api.eth.BlockChain().CurrentUnsealedBlock()
+	}
+
+	// 2. Insert frag into the unsealed block
+	err := api.eth.BlockChain().InsertNewFrag(frag.Frag)
+	if err != nil {
+		log.Error("Error inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock, "error", err)
+		return engine.INVALID, err
+	}
+
+	// 3. If frag.IsLast, seal the unsealed block
+	if frag.Frag.IsLast {
+		engine.SealBlock(unsealedBlock)
+	}
+
+	// 4. Response (we still need to define how we'll response)
+	// TODO: figure out if we want to respond with more data
+	return engine.VALID, nil
 }
 
-func (api *ConsensusAPI) SealFragV0(seal engine.SignedSeal) error {
-	// TODO: Perform validations
-	return api.sealFragV0(seal)
+func (api *ConsensusAPI) SealFragV0(frag engine.SignedSeal) error {
+	// TODO: Validations
+	// -1. Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
+	// 0. Gas used < gas limit
+	// 1. Check the total frags is correct
+	// 2. Seal the UnsealedBlock
+	// 3. Check the block number
+	// 4. Check the parent hash
+	// 5. Compute and check the block hash (*)
+	// 6. Compute and check the state root (*)
+	// 7. Compute and check the transactions root (*)
+	// 8. Compute and check the receipts root (*)
+	//
+	// (*) double check if we need to compute since we should already know the last new frag sent
+	return api.sealFragV0(frag)
 }
 
-func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) error {
-	// TODO: Implement
-	log.Info("(api *ConsensusAPI) sealFragV0", seal)
+func (api *ConsensusAPI) sealFragV0(frag engine.SignedSeal) error {
+	// TODO:
+	// 1. Commit the seal
+	// 2. Response (we still need to define how we'll response)
+	log.Info("(api *ConsensusAPI) sealFragV0", frag)
 	return nil
 }
 

@@ -686,9 +686,11 @@ func (api *BlockChainAPI) GetBalance(ctx context.Context, address common.Address
 
 	state, _, err := api.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
+		log.Error("Failed to get state", "err", err)
 		return nil, err
 	}
 	b := state.GetBalance(address).ToBig()
+
 	return (*hexutil.Big)(b), state.Error()
 }
 

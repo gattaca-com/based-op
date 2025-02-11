@@ -239,7 +239,7 @@ def launch(
         sidecar_launcher, sidecar_launch_method = (
             sidecar_launchers[mev_type]["launcher"],
             sidecar_launchers[mev_type]["launch_method"],
-        )
+        ) if mev_type else (None, None)
 
         # Zero-pad the index using the calculated zfill value
         index_str = ethereum_package_shared_utils.zfill_custom(

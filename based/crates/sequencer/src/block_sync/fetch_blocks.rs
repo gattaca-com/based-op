@@ -13,11 +13,6 @@ use tracing::{info, warn};
 
 use super::AlloyProvider;
 
-#[allow(unused)]
-pub(crate) const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
-#[allow(unused)]
-pub(crate) const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.publicnode.com";
-
 /// Fetches a range of blocks sends them through the channel.
 ///
 /// The fetching is done in batches, as soon as one batch is received fully, it is ordered sequentially by block number
@@ -32,8 +27,6 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
     block_sender: &SendersSpine<Db>,
     provider: &AlloyProvider,
 ) {
-    info!(start = curr_block, end = end_block, "fetching blocks");
-
     let futures = (curr_block..=end_block).map(|i| fetch_block(i, provider));
 
     let blocks: Vec<BlockWithSenders<OpBlock>> = join_all(futures).await;
@@ -42,33 +35,30 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
         block_sender.send_forever(block);
     }
 
-    info!("fetching and sending blocks done. Last fetched block: {}", curr_block - 1);
+    info!(start = curr_block, last = curr_block - 1, "fetched blocks");
 }
 
 pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockSyncMessage {
-    let mut backoff_ms = 10;
+    const BACKOFF_MAX: Duration = Duration::from_secs(1);
+    const BACKOFF_STEP: Duration = Duration::from_millis(10);
+
+    let mut backoff = BACKOFF_STEP;
+
     loop {
         match client.get_block_by_number(block_number.into(), true.into()).await {
             Ok(Some(block)) => return convert_block(block),
+
             Ok(None) => {
-                warn!(
-                    retry_after=?backoff_ms,
-                    block=%block_number,
-                    "block not found"
-                );
+                warn!(?backoff, block_number, "block not found");
             }
+
             Err(err) => {
-                warn!(
-                    ?err,
-                    retry_after=?backoff_ms,
-                    block=%block_number,
-                    "RPC error while fetching block"
-                );
+                warn!(?err, ?backoff, block_number, "failed fetching");
             }
         }
 
-        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-        backoff_ms = std::cmp::min(backoff_ms * 2, 1000);
+        tokio::time::sleep(backoff).await;
+        backoff = std::cmp::min(backoff * 2, BACKOFF_MAX);
     }
 }
 
@@ -104,6 +94,12 @@ pub fn convert_block(block: RpcBlock<op_alloy_rpc_types::Transaction>) -> BlockW
 
     BlockWithSenders::new_unchecked(block, senders)
 }
+
+#[cfg(test)]
+pub const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
+
+#[cfg(test)]
+pub const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.publicnode.com";
 
 #[cfg(test)]
 mod tests {

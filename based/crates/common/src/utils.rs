@@ -3,6 +3,8 @@ use tracing::level_filters::LevelFilter;
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
+use crate::config::LoggingConfig;
+
 pub const DEFAULT_TRACING_ENV_FILTERS: &[&str] = &[
     "hyper::proto::h1=off",
     "trust_dns_proto=off",
@@ -13,69 +15,66 @@ pub const DEFAULT_TRACING_ENV_FILTERS: &[&str] = &[
     "jsonrpsee=info",
     "alloy_transport_http=info",
     "alloy_rpc_client=info",
+    "storage::db::mdbx=info",
 ];
 
 /// Builds an environment filter for logging. Uses a default set of filters plus some optional
 /// extras.
-pub fn build_env_filter(env_filters: Option<Vec<&str>>) -> EnvFilter {
-    let mut env_filter = EnvFilter::builder().from_env_lossy();
+pub fn build_env_filter(default_level: LevelFilter, env_filters: Option<String>) -> EnvFilter {
+    let env_builder = EnvFilter::builder().with_default_directive(default_level.into());
+
+    let mut env_filter = if let Some(env_filters) = env_filters {
+        env_builder.parse_lossy(env_filters)
+    } else {
+        env_builder.from_env_lossy()
+    };
 
     for directive in DEFAULT_TRACING_ENV_FILTERS {
         env_filter = env_filter.add_directive(directive.parse().unwrap());
-    }
-
-    if let Some(env_filters) = env_filters {
-        for directive in env_filters {
-            if !DEFAULT_TRACING_ENV_FILTERS.contains(&directive) {
-                env_filter = env_filter.add_directive(directive.parse().unwrap());
-            }
-        }
     }
 
     env_filter
 }
 
 /// Initialises tracing logger that creates daily log files.
-pub fn init_tracing(
-    filename_prefix: Option<&str>,
-    max_log_files: usize,
-    env_filters: Option<Vec<&str>>,
-) -> (Option<WorkerGuard>, WorkerGuard) {
-    let format = tracing_subscriber::fmt::format()
-        .with_level(true)
-        .with_thread_ids(false)
-        .with_target(false)
-        .with_timer(tracing_subscriber::fmt::time());
+pub fn init_tracing(config: LoggingConfig) -> WorkerGuard {
+    let format = tracing_subscriber::fmt::format().with_level(true).with_thread_ids(false).with_target(false);
 
-    let (file_layer, worker_guard) = if let Some(fname) = filename_prefix {
-        let log_path = std::env::var("LOG_PATH").unwrap_or("/tmp".into());
+    if config.enable_file_logging {
+        let mut builder =
+            tracing_appender::rolling::Builder::new().rotation(Rotation::DAILY).max_log_files(config.max_files);
 
-        let file_appender = tracing_appender::rolling::Builder::new()
-            .filename_prefix(fname)
-            .max_log_files(max_log_files)
-            .rotation(Rotation::DAILY)
-            .build(log_path)
-            .expect("failed to create log appender!");
-        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-        (
-            Some(
-                tracing_subscriber::fmt::layer()
-                    .event_format(format.clone())
-                    .with_writer(non_blocking)
-                    .with_filter(build_env_filter(env_filters.clone())),
-            ),
-            Some(guard),
-        )
+        if let Some(prefix) = config.prefix {
+            builder = builder.filename_prefix(prefix);
+        }
+
+        let appender = builder.build(config.path).expect("failed to create log appender!");
+        let (writer, guard) = tracing_appender::non_blocking(appender);
+
+        let stdout_layer = tracing_subscriber::fmt::layer()
+            .event_format(format.clone())
+            .with_filter(build_env_filter(config.level, config.filters.clone()));
+
+        let file_layer = tracing_subscriber::fmt::layer()
+            .event_format(format)
+            .with_ansi(false)
+            .with_writer(writer)
+            .with_filter(build_env_filter(config.level, config.filters.clone()));
+
+        tracing_subscriber::registry().with(stdout_layer.and_then(file_layer)).init();
+
+        guard
     } else {
-        (None, None)
-    };
-    let (stdout_writer, stdout_guard) = tracing_appender::non_blocking(std::io::stdout());
-    let stdout_layer = tracing_subscriber::fmt::layer()
-        .event_format(format.clone())
-        .with_writer(stdout_writer)
-        .with_filter(build_env_filter(env_filters));
-    tracing_subscriber::registry().with(stdout_layer).with(file_layer).init();
-    (worker_guard, stdout_guard)
+        let (writer, guard) = tracing_appender::non_blocking(std::io::stdout());
+
+        let stdout_layer = tracing_subscriber::fmt::layer()
+            .event_format(format)
+            .with_writer(writer)
+            .with_filter(build_env_filter(config.level, config.filters.clone()));
+
+        tracing_subscriber::registry().with(stdout_layer).init();
+        guard
+    }
 }
 
 pub fn initialize_test_tracing(level: LevelFilter) {
@@ -151,23 +150,5 @@ pub fn last_part_of_typename<T>() -> &'static str {
         &full_name[..generic_start]
     } else {
         full_name
-    }
-}
-
-pub fn last_part_of_typename_without_generic<T>() -> &'static str {
-    let name = strip_namespace(std::any::type_name::<T>());
-    if let Some(id) = name.find('<') {
-        &name[..id]
-    } else {
-        name
-    }
-}
-
-pub fn typename_no_generics<T>() -> &'static str {
-    let name = strip_namespace(std::any::type_name::<T>());
-    if let Some(last) = name.find('<') {
-        &name[..last]
-    } else {
-        name
     }
 }

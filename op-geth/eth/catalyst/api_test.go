@@ -1861,17 +1861,19 @@ func TestNewFragV0(t *testing.T) {
 	api := NewConsensusAPI(ethservice)
 	info := engine.SignedNewFrag{
 		Signature: engine.Bytes65{},
-		Frag: engine.NewFrag{
-			BlockNumber: 10,
+		Frag: types.Frag{
+			blockNumber: 10,
 			Seq:         0,
 			IsLast:      true,
-			Txs:         make([]engine.Data, 0),
-			Version:     0,
+			Txs:         []*types.Transaction{},
 		},
 	}
-	err := api.NewFragV0(info)
+	status, err := api.NewFragV0(info)
 	if err != nil {
 		t.Fatalf("error creating new frag: %v", err)
+	}
+	if status != engine.VALID {
+		t.Fatalf("unexpected status: %v", status)
 	}
 }
 
@@ -1919,6 +1921,6 @@ func TestEnvV0(t *testing.T) {
 		}}
 	err := api.EnvV0(info)
 	if err != nil {
-		t.Fatalf("error sealing frag: %v", err)
+		t.Fatalf("error adding block env: %v", err)
 	}
 }

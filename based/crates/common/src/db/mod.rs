@@ -42,6 +42,8 @@ pub trait DatabaseWrite:
         block_execution_output: BlockExecutionOutput<OpReceipt>,
         trie_updates: TrieUpdates,
     ) -> Result<(), Error>;
+
+    fn roll_back_head(&self) -> Result<(), Error>;
 }
 
 /// Database read functions

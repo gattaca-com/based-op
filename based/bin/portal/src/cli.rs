@@ -1,9 +1,11 @@
 use std::{net::Ipv4Addr, path::PathBuf};
 
+use bop_common::config::LoggingConfig;
 use clap::{command, Parser};
 use eyre::bail;
 use reqwest::Url;
 use reth_rpc_layer::JwtSecret;
+use tracing::level_filters::LevelFilter;
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, name = "based-portal")]
@@ -77,6 +79,23 @@ impl PortalArgs {
             Ok(jwt)
         } else {
             bail!("either --gateway.jwt or --gateway.jwt_path must be provided");
+        }
+    }
+}
+
+impl From<&PortalArgs> for LoggingConfig {
+    fn from(args: &PortalArgs) -> Self {
+        Self {
+            level: args
+                .trace
+                .then_some(LevelFilter::TRACE)
+                .or(args.debug.then_some(LevelFilter::DEBUG))
+                .unwrap_or(LevelFilter::INFO),
+            enable_file_logging: false,
+            prefix: None,
+            max_files: 100,
+            path: PathBuf::from("/tmp"),
+            filters: None,
         }
     }
 }

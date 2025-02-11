@@ -419,6 +419,10 @@ func (v *ClientVersionV1) String() string {
 	return fmt.Sprintf("%s-%s-%s-%s", v.Code, v.Name, v.Version, v.Commit)
 }
 
+func SealBlock(ub *types.UnsealedBlock) (*types.Block, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 type Bytes65 [65]byte
 
 func (b *Bytes65) UnmarshalJSON(text []byte) error {
@@ -470,16 +474,8 @@ func (b Bytes32) TerminalString() string {
 }
 
 type SignedNewFrag struct {
-	Signature Bytes65 `json:"signature"`
-	Frag      NewFrag `json:"frag"`
-}
-
-type NewFrag struct {
-	BlockNumber uint64 `json:"blockNumber"`
-	Seq         uint64 `json:"seq"`
-	IsLast      bool   `json:"isLast"`
-	Txs         []Data `json:"txs"`
-	Version     uint64 `json:"version"`
+	Signature Bytes65    `json:"signature"`
+	Frag      types.Frag `json:"frag"`
 }
 
 type SignedSeal struct {

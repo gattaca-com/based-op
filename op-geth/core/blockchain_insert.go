@@ -17,11 +17,14 @@
 package core
 
 import (
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -173,4 +176,74 @@ func (it *insertIterator) current() *types.Header {
 // remaining returns the number of remaining blocks.
 func (it *insertIterator) remaining() int {
 	return len(it.chain) - it.index
+}
+
+func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
+	currentUnsealedBlock := bc.CurrentUnsealedBlock()
+
+	parent := bc.GetBlockByNumber(currentUnsealedBlock.Number.Uint64() - 1)
+
+	statedb := bc.unsealedBlockDbState
+
+	if statedb == nil {
+		return fmt.Errorf("unsealed block state db not set")
+	}
+
+	chainConfig := bc.Config()
+
+	blockContext := vm.BlockContext{
+		CanTransfer: CanTransfer,
+		Transfer:    Transfer,
+		Coinbase:    parent.Coinbase(),
+		BlockNumber: currentUnsealedBlock.Number,
+		Time:        parent.Time(),
+		Difficulty:  parent.Difficulty(),
+		GasLimit:    math.MaxUint64,
+		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
+		BaseFee:     parent.BaseFee(),
+	}
+
+	vmConfig := bc.GetVMConfig()
+
+	var receipts types.Receipts
+	for i, tx := range frag.Txs {
+		gp := new(GasPool).AddGas(tx.Gas())
+
+		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(currentUnsealedBlock.Number)).Bytes()
+
+		signer := types.MakeSigner(bc.Config(), currentUnsealedBlock.Number, parent.Time()) // TODO: Replace parent.Time()
+
+		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
+
+		if err != nil {
+			return fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
+		}
+
+		txContext := NewEVMTxContext(msg)
+
+		evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
+
+		statedb.SetTxContext(tx.Hash(), i)
+
+		txExecutionResult, err := ApplyMessage(evm, msg, gp)
+
+		if err != nil {
+			return fmt.Errorf("could not apply message %v: %w", tx.Hash().Hex(), err)
+		}
+
+		txReceipt := MakeReceipt(evm, txExecutionResult, statedb, currentUnsealedBlock.Number, currentUnsealedBlock.Hash, tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
+
+		receipts = append(receipts, txReceipt)
+	}
+
+	// Update the unsealed block state:
+	// 1. Insert the frag into the current unsealed block
+	// 2. Update the last sequence number
+	// 3. Insert the receipts into the current unsealed block
+
+	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
+	currentUnsealedBlock.LastSequenceNumber = frag.Seq
+	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, receipts...)
+
+	return nil
 }

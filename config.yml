@@ -1,9 +1,20 @@
 optimism_package:
   chains:
     - participants:
+        # Vanilla Stack (OP-Node, OP-EL)
         - el_type: op-reth
           cl_type: op-node
-          # cl_extra_params: [--rpc.based]
+          cl_image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:latest
+        # Follower Node Stack (BOP-Node, BOP-EL)
+        - el_type: op-geth
+          el_image: based_op_geth
+          el_extra_params:
+            - --rollup.sequencerhttp
+            - http://host.docker.internal:9997
+          cl_type: op-node
+          cl_image: based_op_node
+          cl_extra_params:
+            - --rpc.enable-based
       mev_type: based-portal
       mev_params:
         based_portal_image: based_portal_local
@@ -15,4 +26,5 @@ optimism_package:
 ethereum_package:
   participants:
     - el_type: geth
+      # This is fixed because v1.15.0 (latest) introduces braking changes
       el_image: ethereum/client-go:v1.14.13
