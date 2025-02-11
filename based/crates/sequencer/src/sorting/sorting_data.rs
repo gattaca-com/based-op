@@ -34,6 +34,17 @@ pub struct SortingTelemetry {
     n_sims_succesful: usize,
     tot_sim_time: Duration,
 }
+impl SortingTelemetry {
+    #[tracing::instrument(skip_all, name = "sorting_telemetry")]
+    pub fn report(&self) {
+        tracing::info!(
+            "{} total sims: {}% success, tot simtime {}",
+            self.n_sims_sent,
+            (self.n_sims_succesful * 10000 / self.n_sims_errored) as f64 / 100.0,
+            self.tot_sim_time
+        );
+    }
+}
 
 impl AddAssign for SortingTelemetry {
     fn add_assign(&mut self, rhs: Self) {
@@ -213,15 +224,32 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
     }
 
     pub fn send_next(mut self, n_sims_per_loop: usize, senders: &mut SpineConnections<Db>) -> Self {
-        let db = self.state();
-
-        for t in self.tof_snapshot.iter().rev().take(n_sims_per_loop).map(|t| t.next_to_sim()) {
-            debug_assert!(t.is_some(), "Unsimmable TxList should have been cleared previously");
-            let tx = t.unwrap();
-            senders.send(SequencerToSimulator::SimulateTx(tx, db.clone()));
+        if self.tof_snapshot.len() == 0 {
+            return self;
+        }
+        let mut i = self.tof_snapshot.len() - 1;
+        while self.in_flight_sims < n_sims_per_loop {
+            // check if we even have enough gas left for next order
+            if self.tof_snapshot.verify_gas(i, self.gas_remaining) {
+                self.tof_snapshot.swap_remove_back(i);
+                if i == 0 {
+                    return self;
+                }
+                i -= 1;
+                continue;
+            }
+            let order = self.tof_snapshot[i].next_to_sim();
+            debug_assert!(order.is_some(), "Unsimmable TxList should have been cleared previously");
+            let tx_to_sim = order.unwrap();
+            senders.send(SequencerToSimulator::SimulateTx(tx_to_sim, self.state()));
             self.in_flight_sims += 1;
             self.telemetry.n_sims_sent += 1;
+            if i == 0 {
+                return self;
+            }
+            i -= 1;
         }
+
         self
     }
 

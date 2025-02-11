@@ -20,14 +20,15 @@ impl Gossiper {
             return;
         };
         let Ok(res) = self.client.post(url).json(&msg).send() else {
-            tracing::error!("couldn't send {msg:?}");
+            tracing::error!("couldn't send {}", msg.as_ref());
             return;
         };
 
         if let Err(e) = res.error_for_status_ref() {
             tracing::error!("received {e} upon sending {msg:?}");
-            tracing::error!("body: {:?}", res.text());
+            tracing::error!("body: {:.20}", format!("{:?}", res.text()));
         }
+        tracing::info!(" successfully sent {}", msg.as_ref());
     }
 }
 
