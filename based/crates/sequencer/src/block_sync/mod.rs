@@ -1,10 +1,11 @@
 // #![allow(unused)] // TODO: remove
 
-use std::{fmt::Display, sync::Arc, time::Instant};
+use std::{fmt::Display, sync::Arc};
 
 use bop_common::{
     communication::messages::BlockSyncError,
     db::{DatabaseRead, DatabaseWrite},
+    time::BlockSyncTimers,
 };
 use reth_consensus::ConsensusError;
 use reth_evm::execute::{
@@ -33,13 +34,14 @@ pub struct BlockSync {
     /// Blocks that we have received from the provider but require a prior block to be applied before this can be.
     /// Sorted list in reverse order by block number.
     pending_blocks: Vec<BlockWithSenders<OpBlock>>,
+    timers: BlockSyncTimers,
 }
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
     pub fn new(chain_spec: Arc<OpChainSpec>) -> Self {
         let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
-        Self { chain_spec, execution_factory, pending_blocks: vec![] }
+        Self { chain_spec, execution_factory, pending_blocks: vec![], timers: Default::default() }
     }
 
     /// Returns block numbers to fetch, start to end. This will be used in the case of a reorg.
@@ -53,6 +55,7 @@ impl BlockSync {
     where
         DB: DatabaseWrite + DatabaseRead,
     {
+        self.timers.total.start();
         let db_head = db.head_block_number()?;
         let block_number = block.header.number;
 
@@ -96,11 +99,7 @@ impl BlockSync {
             return Ok(Some((db.head_block_number().unwrap() + 1, block.header.number)));
         }
 
-        let (execution_output, trie_updates) = self.execute(block, db)?;
-
-        if commit_block {
-            db.commit_block_unchecked(block, execution_output, trie_updates)?;
-        }
+        self.execute_and_maybe_commit(block, db, commit_block)?;
 
         // Process any pending blocks that can now be applied
         while let Some(last_pending) = self.pending_blocks.last() {
@@ -126,14 +125,44 @@ impl BlockSync {
                 return Ok(Some((pending_block.header.number - 1, pending_block.header.number)));
             }
 
-            // Apply block
-            let (execution_output, trie_updates) = self.execute(&pending_block, db)?;
-            if commit_block {
-                db.commit_block_unchecked(&pending_block, execution_output, trie_updates)?;
-            }
+            self.execute_and_maybe_commit(&pending_block, db, commit_block)?;
         }
+        self.timers.total.stop();
+        info!(
+            n_txs = block.body.transactions.len(),
+            total_t = %self.timers.total.elapsed(),
+        );
+        tracing::debug!(
+            "commit block took: {} (caches: {}, state_changes: {}, trie_updates: {}, header_write: {}, db_commit: {})",
+            self.timers.total.elapsed(),
+            self.timers.caches.elapsed(),
+            self.timers.state_changes.elapsed(),
+            self.timers.trie_updates.elapsed(),
+            self.timers.header_write.elapsed(),
+            self.timers.db_commit.elapsed(),
+        );
 
         Ok(None)
+    }
+
+    pub fn execute_and_maybe_commit<DB>(
+        &mut self,
+        block: &BlockWithSenders<OpBlock>,
+        db: &DB,
+        commit: bool,
+    ) -> Result<(), BlockSyncError>
+    where
+        DB: DatabaseWrite + DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+    {
+        self.timers.execution.start();
+        let (execution_output, trie_updates) = self.execute(block, db)?;
+        self.timers.execution.stop();
+        if commit {
+            self.timers.db_commit.start();
+            db.commit_block_unchecked(block, execution_output, trie_updates, &mut self.timers)?;
+            self.timers.db_commit.stop();
+        }
+        Ok(())
     }
 
     /// Executes a block and validates its state root and receipts.
@@ -146,46 +175,40 @@ impl BlockSync {
     where
         DB: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
-        let start = Instant::now();
         debug_assert!(
             block.header.parent_hash == db.head_block_hash().expect("failed to get head block hash"),
             "can only apply blocks sequentially"
         );
-
+        self.timers.execute_txs.start();
         // Apply the block.
         let mut executor = self.execution_factory.create_strategy(db.clone());
         executor.apply_pre_execution_changes(block)?;
         let ExecuteOutput { receipts, gas_used } = executor.execute_transactions(block)?;
         let requests = executor.apply_post_execution_changes(block, &receipts)?;
-        let after_block_apply = Instant::now();
+        self.timers.execute_txs.stop();
 
         // Validate receipts/ gas used
-        reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &receipts)?;
+        self.timers
+            .validate
+            .time(|| reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &receipts))?;
 
         // Merge transitions and take bundle state.
-        let state = executor.finish();
-        let after_bundle_state_finish = Instant::now();
+        let state = self.timers.take_bundle.time(|| executor.finish());
 
         // Validate state root
-        let (state_root, trie_updates) = db
-            .calculate_state_root(&state)
-            .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::Other(e.into())))?;
+        let trie_updates = self.timers.state_root.time(|| {
+            let (state_root, trie_updates) = db
+                .calculate_state_root(&state)
+                .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::Other(e.into())))?;
 
-        if state_root != block.header.state_root {
-            return Err(BlockExecutionError::Consensus(ConsensusError::BodyStateRootDiff(
-                GotExpected::new(state_root, block.header.state_root).into(),
-            )));
-        }
-        let after_state_root = Instant::now();
-
-        info!(
-            n_txs = block.body.transactions.len(),
-            %state_root,
-            total_t = ?start.elapsed(),
-            block_apply_t = ?after_block_apply.duration_since(start),
-            state_root_t = ?after_state_root.duration_since(after_bundle_state_finish),
-            "committed"
-        );
+            if state_root != block.header.state_root {
+                return Err(BlockExecutionError::Consensus(ConsensusError::BodyStateRootDiff(
+                    GotExpected::new(state_root, block.header.state_root).into(),
+                )));
+            }
+            Ok(trie_updates)
+        })?;
+        self.timers.state_root.stop();
 
         Ok((BlockExecutionOutput { state, receipts, requests, gas_used }, trie_updates))
     }
