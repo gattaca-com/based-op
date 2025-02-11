@@ -39,7 +39,7 @@ deps: ## 🚀 Install all dependencies
 
 build: build-portal build-op-node build-op-geth ## 🏗️ Build
 
-build-portal:
+build-portal: ## 🏗️ Build based portal from based directory
 	docker build -t based_portal_local --build-context reth=./reth ./based
 
 build-op-node: ## 🏗️ Build OP node from optimism directory
@@ -66,7 +66,7 @@ logs: ## 📜 Show logs
 dump:
 	bash -c 'kurtosis files download based-op $$(kurtosis enclave inspect based-op | grep op-deployer-configs | awk "{print \$$1}") ./genesis'
 
-gateway:
+gateway: ## 🚀 Run the gateway
 	RUST_LOG=debug cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway -- \
 	--db.datadir ./data \
 	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
