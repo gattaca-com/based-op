@@ -8,6 +8,9 @@ optimism_package:
         # Follower Node Stack (BOP-Node, BOP-EL)
         - el_type: op-geth
           el_image: based_op_geth
+          el_extra_params:
+            - --rollup.sequencerhttp
+            - http://host.docker.internal:9997
           cl_type: op-node
           cl_image: based_op_node
           cl_extra_params:
