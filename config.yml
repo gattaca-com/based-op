@@ -1,17 +1,17 @@
 optimism_package:
   chains:
     - participants:
-        # Vanilla Stack (OP-Node, OP-EL)
+        # Vanilla Stack (OP-Node, OP-EL) for the Sequencer
         - el_type: op-reth
           cl_type: op-node
           cl_image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:latest
         # Follower Node Stack (BOP-Node, BOP-EL)
-        - el_type: op-geth
-          el_image: based_op_geth
-          cl_type: op-node
-          cl_image: based_op_node
-          cl_extra_params:
-            - --rpc.enable-based
+        # - el_type: op-geth
+        #   el_image: based_op_geth
+        #   cl_type: op-node
+        #   cl_image: based_op_node
+        #   cl_extra_params:
+        #     - --rpc.enable-based
       mev_type: based-portal
       mev_params:
         based_portal_image: based_portal_local
