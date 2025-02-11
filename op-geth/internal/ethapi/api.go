@@ -684,14 +684,6 @@ func (api *BlockChainAPI) GetBalance(ctx context.Context, address common.Address
 		}
 	}
 
-	last_state, _, err := api.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(header.Number.Int64()))
-	if last_state == nil || err != nil {
-		return nil, err
-	}
-
-	last_b := last_state.GetBalance(address).ToBig()
-	log.Info("Balance of last commited block", "b", last_b)
-
 	state, _, err := api.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		log.Error("Failed to get state", "err", err)
