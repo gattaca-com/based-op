@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math/big"
 	"strconv"
 	"sync"
 	"time"
@@ -1347,76 +1346,44 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 
 	currentUnsealedBlock := api.eth.BlockChain().CurrentUnsealedBlock()
 
-	log.Info("NewFrag received", "frag", frag)
-	if frag.Frag.IsFirst() {
-		// Check there's no unsealed block in progress.
-		if types.IsOpened(currentUnsealedBlock) {
-			log.Error("NewFrag received with seq 0 but there's an unsealed block in progress")
-			return engine.INVALID, errors.New("current block was not sealed")
-		}
-
-		// Check frag block number == current_head_block_number + 1.
-		expected_block_number := new(big.Int)
-		expected_block_number.Add(api.eth.BlockChain().CurrentBlock().Number, big.NewInt(1))
-		if frag.Frag.BlockNumber().Cmp(expected_block_number) != 0 {
-			log.Error("NewFrag received with seq 0 but unexpected block number", "expected", expected_block_number, "received", frag.Frag.BlockNumber)
-			return engine.INVALID, errors.New("unexpected block number")
-		}
-	} else {
-		// Check that the current last frag does not have the IsLast flag set.
-		if !types.IsOpened(currentUnsealedBlock) {
-			log.Error("NewFrag received with seq > 0 but there's no unsealed block in progress")
-			return engine.INVALID, errors.New("current block was not started")
-		}
-
-		// Check frag block number matches the current unsealed block number
-		if frag.Frag.BlockNumber().Cmp(currentUnsealedBlock.Number) != 0 {
-			log.Error("NewFrag received with seq > 0 but unexpected block number", "expected", currentUnsealedBlock.Number, "received", frag.Frag.BlockNumber)
-			return engine.INVALID, errors.New("unexpected block number")
-		}
-
-		// Check frag sequence number == latest_frag_seq_in_current_unsealed_block + 1.
-		if !currentUnsealedBlock.IsNextFrag(&frag.Frag) {
-			log.Error("NewFrag received with unexpected sequence number", "expected", currentUnsealedBlock.LastSequenceNumber+1, "received", frag.Frag.Seq)
-			return engine.INVALID, errors.New("unexpected sequence number")
-		}
+	// Check that there's an unsealed block in progress
+	if !types.IsOpened(currentUnsealedBlock) {
+		return engine.INVALID, errors.New("new frag sent but no unsealed block was opened")
 	}
 
-	log.Info("NewFrag is valid")
-	return api.newFragV0(frag)
+	// Check that the block number matches the unsealed block
+	if frag.Frag.BlockNumber != currentUnsealedBlock.Env.Number {
+		return engine.INVALID, fmt.Errorf("frag block number doesn't match opened unsealed block number, expected %d, received %d", currentUnsealedBlock.Env.Number, frag.Frag.BlockNumber)
+	}
+
+	// Check that the unsealed block is empty for the first frag
+	if frag.Frag.IsFirst() && !currentUnsealedBlock.IsEmpty() {
+		return engine.INVALID, errors.New("unsealed block is not empty and frag is the first one")
+	}
+
+	// Check that the unsealed block is not empty for the following frags
+	if !frag.Frag.IsFirst() && currentUnsealedBlock.IsEmpty() {
+		return engine.INVALID, errors.New("unsealed block is empty and frag is not the first one")
+	}
+
+	// Check that the frag sequence number is the next one
+	if !currentUnsealedBlock.IsNextFrag(&frag.Frag) {
+		return engine.INVALID, fmt.Errorf("frag sequence number is not the next one, expected %d, received %d", *currentUnsealedBlock.LastSequenceNumber+1, frag.Frag.Seq)
+	}
+
+	return api.newFragV0(frag, currentUnsealedBlock)
 }
 
-func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) (string, error) {
-	var unsealedBlock *types.UnsealedBlock
+func (api *ConsensusAPI) newFragV0(f engine.SignedNewFrag, ub *types.UnsealedBlock) (string, error) {
+	err := api.eth.BlockChain().InsertNewFrag(f.Frag)
 
-	// 1. if frag.seq == 0
-	//     a. start an unsealed block.
-	//    else
-	//     a. fetch the current unsealed block
-	if frag.Frag.Seq == 0 {
-		log.Info("[engine_newFragV0] Frag sequence is 0, starting a new unsealed block", "frag", frag.Frag)
-		unsealedBlock = types.NewUnsealedBlock(frag.Frag.BlockNumber())
-		api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
-	} else {
-		log.Info("[engine_newFragV0] Fetching current unsealed block", "frag", frag.Frag)
-		unsealedBlock = api.eth.BlockChain().CurrentUnsealedBlock()
-	}
-
-	// 2. Insert frag into the unsealed block
-	log.Info("[engine_newFragV0] Inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
-	err := api.eth.BlockChain().InsertNewFrag(frag.Frag)
 	if err != nil {
-		log.Error("[engine_newFragV0] Error inserting new frag into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock, "error", err)
-		return engine.INVALID, err
+		return engine.INVALID, fmt.Errorf("failed to insert new frag: %w", err)
 	}
 
-	// 3. If frag.IsLast, seal the unsealed block
-	if frag.Frag.IsLast {
-		log.Info("[engine_newFragV0] Frag is last, sealing unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
-		engine.SealBlock(unsealedBlock)
+	if f.Frag.IsLast {
+		engine.SealBlock(ub)
 	}
-
-	log.Info("[engine_newFragV0] New frag inserted into unsealed block", "frag", frag.Frag, "unsealedBlock", unsealedBlock)
 
 	// 4. Response (we still need to define how we'll response)
 	// TODO: figure out if we want to respond with more data

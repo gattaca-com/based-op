@@ -18,7 +18,7 @@ package core
 
 import (
 	"fmt"
-	"math"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -181,7 +181,7 @@ func (it *insertIterator) remaining() int {
 func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	currentUnsealedBlock := bc.CurrentUnsealedBlock()
 
-	parent := bc.GetBlockByNumber(currentUnsealedBlock.Number.Uint64() - 1)
+	parent := bc.GetBlockByNumber(currentUnsealedBlock.Env.Number - 1)
 
 	statedb := bc.unsealedBlockDbState
 
@@ -194,13 +194,14 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	blockContext := vm.BlockContext{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
-		Coinbase:    parent.Coinbase(),
-		BlockNumber: currentUnsealedBlock.Number,
-		Time:        parent.Time(),
-		Difficulty:  parent.Difficulty(),
-		GasLimit:    math.MaxUint64,
+		Coinbase:    currentUnsealedBlock.Env.Beneficiary,
+		BlockNumber: new(big.Int).SetUint64(currentUnsealedBlock.Env.Number),
+		Time:        currentUnsealedBlock.Env.Timestamp,
+		Difficulty:  currentUnsealedBlock.Env.Difficulty.ToInt(),
+		GasLimit:    currentUnsealedBlock.Env.GasLimit,
 		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
-		BaseFee:     parent.BaseFee(),
+		BaseFee:     new(big.Int).SetUint64(currentUnsealedBlock.Env.Basefee),
+		Random:      &currentUnsealedBlock.Env.Prevrandao,
 	}
 
 	vmConfig := bc.GetVMConfig()
@@ -209,9 +210,9 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	for i, tx := range frag.Txs {
 		gp := new(GasPool).AddGas(tx.Gas())
 
-		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(currentUnsealedBlock.Number)).Bytes()
+		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(blockContext.BlockNumber)).Bytes()
 
-		signer := types.MakeSigner(bc.Config(), currentUnsealedBlock.Number, parent.Time()) // TODO: Replace parent.Time()
+		signer := types.MakeSigner(bc.Config(), blockContext.BlockNumber, parent.Time()) // TODO: Replace parent.Time()
 
 		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
 
@@ -231,7 +232,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 			return fmt.Errorf("could not apply message %v: %w", tx.Hash().Hex(), err)
 		}
 
-		txReceipt := MakeReceipt(evm, txExecutionResult, statedb, currentUnsealedBlock.Number, currentUnsealedBlock.Hash, tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
+		txReceipt := MakeReceipt(evm, txExecutionResult, statedb, blockContext.BlockNumber, currentUnsealedBlock.Hash, tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
 
 		receipts = append(receipts, txReceipt)
 	}
@@ -242,7 +243,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	// 3. Insert the receipts into the current unsealed block
 
 	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
-	currentUnsealedBlock.LastSequenceNumber = frag.Seq
+	currentUnsealedBlock.LastSequenceNumber = &frag.Seq
 	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, receipts...)
 
 	return nil
