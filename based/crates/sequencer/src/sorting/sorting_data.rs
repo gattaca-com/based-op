@@ -336,6 +336,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
             self.payment += simulated_tx.payment;
             self.txs.push(simulated_tx);
         }
+
         Ok(())
     }
 }
