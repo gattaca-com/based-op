@@ -85,7 +85,7 @@ op-geth-logs:
 	$(MAKE) logs SERVICE=op-el-1-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
-	rm -rf ./genesis && kurtosis enclave rm  based-op --force
+	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data
 
 restart: clean dump run ## 🔄 Restart
 
