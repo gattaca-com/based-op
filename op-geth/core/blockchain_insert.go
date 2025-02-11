@@ -215,13 +215,13 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 
 		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
 
-		txContext := NewEVMTxContext(msg)
-
-		evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
-
 		if err != nil {
 			return fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
 		}
+
+		txContext := NewEVMTxContext(msg)
+
+		evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
 
 		statedb.SetTxContext(tx.Hash(), i)
 
