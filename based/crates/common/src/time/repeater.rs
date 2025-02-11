@@ -11,7 +11,7 @@ pub struct Repeater {
 impl Repeater {
     #[inline]
     pub fn every(interval: Duration) -> Self {
-        Self { interval, last_acted: Instant::now() }
+        Self { interval, last_acted: Instant::ZERO }
     }
 
     #[inline]

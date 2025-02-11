@@ -16,7 +16,7 @@ use crate::{
     p2p::VersionedMessage,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
-    utils::last_part_of_typename,
+    utils::{full_last_part_of_typename, last_part_of_typename},
 };
 
 pub type CrossBeamReceiver<T> = crossbeam_channel::Receiver<InternalMessage<T>>;
@@ -116,7 +116,7 @@ impl<T, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
     pub fn new<S: AsRef<str>>(system_name: S, receiver: R) -> Self {
         Self {
             receiver,
-            timer: Timer::new(format!("{}-{}", system_name.as_ref(), last_part_of_typename::<T>())),
+            timer: Timer::new(format!("{}-{}", system_name.as_ref(), full_last_part_of_typename::<T>())),
             _t: PhantomData,
         }
     }

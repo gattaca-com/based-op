@@ -145,6 +145,10 @@ pub fn strip_namespace(s: &str) -> &str {
     &s[start..]
 }
 
+pub fn full_last_part_of_typename<T>() -> &'static str {
+    strip_namespace(std::any::type_name::<T>())
+}
+
 pub fn last_part_of_typename<T>() -> &'static str {
     let full_name = strip_namespace(std::any::type_name::<T>());
     if let Some(generic_start) = full_name.find('<') {
