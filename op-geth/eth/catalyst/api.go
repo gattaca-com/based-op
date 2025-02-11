@@ -1380,7 +1380,7 @@ func (api *ConsensusAPI) newFragV0(f engine.SignedNewFrag, ub *types.UnsealedBlo
 	}
 
 	if f.Frag.IsLast {
-		engine.SealBlock(ub)
+		engine.SealBlock(api.eth.BlockChain(), ub)
 	}
 
 	// 4. Response (we still need to define how we'll response)

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"math/big"
@@ -47,6 +48,19 @@ func (ub *UnsealedBlock) IsNextFrag(f *Frag) bool {
 	} else {
 		return lastKnownFrag.Seq+1 == f.Seq
 	}
+}
+
+func (ub *UnsealedBlock) Transactions() [][]byte {
+	buffer := new(bytes.Buffer)
+	txs := [][]byte{}
+	for _, frag := range ub.Frags {
+		for _, tx := range frag.Txs {
+			buffer.Reset()
+			tx.inner.encode(buffer)
+			txs = append(txs, buffer.Bytes())
+		}
+	}
+	return txs
 }
 
 type Frag struct {

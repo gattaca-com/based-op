@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
@@ -419,7 +420,40 @@ func (v *ClientVersionV1) String() string {
 	return fmt.Sprintf("%s-%s-%s-%s", v.Code, v.Name, v.Version, v.Commit)
 }
 
-func SealBlock(ub *types.UnsealedBlock) (*types.Block, error) {
+func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, error) {
+	gasUsed := uint64(0)
+	blobGasUsed := uint64(0)
+	for _, tx := range ub.Receipts {
+		gasUsed += tx.GasUsed
+		blobGasUsed += tx.BlobGasUsed
+	}
+
+	block, err := ExecutableDataToBlock(ExecutableData{
+		ParentHash:       bc.GetCanonicalHash(ub.Env.Number-1),
+		FeeRecipient:     ub.Env.Beneficiary,
+		StateRoot:        bc.CurrentUnsealedBlockState().GetTrie().Hash(),
+		ReceiptsRoot:     [32]byte{}, // TODO
+		LogsBloom:        []byte{}, // TODO
+		Random:           ub.Env.Prevrandao,
+		Number:           ub.Env.Number,
+		GasLimit:         ub.Env.GasLimit,
+		GasUsed:          gasUsed,
+		Timestamp:        ub.Env.Timestamp,
+		ExtraData:        []byte{}, // TODO
+		BaseFeePerGas:    new(big.Int).SetUint64(ub.Env.Basefee),
+		BlockHash:        [32]byte{}, // TODO
+		Transactions:     ub.Transactions(),
+		Withdrawals:      []*types.Withdrawal{}, // TODO
+		BlobGasUsed:      &blobGasUsed,
+		ExcessBlobGas:    new(uint64), // TODO
+		Deposits:         []*types.Deposit{}, // TODO
+		ExecutionWitness: &types.ExecutionWitness{}, // TODO
+		WithdrawalsRoot:  &[32]byte{}, // TODO
+	}, nil, nil, bc.Config())
+	if err != nil {
+		return nil, err
+	}
+
 	return nil, fmt.Errorf("not implemented")
 }
 

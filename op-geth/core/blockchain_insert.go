@@ -199,7 +199,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		Difficulty:  currentUnsealedBlock.Env.Difficulty,
 		GasLimit:    currentUnsealedBlock.Env.GasLimit,
 		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
-		BaseFee:     new(big.Int).SetUint64(currentUnsealedBlock.Env.Basefee),
+		BaseFee:     new(big.Int).SetUint64(0),
 		Random:      &currentUnsealedBlock.Env.Prevrandao,
 	}
 
