@@ -1,9 +1,9 @@
 use std::{
     fmt::{Debug, Formatter},
     sync::Arc,
-    time::Instant,
 };
 
+use bop_common::time::BlockSyncTimers;
 use parking_lot::RwLock;
 use reth_db::{
     cursor::{DbCursorRO, DbCursorRW, DbDupCursorRO},
@@ -37,7 +37,6 @@ mod init;
 pub use alloy_db::AlloyDB;
 pub use bop_common::db::{DatabaseRead, DatabaseWrite, Error};
 pub use init::init_database;
-use tracing::debug;
 
 use crate::cache::ReadCaches;
 
@@ -121,23 +120,6 @@ impl DatabaseRead for SequencerDB {
 }
 
 impl DatabaseWrite for SequencerDB {
-    /// Commit a new block to the database.
-    fn commit_block(
-        &self,
-        block: &BlockWithSenders<OpBlock>,
-        block_execution_output: BlockExecutionOutput<OpReceipt>,
-    ) -> Result<(), Error> {
-        // Calculate state root and get trie updates.
-        let (state_root, trie_updates) = self.calculate_state_root(&block_execution_output.state)?;
-
-        if state_root != block.block.header.state_root {
-            tracing::error!("State root mismatch: {state_root}, block: {:?}", block.block.header);
-            return Err(Error::StateRootError(block.block.header.number));
-        }
-
-        self.commit_block_unchecked(block, block_execution_output, trie_updates)
-    }
-
     /// Commit a new block to the database without performing state root check. This should only be
     /// used if the state root calculation has already been performed upstream.
     fn commit_block_unchecked(
@@ -145,54 +127,42 @@ impl DatabaseWrite for SequencerDB {
         block: &BlockWithSenders<OpBlock>,
         block_execution_output: BlockExecutionOutput<OpReceipt>,
         trie_updates: TrieUpdates,
+        timers: &mut BlockSyncTimers,
     ) -> Result<(), Error> {
         let provider = self.factory.provider().map_err(Error::ProviderError)?;
         let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
 
-        let start = Instant::now();
+        timers.caches.time(|| self.caches.update(&block_execution_output.state));
 
         // Update the read caches.
-        self.caches.update(&block_execution_output.state);
-        let after_caches_update = Instant::now();
 
-        let (plain_state, reverts) = block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
-
-        // Write state reverts
-        rw_provider.write_state_reverts(reverts, block.block.header.number)?;
-        let after_state_reverts = Instant::now();
-        // Write plain state
-        rw_provider.write_state_changes(plain_state)?;
-        let after_state_changes = Instant::now();
+        timers.state_changes.time(|| {
+            let (plain_state, reverts) =
+                block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
+            // Write state reverts
+            rw_provider.write_state_reverts(reverts, block.block.header.number)?;
+            // Write plain state
+            rw_provider.write_state_changes(plain_state)
+        })?;
 
         // Write state trie updates
-        let latest_state = LatestStateProviderRef::new(&provider);
-        let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
-        rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
-        rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)?;
-        let after_trie_updates = Instant::now();
+        timers.trie_updates.time(|| {
+            let latest_state = LatestStateProviderRef::new(&provider);
+            let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
+            rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
+            rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)
+        })?;
+        timers.header_write.time(|| {
+            // Write to header table
+            rw_provider
+                .tx_ref()
+                .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
+                .unwrap();
+        });
 
-        // Write to header table
-        rw_provider
-            .tx_ref()
-            .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
-            .unwrap();
-        let after_header_write = Instant::now();
-
-        rw_provider.commit()?;
-        let after_commit = Instant::now();
+        timers.db_commit.time(|| rw_provider.commit())?;
 
         self.reset_provider();
-
-        debug!(
-            "commit block took: {:?} (caches: {:?}, state_reverts: {:?}, state_changes: {:?}, trie_updates: {:?}, header_write: {:?}, commit: {:?})",
-            start.elapsed(),
-            after_caches_update.duration_since(start),
-            after_state_reverts.duration_since(after_caches_update),
-            after_state_changes.duration_since(after_state_reverts),
-            after_trie_updates.duration_since(after_state_changes),
-            after_header_write.duration_since(after_trie_updates),
-            after_commit.duration_since(after_header_write),
-        );
 
         Ok(())
     }
