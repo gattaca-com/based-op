@@ -1348,7 +1348,7 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 
 	// Check that there's an unsealed block in progress
 	if !types.IsOpened(currentUnsealedBlock) {
-		error := errors.New("new frag sent but no unsealed block was opened")
+		error := errors.New("new frag received but no unsealed block was opened")
 		log.Error(error.Error())
 		return engine.INVALID, error
 	}
