@@ -1455,6 +1455,18 @@ func (api *ConsensusAPI) SealFragV0(seal engine.SignedSeal) error {
 		return error
 	}
 
+	if sealedBlock.GasUsed() != seal.Seal.GasUsed {
+		error := fmt.Errorf("gas used mismatch, expected %v, got %v", sealedBlock.GasUsed(), seal.Seal.GasUsed)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	if sealedBlock.GasLimit() != seal.Seal.GasLimit {
+		error := fmt.Errorf("gas limit mismatch, expected %v, got %v", sealedBlock.GasLimit(), seal.Seal.GasLimit)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
 	return api.sealFragV0(seal)
 }
 
