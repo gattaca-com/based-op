@@ -601,6 +601,10 @@ func (s *Seal) Root() Bytes32 {
 	return unionRoot(ssz.HashSequential(s), 1)
 }
 
+func (e *Env) Root() Bytes32 {
+	return unionRoot(ssz.HashSequential(e), 2)
+}
+
 func unionRoot(valueRoot Bytes32, typeIndex uint64) Bytes32 {
 	var serialized_type [32]byte
 	binary.LittleEndian.PutUint64(serialized_type[:], typeIndex)
