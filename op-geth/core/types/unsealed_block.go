@@ -3,15 +3,15 @@ package types
 import (
 	"encoding/json"
 	"log"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 type UnsealedBlock struct {
 	Env                *Env
 	Frags              []Frag
-	LastSequenceNumber uint64
+	LastSequenceNumber *uint64
 	Hash               common.Hash
 
 	Receipts Receipts
@@ -21,7 +21,7 @@ func NewUnsealedBlock(e *Env) *UnsealedBlock {
 	return &UnsealedBlock{
 		Env:                e,
 		Frags:              []Frag{},
-		LastSequenceNumber: *new(uint64),
+		LastSequenceNumber: nil,
 		Hash:               common.Hash{},
 		Receipts:           Receipts{},
 	}
@@ -31,8 +31,16 @@ func IsOpened(ub *UnsealedBlock) bool {
 	return ub != nil
 }
 
+func (ub *UnsealedBlock) IsEmpty() bool {
+	return len(ub.Frags) == 0
+}
+
 func (ub *UnsealedBlock) IsNextFrag(f *Frag) bool {
-	return ub.LastSequenceNumber+1 == f.Seq
+	if ub.LastSequenceNumber == nil {
+		return f.IsFirst()
+	} else {
+		return *ub.LastSequenceNumber+1 == f.Seq
+	}
 }
 
 type Frag struct {
