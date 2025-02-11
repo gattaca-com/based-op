@@ -126,3 +126,35 @@ impl From<IngestionTime> for Nanos {
         value.real
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct BlockSyncTimers {
+    pub total: Timer,
+    pub execution: Timer,
+    pub execute_txs: Timer,
+    pub validate: Timer,
+    pub take_bundle: Timer,
+    pub state_root: Timer,
+    pub caches: Timer,
+    pub state_changes: Timer,
+    pub trie_updates: Timer,
+    pub header_write: Timer,
+    pub db_commit: Timer,
+}
+impl Default for BlockSyncTimers {
+    fn default() -> Self {
+        Self {
+            total: Timer::new("BlockSync-total"),
+            execution: Timer::new("BlockSync-execution"),
+            execute_txs: Timer::new("BlockSync-execute_txs"),
+            validate: Timer::new("BlockSync-validate"),
+            take_bundle: Timer::new("BlockSync-take_bundle"),
+            state_root: Timer::new("BlockSync-state_root"),
+            caches: Timer::new("BlockSync-caches"),
+            state_changes: Timer::new("BlockSync-state_changes"),
+            trie_updates: Timer::new("BlockSync-trie_updates"),
+            header_write: Timer::new("BlockSync-header_write"),
+            db_commit: Timer::new("BlockSync-db_commit"),
+        }
+    }
+}
