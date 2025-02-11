@@ -94,9 +94,9 @@ func (m *mockGossipIn) OnNewFrag(ctx context.Context, from peer.ID, msg *eth.Sig
 	return nil
 }
 
-func (m *mockGossipIn) OnEnv(ctx context.Context, from peer.ID, msg *eth.SignedEnv) error {
-	if m.OnEnvFn != nil {
-		return m.OnEnvFn(ctx, from, msg)
+func (m *mockGossipIn) OnSealFrag(ctx context.Context, from peer.ID, msg *eth.SignedSeal) error {
+	if m.OnSealFragFn != nil {
+		return m.OnSealFragFn(ctx, from, msg)
 	}
 	return nil
 }
