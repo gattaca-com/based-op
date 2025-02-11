@@ -1,15 +1,15 @@
 [package]
-name = "bop-timekeeper"
-version.workspace = true
-rust-version.workspace = true
 edition.workspace = true
+name = "bop-timekeeper"
 repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
+bitflags = "2.6.0"
 bop-common.workspace = true
-rgb = "0.8.50"
-textplots = "0.8.6"
 crossterm = "0.28.1"
 ratatui = "0.28.1"
-bitflags = "2.6.0"
+rgb = "0.8.50"
+textplots = "0.8.6"
 tracing.workspace = true
