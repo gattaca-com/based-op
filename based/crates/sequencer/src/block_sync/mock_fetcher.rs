@@ -68,8 +68,8 @@ impl Default for BenchmarkData {
 ///               many txs were sorted and Mgas/s was reached. This process repeats on top of the current block
 ///               until stopped.
 /// Spammer:      Will first sync as usual. Afterwards it will start spamming new txs similar to a normal node would
-/// receive.               No `EngineApi` messages are mocked, hence the system works as in a standard prod situation.
-/// Ideally used with               kurtosis
+///               receive. No `EngineApi` messages are mocked, hence the system works as in a standard prod situation.
+///               Ideally used with kurtosis
 #[derive(Default, Debug, Clone)]
 pub enum Mode {
     #[default]
