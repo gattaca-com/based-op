@@ -1,11 +1,11 @@
 use std::{net::SocketAddr, time::Duration};
 
-use alloy_primitives::B256;
+use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
-    api::{EngineApiClient, EngineApiServer, CAPABILITIES},
+    api::{EngineApiClient, EngineApiServer, EthApiClient, MinimalEthApiServer, CAPABILITIES},
     communication::messages::{RpcError, RpcResult},
-    utils::wait_for_signal,
+    utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::async_trait,
@@ -20,6 +20,7 @@ use crate::{cli::PortalArgs, middleware::ProxyService};
 
 pub type HttpClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
 
+#[derive(Clone)]
 pub struct PortalServer {
     fallback_client: HttpClient,
     gateway_client: HttpClient,
@@ -55,9 +56,11 @@ impl PortalServer {
             RpcServiceBuilder::new().layer_fn(move |s| ProxyService::new(CAPABILITIES, s, fallback_client.clone()));
 
         let server = ServerBuilder::default().set_rpc_middleware(rpc_middleware).build(addr).await?;
-        let execution_module = EngineApiServer::into_rpc(self);
 
-        let server_handle = server.start(execution_module);
+        let mut module = EngineApiServer::into_rpc(self.clone());
+        module.merge(MinimalEthApiServer::into_rpc(self)).expect("failed to merge modules");
+
+        let server_handle = server.start(module);
 
         tokio::select! {
             _ = server_handle.stopped() => {
@@ -73,9 +76,38 @@ impl PortalServer {
     }
 }
 
+/// This is a temporary API to broacast transactions to both gateway and fallback. In practice this should not be
+/// receiving user facing calls so we need to find another way to do this
+#[async_trait]
+impl MinimalEthApiServer for PortalServer {
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
+    async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
+        // send both to gateway and fallback
+        let gateway_fut = tokio::spawn({
+            let client = self.gateway_client.clone();
+            let bytes = bytes.clone();
+            async move { client.send_raw_transaction(bytes).await }
+        });
+
+        let fallback_fut = tokio::spawn({
+            let client = self.fallback_client.clone();
+            async move { client.send_raw_transaction(bytes).await }
+        });
+
+        let (gateway, fallback) = tokio::join!(gateway_fut, fallback_fut);
+
+        let gateway = gateway?;
+        let fallback = fallback?;
+
+        let response = gateway.or(fallback)?;
+
+        Ok(response)
+    }
+}
+
 #[async_trait]
 impl EngineApiServer for PortalServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn fork_choice_updated_v3(
         &self,
         fork_choice_state: ForkchoiceState,
@@ -117,7 +149,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn new_payload_v3(
         &self,
         payload: ExecutionPayloadV3,
@@ -162,7 +194,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         debug!(%payload_id, "new request");
 
@@ -178,14 +210,18 @@ impl EngineApiServer for PortalServer {
                 let fallback_client = self.fallback_client.clone();
 
                 async move {
-                    let gateway_payload = gateway_client.get_payload_v3(payload_id).await?;
+                    let gateway_payload = gateway_client
+                        .get_payload_v3(payload_id)
+                        .await
+                        .inspect_err(|err| error!(%err, "failed gateway"))?;
                     let payload_status = fallback_client
                         .new_payload_v3(
                             gateway_payload.execution_payload.clone(),
                             vec![],
                             gateway_payload.parent_beacon_block_root,
                         )
-                        .await?;
+                        .await
+                        .inspect_err(|err| error!(%err, "failed fallback validation"))?;
 
                     if payload_status.is_valid() {
                         debug!(?gateway_payload, ?payload_status, "gateway response");

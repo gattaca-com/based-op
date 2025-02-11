@@ -10,7 +10,8 @@ use reth_optimism_primitives::OpTransactionSigned;
 
 use crate::communication::messages::RpcResult;
 
-pub const CAPABILITIES: &[&str] = &["engine_forkchoiceUpdatedV3", "engine_getPayloadV3", "engine_newPayloadV3"];
+pub const CAPABILITIES: &[&str] =
+    &["engine_forkchoiceUpdatedV3", "engine_getPayloadV3", "engine_newPayloadV3", "eth_sendRawTransaction"];
 
 pub type OpRpcBlock = alloy_rpc_types::Block<OpTransactionSigned>;
 
@@ -85,4 +86,11 @@ pub trait EthApi {
     /// Returns the balance of the account of given address.
     #[method(name = "getBalance")]
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256>;
+}
+
+#[rpc(client, server, namespace = "eth")]
+pub trait MinimalEthApi {
+    /// Sends signed transaction, returning its hash
+    #[method(name = "sendRawTransaction")]
+    async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
 }
