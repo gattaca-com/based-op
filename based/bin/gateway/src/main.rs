@@ -18,6 +18,7 @@ use bop_sequencer::{
     Sequencer, SequencerConfig, Simulator,
 };
 use clap::Parser;
+use revm_primitives::B256;
 use tokio::runtime::Runtime;
 use tracing::{error, info};
 
@@ -55,7 +56,13 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     info!(db_block, %db_hash, "starting gateway");
 
     let shared_state = SharedState::new(db_bop.clone().into());
-    let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
+    let head_block_number = db_bop.head_block_number().expect("couldn't get head block number");
+    let start_fetch = if db_bop.head_block_hash().expect("couldn't get head block hash") == B256::ZERO {
+        // genesis
+        head_block_number
+    } else {
+        head_block_number + 1
+    };
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
 

@@ -191,6 +191,9 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         let seq = FragSequence::new(self.gas_limit(), self.block_number(), self.timestamp());
         let mut sorting = SortingData::new(&seq, self);
 
+        // Initialise the shared state for this new pending block
+        self.shared_state.initialise_for_new_block(&env_with_handler_cfg.block, self.parent_header.parent_hash);
+
         sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");
         self.tx_pool.remove_mined_txs(sorting.txs.iter());
         (seq, sorting)
@@ -290,6 +293,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             state_root,
             block_hash: v1.block_hash,
         };
+        let mgas = (gas_used / 10_000) as f64 / 100.0;
+        info!(
+            "sealed block with {} txs, {mgas} MGas ({:.2} MGas/s)",
+            frag_seq.txs.len(),
+            mgas / frag_seq.start_t.elapsed().as_secs()
+        );
         (seal, OpExecutionPayloadEnvelopeV3 {
             execution_payload: ExecutionPayloadV3 {
                 payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
@@ -310,7 +319,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
     pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
         let blocks_to_fetch = self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
-        self.shared_state.as_mut().reset();
+        self.shared_state.reset();
 
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();

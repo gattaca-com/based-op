@@ -25,22 +25,19 @@ pub use sorting::DBSorting;
 pub mod state;
 pub use state::State;
 
+use crate::time::BlockSyncTimers;
+
 /// Database trait for all DB operations.
 #[auto_impl(&, Arc)]
 pub trait DatabaseWrite:
     Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug
 {
-    fn commit_block(
-        &self,
-        block: &BlockWithSenders<OpBlock>,
-        block_execution_output: BlockExecutionOutput<OpReceipt>,
-    ) -> Result<(), Error>;
-
     fn commit_block_unchecked(
         &self,
         block: &BlockWithSenders<OpBlock>,
         block_execution_output: BlockExecutionOutput<OpReceipt>,
         trie_updates: TrieUpdates,
+        timers: &mut BlockSyncTimers,
     ) -> Result<(), Error>;
 
     fn roll_back_head(&self) -> Result<(), Error>;

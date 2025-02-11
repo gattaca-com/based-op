@@ -5,6 +5,21 @@
 
 .DEFAULT_GOAL := help
 
+# Variables
+
+# The following port variables are:
+#
+# - OP_EL_PORT: This is the port of the Sequencer's OP-Node.
+# - BOP_NODE_PORT: This is the port of the Follower's BOP-Node.
+# - BOP_EL_PORT: This is the port of the Follower's BOP-Node.
+#
+# Note: The Kurtosis enclave must be running for these to work.
+OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+
+# Recipes
+
 help: ## 📚 Show help for each of the Makefile recipes
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
@@ -24,10 +39,10 @@ deps: ## 🚀 Install all dependencies
 
 build: build-portal build-gateway build-op-node build-op-geth ## 🏗️ Build
 
-build-portal:
+build-portal: ## 🏗️ Build based portal from based directory
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
-build-gateway:
+build-gateway: ## 🏗️ Build based gateway from based directory
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-op-node: ## 🏗️ Build OP node from optimism directory
@@ -54,6 +69,14 @@ logs: ## 📜 Show logs
 dump:
 	bash -c 'kurtosis files download based-op $$(kurtosis enclave inspect based-op | grep op-deployer-configs | awk "{print \$$1}") ./genesis'
 
+gateway: ## 🚀 Run the gateway
+	RUST_LOG=debug cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway -- \
+	--db.datadir ./data \
+	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
+	--chain-spec ./genesis/genesis-2151908.json \
+	--rpc.port 9997 \
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
+	--test
 
 based-portal-logs:
 	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
@@ -68,9 +91,9 @@ op-geth-logs:
 	$(MAKE) logs SERVICE=op-el-1-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
-	rm -rf ./genesis && kurtosis enclave rm  based-op --force
+	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data
 
-restart: clean run ## 🔄 Restart
+restart: clean dump run ## 🔄 Restart
 
 # Testing
 
@@ -118,6 +141,29 @@ test-seal:
 					"receiptsRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
 					"stateRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
 					"blockHash": "0x1234567890123456789012345678901234567890123456789012345678901234" \
+				} \
+			} \
+		] \
+	}'
+
+test-env:
+	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
+	--data '{ \
+		"jsonrpc": "2.0", \
+		"id": 1, \
+		"method": "based_env", \
+		"params": [ \
+			{ \
+				"signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
+				"env": { \
+					"totalFrags": 2, \
+					"number": $(BLOCK_NUMBER), \
+					"beneficiary": "0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a", \
+					"timestamp": 2739281173, \
+					"gasLimit": 0, \
+					"baseFee": 0, \
+					"difficulty": 0, \
+					"prevrandao": "0x1234567890123456789012345678901234567890123456789012345678901234" \
 				} \
 			} \
 		] \

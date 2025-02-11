@@ -1,7 +1,7 @@
 use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use bop_common::{p2p::FragV0, transaction::SimulatedTx};
+use bop_common::{p2p::FragV0, time::Instant, transaction::SimulatedTx};
 use revm_primitives::{Bytes, B256};
 
 use super::{sorting_data::SortingTelemetry, SortingData};
@@ -10,6 +10,7 @@ use crate::context::SequencerContext;
 /// Sequence of frags applied on the last block
 #[derive(Clone, Debug)]
 pub struct FragSequence {
+    pub start_t: Instant,
     pub gas_remaining: u64,
     pub gas_used: u64,
     pub payment: U256,
@@ -25,6 +26,7 @@ pub struct FragSequence {
 impl FragSequence {
     pub fn new(gas_remaining: u64, block_number: u64, block_timestamp: u64) -> Self {
         Self {
+            start_t: Instant::now(),
             gas_remaining,
             gas_used: 0,
             payment: U256::ZERO,
@@ -163,8 +165,8 @@ mod tests {
 
     //     // Simulator
     //     let _sim_handle =
-    //         std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default(),
-    // 0));     let mut seq = FragSequence::new(db_frag, 300_000_000);
+    //         std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default(), 0));
+    //     let mut seq = FragSequence::new(db_frag, 300_000_000);
     //     let mut sorting_db = seq.create_in_sort();
 
     //     let mut connections = spine.to_connections("test");
