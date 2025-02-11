@@ -37,10 +37,10 @@ pub struct GatewayArgs {
     #[arg(long = "db.datadir")]
     pub db_datadir: PathBuf,
     /// Maximum number of cached accounts
-    #[arg(long = "db.max_cached_accounts", default_value_t = 10_000)]
+    #[arg(long = "db.max_cached_accounts", default_value_t = 100_000)]
     pub max_cached_accounts: u64,
     /// Maximum number of cached storages
-    #[arg(long = "db.max_cached_storages", default_value_t = 100_000)]
+    #[arg(long = "db.max_cached_storages", default_value_t = 1_000_000)]
     pub max_cached_storages: u64,
     /// Test mode
     #[arg(long = "test")]

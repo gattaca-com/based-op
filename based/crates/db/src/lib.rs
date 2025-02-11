@@ -83,6 +83,14 @@ impl SequencerDB {
     pub fn reset_provider(&self) {
         *self.provider.write() = None;
     }
+
+    /// Puts a canonical header into the database and commits the changes.
+    pub fn write_canonical_header(&self, number: u64, hash: B256) -> Result<(), Error> {
+        let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
+        rw_provider.tx_ref().put::<tables::CanonicalHeaders>(number, hash).unwrap();
+        rw_provider.commit()?;
+        Ok(())
+    }
 }
 
 impl Debug for SequencerDB {
