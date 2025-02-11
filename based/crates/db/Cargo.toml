@@ -1,52 +1,42 @@
 [package]
-name = "bop-db"
-version.workspace = true
-rust-version.workspace = true
 edition.workspace = true
+name = "bop-db"
 repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
-bop-common.workspace = true
-parking_lot.workspace = true
-revm-primitives.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-moka = "0.12.10"
-
-# alloy
+alloy-consensus.workspace = true
+alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
 alloy-transport.workspace = true
 alloy-transport-http.workspace = true
-alloy-eips.workspace = true
-alloy-consensus.workspace = true
+bop-common.workspace = true
+eyre.workspace = true
+moka.workspace = true
 op-alloy-network.workspace = true
-
-# revm
-revm.workspace = true
-
-# async
-tokio.workspace = true
-
-# Reth DB dpeendencies
+parking_lot.workspace = true
+reqwest.workspace = true
+reth-chainspec.workspace = true
+reth-db.workspace = true
+reth-db-api.workspace = true
+reth-db-common.workspace = true
+reth-node-types.workspace = true
 reth-optimism-chainspec.workspace = true
 reth-optimism-node.workspace = true
 reth-optimism-primitives.workspace = true
 reth-primitives.workspace = true
-reth-db.workspace = true
-reth-db-common.workspace = true
+reth-provider.workspace = true
+reth-stages-types.workspace = true
 reth-storage-api.workspace = true
 reth-storage-errors.workspace = true
-reth-trie-common.workspace = true
-reth-provider.workspace = true
-reth-chainspec.workspace = true
-reth-db-api.workspace = true
-reth-node-types.workspace = true
 reth-trie.workspace = true
+reth-trie-common.workspace = true
 reth-trie-db.workspace = true
 reth-trie-parallel.workspace = true
-reth-stages-types.workspace = true
-
-# Networking
-reqwest.workspace = true
-eyre.workspace = true
+revm.workspace = true
+revm-primitives.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
