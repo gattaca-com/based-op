@@ -558,6 +558,10 @@ func (c *Config) SealFragVersion(timestamp uint64) eth.EngineAPIMethod {
 	return eth.SealFragV0
 }
 
+func (c *Config) EnvVersion(timestamp uint64) eth.EngineAPIMethod {
+	return eth.EnvV0
+}
+
 // GetOPAltDAConfig validates and returns the altDA config from the rollup config.
 func (c *Config) GetOPAltDAConfig() (altda.Config, error) {
 	if c.AltDAConfig == nil {
