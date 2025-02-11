@@ -1413,27 +1413,67 @@ func (api *ConsensusAPI) newFragV0(frag engine.SignedNewFrag) (string, error) {
 	return engine.VALID, nil
 }
 
-func (api *ConsensusAPI) SealFragV0(frag engine.SignedSeal) error {
+func (api *ConsensusAPI) SealFragV0(seal engine.SignedSeal) error {
 	// TODO: Validations
-	// -1. Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
-	// 0. Gas used < gas limit
-	// 1. Check the total frags is correct
-	// 2. Seal the UnsealedBlock
-	// 3. Check the block number
-	// 4. Check the parent hash
-	// 5. Compute and check the block hash (*)
-	// 6. Compute and check the state root (*)
-	// 7. Compute and check the transactions root (*)
-	// 8. Compute and check the receipts root (*)
-	//
-	// (*) double check if we need to compute since we should already know the last new frag sent
-	return api.sealFragV0(frag)
+	// Check the total frags is correct
+
+	sealedBlock := api.eth.BlockChain().GetBlockByNumber(seal.Seal.BlockNumber)
+
+	if sealedBlock == nil {
+		error := fmt.Errorf("sealed block %v not found", seal.Seal.BlockNumber)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	if sealedBlock.Hash().Cmp(seal.Seal.BlockHash) != 0 {
+		error := fmt.Errorf("block hash mismatch, expected %v, got %v", sealedBlock.Hash(), seal.Seal.BlockHash)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	if sealedBlock.ParentHash().Cmp(seal.Seal.ParentHash) != 0 {
+		error := fmt.Errorf("parent hash mismatch, expected %v, got %v", sealedBlock.ParentHash(), seal.Seal.ParentHash)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	if sealedBlock.Root().Cmp(seal.Seal.StateRoot) != 0 {
+		error := fmt.Errorf("state root mismatch, expected %v, got %v", sealedBlock.Root(), seal.Seal.StateRoot)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	if sealedBlock.TxHash().Cmp(seal.Seal.TransactionsRoot) != 0 {
+		error := fmt.Errorf("transactions root mismatch, expected %v, got %v", sealedBlock.TxHash(), seal.Seal.TransactionsRoot)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	if sealedBlock.ReceiptHash().Cmp(seal.Seal.ReceiptsRoot) != 0 {
+		error := fmt.Errorf("receipts root mismatch, expected %v, got %v", sealedBlock.ReceiptHash(), seal.Seal.ReceiptsRoot)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	if sealedBlock.GasUsed() != seal.Seal.GasUsed {
+		error := fmt.Errorf("gas used mismatch, expected %v, got %v", sealedBlock.GasUsed(), seal.Seal.GasUsed)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	if sealedBlock.GasLimit() != seal.Seal.GasLimit {
+		error := fmt.Errorf("gas limit mismatch, expected %v, got %v", sealedBlock.GasLimit(), seal.Seal.GasLimit)
+		log.Error("SealFragV0 failed", "error", error)
+		return error
+	}
+
+	return api.sealFragV0(seal)
 }
 
-func (api *ConsensusAPI) sealFragV0(frag engine.SignedSeal) error {
+func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) error {
 	// TODO:
 	// 1. Commit the seal
 	// 2. Response (we still need to define how we'll response)
-	log.Info("(api *ConsensusAPI) sealFragV0", frag)
+	log.Info("(api *ConsensusAPI) sealFragV0", seal)
 	return nil
 }
