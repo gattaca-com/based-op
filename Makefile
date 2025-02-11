@@ -22,10 +22,13 @@ deps: ## 🚀 Install all dependencies
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
-build: build-portal build-op-node build-op-geth ## 🏗️ Build
+build: build-portal build-gateway build-op-node build-op-geth ## 🏗️ Build
 
 build-portal:
-	docker build -t based_portal_local --build-context reth=./reth ./based
+	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
+
+build-gateway:
+	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
@@ -54,6 +57,9 @@ dump:
 
 based-portal-logs:
 	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
+
+gateway-logs:
+	$(MAKE) logs SERVICE=gateway-1-gateway-op-kurtosis
 
 op-node-logs:
 	$(MAKE) logs SERVICE=op-cl-1-op-node-op-geth-op-kurtosis

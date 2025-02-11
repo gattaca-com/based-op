@@ -46,12 +46,8 @@ fn main() {
 fn run(args: GatewayArgs) -> eyre::Result<()> {
     let spine = Spine::default();
 
-    let db_bop = init_database(
-        args.db_datadir.clone(),
-        args.max_cached_accounts,
-        args.max_cached_storages,
-        args.chain_spec.clone(),
-    )?;
+    let db_bop =
+        init_database(args.db_datadir.clone(), args.max_cached_accounts, args.max_cached_storages, args.chain.clone())?;
 
     let db_block = db_bop.head_block_number()?;
     let db_hash = db_bop.head_block_hash()?;

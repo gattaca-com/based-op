@@ -35,7 +35,11 @@ DEFAULT_PROPOSER_IMAGES = {
 
 DEFAULT_SIDECAR_IMAGES = {
     "rollup-boost": "flashbots/rollup-boost:latest",
-    "based-portal": "TODO_publish_images",
+    "based-portal": "",
+}
+
+DEFAULT_GATEWAY_IMAGES = {
+    "gateway": "",
 }
 
 DEFAULT_ADDITIONAL_SERVICES = []
@@ -199,6 +203,7 @@ def input_parser(plan, input_args):
                 mev_params=struct(
                     rollup_boost_image=result["mev_params"]["rollup_boost_image"],
                     based_portal_image=result["mev_params"]["based_portal_image"],
+                    gateway_image=result["mev_params"]["gateway_image"],
                     builder_host=result["mev_params"]["builder_host"],
                     builder_port=result["mev_params"]["builder_port"],
                 ),
@@ -432,6 +437,7 @@ def default_mev_params():
     return {
         "rollup_boost_image": "",
         "based_portal_image": "",
+        "gateway_image": "",
         "builder_host": "",
         "builder_port": "",
     }
@@ -517,6 +523,7 @@ def default_participant():
         "cl_max_cpu": 0,
         "cl_min_mem": 0,
         "cl_max_mem": 0,
+        "gateway_image": "",
         "el_builder_type": "op-geth",
         "el_builder_image": "",
         "el_builder_log_level": "",

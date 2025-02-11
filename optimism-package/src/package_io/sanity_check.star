@@ -94,6 +94,7 @@ SUBCATEGORY_PARAMS = {
     "mev_params": [
         "rollup_boost_image",
         "based_portal_image",
+        "gateway_image",
         "builder_host",
         "builder_port",
     ],
