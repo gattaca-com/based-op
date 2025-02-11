@@ -255,7 +255,7 @@ def get_config(
             "--bootnodes="
             + ",".join(
                 [
-                    ctx.enode if hasattr(ctx, "enode") else ""
+                    ctx.enode if hasattr(ctx, "enode") and ctx.enode != None else ""
                     for ctx in existing_el_clients[
                         : ethereum_package_constants.MAX_ENODE_ENTRIES
                     ]
