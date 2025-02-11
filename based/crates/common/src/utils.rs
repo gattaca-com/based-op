@@ -2,6 +2,7 @@ use tokio::signal::unix::{signal, SignalKind};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use uuid::Uuid;
 
 use crate::config::LoggingConfig;
 
@@ -151,4 +152,8 @@ pub fn last_part_of_typename<T>() -> &'static str {
     } else {
         full_name
     }
+}
+
+pub fn uuid() -> Uuid {
+    Uuid::new_v4()
 }
