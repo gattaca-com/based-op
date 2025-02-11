@@ -1862,7 +1862,7 @@ func TestNewFragV0(t *testing.T) {
 	info := engine.SignedNewFrag{
 		Signature: engine.Bytes65{},
 		Frag: types.Frag{
-			blockNumber: 10,
+			BlockNumber: 10,
 			Seq:         0,
 			IsLast:      true,
 			Txs:         []*types.Transaction{},
