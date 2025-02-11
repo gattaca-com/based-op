@@ -3,9 +3,9 @@ package types
 import (
 	"encoding/json"
 	"log"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 type UnsealedBlock struct {
@@ -86,6 +86,6 @@ type Env struct {
 	Timestamp   uint64         `json:timestamp`
 	GasLimit    uint64         `json:gas_limit`
 	Basefee     uint64         `json:basefee`
-	Difficulty  *hexutil.Big   `json:difficulty`
+	Difficulty  *big.Int       `json:difficulty`
 	Prevrandao  common.Hash    `json:prevrandao`
 }
