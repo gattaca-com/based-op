@@ -35,7 +35,7 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
         block_sender.send_forever(block);
     }
 
-    info!(start = curr_block, last = curr_block - 1, "fetched blocks");
+    info!(start = curr_block, last = end_block, "fetched blocks");
 }
 
 pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockSyncMessage {

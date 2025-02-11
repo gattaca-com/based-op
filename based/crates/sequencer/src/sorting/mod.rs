@@ -66,6 +66,16 @@ impl ActiveOrders {
         // not found so we insert it at the id corresponding to the payment
         self.orders.insert(id, SimulatedTxList::from(tx))
     }
+
+    /// Checks whether we have enough gas remaining for order at id.
+    /// If not: swap remove and return true
+    pub fn verify_gas(&mut self, id: usize, gas_remaining: u64) -> bool {
+        if self.orders[id].gas_limit().is_none_or(|gas| gas_remaining < gas) {
+            self.orders.swap_remove_back(id);
+            return true;
+        }
+        false
+    }
 }
 
 impl Deref for ActiveOrders {
