@@ -28,7 +28,7 @@ pub struct GatewayArgs {
     #[arg(long = "rpc.fallback_url", default_value = "https://base-sepolia-rpc.publicnode.com")]
     pub rpc_fallback_url: Url,
     /// Url to the root peer gossip node
-    #[arg(long = "gossip.root_peer_url", default_value = "None")]
+    #[arg(long = "gossip.root_peer_url")]
     pub gossip_root_peer_url: Option<Url>,
     /// Duration of a frag in ms
     #[arg(long = "sequencer.frag_duration_ms", default_value_t = 200)]
@@ -40,10 +40,10 @@ pub struct GatewayArgs {
     #[arg(long = "db.datadir")]
     pub db_datadir: PathBuf,
     /// Maximum number of cached accounts
-    #[arg(long = "db.max_cached_accounts", default_value_t = 100_000)]
+    #[arg(long = "db.max_cached_accounts", default_value_t = 10_000)]
     pub max_cached_accounts: u64,
     /// Maximum number of cached storages
-    #[arg(long = "db.max_cached_storages", default_value_t = 1_000_000)]
+    #[arg(long = "db.max_cached_storages", default_value_t = 100_000)]
     pub max_cached_storages: u64,
     /// Test mode
     #[arg(long = "test")]

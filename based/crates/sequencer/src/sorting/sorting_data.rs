@@ -34,18 +34,13 @@ pub struct SortingTelemetry {
     n_sims_succesful: usize,
     tot_sim_time: Duration,
 }
-
 impl SortingTelemetry {
     #[tracing::instrument(skip_all, name = "sorting_telemetry")]
     pub fn report(&self) {
         tracing::info!(
             "{} total sims: {}% success, tot simtime {}",
             self.n_sims_sent,
-            if self.n_sims_errored == 0 {
-                100.0
-            } else {
-                (self.n_sims_succesful * 10000 / self.n_sims_errored) as f64 / 100.0
-            },
+            (self.n_sims_succesful * 10000 / self.n_sims_errored) as f64 / 100.0,
             self.tot_sim_time
         );
     }

@@ -257,7 +257,6 @@ where
 
                 match payload_attributes {
                     Some(attributes) => {
-
                         // Don't start sequencing until we have a parent hash.
                         if ctx.parent_header.parent_hash == B256::ZERO {
                             return self;
