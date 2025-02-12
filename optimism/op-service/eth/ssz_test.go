@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -618,13 +619,16 @@ func TestMarshalUnmarshalSignedEnv(t *testing.T) {
 	e := SignedEnv{
 		Signature: Bytes65{0x01, 0x42, 0x65, 0x07, 0x01, 0x42, 0x65, 0x07, 0x01, 0x42, 0x65, 0x07},
 		Env: Env{
-			Number:      1,
-			Beneficiary: decodeB20("1234567890123456789012345678901234567890"),
-			Timestamp:   2,
-			GasLimit:    3,
-			Basefee:     4,
-			Difficulty:  big.NewInt(5),
-			Prevrandao:  common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+			Number:           1,
+			Beneficiary:      decodeB20("1234567890123456789012345678901234567890"),
+			Timestamp:        2,
+			GasLimit:         3,
+			Basefee:          4,
+			Difficulty:       (*hexutil.Big)(big.NewInt(5)),
+			Prevrandao:       common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+			ParentHash:       common.BytesToHash(decodeOrPanic("69c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db")),
+			ParentBeaconRoot: common.BytesToHash(decodeOrPanic("c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db69")),
+			ExtraData:        []byte{0x01, 0x02, 0x03},
 		},
 	}
 
@@ -699,16 +703,19 @@ func TestFragRoot(t *testing.T) {
 
 func TestEnvRoot(t *testing.T) {
 	e := Env{
-		Number:      1,
-		Beneficiary: decodeB20("1234567890123456789012345678901234567890"),
-		Timestamp:   2,
-		GasLimit:    3,
-		Basefee:     4,
-		Difficulty:  big.NewInt(5),
-		Prevrandao:  common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+		Number:           1,
+		Beneficiary:      decodeB20("1234567890123456789012345678901234567890"),
+		Timestamp:        2,
+		GasLimit:         3,
+		Basefee:          4,
+		Difficulty:       (*hexutil.Big)(big.NewInt(5)),
+		Prevrandao:       common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+		ParentHash:       common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+		ParentBeaconRoot: common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+		ExtraData:        []byte{0x01, 0x02, 0x03},
 	}
 
-	expected := decodeB32("6805e5742eae056f663f11d87044022f19a38bde3ba41c41ce9078c3406326c3")
+	expected := decodeB32("fa09df7670737568ba783dfd934e19b06e6681e367a866a5647449bd4e5ca324")
 	root := e.Root()
 
 	if expected != root {
