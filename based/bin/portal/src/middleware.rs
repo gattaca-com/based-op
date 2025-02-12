@@ -41,7 +41,6 @@ where
         async move {
             if supported_methods.contains(&req.method_name()) {
                 // debug!(method = %req.method_name(), "handling request");
-                
 
                 inner.call(req).await
             } else {

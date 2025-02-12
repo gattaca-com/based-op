@@ -68,11 +68,8 @@ impl PortalServer {
 
         let fallback_client =
             create_auth_client(args.fallback_url, fallback_jwt, Duration::from_millis(args.fallback_timeout_ms))?;
-        let gateway_client = create_gateway_client(
-            args.gateway_url,
-            gateway_jwt.clone(),
-            Duration::from_millis(args.gateway_timeout_ms),
-        )?;
+        let gateway_client =
+            create_gateway_client(args.gateway_url, gateway_jwt, Duration::from_millis(args.gateway_timeout_ms))?;
 
         let gateway_clients = Arc::new(RwLock::new(vec![gateway_client.clone()]));
 
