@@ -37,6 +37,21 @@ impl From<EnvV0> for VersionedMessage {
 
 pub type MaxExtraDataSize = typenum::U256;
 pub type ExtraData = VariableList<u8, MaxExtraDataSize>;
+impl VersionedMessage {
+    pub fn to_json(&self) -> serde_json::Value {
+        let method = match self {
+            VersionedMessage::FragV0(_) => "based_newFrag",
+            VersionedMessage::SealV0(_) => "based_sealFrag",
+            VersionedMessage::EnvV0(_) => "based_env",
+        };
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": [self],
+            "id": 1
+        })
+    }
+}
 
 /// Initial message to set the block environment for the current block
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]

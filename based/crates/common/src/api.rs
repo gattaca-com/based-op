@@ -8,7 +8,7 @@ use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 
-use crate::communication::messages::RpcResult;
+use crate::{communication::messages::RpcResult, p2p::{EnvV0, FragV0, SealV0}};
 
 pub const CAPABILITIES: &[&str] =
     &["engine_forkchoiceUpdatedV3", "engine_getPayloadV3", "engine_newPayloadV3", "eth_sendRawTransaction"];
@@ -93,4 +93,18 @@ pub trait MinimalEthApi {
     /// Sends signed transaction, returning its hash
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
+}
+
+#[rpc(client, server, namespace = "based")]
+pub trait BasedGossipApi {
+    #[method(name = "env")]
+    async fn send_env(&self, frag: EnvV0) -> RpcResult<()>;
+
+    /// Sends new frag to root gossip follower node
+    #[method(name = "newFrag")]
+    async fn send_frag(&self, frag: FragV0) -> RpcResult<()>;
+
+    #[method(name = "sealFrag")]
+    async fn send_seal(&self, block: SealV0) -> RpcResult<()>;
+
 }
