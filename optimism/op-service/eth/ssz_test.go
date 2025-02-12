@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -624,7 +623,7 @@ func TestMarshalUnmarshalSignedEnv(t *testing.T) {
 			Timestamp:        2,
 			GasLimit:         3,
 			Basefee:          4,
-			Difficulty:       (*hexutil.Big)(big.NewInt(5)),
+			Difficulty:       big.NewInt(5),
 			Prevrandao:       common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
 			ParentHash:       common.BytesToHash(decodeOrPanic("69c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db")),
 			ParentBeaconRoot: common.BytesToHash(decodeOrPanic("c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db69")),
@@ -708,7 +707,7 @@ func TestEnvRoot(t *testing.T) {
 		Timestamp:        2,
 		GasLimit:         3,
 		Basefee:          4,
-		Difficulty:       (*hexutil.Big)(big.NewInt(5)),
+		Difficulty:       big.NewInt(5),
 		Prevrandao:       common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
 		ParentHash:       common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
 		ParentBeaconRoot: common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
