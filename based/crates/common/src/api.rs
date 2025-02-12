@@ -4,9 +4,9 @@ use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
 };
 use jsonrpsee::proc_macros::rpc;
+use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_optimism_primitives::OpTransactionSigned;
 
 use crate::communication::messages::RpcResult;
 
@@ -23,7 +23,7 @@ pub const CAPABILITIES: &[&str] = &[
     "eth_balance",
 ];
 
-pub type OpRpcBlock = alloy_rpc_types::Block<OpTransactionSigned>;
+pub type OpRpcBlock = alloy_rpc_types::Block<OpTxEnvelope>;
 
 /// The Engine API is used by the consensus layer to interact with the execution layer. Here we
 /// implement a minimal subset of the API for the gateway to return blocks to the op-node

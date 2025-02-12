@@ -9,6 +9,7 @@ alloy-primitives.workspace = true
 alloy-rpc-types.workspace = true
 bop-common.workspace = true
 jsonrpsee.workspace = true
+op-alloy-consensus.workspace = true
 op-alloy-rpc-types.workspace = true
 op-alloy-rpc-types-engine.workspace = true
 reqwest.workspace = true
