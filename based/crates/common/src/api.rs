@@ -10,8 +10,18 @@ use reth_optimism_primitives::OpTransactionSigned;
 
 use crate::communication::messages::RpcResult;
 
-pub const CAPABILITIES: &[&str] =
-    &["engine_forkchoiceUpdatedV3", "engine_getPayloadV3", "engine_newPayloadV3", "eth_sendRawTransaction"];
+pub const CAPABILITIES: &[&str] = &[
+    "engine_forkchoiceUpdatedV3",
+    "engine_getPayloadV3",
+    "engine_newPayloadV3",
+    "eth_sendRawTransaction",
+    "eth_getTransactionReceipt",
+    "eth_getBlockByNumber",
+    "eth_getBlockByHash",
+    "eth_blockNumber",
+    "eth_getTransactionCount",
+    "eth_balance",
+];
 
 pub type OpRpcBlock = alloy_rpc_types::Block<OpTransactionSigned>;
 
