@@ -26,6 +26,7 @@ based_portal = import_module("./mev/based-portal/based_portal_launcher.star")
 op_geth_builder = import_module("./el/op-geth/op_geth_builder_launcher.star")
 op_reth_builder = import_module("./el/op-reth/op_reth_builder_launcher.star")
 op_node_builder = import_module("./cl/op-node/op_node_builder_launcher.star")
+gateway = import_module("./mev/gateway/gateway_launcher.star")
 
 ROLLUP_BOOST_MEV_TYPE = "rollup-boost"
 BASED_PORTAL_MEV_TYPE = "based-portal"
@@ -119,6 +120,18 @@ def launch(
         },
     }
 
+    gateway_launchers = {
+        "gateway": {
+            "launcher": gateway.new_gateway_launcher(
+                deployment_output,
+                jwt_file,
+                network_params.network,
+                network_params.network_id,
+            ),
+            "launch_method": gateway.launch,
+        },
+    }
+
     cl_launchers = {
         "op-node": {
             "launcher": op_node.new_op_node_launcher(
@@ -175,6 +188,7 @@ def launch(
         el_type = participant.el_type
         cl_builder_type = participant.cl_builder_type
         el_builder_type = participant.el_builder_type
+        gateway_type = "gateway"
 
         node_selectors = ethereum_package_input_parser.get_client_node_selectors(
             participant.node_selectors,
@@ -199,6 +213,13 @@ def launch(
             fail(
                 "Unsupported launcher '{0}', need one of '{1}'".format(
                     cl_type, ",".join(cl_launchers.keys())
+                )
+            )
+
+        if gateway_type not in gateway_launchers:
+            fail(
+                "Unsupported launcher '{0}', need one of '{1}'".format(
+                    gateway_type, ",".join(gateway_launchers.keys())
                 )
             )
 
@@ -236,10 +257,19 @@ def launch(
             cl_builder_launchers[cl_builder_type]["launch_method"],
         )
 
+        gateway_launcher, gateway_launch_method = (
+            gateway_launchers[gateway_type]["launcher"],
+            gateway_launchers[gateway_type]["launch_method"],
+        )
+
         sidecar_launcher, sidecar_launch_method = (
-            sidecar_launchers[mev_type]["launcher"],
-            sidecar_launchers[mev_type]["launch_method"],
-        ) if mev_type else (None, None)
+            (
+                sidecar_launchers[mev_type]["launcher"],
+                sidecar_launchers[mev_type]["launch_method"],
+            )
+            if mev_type
+            else (None, None)
+        )
 
         # Zero-pad the index using the calculated zfill value
         index_str = ethereum_package_shared_utils.zfill_custom(
@@ -254,6 +284,9 @@ def launch(
         )
         el_builder_service_name = "op-el-builder-{0}-{1}-{2}-{3}".format(
             index_str, el_builder_type, cl_builder_type, l2_services_suffix
+        )
+        gateway_service_name = "gateway-{0}-{1}-{2}".format(
+            index_str, gateway_type, l2_services_suffix
         )
         cl_builder_service_name = "op-cl-builder-{0}-{1}-{2}-{3}".format(
             index_str, cl_builder_type, el_builder_type, l2_services_suffix
@@ -333,10 +366,25 @@ def launch(
 
                 all_el_contexts.append(el_builder_context)
             elif based_portal_enabled:
-                plan.print("Starting based portal")
+                plan.print("Starting based gateway")
+
+                gateway_image = (
+                    mev_params.gateway_image
+                    if mev_params.gateway_image != ""
+                    else input_parser.DEFAULT_GATEWAY_IMAGES[gateway_type]
+                )
 
                 if mev_params.builder_host == "" or mev_params.builder_port == "":
-                    fail("GATEWAY INSIDE ENCLAVE NOT SUPPORTED YET")
+                    el_builder_context = gateway_launch_method(
+                        plan,
+                        gateway_launcher,
+                        gateway_service_name,
+                        gateway_image,
+                        node_selectors,
+                        all_el_contexts,
+                        el_context,
+                        observability_helper
+                    )
                 else:
                     el_builder_context = struct(
                         ip_addr=mev_params.builder_host,
@@ -347,6 +395,8 @@ def launch(
                         ),
                         client_name="external-gateway",
                     )
+
+                plan.print("Starting based portal")
 
                 based_portal_image = (
                     mev_params.based_portal_image
@@ -365,9 +415,9 @@ def launch(
                 )
 
                 # use sidecar RPC in place of the sequencer RPC to broadcast txs
-                # (this will be remove at some point)
+                # (this will be removed at some point)
                 all_el_contexts.append(sidecar_context)
-                all_el_contexts.append(el_builder_context)
+                # all_el_contexts.append(el_builder_context)
             elif mev_type:
                 fail("UNSUPPORTED MEV TYPE: {0}".format(mev_type))
 

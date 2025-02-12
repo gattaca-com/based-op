@@ -17,7 +17,7 @@ pub struct GatewayArgs {
         default_value = OpChainSpecParser::SUPPORTED_CHAINS[6],
         value_parser = OpChainSpecParser::parser(),
     )]
-    pub chain_spec: Arc<OpChainSpec>,
+    pub chain: Arc<OpChainSpec>,
     /// The host to run the engine_ and eth_ RPC
     #[arg(long = "rpc.host", default_value_t = Ipv4Addr::UNSPECIFIED)]
     pub rpc_host: Ipv4Addr,

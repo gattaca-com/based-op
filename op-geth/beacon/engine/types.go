@@ -510,12 +510,12 @@ type Data = hexutil.Bytes
 
 type SignedNewFrag struct {
 	Signature Bytes65    `json:"signature"`
-	Frag      types.Frag `json:"frag"`
+	Frag      types.Frag `json:"message"`
 }
 
 type SignedSeal struct {
 	Signature Bytes65 `json:"signature"`
-	Seal      Seal    `json:"seal"`
+	Seal      Seal    `json:"message"`
 }
 
 // Total frags in the block + block header fields
@@ -533,5 +533,5 @@ type Seal struct {
 
 type SignedEnv struct {
 	Signature Bytes65   `json:"signature"`
-	Env       types.Env `json:"env"`
+	Env       types.Env `json:"message"`
 }
