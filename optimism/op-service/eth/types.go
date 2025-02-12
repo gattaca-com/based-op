@@ -229,7 +229,7 @@ type (
 
 type SignedNewFrag struct {
 	Signature Bytes65 `json:"signature"`
-	Frag      NewFrag `json:"frag"`
+	Frag      NewFrag `json:"message"`
 }
 
 type NewFrag struct {
@@ -241,7 +241,7 @@ type NewFrag struct {
 
 type SignedSeal struct {
 	Signature Bytes65 `json:"signature"`
-	Seal      Seal    `json:"seal"`
+	Seal      Seal    `json:"message"`
 }
 
 // Total frags in the block + block header fields
@@ -259,7 +259,7 @@ type Seal struct {
 
 type SignedEnv struct {
 	Signature Bytes65 `json:"signature"`
-	Env       Env     `json:"env"`
+	Env       Env     `json:"message"`
 }
 
 // Initial message to set the block environment for the current block
