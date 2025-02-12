@@ -266,7 +266,12 @@ where
                         let (seq, first_frag) = ctx.start_sequencing(attributes, senders);
                         ctx.timers.start_sequencing.stop();
 
-                        let env_msg: EnvV0 = (&ctx.block_env).into();
+                        let env_msg: EnvV0 = EnvV0::new(
+                            &ctx.block_env,
+                            ctx.parent_hash,
+                            &ctx.extra_data(),
+                            ctx.parent_beacon_block_root().unwrap(),
+                        );
                         let _ = senders.send(VersionedMessage::from(env_msg));
 
                         info!("start sorting with {} orders", first_frag.tof_snapshot.len());
