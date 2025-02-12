@@ -1,10 +1,12 @@
-use bop_common::{actor::Actor, communication::SpineConnections, p2p};
+use bop_common::{actor::Actor, communication::SpineConnections, p2p, signing::ECDSASigner};
 use jsonrpsee::client_transport::ws::Url;
 use reqwest::blocking::{Client, ClientBuilder};
+use tracing::{error, info};
 
 pub struct Gossiper {
     target_rpc: Option<Url>,
     client: Client,
+    signer: ECDSASigner,
 }
 
 impl Gossiper {
@@ -13,23 +15,32 @@ impl Gossiper {
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .expect("couldn't build http client");
-        Self { target_rpc, client }
+
+        let signer = ECDSASigner::random();
+
+        Self { target_rpc, client, signer }
     }
 
     fn gossip(&self, msg: p2p::VersionedMessage) {
         let Some(url) = self.target_rpc.as_ref().cloned() else {
             return;
         };
-        let Ok(res) = self.client.post(url).json(&msg.to_json()).send() else {
-            tracing::error!("couldn't send {}", msg.as_ref());
+
+        let payload = p2p::SignedMessage::new(&self.signer, msg).to_json();
+
+        let Ok(res) = self.client.post(url).json(&payload).send() else {
+            tracing::error!("couldn't send {}", payload);
             return;
         };
 
-        if let Err(e) = res.error_for_status_ref() {
-            tracing::error!("received {e} upon sending {msg:?}");
-            tracing::error!("body: {:.20}", format!("{:?}", res.text()));
+        let code = res.status();
+        let body = res.text().expect("couldn't read response");
+
+        if code.is_success() {
+            info!(body, %payload, "successfully sent");
+        } else {
+            error!(body, %payload, code = code.as_u16(), "failed to send");
         }
-        tracing::info!(" successfully sent {}", msg.as_ref());
     }
 }
 

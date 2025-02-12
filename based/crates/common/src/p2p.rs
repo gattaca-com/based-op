@@ -3,9 +3,10 @@ use revm_primitives::BlockEnv;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, VariableList};
 use strum_macros::AsRefStr;
+use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
-use crate::transaction::Transaction as BuilderTransaction;
+use crate::{signing::ECDSASigner, transaction::Transaction as BuilderTransaction};
 
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize, AsRefStr)]
 #[tree_hash(enum_behaviour = "union")]
@@ -37,21 +38,6 @@ impl From<EnvV0> for VersionedMessage {
 
 pub type MaxExtraDataSize = typenum::U256;
 pub type ExtraData = VariableList<u8, MaxExtraDataSize>;
-impl VersionedMessage {
-    pub fn to_json(&self) -> serde_json::Value {
-        let method = match self {
-            VersionedMessage::FragV0(_) => "based_newFrag",
-            VersionedMessage::SealV0(_) => "based_sealFrag",
-            VersionedMessage::EnvV0(_) => "based_env",
-        };
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": [self],
-            "id": 1
-        })
-    }
-}
 
 /// Initial message to set the block environment for the current block
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
@@ -142,6 +128,30 @@ pub struct SealV0 {
 pub struct SignedMessage {
     pub signature: Bytes,
     pub message: VersionedMessage,
+}
+
+impl SignedMessage {
+    pub fn new(signer: &ECDSASigner, message: VersionedMessage) -> Self {
+        let signature = signer.sign_message(message.tree_hash_root()).expect("couldn't sign message");
+        let signature = signature.as_bytes().into();
+
+        Self { signature, message }
+    }
+
+    pub fn to_json(self) -> serde_json::Value {
+        let method = match self.message {
+            VersionedMessage::FragV0(_) => "based_newFrag",
+            VersionedMessage::SealV0(_) => "based_sealFrag",
+            VersionedMessage::EnvV0(_) => "based_env",
+        };
+
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": [self],
+            "id": 1
+        })
+    }
 }
 
 #[cfg(test)]
