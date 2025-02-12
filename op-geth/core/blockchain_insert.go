@@ -195,7 +195,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		L1CostFunc:  types.NewL1CostFunc(bc.Config(), statedb),
 		Coinbase:    currentUnsealedBlock.Env.Beneficiary,
 		BlockNumber: new(big.Int).SetUint64(currentUnsealedBlock.Env.Number),
-		Time:        currentUnsealedBlock.Env.Timestamp,
+		Time:        uint64(time.Now().Unix()), // TODO: Use currentUnsealedBlock.Env.Timestamp with a valid timestamp
 		Difficulty:  currentUnsealedBlock.Env.Difficulty,
 		GasLimit:    currentUnsealedBlock.Env.GasLimit,
 		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
@@ -205,14 +205,17 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 
 	vmConfig := bc.GetVMConfig()
 
-	var receipts types.Receipts
+	evm := vm.NewEVM(blockContext, vm.TxContext{}, statedb, chainConfig, *vmConfig)
+	signer := types.MakeSigner(bc.Config(), blockContext.BlockNumber, blockContext.Time)
+
+	var (
+		receipts types.Receipts
+		allLogs  []*types.Log
+		usedGas  = new(uint64)
+	)
 	for i, tx := range frag.Txs {
 		log.Info("Inserting transaction", "tx", tx)
 		gp := new(GasPool).AddGas(tx.Gas())
-
-		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(blockContext.BlockNumber)).Bytes()
-
-		signer := types.MakeSigner(bc.Config(), blockContext.BlockNumber, blockContext.Time)
 
 		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
 
@@ -220,31 +223,35 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 			return fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
 		}
 
-		txContext := NewEVMTxContext(msg)
-
-		evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
-
 		statedb.SetTxContext(tx.Hash(), i)
 
-		txExecutionResult, err := ApplyMessage(evm, msg, gp)
+		txReceipt, err := ApplyTransactionWithEVM(msg, chainConfig, gp, statedb, blockContext.BlockNumber, currentUnsealedBlock.Hash, tx, usedGas, evm)
 
 		if err != nil {
-			return fmt.Errorf("could not apply message %v: %w", tx.Hash().Hex(), err)
+			return fmt.Errorf("could not apply transaction %v: %w", tx.Hash().Hex(), err)
 		}
 
-		txReceipt := MakeReceipt(evm, txExecutionResult, statedb, blockContext.BlockNumber, currentUnsealedBlock.Hash, tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
+		log.Info("FRAG TX RECEIPT", "tx", tx.Hash().Hex(), "receipt", txReceipt)
 
 		receipts = append(receipts, txReceipt)
+		allLogs = append(allLogs, txReceipt.Logs...)
 	}
 
-	// Update the unsealed block state:
-	// 1. Insert the frag into the current unsealed block
-	// 2. Update the last sequence number
-	// 3. Insert the receipts into the current unsealed block
+	// Read requests if Prague is enabled.
+	var requests types.Requests
+	if chainConfig.IsPrague(blockContext.BlockNumber, blockContext.Time) {
+		_requests, err := ParseDepositLogs(allLogs, chainConfig)
+		requests = _requests
+		if err != nil {
+			return err
+		}
+	}
 
 	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
 	currentUnsealedBlock.LastSequenceNumber = &frag.Seq
 	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, receipts...)
+	currentUnsealedBlock.Requests = append(currentUnsealedBlock.Requests, requests...)
+	currentUnsealedBlock.Logs = append(currentUnsealedBlock.Logs, allLogs...)
 
 	return nil
 }

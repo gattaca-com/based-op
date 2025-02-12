@@ -1918,7 +1918,8 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	// Process block using the parent state as reference point
 	pstart := time.Now()
-	res, err := bc.processor.Process(block, statedb, bc.vmConfig)
+	isUnsealed := bc.currentUnsealedBlock != nil && bc.currentUnsealedBlock.Env.Number == block.NumberU64() && bc.currentUnsealedBlock.Env.ParentHash == block.ParentHash()
+	res, err := bc.processor.Process(block, statedb, bc.vmConfig, isUnsealed)
 	if err != nil {
 		bc.reportBlock(block, res, err)
 		return nil, err

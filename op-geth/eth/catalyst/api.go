@@ -1505,7 +1505,7 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 
 	api.unsealedBlockLock.Lock()
 
-	parent := api.eth.BlockChain().GetBlockByHash(env.Env.ParentHash).Header()
+	parent := api.eth.BlockChain().GetBlockByHash(env.Env.ParentHash)
 
 	if parent == nil {
 		error := errors.New("there's no parent block")
@@ -1513,6 +1513,8 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
+
+	parentHeader := parent.Header()
 
 	// Check that there's no unsealed block in progress
 	if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
@@ -1522,7 +1524,7 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 		return engine.INVALID, error
 	}
 
-	expectedBlockNumber := parent.Number.Uint64() + 1
+	expectedBlockNumber := parentHeader.Number.Uint64() + 1
 
 	// Check the block number
 	if env.Env.Number != expectedBlockNumber {
@@ -1533,8 +1535,8 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 	}
 
 	// Check the timestamp
-	if env.Env.Timestamp < parent.Time {
-		error := fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
+	if env.Env.Timestamp < parentHeader.Time {
+		error := fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parentHeader.Time, env.Env.Timestamp)
 		log.Error("EnvV0 failed", "error", error.Error())
 		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error

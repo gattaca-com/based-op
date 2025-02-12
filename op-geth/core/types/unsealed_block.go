@@ -1,7 +1,6 @@
 package types
 
 import (
-	"bytes"
 	"encoding/json"
 	"math/big"
 
@@ -17,6 +16,8 @@ type UnsealedBlock struct {
 	Hash               common.Hash
 
 	Receipts Receipts
+	Requests Requests
+	Logs     []*Log
 }
 
 func NewUnsealedBlock(e *Env) *UnsealedBlock {
@@ -26,6 +27,8 @@ func NewUnsealedBlock(e *Env) *UnsealedBlock {
 		LastSequenceNumber: nil,
 		Hash:               common.Hash{},
 		Receipts:           Receipts{},
+		Requests:           Requests{},
+		Logs:               []*Log{},
 	}
 }
 
