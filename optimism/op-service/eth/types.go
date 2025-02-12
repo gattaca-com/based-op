@@ -264,16 +264,16 @@ type SignedEnv struct {
 
 // Initial message to set the block environment for the current block
 type Env struct {
-	Number           uint64         `json:"number" ssz-size:"8"`
-	Beneficiary      common.Address `json:"beneficiary" ssz-size:"20"`
-	Timestamp        uint64         `json:"timestamp" ssz-size:"8"`
-	GasLimit         uint64         `json:"gasLimit" ssz-size:"8"`
-	Basefee          uint64         `json:"basefee" ssz-size:"8"`
-	Difficulty       *big.Int       `json:"difficulty" ssz-size:"32"`
-	Prevrandao       common.Hash    `json:"prevrandao" ssz-size:"32"`
-	ParentHash       common.Hash    `json:"parentHash" ssz-size:"32"`
-	ParentBeaconRoot common.Hash    `json:"parentBeaconRoot" ssz-size:"32"`
-	ExtraData        []byte         `json:"extraData" ssz-max:"4294967296"`
+	Number           uint64         `ssz-size:"8"`
+	Beneficiary      common.Address `ssz-size:"20"`
+	Timestamp        uint64         `ssz-size:"8"`
+	GasLimit         uint64         `ssz-size:"8"`
+	Basefee          uint64         `ssz-size:"8"`
+	Difficulty       *big.Int       `ssz-size:"32"`
+	Prevrandao       common.Hash    `ssz-size:"32"`
+	ParentHash       common.Hash    `ssz-size:"32"`
+	ParentBeaconRoot common.Hash    `ssz-size:"32"`
+	ExtraData        []byte         `ssz-max:"4294967296"`
 }
 
 func (e *Env) UnmarshalJSON(data []byte) error {
