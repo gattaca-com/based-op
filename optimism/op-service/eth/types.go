@@ -269,7 +269,7 @@ type Env struct {
 	Timestamp        uint64         `json:"timestamp" ssz-size:"8"`
 	GasLimit         uint64         `json:"gasLimit" ssz-size:"8"`
 	Basefee          uint64         `json:"basefee" ssz-size:"8"`
-	Difficulty       *big.Int       `json:"difficulty" ssz-size:"32"`
+	Difficulty       *hexutil.Big   `json:"difficulty" ssz-size:"32"`
 	Prevrandao       common.Hash    `json:"prevrandao" ssz-size:"32"`
 	ParentHash       Bytes32        `json:"parentHash" ssz-size:"32"`
 	ParentBeaconRoot common.Hash    `json:"parentBeaconRoot" ssz-size:"32"`

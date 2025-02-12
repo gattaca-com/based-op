@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -591,7 +592,8 @@ func (e *Env) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineUint64(codec, &e.Timestamp)
 	ssz.DefineUint64(codec, &e.GasLimit)
 	ssz.DefineUint64(codec, &e.Basefee)
-	ssz.DefineUint256BigInt(codec, &e.Difficulty)
+	var difficulty *big.Int = e.Difficulty.ToInt()
+	ssz.DefineUint256BigInt(codec, &difficulty)
 	ssz.DefineStaticBytes(codec, &e.Prevrandao)
 	ssz.DefineStaticBytes(codec, &e.ParentHash)
 	ssz.DefineStaticBytes(codec, &e.ParentBeaconRoot)

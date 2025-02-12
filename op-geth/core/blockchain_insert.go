@@ -196,7 +196,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		Coinbase:    currentUnsealedBlock.Env.Beneficiary,
 		BlockNumber: new(big.Int).SetUint64(currentUnsealedBlock.Env.Number),
 		Time:        currentUnsealedBlock.Env.Timestamp,
-		Difficulty:  currentUnsealedBlock.Env.Difficulty,
+		Difficulty:  currentUnsealedBlock.Env.Difficulty.ToInt(),
 		GasLimit:    currentUnsealedBlock.Env.GasLimit,
 		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
 		BaseFee:     new(big.Int).SetUint64(currentUnsealedBlock.Env.Basefee),
