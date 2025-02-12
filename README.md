@@ -19,7 +19,7 @@
 Run the following to download the dependencies, build, and run the project:
 
 ```Shell
-make deps build dump run gateway
+make deps build run dump gateway
 ```
 
 ### Available Commands
