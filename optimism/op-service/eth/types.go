@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
 )
@@ -233,10 +234,53 @@ type SignedNewFrag struct {
 }
 
 type NewFrag struct {
-	BlockNumber uint64   `json:"blockNumber" ssz-size:"8"`
-	Seq         uint64   `json:"seq" ssz-size:"8"`
-	IsLast      bool     `json:"isLast" ssz-size:"1"`
-	Txs         [][]byte `json:"txs" ssz-max:"1048576,1073741824"`
+	BlockNumber uint64   `ssz-size:"8"`
+	Seq         uint64   `ssz-size:"8"`
+	IsLast      bool     `ssz-size:"1"`
+	Txs         [][]byte `ssz-max:"1048576,1073741824"`
+}
+
+func (f *NewFrag) UnmarshalJSON(data []byte) error {
+	var frag struct {
+		BlockNumber uint64          `json:"blockNumber"`
+		Seq         uint64          `json:"seq"`
+		IsLast      bool            `json:"isLast"`
+		Txs         []hexutil.Bytes `json:"txs"`
+	}
+
+	if err := json.Unmarshal(data, &frag); err != nil {
+		log.Error("failed to unmarshal NewFrag", "error", err)
+		return err
+	}
+
+	f.BlockNumber = frag.BlockNumber
+	f.Seq = frag.Seq
+	f.IsLast = frag.IsLast
+	f.Txs = make([][]byte, len(frag.Txs))
+	for i, tx := range frag.Txs {
+		f.Txs[i] = tx
+	}
+
+	return nil
+}
+
+func (f *NewFrag) MarshalJSON() ([]byte, error) {
+	txs := make([]hexutil.Bytes, len(f.Txs))
+	for i, tx := range f.Txs {
+		txs[i] = tx
+	}
+
+	return json.Marshal(struct {
+		BlockNumber uint64          `json:"blockNumber"`
+		Seq         uint64          `json:"seq"`
+		IsLast      bool            `json:"isLast"`
+		Txs         []hexutil.Bytes `json:"txs"`
+	}{
+		BlockNumber: f.BlockNumber,
+		Seq:         f.Seq,
+		IsLast:      f.IsLast,
+		Txs:         txs,
+	})
 }
 
 type SignedSeal struct {

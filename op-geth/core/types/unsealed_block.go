@@ -71,10 +71,10 @@ func (ub *UnsealedBlock) ByteTransactions() [][]byte {
 }
 
 type Frag struct {
-	BlockNumber uint64         `json:"blockNumber"`
-	Seq         uint64         `json:"seq"`
-	IsLast      bool           `json:"isLast"`
-	Txs         []*Transaction `json:"txs"`
+	BlockNumber uint64
+	Seq         uint64
+	IsLast      bool
+	Txs         []*Transaction
 }
 
 func (f *Frag) IsFirst() bool {
@@ -83,10 +83,10 @@ func (f *Frag) IsFirst() bool {
 
 func (f *Frag) UnmarshalJSON(data []byte) error {
 	var frag struct {
-		BlockNumber uint64
-		Seq         uint64
-		IsLast      bool
-		Txs         [][]byte
+		BlockNumber uint64          `json:"blockNumber"`
+		Seq         uint64          `json:"seq"`
+		IsLast      bool            `json:"isLast"`
+		Txs         []hexutil.Bytes `json:"txs"`
 	}
 
 	if err := json.Unmarshal(data, &frag); err != nil {
@@ -97,15 +97,16 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 	f.BlockNumber = frag.BlockNumber
 	f.Seq = frag.Seq
 	f.IsLast = frag.IsLast
+	f.Txs = make([]*Transaction, len(frag.Txs))
 
-	for _, txData := range frag.Txs {
+	for i, txData := range frag.Txs {
 		var tx Transaction
 		err := tx.UnmarshalBinary(txData)
 		if err != nil {
 			log.Error("Failed to unmarshal transaction", "err", err)
 			return err
 		}
-		f.Txs = append(f.Txs, &tx)
+		f.Txs[i] = &tx
 	}
 
 	return nil
