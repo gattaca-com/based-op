@@ -229,7 +229,7 @@ type (
 
 type SignedNewFrag struct {
 	Signature Bytes65 `json:"signature"`
-	Frag      NewFrag `json:"frag"`
+	Frag      NewFrag `json:"message"`
 }
 
 type NewFrag struct {
@@ -241,7 +241,7 @@ type NewFrag struct {
 
 type SignedSeal struct {
 	Signature Bytes65 `json:"signature"`
-	Seal      Seal    `json:"seal"`
+	Seal      Seal    `json:"message"`
 }
 
 // Total frags in the block + block header fields
@@ -259,7 +259,7 @@ type Seal struct {
 
 type SignedEnv struct {
 	Signature Bytes65 `json:"signature"`
-	Env       Env     `json:"env"`
+	Env       Env     `json:"message"`
 }
 
 // Initial message to set the block environment for the current block
@@ -267,13 +267,13 @@ type Env struct {
 	Number           uint64         `json:"number" ssz-size:"8"`
 	Beneficiary      common.Address `json:"beneficiary" ssz-size:"20"`
 	Timestamp        uint64         `json:"timestamp" ssz-size:"8"`
-	GasLimit         uint64         `json:"gas_limit" ssz-size:"8"`
+	GasLimit         uint64         `json:"gasLimit" ssz-size:"8"`
 	Basefee          uint64         `json:"basefee" ssz-size:"8"`
 	Difficulty       *big.Int       `json:"difficulty" ssz-size:"32"`
 	Prevrandao       common.Hash    `json:"prevrandao" ssz-size:"32"`
 	ParentHash       Bytes32        `json:"parentHash" ssz-size:"32"`
 	ParentBeaconRoot common.Hash    `json:"parentBeaconRoot" ssz-size:"32"`
-	ExtraData        []byte         `json:"extraData" ssz-max:"1073741824"`
+	ExtraData        []byte         `json:"extraData" ssz-max:"32"`
 }
 
 type ExecutionPayloadEnvelope struct {

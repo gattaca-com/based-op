@@ -87,11 +87,14 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 }
 
 type Env struct {
-	Number      uint64         `json:number`
-	Beneficiary common.Address `json:beneficiary`
-	Timestamp   uint64         `json:timestamp`
-	GasLimit    uint64         `json:gas_limit`
-	Basefee     uint64         `json:basefee`
-	Difficulty  *big.Int       `json:difficulty`
-	Prevrandao  common.Hash    `json:prevrandao`
+	Number           uint64         `json:number`
+	Beneficiary      common.Address `json:beneficiary`
+	Timestamp        uint64         `json:timestamp`
+	GasLimit         uint64         `json:gasLimit`
+	Basefee          uint64         `json:basefee`
+	Difficulty       *big.Int       `json:difficulty`
+	Prevrandao       common.Hash    `json:prevrandao`
+	ParentHash       common.Hash    `json:parentHash`
+	ParentBeaconRoot common.Hash    `json:parentBeaconRoot`
+	ExtraData        []byte         `json:extraData`
 }
