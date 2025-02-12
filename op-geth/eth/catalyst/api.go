@@ -159,9 +159,7 @@ type ConsensusAPI struct {
 	forkchoiceLock sync.Mutex // Lock for the forkChoiceUpdated method
 	newPayloadLock sync.Mutex // Lock for the NewPayload method
 
-	newFragLock  sync.Mutex // Lock for the NewFrag method
-	sealFragLock sync.Mutex // Lock for the SealFrag method
-	envLock      sync.Mutex // Lock for the env method
+	unsealedBlockLock sync.Mutex // Lock for the unsealedBlock
 }
 
 // NewConsensusAPI creates a new consensus api for the given backend.
@@ -1341,8 +1339,11 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 }
 
 func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
+	log.Info("NewFragV0 received", "forBlock", frag.Frag.BlockNumber, "current", api.eth.BlockChain().CurrentBlock().Number)
+	log.Info("frag", frag.Frag)
 	// TODO: Validations
 	// - Check signature (this won't be necessary if we agree on not receiving the envelope but its data)
+	api.unsealedBlockLock.Lock()
 
 	currentUnsealedBlock := api.eth.BlockChain().CurrentUnsealedBlock()
 
@@ -1350,6 +1351,7 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 	if !types.IsOpened(currentUnsealedBlock) {
 		error := errors.New("new frag received but no unsealed block was opened")
 		log.Error("NewFragV0 failed", "error", error.Error())
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
@@ -1357,6 +1359,7 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 	if frag.Frag.BlockNumber != currentUnsealedBlock.Env.Number {
 		error := fmt.Errorf("frag block number doesn't match opened unsealed block number, expected %d, received %d", currentUnsealedBlock.Env.Number, frag.Frag.BlockNumber)
 		log.Error("NewFragV0 failed", "error", error.Error())
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
@@ -1364,6 +1367,7 @@ func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
 	if !currentUnsealedBlock.IsNextFrag(&frag.Frag) {
 		error := fmt.Errorf("frag sequence number is not the next one, expected %d, received %d", *currentUnsealedBlock.LastSequenceNumber+1, frag.Frag.Seq)
 		log.Error("NewFragV0 failed", "error", error.Error())
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
@@ -1376,12 +1380,21 @@ func (api *ConsensusAPI) newFragV0(f engine.SignedNewFrag, ub *types.UnsealedBlo
 	if err != nil {
 		error := fmt.Errorf("failed to insert new frag: %w", err)
 		log.Error("newFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	if f.Frag.IsLast {
-		engine.SealBlock(api.eth.BlockChain(), ub)
+		_, err := engine.SealBlock(api.eth.BlockChain(), ub)
+		if err != nil {
+			error := fmt.Errorf("failed to seal block: %w", err)
+			log.Error("newFragV0 failed", "error", error)
+			api.unsealedBlockLock.Unlock()
+			return engine.INVALID, error
+		}
 	}
+
+	api.unsealedBlockLock.Unlock()
 
 	// 4. Response (we still need to define how we'll response)
 	// TODO: figure out if we want to respond with more data
@@ -1389,64 +1402,85 @@ func (api *ConsensusAPI) newFragV0(f engine.SignedNewFrag, ub *types.UnsealedBlo
 }
 
 func (api *ConsensusAPI) SealFragV0(seal engine.SignedSeal) (string, error) {
+	log.Info("SealFragV0 received", "forBlock", seal.Seal.BlockNumber, "current", api.eth.BlockChain().CurrentBlock().Number)
 	// TODO: Validations
 	// Check the total frags is correct
+	api.unsealedBlockLock.Lock()
+
+	if !types.IsOpened(api.eth.BlockChain().CurrentUnsealedBlock()) {
+		error := errors.New("no unsealed block in progress")
+		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
+		return engine.INVALID, error
+	}
 
 	sealedBlock := api.eth.BlockChain().GetBlockByNumber(seal.Seal.BlockNumber)
 
 	if sealedBlock == nil {
 		error := fmt.Errorf("sealed block %v not found", seal.Seal.BlockNumber)
 		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	if sealedBlock.Hash().Cmp(seal.Seal.BlockHash) != 0 {
 		error := fmt.Errorf("block hash mismatch, expected %v, got %v", sealedBlock.Hash(), seal.Seal.BlockHash)
 		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	if sealedBlock.ParentHash().Cmp(seal.Seal.ParentHash) != 0 {
 		error := fmt.Errorf("parent hash mismatch, expected %v, got %v", sealedBlock.ParentHash(), seal.Seal.ParentHash)
 		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	if sealedBlock.Root().Cmp(seal.Seal.StateRoot) != 0 {
 		error := fmt.Errorf("state root mismatch, expected %v, got %v", sealedBlock.Root(), seal.Seal.StateRoot)
 		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	if sealedBlock.TxHash().Cmp(seal.Seal.TransactionsRoot) != 0 {
 		error := fmt.Errorf("transactions root mismatch, expected %v, got %v", sealedBlock.TxHash(), seal.Seal.TransactionsRoot)
 		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	if sealedBlock.ReceiptHash().Cmp(seal.Seal.ReceiptsRoot) != 0 {
 		error := fmt.Errorf("receipts root mismatch, expected %v, got %v", sealedBlock.ReceiptHash(), seal.Seal.ReceiptsRoot)
 		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	if sealedBlock.GasUsed() != seal.Seal.GasUsed {
 		error := fmt.Errorf("gas used mismatch, expected %v, got %v", sealedBlock.GasUsed(), seal.Seal.GasUsed)
 		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	if sealedBlock.GasLimit() != seal.Seal.GasLimit {
 		error := fmt.Errorf("gas limit mismatch, expected %v, got %v", sealedBlock.GasLimit(), seal.Seal.GasLimit)
 		log.Error("SealFragV0 failed", "error", error)
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
-	return api.sealFragV0(seal)
+	result, err := api.sealFragV0(seal)
+
+	api.unsealedBlockLock.Unlock()
+
+	return result, err
 }
 
 func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) (string, error) {
-	log.Info("(api *ConsensusAPI) sealFragV0", seal)
+	log.Info("(api *ConsensusAPI) sealFragV0", "seal", seal)
 
 	block := api.eth.BlockChain().GetBlockByNumber(seal.Seal.BlockNumber)
 	if block == nil {
@@ -1467,11 +1501,16 @@ func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) (string, error) {
 }
 
 func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
+	log.Info("EnvV0 received", "forBlock", env.Env.Number, "current", api.eth.BlockChain().CurrentBlock().Number)
+
+	api.unsealedBlockLock.Lock()
+
 	parent := api.eth.BlockChain().CurrentBlock()
 
 	if parent == nil {
 		error := errors.New("there's no parent block")
 		log.Error("EnvV0 failed", "error", error.Error())
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
@@ -1479,6 +1518,7 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 	if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
 		error := errors.New("cannot open a new unsealed block while there's one already in progress")
 		log.Error("EnvV0 failed", "error", error.Error())
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
@@ -1488,6 +1528,7 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 	if env.Env.Number != expectedBlockNumber {
 		error := fmt.Errorf("env block number doesn't match expected block number, expected %d, received %d", expectedBlockNumber, env.Env.Number)
 		log.Error("EnvV0 failed", "error", error.Error())
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
@@ -1495,6 +1536,7 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 	if env.Env.Timestamp < parent.Time {
 		error := fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
 		log.Error("EnvV0 failed", "error", error.Error())
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
@@ -1506,10 +1548,12 @@ func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
 	if unsealedBlock == nil {
 		error := errors.New("nil unsealed block")
 		log.Error("envV0 failed", "error", error.Error())
+		api.unsealedBlockLock.Unlock()
 		return engine.INVALID, error
 	}
 
 	err := api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
 
+	api.unsealedBlockLock.Unlock()
 	return engine.VALID, err
 }
