@@ -57,6 +57,10 @@ pub struct PortalArgs {
     /// Enable trace logging
     #[arg(long)]
     pub trace: bool,
+
+    /// TEMP: Fetch 30s from this url a list of gateway urls
+    #[arg(long = "gateway.update_url")]
+    pub gateway_update_url: Option<Url>,
 }
 
 impl PortalArgs {

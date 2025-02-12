@@ -19,8 +19,10 @@ optimism_package:
       mev_params:
         based_portal_image: based_portal_local
         gateway_image: based_gateway_local
-        # builder_host: "host.docker.internal"
-        # builder_port: "9997"
+        builder_host: "host.docker.internal"
+        builder_port: "9997"
+        # portal_extra_params:
+        #   - --gateway.update_url=http://172.17.0.1:9099/gateways.example.json
       additional_services:
         - blockscout
 

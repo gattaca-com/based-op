@@ -37,6 +37,7 @@ def launch(
     existing_el_clients,
     sequencer_context,
     builder_context,
+    portal_extra_params
 ):
     network_name = shared_utils.get_network_name(launcher.network)
 
@@ -51,6 +52,7 @@ def launch(
         existing_el_clients,
         sequencer_context,
         builder_context,
+        portal_extra_params
     )
 
     service = plan.add_service(service_name, config)
@@ -81,6 +83,7 @@ def get_config(
     existing_el_clients,
     sequencer_context,
     builder_context,
+    portal_extra_params,
 ):
     L2_EXECUTION_ENGINE_ENDPOINT = "http://{0}:{1}".format(
         sequencer_context.ip_addr,
@@ -103,6 +106,8 @@ def get_config(
         "--gateway.jwt_path=" + constants.JWT_MOUNT_PATH_ON_CONTAINER,
         "--debug",
     ]
+
+    cmd += portal_extra_params
 
     files = {
         constants.JWT_MOUNTPOINT_ON_CLIENTS: jwt_file,
