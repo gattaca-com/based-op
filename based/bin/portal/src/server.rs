@@ -2,7 +2,7 @@ use std::{
     fmt,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -13,7 +13,7 @@ use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpd
 use bop_common::{
     api::{EngineApiClient, EngineApiServer, EthApiClient, MinimalEthApiServer, CAPABILITIES},
     communication::messages::{RpcError, RpcResult},
-    utils::{uuid, wait_for_signal},
+    utils::{utcnow_sec, uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::async_trait,
@@ -48,6 +48,8 @@ pub struct PortalServer {
     next_gateway_index: Arc<AtomicUsize>,
     next_gateway: Arc<Mutex<Gateway>>,
     gateway_clients: Arc<RwLock<Vec<Gateway>>>,
+    last_updated_sec: Arc<AtomicU64>,
+    gateway_update_sec: u64,
 }
 
 async fn refresh_gateway_clients(url: Url, gateway_jwt: JwtSecret, timeout: Duration) -> eyre::Result<Vec<Gateway>> {
@@ -101,7 +103,15 @@ impl PortalServer {
 
         let next_gateway = Arc::new(Mutex::new(gateway_client));
         let next_gateway_index = Arc::new(AtomicUsize::new(0));
-        Ok(Self { fallback_client, gateway_clients, next_gateway, next_gateway_index })
+
+        Ok(Self {
+            fallback_client,
+            gateway_clients,
+            next_gateway,
+            next_gateway_index,
+            last_updated_sec: Arc::new(AtomicU64::new(utcnow_sec())),
+            gateway_update_sec: args.gateway_update_interval_sec,
+        })
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
@@ -134,10 +144,17 @@ impl PortalServer {
     }
 
     fn refresh_next(&self) -> Gateway {
-        let next_index = self.next_gateway_index.fetch_add(1, Ordering::Relaxed);
-        let clients = self.gateway_clients.read();
+        let now = utcnow_sec();
+        let last_updated_sec = self.last_updated_sec.load(Ordering::Relaxed);
         let mut lock = self.next_gateway.lock();
-        *lock = clients[next_index % clients.len()].clone();
+
+        if now.saturating_sub(last_updated_sec) > self.gateway_update_sec {
+            let next_index = self.next_gateway_index.fetch_add(1, Ordering::Relaxed);
+            self.last_updated_sec.store(now, Ordering::Relaxed);
+            let clients = self.gateway_clients.read();
+            *lock = clients[next_index % clients.len()].clone();
+        }
+
         lock.clone()
     }
 
