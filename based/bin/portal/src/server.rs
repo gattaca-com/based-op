@@ -28,12 +28,13 @@ use tracing::{debug, error, info, Instrument, Level};
 
 use crate::{cli::PortalArgs, middleware::ProxyService};
 
-pub type HttpClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
+pub type RpcClient = jsonrpsee::http_client::HttpClient;
+pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
 
 #[derive(Clone)]
 struct Gateway {
     id: Url,
-    client: HttpClient,
+    client: AuthRpcClient,
 }
 
 impl fmt::Debug for Gateway {
@@ -44,7 +45,8 @@ impl fmt::Debug for Gateway {
 
 #[derive(Clone)]
 pub struct PortalServer {
-    fallback_client: HttpClient,
+    fallback_eth_client: RpcClient,
+    fallback_client: AuthRpcClient,
     next_gateway_index: Arc<AtomicUsize>,
     next_gateway: Arc<Mutex<Gateway>>,
     gateway_clients: Arc<RwLock<Vec<Gateway>>>,
@@ -67,6 +69,9 @@ impl PortalServer {
     pub fn new(args: PortalArgs) -> eyre::Result<Self> {
         let gateway_jwt = args.gateway_jwt()?;
         let fallback_jwt = args.fallback_jwt()?;
+
+        let fallback_eth_client =
+            create_client(args.fallback_eth_url, Duration::from_millis(args.fallback_timeout_ms))?;
 
         let fallback_client =
             create_auth_client(args.fallback_url, fallback_jwt, Duration::from_millis(args.fallback_timeout_ms))?;
@@ -105,6 +110,7 @@ impl PortalServer {
         let next_gateway_index = Arc::new(AtomicUsize::new(0));
 
         Ok(Self {
+            fallback_eth_client,
             fallback_client,
             gateway_clients,
             next_gateway,
@@ -116,8 +122,11 @@ impl PortalServer {
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
         let fallback_client = self.fallback_client.clone();
-        let rpc_middleware =
-            RpcServiceBuilder::new().layer_fn(move |s| ProxyService::new(CAPABILITIES, s, fallback_client.clone()));
+        let fallback_eth_client = self.fallback_eth_client.clone();
+
+        let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| {
+            ProxyService::new(CAPABILITIES, s, fallback_eth_client.clone(), fallback_client.clone())
+        });
 
         let server = ServerBuilder::default().set_rpc_middleware(rpc_middleware).build(addr).await?;
 
@@ -179,7 +188,7 @@ impl MinimalEthApiServer for PortalServer {
             });
         }
 
-        let response = self.fallback_client.send_raw_transaction(bytes).await?;
+        let response = self.fallback_eth_client.send_raw_transaction(bytes).await?;
         Ok(response)
     }
 }
@@ -348,7 +357,12 @@ impl EngineApiServer for PortalServer {
     }
 }
 
-fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Result<HttpClient> {
+fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
+    let client = HttpClientBuilder::default().request_timeout(timeout).build(url)?;
+    Ok(client)
+}
+
+fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Result<AuthRpcClient> {
     let secret_layer = AuthClientLayer::new(jwt);
     let middleware = tower::ServiceBuilder::default().layer(secret_layer);
 
