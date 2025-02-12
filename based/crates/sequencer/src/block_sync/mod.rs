@@ -237,6 +237,7 @@ mod tests {
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";
 
+    #[ignore = "Requires manual setup with RPC URL"]
     #[test]
     fn test_block_sync_with_alloydb() {
         let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
@@ -262,6 +263,7 @@ mod tests {
         info!("res: {:?}", res);
     }
 
+    #[ignore = "Requires manual setup with local database"]
     #[test]
     fn test_block_sync_with_on_disk_db() {
         initialize_test_tracing(LevelFilter::INFO);
@@ -288,6 +290,7 @@ mod tests {
         assert!(block_sync.commit_block(&block, &db, true).is_ok());
     }
 
+    #[ignore = "Requires manual setup with local database"]
     #[test]
     fn test_block_sync_reorgs() {
         initialize_test_tracing(LevelFilter::INFO);
@@ -326,77 +329,68 @@ mod tests {
         );
 
         // Test Case 1: reorg at depth 2
-        //     {
-        //         // Apply first block normally
-        //         let block = blocks.get(&(start_block + 1)).unwrap();
-        //         let result = block_sync.commit_block(block, &db, true);
-        //         tracing::info!("Result: {:?}", result);
-        //         assert!(result.is_ok());
-        //         assert!(result.unwrap().is_none());
+        {
+            // Apply first block normally
+            let block = blocks.get(&(start_block + 1)).unwrap();
+            let result = block_sync.commit_block(block, &db, true);
+            tracing::info!("Result: {:?}", result);
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_none());
 
-        //         // Create a competing block at same height
-        //         let mut competing_block = block.clone();
-        //         competing_block.header.parent_hash = B256::random(); // Force different parent hash - we don't commit
-        // the header to the db so this won't affect the db.
+            // Create a competing block at same height
+            let mut competing_block = block.clone();
+            competing_block.header.parent_hash = B256::random(); // Force different parent hash - we don't commit the header to the db so this won't affect the db.
 
-        //         // Apply competing block - should trigger reorg but won't ask for new blocks as the height is the
-        // same.         let result = block_sync.commit_block(&competing_block, &db, true);
-        //         assert!(result.is_ok());
-        //         let fetch_request = result.unwrap().expect("should request reorg blocks");
+            // Apply competing block - should trigger reorg but won't ask for new blocks as the height is the same.
+            let result = block_sync.commit_block(&competing_block, &db, true);
+            assert!(result.is_ok());
+            let (from, to) = result.unwrap().expect("should request reorg blocks");
 
-        //         // Verify correct blocks requested
-        //         match fetch_request {
-        //             BlockFetch::FromTo(from, to) => {
-        //                 assert_eq!(from, competing_block.header.number - 1);
-        //                 assert_eq!(to, competing_block.header.number);
-        //             }
-        //         }
+            // Verify correct blocks requested
+            assert_eq!(from, competing_block.header.number - 1);
+            assert_eq!(to, competing_block.header.number);
 
-        //         // Verify db state after reorg has gone past db.
-        //         assert_eq!(db.head_block_number().unwrap(), start_block - 1);
-        //     }
+            // Verify db state after reorg has gone past db.
+            assert_eq!(db.head_block_number().unwrap(), start_block - 1);
+        }
 
-        //     let head_block = db.head_block_number().unwrap();
-        //     let state_root = db.state_root().unwrap();
-        //     tracing::info!("Head Block Number after first reorg: {:?} | State Root: {:?}", head_block, state_root);
+        let head_block = db.head_block_number().unwrap();
+        let state_root = db.state_root().unwrap();
+        tracing::info!("Head Block Number after first reorg: {:?} | State Root: {:?}", head_block, state_root);
 
-        //     // Test Case 2: Reorg with missing intermediate block
-        //     {
-        //         // Apply blocks from head_block+1 to head_block + 3, skipping head_block + 2
-        //         let block1 = blocks.get(&(head_block + 1)).unwrap();
-        //         tracing::info!("Block 1: {:?}", block1.header.number);
-        //         let result = block_sync.commit_block(block1, &db, true);
-        //         tracing::info!("Result: {:?}", result);
-        //         assert!(result.is_ok());
+        // Test Case 2: Reorg with missing intermediate block
+        {
+            // Apply blocks from head_block+1 to head_block + 3, skipping head_block + 2
+            let block1 = blocks.get(&(head_block + 1)).unwrap();
+            tracing::info!("Block 1: {:?}", block1.header.number);
+            let result = block_sync.commit_block(block1, &db, true);
+            tracing::info!("Result: {:?}", result);
+            assert!(result.is_ok());
 
-        //         let block3 = blocks.get(&(head_block + 3)).unwrap();
-        //         let result = block_sync.commit_block(block3, &db, true);
-        //         assert!(result.is_ok());
-        //         let fetch_request = result.unwrap().expect("should request missing blocks");
+            let block3 = blocks.get(&(head_block + 3)).unwrap();
+            let result = block_sync.commit_block(block3, &db, true);
+            assert!(result.is_ok());
+            let (from, to) = result.unwrap().expect("should request missing blocks");
 
-        //         // Verify correct range requested
-        //         match fetch_request {
-        //             BlockFetch::FromTo(from, to) => {
-        //                 assert_eq!(from, head_block + 2);
-        //                 assert_eq!(to, head_block + 2);
-        //             }
-        //         }
+            // Verify correct range requested
+            assert_eq!(from, head_block + 2);
+            assert_eq!(to, head_block + 2);
 
-        //         // Verify block is in pending queue
-        //         assert_eq!(block_sync.pending_blocks.len(), 1);
-        //         assert_eq!(block_sync.pending_blocks[0].header.number, head_block + 3);
-        //     }
+            // Verify block is in pending queue
+            assert_eq!(block_sync.pending_blocks.len(), 1);
+            assert_eq!(block_sync.pending_blocks[0].header.number, head_block + 3);
+        }
 
-        //     // Test Case 3: Apply pending blocks after gap is filled
-        //     {
-        //         let block2 = blocks.get(&(head_block + 2)).unwrap();
-        //         let result = block_sync.commit_block(block2, &db, true);
-        //         assert!(result.is_ok());
-        //         assert!(result.unwrap().is_none()); // No more blocks needed
+        // Test Case 3: Apply pending blocks after gap is filled
+        {
+            let block2 = blocks.get(&(head_block + 2)).unwrap();
+            let result = block_sync.commit_block(block2, &db, true);
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_none()); // No more blocks needed
 
-        //         // Verify pending block was processed
-        //         assert_eq!(block_sync.pending_blocks.len(), 0);
-        //         assert_eq!(db.head_block_number().unwrap(), head_block + 3);
-        //     }
+            // Verify pending block was processed
+            assert_eq!(block_sync.pending_blocks.len(), 0);
+            assert_eq!(db.head_block_number().unwrap(), head_block + 3);
+        }
     }
 }

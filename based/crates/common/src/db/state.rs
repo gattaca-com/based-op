@@ -666,10 +666,6 @@ mod tests {
         states::{reverts::AccountInfoRevert, StorageSlot},
         AccountRevert, AccountStatus, BundleAccount, RevertToSlot,
     };
-    // use crate::db::{
-    //     states::{reverts::AccountInfoRevert, StorageSlot},
-    //     AccountRevert, AccountStatus, BundleAccount, RevertToSlot,
-    // };
     use revm_interpreter::primitives::keccak256;
 
     use super::*;
