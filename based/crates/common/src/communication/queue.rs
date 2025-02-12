@@ -522,12 +522,12 @@ mod test {
                 let mut c = 0;
                 while n < tot_messages {
                     match c1.try_consume_clone() {
-                      Ok(t) => {
-                        n += 1;
-                        c += t;
-                      }
-                      Err(ReadError::Empty) => {},
-                      Err(ReadError::SpedPast) => panic!("sped past")
+                        Ok(t) => {
+                            n += 1;
+                            c += t;
+                        }
+                        Err(ReadError::Empty) => {}
+                        Err(ReadError::SpedPast) => panic!("sped past"),
                     }
                 }
                 assert_eq!(c, (0..tot_messages).sum::<usize>());

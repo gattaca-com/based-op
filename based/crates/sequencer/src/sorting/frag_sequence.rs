@@ -95,44 +95,39 @@ impl FragSequence {
 }
 #[cfg(test)]
 mod tests {
-    use std::{fmt::Debug, sync::Arc};
+    use std::sync::Arc;
 
     use alloy_consensus::Signed;
     use alloy_eips::eip2718::Encodable2718;
-    use alloy_primitives::{Bytes, U256};
+    use alloy_primitives::Bytes;
     use alloy_provider::ProviderBuilder;
     use alloy_rpc_types::engine::PayloadAttributes;
     use bop_common::{
-        actor::{Actor, ActorConfig},
-        communication::{
-            messages::{SequencerToSimulator, SimulatorToSequencer, SimulatorToSequencerMsg},
-            Spine, TrackedSenders,
-        },
-        db::{DBFrag, DBSorting},
-        shared::SharedState,
-        time::Duration,
-        transaction::Transaction,
+        communication::Spine, db::DBFrag, shared::SharedState, time::Duration, transaction::Transaction,
+        utils::initialize_test_tracing,
     };
     use bop_db::AlloyDB;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use op_alloy_rpc_types_engine::OpPayloadAttributes;
-    use reqwest::{Client, Url};
-    use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
+    use reqwest::Url;
+    use reth_optimism_chainspec::BASE_SEPOLIA;
     use reth_optimism_evm::OpEvmConfig;
     use reth_primitives_traits::{Block, SignedTransaction};
-    use revm_primitives::{BlobExcessGasAndPrice, BlockEnv};
+    use tracing::level_filters::LevelFilter;
 
     use crate::{
-        block_sync::fetch_blocks::fetch_block, context::SequencerContext, sorting::FragSequence, SequencerConfig,
-        Simulator, SortingData,
+        block_sync::fetch_blocks::fetch_block, context::SequencerContext, simulator::simulate_tx_inner,
+        SequencerConfig, Simulator,
     };
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";
     const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
 
-    #[ignore = "Requires RPC callc"]
+    #[ignore = "Requires RPC calls"]
     #[test]
     fn test_block_seal_with_alloydb() {
+        initialize_test_tracing(LevelFilter::INFO);
+
         let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
 
         // Get RPC URL from environment
@@ -141,31 +136,22 @@ mod tests {
         tracing::info!("RPC URL: {}", rpc_url);
 
         // Create the block executor.
-        let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
         let evm_config = OpEvmConfig::new(BASE_SEPOLIA.clone());
 
         // Fetch the block from the RPC.
-        let provider = ProviderBuilder::new().network().on_http(rpc_url);
-        let block = rt.block_on(async { fetch_block(25771900, &provider).await });
-
+        let provider = ProviderBuilder::new().network().on_http(rpc_url.clone());
+        let block_number = 21803240;
+        let block = rt.block_on(async { fetch_block(block_number, &provider).await });
+        let previous_block = rt.block_on(async { fetch_block(block_number - 1, &provider).await });
         let header = block.block.header();
-
-        let block_env = BlockEnv {
-            number: U256::from(header.number),
-            coinbase: (*header.beneficiary).into(),
-            timestamp: U256::from(header.timestamp),
-            difficulty: header.difficulty,
-            basefee: U256::from(header.base_fee_per_gas.unwrap()),
-            gas_limit: U256::from(header.gas_limit),
-            prevrandao: Some(header.mix_hash),
-            blob_excess_gas_and_price: header.excess_blob_gas.map(|ebg| BlobExcessGasAndPrice::new(ebg, false)),
-        };
+        let previous_header = previous_block.block.header();
+        tracing::info!("Testing block header: {:?}", header);
 
         let config = SequencerConfig {
             frag_duration: Duration::from_millis(200),
             n_per_loop: 5,
-            rpc_url,
-            evm_config,
+            rpc_url: rpc_url.clone(),
+            evm_config: evm_config.clone(),
             simulate_tof_in_pools: false,
             commit_sealed_frags_to_db: false,
         };
@@ -183,9 +169,10 @@ mod tests {
         let spine = Spine::default();
         let sim_connections = spine.to_connections("sim");
 
-        let mut ctx = SequencerContext::new(alloy_db.clone(), shared_state, config);
-        let mut seq: FragSequence = FragSequence::new(block.gas_limit, block.number, block.timestamp);
-        let mut sorting_db: SortingData<AlloyDB> = SortingData::new(&seq, &ctx);
+        let mut ctx: SequencerContext<AlloyDB> = SequencerContext::new(alloy_db.clone(), shared_state, config);
+        ctx.parent_header = previous_header.clone();
+        ctx.parent_hash = previous_block.hash_slow();
+        ctx.base_fee = block.base_fee_per_gas.unwrap();
 
         let mut must_include_txs = Vec::with_capacity(10);
         let mut non_must_include_txs = Vec::with_capacity(block.block.body.transactions.len().saturating_sub(10));
@@ -231,9 +218,10 @@ mod tests {
             transactions: Some(must_include_txs),
             no_tx_pool: None,
             gas_limit: Some(block.gas_limit),
-            eip_1559_params: None, // TODO: add eip1559 params
+            eip_1559_params: Some(revm_primitives::FixedBytes::from_slice(&block.extra_data[1..9])),
         });
-        ctx.start_sequencing(attributes, sim_connections.senders());
+
+        let (mut seq, mut sorting_db) = ctx.start_sequencing(attributes, sim_connections.senders());
 
         // Apply non-must include txs using simulator
         let mut sim = Simulator::new(sim_db, &evm_config, 0);
@@ -241,24 +229,20 @@ mod tests {
         sim.update_evm_environments(simulator_evm_block_params);
 
         for tx in non_must_include_txs {
-            sorting_db.apply_tx(
-                Simulator::simulate_transaction::<DBSorting<AlloyDB>>(
-                    tx,
-                    sorting_db.state(),
-                    &mut sim.evm_sorting,
-                    true,
-                    true,
-                    true,
-                )
-                .unwrap(),
-            );
+            let evm = &mut sim.evm_sorting;
+            let db = sorting_db.state();
+
+            let new_state = bop_common::db::State::new(db);
+            let _ = std::mem::replace(evm.db_mut(), new_state);
+            let result = simulate_tx_inner(tx, evm, true, true, true).unwrap();
+            sorting_db.apply_tx(result);
         }
 
         // Apply the frag of non-must include txs
-        seq.apply_sorted_frag(sorting_db, &mut ctx);
+        let (_frag, _sorting_db) = ctx.seal_frag(sorting_db, &mut seq);
 
         // Seal the block
         let (_seal, payload) = ctx.seal_block(seq);
-        assert_eq!(block.block.header.state_root, payload.execution_payload.payload_inner.payload_inner.state_root);
+        assert_eq!(block.block.header.hash_slow(), payload.execution_payload.payload_inner.payload_inner.block_hash);
     }
 }

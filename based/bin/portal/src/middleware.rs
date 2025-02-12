@@ -96,6 +96,7 @@ mod tests {
 
     use super::*;
 
+    #[ignore = "Requires RPC calls"]
     #[tokio::test]
     async fn test_proxy() {
         let received_fallback = Arc::new(AtomicBool::new(false));
