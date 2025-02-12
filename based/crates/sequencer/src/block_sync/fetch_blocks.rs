@@ -105,9 +105,12 @@ pub const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.publicnode
 mod tests {
     use alloy_primitives::b256;
     use alloy_provider::ProviderBuilder;
+    use bop_common::communication::Spine;
+    use bop_db::AlloyDB;
 
     use super::*;
 
+    #[ignore = "Requires RPC call"]
     #[tokio::test]
     async fn test_single_block_fetch() {
         let provider = ProviderBuilder::new().network().on_http(TEST_BASE_RPC_URL.parse().unwrap());
@@ -120,42 +123,45 @@ mod tests {
         assert!(block.body.transactions.first().unwrap().is_deposit());
     }
 
-    // #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    // async fn test_batch_fetch_ordering() {
-    //     let start_block = 25738473;
-    //     let end_block = 25738483;
+    #[ignore = "Requires RPC call"]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_batch_fetch_ordering() {
+        let start_block = 25738473;
+        let end_block = 25738483;
 
-    //     let spine = Spine::default();
+        let spine: Spine<AlloyDB> = Spine::default();
+        let mut connections = spine.to_connections("test");
+        let senders_clone = connections.senders().clone();
 
-    //     tokio::spawn(async_fetch_blocks_and_send_sequentially(
-    //         start_block,
-    //         end_block,
-    //         TEST_BASE_RPC_URL.parse().unwrap(),
-    //         sender.into,
-    //         None,
-    //     ));
+        let provider = ProviderBuilder::new().network().on_http(TEST_BASE_RPC_URL.parse().unwrap());
+        let handle = tokio::spawn(async move {
+            async_fetch_blocks_and_send_sequentially(start_block, end_block, &senders_clone, &provider).await;
+        });
 
-    //     let mut prev_block_num = start_block - 1;
-    //     let mut blocks_received = 0;
+        let mut prev_block_num = start_block - 1;
+        let mut blocks_received = 0;
 
-    //     while let Ok(block_result) = receiver.recv() {
-    //         let block = block_result.data().as_ref().unwrap();
-    //         blocks_received += 1;
+        loop {
+            connections.receive(|block: BlockWithSenders<OpBlock>, _| {
+                blocks_received += 1;
 
-    //         assert!(block.header.number > prev_block_num, "Blocks must be in ascending order");
-    //         prev_block_num = block.header.number;
+                assert!(block.header.number > prev_block_num, "Blocks must be in ascending order");
+                prev_block_num = block.header.number;
+            });
 
-    //         if blocks_received == (end_block - start_block + 1) as usize {
-    //             break;
-    //         }
-    //     }
+            if blocks_received == (end_block - start_block + 1) as usize {
+                break;
+            }
+        }
 
-    //     assert_eq!(
-    //         blocks_received,
-    //         (end_block - start_block + 1) as usize,
-    //         "Should receive exactly {} blocks",
-    //         end_block - start_block + 1
-    //     );
-    //     assert_eq!(prev_block_num, end_block, "Last block should be end_block");
-    // }
+        assert_eq!(
+            blocks_received,
+            (end_block - start_block + 1) as usize,
+            "Should receive exactly {} blocks",
+            end_block - start_block + 1
+        );
+        assert_eq!(prev_block_num, end_block, "Last block should be end_block");
+
+        handle.abort();
+    }
 }
