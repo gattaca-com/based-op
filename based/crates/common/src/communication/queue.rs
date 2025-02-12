@@ -471,7 +471,7 @@ impl<T: Clone, Q: Into<ConsumerBare<T>>> From<Q> for Consumer<T> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_arch = "x86_64"))]
 mod test {
     use super::*;
 
