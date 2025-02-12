@@ -94,7 +94,7 @@ type Env struct {
 	Basefee          uint64         `json:basefee`
 	Difficulty       *big.Int       `json:difficulty`
 	Prevrandao       common.Hash    `json:prevrandao`
-	ParentHash       common.Hash    `json:parent_hash`
-	ParentBeaconRoot common.Hash    `json:parent_beacon_root`
-	ExtraData        []byte         `json:extra_data`
+	ParentHash       common.Hash    `json:parentHash`
+	ParentBeaconRoot common.Hash    `json:parentBeaconRoot`
+	ExtraData        []byte         `json:extraData`
 }
