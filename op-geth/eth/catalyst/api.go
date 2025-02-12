@@ -1505,7 +1505,7 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 
 	api.unsealedBlockLock.Lock()
 
-	parent := api.eth.BlockChain().CurrentBlock()
+	parent := api.eth.BlockChain().GetBlockByHash(env.Env.ParentHash).Header()
 
 	if parent == nil {
 		error := errors.New("there's no parent block")
