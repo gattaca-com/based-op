@@ -21,7 +21,7 @@ impl From<&GatewayArgs> for SequencerConfig {
             n_per_loop: args.sim_threads,
             rpc_url: args.rpc_fallback_url.clone(),
             simulate_tof_in_pools: false,
-            evm_config: OpEvmConfig::new(args.chain_spec.clone()),
+            evm_config: OpEvmConfig::new(args.chain.clone()),
             commit_sealed_frags_to_db: args.commit_sealed_frags_to_db,
         }
     }

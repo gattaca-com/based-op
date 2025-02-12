@@ -15,6 +15,11 @@ CLIENT_TYPES = struct(
     el="execution",
     cl="beacon",
 )
+
+GATEWAY_TYPE = struct(
+    gateway="gateway",
+)
+
 VOLUME_SIZE = {
     "kurtosis": {
         "op_geth_volume_size": 5000,  # 5GB

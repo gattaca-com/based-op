@@ -203,7 +203,7 @@ impl Transaction {
             OpTxEnvelope::Eip2930(signed) => signed.recover_signer().unwrap(),
             OpTxEnvelope::Eip1559(signed) => signed.recover_signer().unwrap(),
             OpTxEnvelope::Eip7702(signed) => signed.recover_signer().unwrap(),
-            OpTxEnvelope::Deposit(_sealed) => _sealed.from,
+            OpTxEnvelope::Deposit(sealed) => sealed.from,
             _ => panic!("invalid tx type"),
         };
 

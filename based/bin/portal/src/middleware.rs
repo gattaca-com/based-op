@@ -26,6 +26,8 @@ impl<S> ProxyService<S> {
     }
 }
 
+const IGNORE_METHODS: &[&str] = &["eth_getTransactionReceipt", "eth_getBlockByNumber"];
+
 impl<'a, S> RpcServiceT<'a> for ProxyService<S>
 where
     S: Send + Clone + Sync + RpcServiceT<'a> + 'a,
@@ -40,7 +42,9 @@ where
 
         async move {
             if supported_methods.contains(&req.method_name()) {
-                debug!(method = %req.method_name(), "handling request");
+                if !IGNORE_METHODS.contains(&req.method_name()) {
+                    debug!(method = %req.method_name(), "handling request");
+                }
 
                 inner.call(req).await
             } else {
