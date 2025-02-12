@@ -165,8 +165,8 @@ mod tests {
 
     //     // Simulator
     //     let _sim_handle =
-    //         std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default(), 0));
-    //     let mut seq = FragSequence::new(db_frag, 300_000_000);
+    //         std::thread::spawn(move || Simulator::create_and_run(sim_connections, sim_db, ActorConfig::default(),
+    // 0));     let mut seq = FragSequence::new(db_frag, 300_000_000);
     //     let mut sorting_db = seq.create_in_sort();
 
     //     let mut connections = spine.to_connections("test");
