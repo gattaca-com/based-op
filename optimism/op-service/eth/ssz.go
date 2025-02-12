@@ -579,9 +579,11 @@ func (f *NewFrag) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineSliceOfDynamicBytesContent(codec, &f.Txs, MaxTxAmount, MaxTxsSize)
 }
 
-const EnvSize = 8 + 20 + 8 + 8 + 8 + 32 + 32
+const MaxExtraDataSize = 4_294_967_296
 
-func (e *Env) SizeSSZ(siz *ssz.Sizer) uint32 { return EnvSize }
+func (e *Env) SizeSSZ(siz *ssz.Sizer) uint32 {
+	return uint32(8+20+8+8+8+32+32+32+32+4) + ssz.SizeDynamicBytes(siz, e.ExtraData)
+}
 
 func (e *Env) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineUint64(codec, &e.Number)
@@ -591,6 +593,10 @@ func (e *Env) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineUint64(codec, &e.Basefee)
 	ssz.DefineUint256BigInt(codec, &e.Difficulty)
 	ssz.DefineStaticBytes(codec, &e.Prevrandao)
+	ssz.DefineStaticBytes(codec, &e.ParentHash)
+	ssz.DefineStaticBytes(codec, &e.ParentBeaconRoot)
+	ssz.DefineDynamicBytesOffset(codec, &e.ExtraData, MaxExtraDataSize)
+	ssz.DefineDynamicBytesContent(codec, &e.ExtraData, MaxExtraDataSize)
 }
 
 func (f *NewFrag) Root() Bytes32 {
