@@ -59,6 +59,7 @@ revm.workspace = true
 revm-interpreter.workspace = true
 revm-primitives.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 shared_memory.workspace = true
 signal-hook.workspace = true
 ssz_types.workspace = true

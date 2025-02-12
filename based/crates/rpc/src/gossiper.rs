@@ -6,6 +6,7 @@ pub struct Gossiper {
     target_rpc: Option<Url>,
     client: Client,
 }
+
 impl Gossiper {
     pub fn new(target_rpc: Option<Url>) -> Self {
         let client = ClientBuilder::new()
@@ -19,7 +20,7 @@ impl Gossiper {
         let Some(url) = self.target_rpc.as_ref().cloned() else {
             return;
         };
-        let Ok(res) = self.client.post(url).json(&msg).send() else {
+        let Ok(res) = self.client.post(url).json(&msg.to_json()).send() else {
             tracing::error!("couldn't send {}", msg.as_ref());
             return;
         };
