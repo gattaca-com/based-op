@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_signer::Signature as ECDSASignature;
 use revm_primitives::BlockEnv;
 use serde::{Deserialize, Serialize};
@@ -35,29 +35,37 @@ impl From<EnvV0> for VersionedMessage {
     }
 }
 
+pub type MaxExtraDataSize = typenum::U256;
+pub type ExtraData = VariableList<u8, MaxExtraDataSize>;
+
 /// Initial message to set the block environment for the current block
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
 pub struct EnvV0 {
     number: u64,
+    parent_hash: B256,
     beneficiary: Address,
     timestamp: u64,
     gas_limit: u64,
     basefee: u64,
     difficulty: U256,
     prevrandao: B256,
+    extra_data: ExtraData,
+    parent_beacon_block_root: B256,
 }
 
-impl From<&BlockEnv> for EnvV0 {
-    fn from(env: &BlockEnv) -> Self {
-        // unwraps are safe because u64 is large enough
+impl EnvV0 {
+    pub fn new(env: &BlockEnv, parent_hash: B256, extra_data: &Bytes, parent_beacon_block_root: B256) -> Self {
         Self {
-            number: env.number.try_into().unwrap(),
+            number: env.number.to(),
+            parent_hash,
             beneficiary: env.coinbase,
-            timestamp: env.timestamp.try_into().unwrap(),
-            gas_limit: env.gas_limit.try_into().unwrap(),
-            basefee: env.basefee.try_into().unwrap(),
+            timestamp: env.timestamp.to(),
+            gas_limit: env.gas_limit.to(),
+            basefee: env.basefee.to(),
             difficulty: env.difficulty,
             prevrandao: env.prevrandao.unwrap_or_default(),
+            extra_data: ExtraData::from(extra_data.to_vec()),
+            parent_beacon_block_root,
         }
     }
 }
