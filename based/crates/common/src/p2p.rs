@@ -1,5 +1,4 @@
 use alloy_primitives::{Address, Bytes, B256, U256};
-use alloy_signer::Signature as ECDSASignature;
 use revm_primitives::BlockEnv;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, VariableList};
@@ -10,6 +9,7 @@ use crate::transaction::Transaction as BuilderTransaction;
 
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize, AsRefStr)]
 #[tree_hash(enum_behaviour = "union")]
+#[serde(untagged)]
 #[non_exhaustive]
 pub enum VersionedMessage {
     FragV0(FragV0),
@@ -40,6 +40,7 @@ pub type ExtraData = VariableList<u8, MaxExtraDataSize>;
 
 /// Initial message to set the block environment for the current block
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EnvV0 {
     number: u64,
     parent_hash: B256,
@@ -49,6 +50,7 @@ pub struct EnvV0 {
     basefee: u64,
     difficulty: U256,
     prevrandao: B256,
+    #[serde(with = "ssz_types::serde_utils::hex_var_list")]
     extra_data: ExtraData,
     parent_beacon_block_root: B256,
 }
@@ -78,6 +80,7 @@ pub type Transactions = VariableList<Transaction, MaxTransactionsPerPayload>;
 /// A _fragment_ of a block, containing a sequenced set of transactions that will be eventually included in the next
 /// block in this order
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FragV0 {
     /// Block in which this frag will be included
     block_number: u64,
@@ -86,6 +89,7 @@ pub struct FragV0 {
     /// Whether this is the last frag in the sequence
     pub is_last: bool,
     /// Ordered list of EIP-2718 encoded transactions
+    #[serde(with = "ssz_types::serde_utils::list_of_hex_var_list")]
     txs: Transactions,
 }
 
@@ -103,6 +107,7 @@ impl FragV0 {
 
 /// A message sealing a sequence of frags, with fields from the block header
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SealV0 {
     /// How many frags for this block were in this sequence
     pub total_frags: u64,
@@ -118,9 +123,9 @@ pub struct SealV0 {
     pub block_hash: B256,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignedMessage {
-    pub signature: ECDSASignature,
+    pub signature: Bytes,
     pub message: VersionedMessage,
 }
 
@@ -141,11 +146,14 @@ mod tests {
             basefee: 4,
             difficulty: U256::from(5),
             prevrandao: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+            parent_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+            extra_data: ExtraData::from(vec![1, 2, 3]),
+            parent_beacon_block_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
         };
 
         let message = VersionedMessage::from(env);
         let hash = message.tree_hash_root();
-        assert_eq!(hash, b256!("6805e5742eae056f663f11d87044022f19a38bde3ba41c41ce9078c3406326c3"));
+        assert_eq!(hash, b256!("fa09df7670737568ba783dfd934e19b06e6681e367a866a5647449bd4e5ca324"));
     }
 
     #[test]
