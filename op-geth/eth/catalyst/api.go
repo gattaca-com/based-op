@@ -1461,6 +1461,8 @@ func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) (string, error) {
 		return engine.INVALID, error
 	}
 
+	api.eth.BlockChain().SetCurrentUnsealedBlock(nil)
+
 	return engine.VALID, nil
 }
 
