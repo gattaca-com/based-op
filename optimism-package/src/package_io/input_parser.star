@@ -206,6 +206,7 @@ def input_parser(plan, input_args):
                     gateway_image=result["mev_params"]["gateway_image"],
                     builder_host=result["mev_params"]["builder_host"],
                     builder_port=result["mev_params"]["builder_port"],
+                    portal_extra_params=result["mev_params"]["portal_extra_params"],
                 ),
                 additional_services=result["additional_services"],
             )
@@ -441,6 +442,7 @@ def default_mev_params():
         "gateway_image": "",
         "builder_host": "",
         "builder_port": "",
+        "portal_extra_params": [],
     }
 
 

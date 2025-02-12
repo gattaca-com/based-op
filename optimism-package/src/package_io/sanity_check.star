@@ -97,6 +97,7 @@ SUBCATEGORY_PARAMS = {
         "gateway_image",
         "builder_host",
         "builder_port",
+        "portal_extra_params",
     ],
 }
 

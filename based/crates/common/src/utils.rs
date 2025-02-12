@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
@@ -160,4 +162,8 @@ pub fn last_part_of_typename<T>() -> &'static str {
 
 pub fn uuid() -> Uuid {
     Uuid::new_v4()
+}
+
+pub fn utcnow_sec() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
 }
