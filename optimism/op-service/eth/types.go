@@ -267,7 +267,7 @@ type Env struct {
 	Number           uint64         `json:"number" ssz-size:"8"`
 	Beneficiary      common.Address `json:"beneficiary" ssz-size:"20"`
 	Timestamp        uint64         `json:"timestamp" ssz-size:"8"`
-	GasLimit         uint64         `json:"gas_limit" ssz-size:"8"`
+	GasLimit         uint64         `json:"gasLimit" ssz-size:"8"`
 	Basefee          uint64         `json:"basefee" ssz-size:"8"`
 	Difficulty       *big.Int       `json:"difficulty" ssz-size:"32"`
 	Prevrandao       common.Hash    `json:"prevrandao" ssz-size:"32"`

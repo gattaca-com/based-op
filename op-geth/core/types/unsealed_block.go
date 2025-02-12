@@ -90,7 +90,7 @@ type Env struct {
 	Number           uint64         `json:number`
 	Beneficiary      common.Address `json:beneficiary`
 	Timestamp        uint64         `json:timestamp`
-	GasLimit         uint64         `json:gas_limit`
+	GasLimit         uint64         `json:gasLimit`
 	Basefee          uint64         `json:basefee`
 	Difficulty       *big.Int       `json:difficulty`
 	Prevrandao       common.Hash    `json:prevrandao`
