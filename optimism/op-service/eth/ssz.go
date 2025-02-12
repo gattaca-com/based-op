@@ -582,7 +582,7 @@ func (f *NewFrag) DefineSSZ(codec *ssz.Codec) {
 const MaxExtraDataSize = 32
 
 func (e *Env) SizeSSZ(siz *ssz.Sizer) uint32 {
-	return uint32(8+20+8+8+8+32+32+32+32) + ssz.SizeDynamicBytes(siz, e.ExtraData)
+	return uint32(8+20+8+8+8+32+32+32+32+4) + ssz.SizeDynamicBytes(siz, e.ExtraData)
 }
 
 func (e *Env) DefineSSZ(codec *ssz.Codec) {
