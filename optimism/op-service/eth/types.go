@@ -273,7 +273,7 @@ type Env struct {
 	Prevrandao       common.Hash    `json:"prevrandao" ssz-size:"32"`
 	ParentHash       Bytes32        `json:"parentHash" ssz-size:"32"`
 	ParentBeaconRoot common.Hash    `json:"parentBeaconRoot" ssz-size:"32"`
-	ExtraData        []byte         `json:"extraData" ssz-max:"32"`
+	ExtraData        []byte         `json:"extraData" ssz-max:"4294967296"`
 }
 
 type ExecutionPayloadEnvelope struct {
