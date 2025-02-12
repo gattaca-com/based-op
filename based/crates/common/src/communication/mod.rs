@@ -1,6 +1,9 @@
 use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
 
-use messages::{BlockSyncMessage, EvmBlockParams, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
+use messages::{
+    BlockFetch, BlockSyncMessage, EngineApi, EvmBlockParams, SequencerToExternal, SequencerToSimulator,
+    SimulatorToSequencer,
+};
 use shared_memory::ShmemError;
 use thiserror::Error;
 
@@ -16,10 +19,11 @@ use crate::{
     p2p::VersionedMessage,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
-    utils::last_part_of_typename,
+    utils::{full_last_part_of_typename, last_part_of_typename},
 };
 
 pub type CrossBeamReceiver<T> = crossbeam_channel::Receiver<InternalMessage<T>>;
+pub type Sender<T> = crossbeam_channel::Sender<InternalMessage<T>>;
 
 pub trait NonBlockingSender<T> {
     fn try_send(&self, data: T) -> Result<(), T>;
@@ -34,7 +38,6 @@ pub trait NonBlockingReceiver<T> {
     fn try_receive(&mut self) -> Option<T>;
 }
 
-// TODO: turn this into a macro
 pub trait TrackedSenders {
     fn set_ingestion_t(&mut self, ingestion_t: IngestionTime);
     fn ingestion_t(&self) -> IngestionTime;
@@ -116,7 +119,7 @@ impl<T, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
     pub fn new<S: AsRef<str>>(system_name: S, receiver: R) -> Self {
         Self {
             receiver,
-            timer: Timer::new(format!("{}-{}", system_name.as_ref(), last_part_of_typename::<T>())),
+            timer: Timer::new(format!("{}-{}", system_name.as_ref(), full_last_part_of_typename::<T>())),
             _t: PhantomData,
         }
     }
@@ -157,8 +160,6 @@ impl<T, R: NonBlockingReceiver<InternalMessage<T>>> Receiver<T, R> {
         }
     }
 }
-
-pub type Sender<T> = crossbeam_channel::Sender<InternalMessage<T>>;
 
 pub struct Connections<S, R> {
     senders: S,
@@ -227,6 +228,8 @@ impl<S: TrackedSenders, R> Connections<S, R> {
     }
 }
 
+/// The Spine contains all the message passing interfaces between all the Actors
+/// It is mainly used to create Connections from to be used by the Actor systems.
 #[derive(Clone)]
 pub struct Spine<Db: 'static> {
     sender_simulator_to_sequencer: Sender<SimulatorToSequencer>,
@@ -238,8 +241,8 @@ pub struct Spine<Db: 'static> {
     sender_sequencer_to_rpc: Sender<SequencerToExternal>,
     receiver_sequencer_to_rpc: CrossBeamReceiver<SequencerToExternal>,
 
-    sender_engine_rpc_to_sequencer: Sender<messages::EngineApi>,
-    receiver_engine_rpc_to_sequencer: CrossBeamReceiver<messages::EngineApi>,
+    sender_engine_rpc_to_sequencer: Sender<EngineApi>,
+    receiver_engine_rpc_to_sequencer: CrossBeamReceiver<EngineApi>,
 
     sender_eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     receiver_eth_rpc_to_sequencer: CrossBeamReceiver<Arc<Transaction>>,
@@ -247,8 +250,8 @@ pub struct Spine<Db: 'static> {
     sender_blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     receiver_blockfetch_to_sequencer: CrossBeamReceiver<BlockSyncMessage>,
 
-    sender_sequencer_to_blockfetch: Sender<messages::BlockFetch>,
-    receiver_sequencer_to_blockfetch: CrossBeamReceiver<messages::BlockFetch>,
+    sender_sequencer_to_blockfetch: Sender<BlockFetch>,
+    receiver_sequencer_to_blockfetch: CrossBeamReceiver<BlockFetch>,
 
     sender_sequencer_frag_broadcast: Sender<VersionedMessage>,
     receiver_sequencer_frag_broadcast: CrossBeamReceiver<VersionedMessage>,
@@ -290,6 +293,8 @@ impl<Db> Default for Spine<Db> {
         }
     }
 }
+
+pub type SpineConnections<Db> = Connections<SendersSpine<Db>, ReceiversSpine<Db>>;
 
 impl<Db: Clone> Spine<Db> {
     pub fn to_connections<S: AsRef<str>>(&self, name: S) -> SpineConnections<Db> {
@@ -368,19 +373,22 @@ impl<Db> AsMut<Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>
     }
 }
 
-//TODO: remove allow dead code
-#[allow(dead_code)]
+/// SendersSpine holds the Sender side of the Connections interface.
+/// Actors use this to send messages to eachother. The main reason for this
+/// to exist is that by setting the `timestamp` field when consuming a message
+/// to the origin time of that message, it allows to automatically attach that
+/// to any derived message without the user needing to do this manually.
 #[derive(Clone, Debug)]
 pub struct SendersSpine<Db> {
     sequencer_to_simulator: Sender<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Sender<SequencerToExternal>,
     simulator_to_sequencer: Sender<SimulatorToSequencer>,
-    engine_rpc_to_sequencer: Sender<messages::EngineApi>,
+    engine_rpc_to_sequencer: Sender<EngineApi>,
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     sequencer_frag_broadcast: Sender<VersionedMessage>,
     evm_block_params: Producer<InternalMessage<EvmBlockParams>>,
-    sequencer_to_blockfetch: Sender<messages::BlockFetch>,
+    sequencer_to_blockfetch: Sender<BlockFetch>,
     timestamp: IngestionTime,
 }
 
@@ -411,17 +419,22 @@ impl<Db> TrackedSenders for SendersSpine<Db> {
     }
 }
 
+/// ReceiversSpine holds the Receiver side of the Connections interface.
+/// Using the various `AsMut` implementations, it allows for an Actor to
+/// simply call receive on the Connections and the right queue will be
+/// targeted for each message type. Each of the Receivers holds the Timer
+/// which will report latency and processing time of each of the messages.
 #[derive(Debug)]
 pub struct ReceiversSpine<Db> {
     simulator_to_sequencer: Receiver<SimulatorToSequencer>,
     sequencer_to_simulator: Receiver<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Receiver<SequencerToExternal>,
-    engine_rpc_to_sequencer: Receiver<messages::EngineApi>,
+    engine_rpc_to_sequencer: Receiver<EngineApi>,
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
     sequencer_frag_broadcast: Receiver<VersionedMessage>,
     evm_block_params: Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>>>,
-    sequencer_to_blockfetch: Receiver<messages::BlockFetch>,
+    sequencer_to_blockfetch: Receiver<BlockFetch>,
 }
 
 impl<Db> ReceiversSpine<Db> {
@@ -439,8 +452,6 @@ impl<Db> ReceiversSpine<Db> {
         }
     }
 }
-
-pub type SpineConnections<Db> = Connections<SendersSpine<Db>, ReceiversSpine<Db>>;
 
 #[derive(Error, Debug, Copy, Clone, PartialEq)]
 pub enum ReadError {

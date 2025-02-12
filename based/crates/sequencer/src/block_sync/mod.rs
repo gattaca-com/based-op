@@ -1,5 +1,3 @@
-// #![allow(unused)] // TODO: remove
-
 use std::{fmt::Display, sync::Arc};
 
 use bop_common::{
