@@ -74,7 +74,6 @@ def launch(
         node_selectors,
         existing_el_clients,
         sequencer_context,
-        observability_helper,
     )
 
     service = plan.add_service(service_name, config)
@@ -103,7 +102,6 @@ def get_config(
     launcher,
     service_name,
     service_image,
-    global_log_level,
     node_selectors,
     existing_el_clients,
     sequencer_context,
@@ -120,7 +118,7 @@ def get_config(
         "--db.datadir=" + EXECUTION_DATA_DIRPATH_ON_CLIENT_CONTAINER,
         "--rpc.fallback_url=" + sequencer_context.rpc_http_url,
         "--rpc.port={0}".format(RPC_PORT_NUM),
-        "--gossip.root_peer_url=" + "http://fix.me",  # TODO
+        "--gossip.root_peer_url=" + "http://op-cl-2-op-node-op-geth-op-kurtosis:8547",  # TODO
         "--debug",
     ]
 

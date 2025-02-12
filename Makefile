@@ -48,7 +48,6 @@ build-gateway: ## 🏗️ Build based gateway from based directory
 build-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
 	IMAGE_TAGS=develop \
-	PLATFORMS="linux/arm64" \
 	docker buildx bake \
 	-f docker-bake.hcl \
 	--set op-node.tags=based_op_node \

@@ -380,10 +380,10 @@ def launch(
                         gateway_launcher,
                         gateway_service_name,
                         gateway_image,
-                        global_log_level,
                         node_selectors,
                         all_el_contexts,
                         el_context,
+                        observability_helper
                     )
                 else:
                     el_builder_context = struct(
@@ -417,7 +417,7 @@ def launch(
                 # use sidecar RPC in place of the sequencer RPC to broadcast txs
                 # (this will be removed at some point)
                 all_el_contexts.append(sidecar_context)
-                all_el_contexts.append(el_builder_context)
+                # all_el_contexts.append(el_builder_context)
             elif mev_type:
                 fail("UNSUPPORTED MEV TYPE: {0}".format(mev_type))
 
