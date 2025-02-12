@@ -60,12 +60,9 @@ func (ub *UnsealedBlock) Transactions() []*Transaction {
 }
 
 func (ub *UnsealedBlock) ByteTransactions() [][]byte {
-	buffer := new(bytes.Buffer)
-	txs := [][]byte{}
-	for _, tx := range ub.Transactions() {
-		buffer.Reset()
-		tx.inner.encode(buffer)
-		txs = append(txs, buffer.Bytes())
+	txs := make([][]byte, len(ub.Transactions()))
+	for i, tx := range ub.Transactions() {
+		txs[i], _ = tx.MarshalBinary()
 	}
 	return txs
 }
