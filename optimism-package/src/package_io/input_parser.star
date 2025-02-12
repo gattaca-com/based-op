@@ -433,6 +433,7 @@ def default_supervisor_params():
         "extra_params": [],
     }
 
+
 def default_mev_params():
     return {
         "rollup_boost_image": "",

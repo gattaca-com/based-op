@@ -234,8 +234,7 @@ def sanity_check(plan, optimism_config):
         # Checks everything else
         for param in input_args.keys():
             combined_root_params = (
-                PARTICIPANT_CATEGORIES.keys()
-                + SUBCATEGORY_PARAMS.keys()
+                PARTICIPANT_CATEGORIES.keys() + SUBCATEGORY_PARAMS.keys()
             )
             combined_root_params.append("additional_services")
             combined_root_params.append("op_contract_deployer_params")

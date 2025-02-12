@@ -78,7 +78,7 @@ gateway: ## 🚀 Run the gateway
 	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
 	--test
 
-based-portal-logs:
+portal-logs:
 	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
 
 gateway-logs:

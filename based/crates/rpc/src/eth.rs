@@ -131,6 +131,6 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     }
 }
 
-fn convert_block(_block: OpBlock, _full: bool) -> OpRpcBlock {
-    todo!()
+fn convert_block(block: OpBlock, _full: bool) -> OpRpcBlock {
+    OpRpcBlock::from_consensus(block, None)
 }

@@ -94,7 +94,7 @@ def launch(
         engine_rpc_port_num=RPC_PORT_NUM,
         rpc_http_url=http_url,
         service_name=service_name,
-        #el_metrics_info=[metrics_info],
+        # el_metrics_info=[metrics_info],
     )
 
 
@@ -108,8 +108,6 @@ def get_config(
     existing_el_clients,
     sequencer_context,
 ):
-    plan.print("Launching gateway: {0}".format(sequencer_context))
-
     ports = dict(get_used_ports())
 
     cmd = [
@@ -122,8 +120,8 @@ def get_config(
         "--db.datadir=" + EXECUTION_DATA_DIRPATH_ON_CLIENT_CONTAINER,
         "--rpc.fallback_url=" + sequencer_context.rpc_http_url,
         "--rpc.port={0}".format(RPC_PORT_NUM),
-        "--gossip.root_peer_url=" + "http://fix.me", # TODO
-        "--debug"
+        "--gossip.root_peer_url=" + "http://fix.me",  # TODO
+        "--debug",
     ]
 
     # configure files
@@ -133,14 +131,12 @@ def get_config(
         # ethereum_package_constants.JWT_MOUNTPOINT_ON_CLIENTS: launcher.jwt_file,
     }
 
-
     # apply customizations
 
     # if observability_helper.enabled:
     #     cmd.append("--metrics=0.0.0.0:{0}".format(observability.METRICS_PORT_NUM))
 
     #     observability.expose_metrics_port(ports)
-
 
     config_args = {
         "image": service_image,
@@ -157,7 +153,6 @@ def get_config(
         ),
         "node_selectors": node_selectors,
     }
-
 
     return ServiceConfig(**config_args)
 
