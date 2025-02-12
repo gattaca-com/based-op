@@ -264,13 +264,16 @@ type SignedEnv struct {
 
 // Initial message to set the block environment for the current block
 type Env struct {
-	Number      uint64         `json:"number"`
-	Beneficiary common.Address `json:"beneficiary"`
-	Timestamp   uint64         `json:"timestamp"`
-	GasLimit    uint64         `json:"gas_limit"`
-	Basefee     uint64         `json:"basefee"`
-	Difficulty  *big.Int       `json:"difficulty"`
-	Prevrandao  common.Hash    `json:"prevrandao"`
+	Number           uint64         `json:"number" ssz-size:"8"`
+	Beneficiary      common.Address `json:"beneficiary" ssz-size:"20"`
+	Timestamp        uint64         `json:"timestamp" ssz-size:"8"`
+	GasLimit         uint64         `json:"gas_limit" ssz-size:"8"`
+	Basefee          uint64         `json:"basefee" ssz-size:"8"`
+	Difficulty       *big.Int       `json:"difficulty" ssz-size:"32"`
+	Prevrandao       common.Hash    `json:"prevrandao" ssz-size:"32"`
+	ParentHash       Bytes32        `json:"parentHash" ssz-size:"32"`
+	ParentBeaconRoot common.Hash    `json:"parentBeaconRoot" ssz-size:"32"`
+	ExtraData        []byte         `json:"extraData" ssz-max:"1073741824"`
 }
 
 type ExecutionPayloadEnvelope struct {
