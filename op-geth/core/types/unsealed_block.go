@@ -3,11 +3,11 @@ package types
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 type UnsealedBlock struct {
@@ -90,7 +90,7 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 	}
 
 	if err := json.Unmarshal(data, &frag); err != nil {
-		log.Fatalln(err)
+		log.Error("Failed to unmarshal frag intermediate struct", "err", err)
 		return err
 	}
 
@@ -100,11 +100,38 @@ func (f *Frag) UnmarshalJSON(data []byte) error {
 
 	for _, txData := range frag.Txs {
 		var tx Transaction
-		tx.UnmarshalBinary(txData)
+		err := tx.UnmarshalBinary(txData)
+		if err != nil {
+			log.Error("Failed to unmarshal transaction", "err", err)
+			return err
+		}
 		f.Txs = append(f.Txs, &tx)
 	}
 
 	return nil
+}
+
+func (f *Frag) MarshalJSON() ([]byte, error) {
+	txs := make([][]byte, len(f.Txs))
+	for i, tx := range f.Txs {
+		if tx, err := tx.MarshalBinary(); err != nil {
+			return nil, err
+		} else {
+			txs[i] = tx
+		}
+	}
+
+	return json.Marshal(struct {
+		BlockNumber uint64   `json:"blockNumber"`
+		Seq         uint64   `json:"seq"`
+		IsLast      bool     `json:"isLast"`
+		Txs         [][]byte `json:"txs"`
+	}{
+		BlockNumber: f.BlockNumber,
+		Seq:         f.Seq,
+		IsLast:      f.IsLast,
+		Txs:         txs,
+	})
 }
 
 type Env struct {
