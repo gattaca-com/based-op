@@ -412,6 +412,7 @@ def launch(
                     all_el_contexts,
                     el_context,
                     el_builder_context,
+                    mev_params.portal_extra_params,
                 )
 
                 # use sidecar RPC in place of the sequencer RPC to broadcast txs
