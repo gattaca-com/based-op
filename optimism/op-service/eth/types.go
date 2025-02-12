@@ -269,11 +269,69 @@ type Env struct {
 	Timestamp        uint64         `json:"timestamp" ssz-size:"8"`
 	GasLimit         uint64         `json:"gasLimit" ssz-size:"8"`
 	Basefee          uint64         `json:"basefee" ssz-size:"8"`
-	Difficulty       *hexutil.Big   `json:"difficulty" ssz-size:"32"`
+	Difficulty       *big.Int       `json:"difficulty" ssz-size:"32"`
 	Prevrandao       common.Hash    `json:"prevrandao" ssz-size:"32"`
-	ParentHash       Bytes32        `json:"parentHash" ssz-size:"32"`
+	ParentHash       common.Hash    `json:"parentHash" ssz-size:"32"`
 	ParentBeaconRoot common.Hash    `json:"parentBeaconRoot" ssz-size:"32"`
 	ExtraData        []byte         `json:"extraData" ssz-max:"4294967296"`
+}
+
+func (e *Env) UnmarshalJSON(data []byte) error {
+	var env struct {
+		Number           uint64         `json:"number"`
+		Beneficiary      common.Address `json:"beneficiary"`
+		Timestamp        uint64         `json:"timestamp"`
+		GasLimit         uint64         `json:"gasLimit"`
+		Basefee          uint64         `json:"basefee"`
+		Difficulty       *hexutil.Big   `json:"difficulty"`
+		Prevrandao       common.Hash    `json:"prevrandao"`
+		ParentHash       common.Hash    `json:"parentHash"`
+		ParentBeaconRoot common.Hash    `json:"parentBeaconRoot"`
+		ExtraData        []byte         `json:"extraData"`
+	}
+
+	if err := json.Unmarshal(data, &env); err != nil {
+		return err
+	}
+
+	e.Number = env.Number
+	e.Beneficiary = env.Beneficiary
+	e.Timestamp = env.Timestamp
+	e.GasLimit = env.GasLimit
+	e.Basefee = env.Basefee
+	e.Difficulty = env.Difficulty.ToInt()
+	e.Prevrandao = env.Prevrandao
+	e.ParentHash = env.ParentHash
+	e.ParentBeaconRoot = env.ParentBeaconRoot
+	e.ExtraData = env.ExtraData
+
+	return nil
+}
+
+func (e *Env) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Number           uint64         `json:"number"`
+		Beneficiary      common.Address `json:"beneficiary"`
+		Timestamp        uint64         `json:"timestamp"`
+		GasLimit         uint64         `json:"gasLimit"`
+		Basefee          uint64         `json:"basefee"`
+		Difficulty       *hexutil.Big   `json:"difficulty"`
+		Prevrandao       common.Hash    `json:"prevrandao"`
+		ParentHash       common.Hash    `json:"parentHash"`
+		ParentBeaconRoot common.Hash    `json:"parentBeaconRoot"`
+		ExtraData        []byte         `json:"extraData"`
+	}{
+		Number:           e.Number,
+		Beneficiary:      e.Beneficiary,
+		Timestamp:        e.Timestamp,
+		GasLimit:         e.GasLimit,
+		Basefee:          e.Basefee,
+		Difficulty:       (*hexutil.Big)(e.Difficulty),
+		Prevrandao:       e.Prevrandao,
+		ParentHash:       e.ParentHash,
+		ParentBeaconRoot: e.ParentBeaconRoot,
+		ExtraData:        e.ExtraData,
+	})
 }
 
 type ExecutionPayloadEnvelope struct {
