@@ -199,7 +199,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         (seq, sorting)
     }
 
-    fn new_block_params(&mut self) -> (EvmBlockParams, EnvWithHandlerCfg) {
+    pub fn new_block_params(&mut self) -> (EvmBlockParams, EnvWithHandlerCfg) {
         let attributes = &self.payload_attributes;
         let env_attributes = NextBlockEnvAttributes {
             timestamp: attributes.payload_attributes.timestamp,

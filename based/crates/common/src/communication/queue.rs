@@ -551,26 +551,33 @@ mod test {
             let _ = h.join();
         }
     }
+
     #[test]
     fn multithread_1_2() {
         multithread(1, 2, 100000);
     }
+
     #[test]
     fn multithread_1_4() {
         multithread(1, 4, 100000);
     }
+
     #[test]
     fn multithread_2_4() {
         multithread(2, 4, 100000);
     }
+
     #[test]
     fn multithread_4_4() {
         multithread(4, 4, 100000);
     }
+
     #[test]
     fn multithread_8_8() {
         multithread(8, 8, 100000);
     }
+
+    #[ignore = "Requires creating a file in /dev/shm"]
     #[test]
     fn basic_shared() {
         for typ in [QueueType::SPMC, QueueType::MPMC] {
