@@ -84,10 +84,10 @@ gateway-logs:
 	$(MAKE) logs SERVICE=gateway-1-gateway-op-kurtosis
 
 op-node-logs:
-	$(MAKE) logs SERVICE=op-cl-1-op-node-op-geth-op-kurtosis
+	$(MAKE) logs SERVICE=op-cl-2-op-node-op-geth-op-kurtosis
 
 op-geth-logs:
-	$(MAKE) logs SERVICE=op-el-1-op-geth-op-node-op-kurtosis
+	$(MAKE) logs SERVICE=op-el-2-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
 	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data
