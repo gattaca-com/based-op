@@ -50,15 +50,21 @@ func (ub *UnsealedBlock) IsNextFrag(f *Frag) bool {
 	}
 }
 
-func (ub *UnsealedBlock) Transactions() [][]byte {
+func (ub *UnsealedBlock) Transactions() []*Transaction {
+	txs := []*Transaction{}
+	for _, frag := range ub.Frags {
+		txs = append(txs, frag.Txs...)
+	}
+	return txs
+}
+
+func (ub *UnsealedBlock) ByteTransactions() [][]byte {
 	buffer := new(bytes.Buffer)
 	txs := [][]byte{}
-	for _, frag := range ub.Frags {
-		for _, tx := range frag.Txs {
-			buffer.Reset()
-			tx.inner.encode(buffer)
-			txs = append(txs, buffer.Bytes())
-		}
+	for _, tx := range ub.Transactions() {
+		buffer.Reset()
+		tx.inner.encode(buffer)
+		txs = append(txs, buffer.Bytes())
 	}
 	return txs
 }

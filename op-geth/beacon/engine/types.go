@@ -17,6 +17,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -423,38 +424,62 @@ func (v *ClientVersionV1) String() string {
 func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, error) {
 	gasUsed := uint64(0)
 	blobGasUsed := uint64(0)
-	for _, tx := range ub.Receipts {
-		gasUsed += tx.GasUsed
-		blobGasUsed += tx.BlobGasUsed
+	versionedHashes := []common.Hash{}
+	deposits := types.Deposits{}
+	logs := []*types.Log{}
+	for i, receipt := range ub.Receipts {
+		gasUsed += receipt.GasUsed
+		blobGasUsed += receipt.BlobGasUsed
+		if hashes := ub.Transactions()[i].BlobHashes(); hashes != nil {
+			versionedHashes = append(versionedHashes, hashes...)
+		}
+		logs = append(logs, receipt.Logs...)
+	}
+	// keccak256("")
+	emptyHash := common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+
+	requests, err := core.ParseDepositLogs(logs, bc.Config())
+	if err != nil {
+		return nil, err
+	}
+	for _, request := range requests {
+		deposit, ok := request.Inner().(*types.Deposit)
+		if !ok {
+			return nil, errors.New("invalid request type")
+		}
+		deposits = append(deposits, deposit)
 	}
 
-	block, err := ExecutableDataToBlock(ExecutableData{
+	block, err := ExecutableDataToBlockNoHash(ExecutableData{
 		ParentHash:       bc.GetCanonicalHash(ub.Env.Number-1),
 		FeeRecipient:     ub.Env.Beneficiary,
 		StateRoot:        bc.CurrentUnsealedBlockState().GetTrie().Hash(),
-		ReceiptsRoot:     [32]byte{}, // TODO
-		LogsBloom:        []byte{}, // TODO
+		ReceiptsRoot:     types.DeriveSha(ub.Receipts, trie.NewStackTrie(nil)),
+		LogsBloom:        types.CreateBloom(ub.Receipts).Bytes(),
 		Random:           ub.Env.Prevrandao,
 		Number:           ub.Env.Number,
 		GasLimit:         ub.Env.GasLimit,
 		GasUsed:          gasUsed,
 		Timestamp:        ub.Env.Timestamp,
-		ExtraData:        []byte{}, // TODO
+		ExtraData:        ub.Env.ExtraData,
 		BaseFeePerGas:    new(big.Int).SetUint64(ub.Env.Basefee),
-		BlockHash:        [32]byte{}, // TODO
-		Transactions:     ub.Transactions(),
-		Withdrawals:      []*types.Withdrawal{}, // TODO
+		BlockHash:        [32]byte{}, // This is calculated inside the function, it's not needed here
+		Transactions:     ub.ByteTransactions(),
+		Withdrawals:      []*types.Withdrawal{},
 		BlobGasUsed:      &blobGasUsed,
-		ExcessBlobGas:    new(uint64), // TODO
-		Deposits:         []*types.Deposit{}, // TODO
+		ExcessBlobGas:    new(uint64),
+		Deposits:         deposits, // TODO
 		ExecutionWitness: &types.ExecutionWitness{}, // TODO
-		WithdrawalsRoot:  &[32]byte{}, // TODO
-	}, nil, nil, bc.Config())
+		WithdrawalsRoot:  &emptyHash,
+	}, versionedHashes, &ub.Env.ParentBeaconRoot, bc.Config())
+
 	if err != nil {
 		return nil, err
 	}
 
-	return nil, fmt.Errorf("not implemented")
+	bc.InsertBlockWithoutSetHead(block, false)
+
+	return block, nil
 }
 
 type Bytes65 [65]byte
