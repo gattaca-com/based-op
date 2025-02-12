@@ -207,6 +207,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 
 	var receipts types.Receipts
 	for i, tx := range frag.Txs {
+		log.Info("Inserting transaction", "tx", tx)
 		gp := new(GasPool).AddGas(tx.Gas())
 
 		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(blockContext.BlockNumber)).Bytes()
