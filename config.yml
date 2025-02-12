@@ -18,7 +18,7 @@ optimism_package:
       mev_type: based-portal
       mev_params:
         based_portal_image: based_portal_local
-        builder_host: "172.17.0.1"
+        builder_host: "host.docker.internal"
         builder_port: "9997"
       additional_services:
         - blockscout
