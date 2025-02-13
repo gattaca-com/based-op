@@ -477,7 +477,10 @@ func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, erro
 		return nil, err
 	}
 
-	bc.InsertBlockWithoutSetHead(block, false)
+	_, err = bc.Processor().Process(block, bc.CurrentUnsealedBlockState(), *bc.GetVMConfig())
+	if err != nil {
+		return nil, err
+	}
 
 	return block, nil
 }
