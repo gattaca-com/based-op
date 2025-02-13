@@ -1020,8 +1020,7 @@ func (api *ConsensusAPI) executeStatelessPayload(params engine.ExecutableData, v
 	api.lastNewPayloadLock.Unlock()
 
 	log.Trace("Executing block statelessly", "number", block.Number(), "hash", params.BlockHash)
-	isUnsealed := api.eth.BlockChain().CurrentUnsealedBlock() != nil && api.eth.BlockChain().CurrentUnsealedBlock().Env.Number == block.NumberU64() && api.eth.BlockChain().CurrentUnsealedBlock().Env.ParentHash == block.ParentHash()
-	stateRoot, receiptRoot, err := core.ExecuteStateless(api.eth.BlockChain().Config(), block, witness, isUnsealed)
+	stateRoot, receiptRoot, err := core.ExecuteStateless(api.eth.BlockChain().Config(), block, witness)
 	if err != nil {
 		log.Warn("ExecuteStatelessPayload: execution failed", "err", err)
 		errorMsg := err.Error()

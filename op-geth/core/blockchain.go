@@ -1918,8 +1918,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	// Process block using the parent state as reference point
 	pstart := time.Now()
-	isUnsealed := bc.currentUnsealedBlock != nil && bc.currentUnsealedBlock.Env.Number == block.NumberU64() && bc.currentUnsealedBlock.Env.ParentHash == block.ParentHash()
-	res, err := bc.processor.Process(block, statedb, bc.vmConfig, isUnsealed)
+	res, err := bc.processor.Process(block, statedb, bc.vmConfig)
 	if err != nil {
 		bc.reportBlock(block, res, err)
 		return nil, err
@@ -1950,7 +1949,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
 		// Run the stateless self-cross-validation
-		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, witness, isUnsealed)
+		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, witness)
 		if err != nil {
 			return nil, fmt.Errorf("stateless self-validation failed: %v", err)
 		}
