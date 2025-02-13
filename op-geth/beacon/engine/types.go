@@ -451,7 +451,7 @@ func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, erro
 	}
 
 	block, err := ExecutableDataToBlockNoHash(ExecutableData{
-		ParentHash:       bc.GetCanonicalHash(ub.Env.Number-1),
+		ParentHash:       bc.GetCanonicalHash(ub.Env.Number - 1),
 		FeeRecipient:     ub.Env.Beneficiary,
 		StateRoot:        bc.CurrentUnsealedBlockState().GetTrie().Hash(),
 		ReceiptsRoot:     types.DeriveSha(ub.Receipts, trie.NewStackTrie(nil)),
@@ -468,10 +468,10 @@ func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, erro
 		Withdrawals:      []*types.Withdrawal{},
 		BlobGasUsed:      &blobGasUsed,
 		ExcessBlobGas:    new(uint64),
-		Deposits:         deposits, // TODO
+		Deposits:         deposits,                  // TODO
 		ExecutionWitness: &types.ExecutionWitness{}, // TODO
 		WithdrawalsRoot:  &emptyHash,
-	}, versionedHashes, &ub.Env.ParentBeaconRoot, bc.Config())
+	}, versionedHashes, &ub.Env.ParentBeaconBlockRoot, bc.Config())
 
 	if err != nil {
 		return nil, err

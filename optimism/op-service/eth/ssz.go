@@ -598,7 +598,7 @@ func (e *Env) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineUint256BigInt(codec, &e.Difficulty)
 	ssz.DefineStaticBytes(codec, &e.Prevrandao)
 	ssz.DefineStaticBytes(codec, &e.ParentHash)
-	ssz.DefineStaticBytes(codec, &e.ParentBeaconRoot)
+	ssz.DefineStaticBytes(codec, &e.ParentBeaconBlockRoot)
 	ssz.DefineDynamicBytesOffset(codec, &e.ExtraData, MaxExtraDataSize)
 	ssz.DefineDynamicBytesContent(codec, &e.ExtraData, MaxExtraDataSize)
 }
