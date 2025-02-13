@@ -19,7 +19,7 @@ pub struct SharedState<Db> {
     /// This is a dummy block that is set while we are building frags.
     /// We use it so that we can return a block for the pending block that is getting built.
     /// The "hash" header fields will be random.
-    /// 
+    ///
     /// Note: this is just temporary while we serve state from the sequencer directly.
     latest_block: Arc<RwLock<Option<OpRpcBlock>>>,
 }
@@ -64,7 +64,7 @@ impl<Db> SharedState<Db> {
 
     pub fn insert_confirmed_tx(&mut self, tx: OpTxEnvelope, receipt: OpTransactionReceipt) {
         self.receipts.write().insert(tx.tx_hash(), receipt);
-        
+
         let mut guard = self.latest_block.write();
         debug_assert!(guard.is_some(), "latest block must be set");
 
@@ -73,7 +73,7 @@ impl<Db> SharedState<Db> {
             BlockTransactions::Full(txs) => txs.push(tx),
             _ => {
                 block.transactions = BlockTransactions::Full(vec![tx]);
-            },
+            }
         }
     }
 

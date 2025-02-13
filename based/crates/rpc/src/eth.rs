@@ -10,7 +10,7 @@ use bop_common::{
 };
 use jsonrpsee::core::async_trait;
 use op_alloy_rpc_types::OpTransactionReceipt;
-use tracing::{warn, Level, trace};
+use tracing::{trace, warn, Level};
 
 use crate::RpcServer;
 
@@ -50,9 +50,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
 
         match self.shared_state.get_latest_block(full) {
             Some(block) => Ok(Some(block)),
-            None => {
-                Ok(self.fallback.block_by_number(number, full).await?)
-            }
+            None => Ok(self.fallback.block_by_number(number, full).await?),
         }
     }
 
@@ -62,9 +60,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
 
         match self.shared_state.get_latest_block(full) {
             Some(block) => Ok(Some(block)),
-            None => {
-                Ok(self.fallback.block_by_hash(hash, full).await?)
-            }
+            None => Ok(self.fallback.block_by_hash(hash, full).await?),
         }
     }
 
