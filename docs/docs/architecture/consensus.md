@@ -6,7 +6,7 @@ description: Upgrades to the OP node
 
 The OP node was slightly modified to support the new architecture. We have extended its communications protocols as we added a new namespace to the RPC server, a new capability to the P2P server, and extended the current engine API. The new namespace is called `based` and includes new methods to share new envs, frags, and seals with the root OP node, which will then broadcast them to the network. The new capability is the ability to send messages to the execution layer (EL) once the gateway's signature is verified. Lastly, the engine API was extended to include new methods to send the new messages to the EL.
 
-![op-node](./architecture.png)
+![op-node](../../static/img/architecture_consensus.png)
 
 ## Based RPC
 
