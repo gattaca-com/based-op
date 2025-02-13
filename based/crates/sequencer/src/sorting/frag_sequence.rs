@@ -50,7 +50,6 @@ impl FragSequence {
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
-            let hash = tx.tx_hash();
             let receipt = tx.op_tx_receipt(
                 self.gas_used,
                 self.block_number,
@@ -58,7 +57,7 @@ impl FragSequence {
                 ctx.base_fee(),
                 self.txs.len() as u64,
             );
-            ctx.shared_state.insert_receipt(hash, receipt);
+            ctx.shared_state.insert_confirmed_tx(tx.tx.tx.clone(), receipt);
             self.txs.push(tx);
         }
 
