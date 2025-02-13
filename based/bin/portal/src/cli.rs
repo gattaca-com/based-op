@@ -18,6 +18,10 @@ pub struct PortalArgs {
     #[arg(long = "portal.port", default_value_t = 8080)]
     pub portal_port: u16,
 
+    /// TEMP: the URL to the fallback EthAPI
+    #[arg(long = "fallback.eth_url")]
+    pub fallback_eth_url: Url,
+
     /// The URL to the fallback EngineAPI
     #[arg(long = "fallback.url")]
     pub fallback_url: Url,
