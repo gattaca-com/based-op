@@ -10,7 +10,6 @@ use bop_common::{
 };
 use jsonrpsee::core::async_trait;
 use op_alloy_rpc_types::OpTransactionReceipt;
-use reth_optimism_primitives::OpBlock;
 use tracing::{trace, warn, Level};
 
 use crate::RpcServer;
@@ -47,10 +46,8 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         trace!(%number, full, "new request");
 
         let block = match number {
-            BlockNumberOrTag::Latest => self.shared_state.get_latest_block().map(|block| convert_block(block, full)),
-            BlockNumberOrTag::Number(bn) => {
-                self.shared_state.get_block_by_number(bn).map(|block| convert_block(block, full))
-            }
+            BlockNumberOrTag::Latest => self.shared_state.get_latest_block(),
+            BlockNumberOrTag::Number(bn) => self.shared_state.get_block_by_number(bn),
             _ => None,
         };
 
@@ -66,7 +63,7 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
         trace!(%hash, full, "new request");
 
         let block = match self.shared_state.get_block_by_hash(hash) {
-            Some(block) => Some(convert_block(block, full)),
+            Some(block) => Some(block),
             None => self.fallback.block_by_hash(hash, full).await?,
         };
 
@@ -129,8 +126,4 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
 
         Ok(balance)
     }
-}
-
-fn convert_block(block: OpBlock, _full: bool) -> OpRpcBlock {
-    OpRpcBlock::from_consensus(block, None)
 }
