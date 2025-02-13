@@ -1339,8 +1339,7 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 }
 
 func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
-	log.Info("NewFragV0 received", "forBlock", frag.Frag.BlockNumber, "current", api.eth.BlockChain().CurrentBlock().Number)
-	log.Info("frag", frag.Frag)
+	log.Info("NewFragV0 received", "forBlock", frag.Frag.BlockNumber, "current", api.eth.BlockChain().CurrentBlock().Number, "frag", frag.Frag)
 
 	api.unsealedBlockLock.Lock()
 	res, err := api.newFragV0(frag)
@@ -1517,18 +1516,20 @@ func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
 }
 
 func (api *ConsensusAPI) ValidateEnvV0(env engine.SignedEnv) error {
-	parent := api.eth.BlockChain().GetBlockByHash(env.Env.ParentHash).Header()
+	parent := api.eth.BlockChain().GetBlockByHash(env.Env.ParentHash)
 
 	if parent == nil {
 		return errors.New("there's no parent block")
 	}
+
+	parentHeader := parent.Header()
 
 	// Check that there's no unsealed block in progress
 	if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
 		return errors.New("cannot open a new unsealed block while there's one already in progress")
 	}
 
-	expectedBlockNumber := parent.Number.Uint64() + 1
+	expectedBlockNumber := parentHeader.Number.Uint64() + 1
 
 	// Check the block number
 	if env.Env.Number != expectedBlockNumber {
@@ -1536,8 +1537,8 @@ func (api *ConsensusAPI) ValidateEnvV0(env engine.SignedEnv) error {
 	}
 
 	// Check the timestamp
-	if env.Env.Timestamp < parent.Time {
-		return fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
+	if env.Env.Timestamp < parentHeader.Time {
+		return fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parentHeader.Time, env.Env.Timestamp)
 	}
 
 	return nil
