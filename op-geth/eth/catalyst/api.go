@@ -1488,6 +1488,10 @@ func (api *ConsensusAPI) ValidateSealFragV0(seal engine.SignedSeal, currentUnsea
 		return fmt.Errorf("gas limit mismatch, expected %v, got %v", sealedBlock.GasLimit(), seal.Seal.GasLimit)
 	}
 
+	if len(api.eth.BlockChain().CurrentUnsealedBlock().Frags) != int(seal.Seal.TotalFrags) {
+		return fmt.Errorf("total frags mismatch, expected %v, got %v", len(api.eth.BlockChain().CurrentUnsealedBlock().Frags), seal.Seal.TotalFrags)
+	}
+
 	return nil
 }
 
