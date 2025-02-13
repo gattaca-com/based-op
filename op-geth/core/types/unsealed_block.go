@@ -15,16 +15,24 @@ type UnsealedBlock struct {
 	LastSequenceNumber *uint64
 	Hash               common.Hash
 
-	Receipts Receipts
+	Receipts              Receipts
+	Logs                  []*Log
+	Requests              Requests
+	CumulativeGasUsed     uint64
+	CumulativeBlobGasUsed uint64
 }
 
 func NewUnsealedBlock(e *Env) *UnsealedBlock {
 	return &UnsealedBlock{
-		Env:                e,
-		Frags:              []Frag{},
-		LastSequenceNumber: nil,
-		Hash:               common.Hash{},
-		Receipts:           Receipts{},
+		Env:                   e,
+		Frags:                 []Frag{},
+		LastSequenceNumber:    nil,
+		Hash:                  common.Hash{},
+		Receipts:              Receipts{},
+		Logs:                  []*Log{},
+		Requests:              Requests{},
+		CumulativeGasUsed:     0,
+		CumulativeBlobGasUsed: 0,
 	}
 }
 

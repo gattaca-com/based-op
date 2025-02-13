@@ -422,23 +422,17 @@ func (v *ClientVersionV1) String() string {
 }
 
 func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, error) {
-	gasUsed := uint64(0)
-	blobGasUsed := uint64(0)
 	versionedHashes := []common.Hash{}
 	deposits := types.Deposits{}
-	logs := []*types.Log{}
-	for i, receipt := range ub.Receipts {
-		gasUsed += receipt.GasUsed
-		blobGasUsed += receipt.BlobGasUsed
+	for i, _ := range ub.Receipts {
 		if hashes := ub.Transactions()[i].BlobHashes(); hashes != nil {
 			versionedHashes = append(versionedHashes, hashes...)
 		}
-		logs = append(logs, receipt.Logs...)
 	}
 	// keccak256("")
 	emptyHash := common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
-	requests, err := core.ParseDepositLogs(logs, bc.Config())
+	requests, err := core.ParseDepositLogs(ub.Logs, bc.Config())
 	if err != nil {
 		return nil, err
 	}
@@ -459,14 +453,14 @@ func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, erro
 		Random:           ub.Env.Prevrandao,
 		Number:           ub.Env.Number,
 		GasLimit:         ub.Env.GasLimit,
-		GasUsed:          gasUsed,
+		GasUsed:          ub.CumulativeGasUsed,
 		Timestamp:        ub.Env.Timestamp,
 		ExtraData:        ub.Env.ExtraData,
 		BaseFeePerGas:    new(big.Int).SetUint64(ub.Env.Basefee),
 		BlockHash:        [32]byte{}, // This is calculated inside the function, it's not needed here
 		Transactions:     ub.ByteTransactions(),
 		Withdrawals:      []*types.Withdrawal{},
-		BlobGasUsed:      &blobGasUsed,
+		BlobGasUsed:      &ub.CumulativeBlobGasUsed,
 		ExcessBlobGas:    new(uint64),
 		Deposits:         deposits,                  // TODO
 		ExecutionWitness: &types.ExecutionWitness{}, // TODO
