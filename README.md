@@ -19,8 +19,10 @@
 Run the following to download the dependencies, build, and run the project:
 
 ```Shell
-make deps build run dump gateway
+make deps build run
 ```
+
+All the components, including sequencer, gateway, portal, and follower nodes will start in a new kurtosis enclave. To test sending transactions, you can use `make test-tx`
 
 ### Available Commands
 

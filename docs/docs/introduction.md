@@ -14,4 +14,4 @@ The key components are:
 - upgraded [OP node](/architecture/consensus) and [EL](/architecture/execution) changes, including an extended [P2P](/architecture/p2p) network, that enable nodes to pipeline the block processing and serve preconfs before the block time has fully elapsed
 
 
-Designed by [Gattaca](https://gattaca.com/) and developed in collaboration with [Lambda Class](https://lambdaclass.com/), this implementation provides a reference for future development that we hope will help bootstrap based rollups and high-performance gateways solutions.
+Designed by [Gattaca](https://gattaca.com/) and developed in collaboration with [Lambda Class](https://lambdaclass.com/), this implementation provides a reference for future development that we hope will help bootstrap based rollups and high-performance gateway solutions.
