@@ -8,10 +8,13 @@ use std::{
     time::Duration,
 };
 
-use alloy_primitives::{Bytes, B256};
-use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
+use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_rpc_types::{
+    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
+    BlockId, BlockNumberOrTag,
+};
 use bop_common::{
-    api::{EngineApiClient, EngineApiServer, EthApiClient, MinimalEthApiServer, CAPABILITIES},
+    api::{EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpRpcBlock, CAPABILITIES},
     communication::messages::{RpcError, RpcResult},
     utils::{utcnow_sec, uuid, wait_for_signal},
 };
@@ -20,6 +23,7 @@ use jsonrpsee::{
     http_client::{transport::HttpBackend, HttpClientBuilder},
     server::{RpcServiceBuilder, ServerBuilder},
 };
+use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use parking_lot::{Mutex, RwLock};
 use reqwest::Url;
@@ -28,12 +32,13 @@ use tracing::{debug, error, info, Instrument, Level};
 
 use crate::{cli::PortalArgs, middleware::ProxyService};
 
-pub type HttpClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
+pub type RpcClient = jsonrpsee::http_client::HttpClient;
+pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
 
 #[derive(Clone)]
 struct Gateway {
     id: Url,
-    client: HttpClient,
+    client: AuthRpcClient,
 }
 
 impl fmt::Debug for Gateway {
@@ -44,7 +49,8 @@ impl fmt::Debug for Gateway {
 
 #[derive(Clone)]
 pub struct PortalServer {
-    fallback_client: HttpClient,
+    fallback_eth_client: RpcClient,
+    fallback_client: AuthRpcClient,
     next_gateway_index: Arc<AtomicUsize>,
     next_gateway: Arc<Mutex<Gateway>>,
     gateway_clients: Arc<RwLock<Vec<Gateway>>>,
@@ -67,6 +73,9 @@ impl PortalServer {
     pub fn new(args: PortalArgs) -> eyre::Result<Self> {
         let gateway_jwt = args.gateway_jwt()?;
         let fallback_jwt = args.fallback_jwt()?;
+
+        let fallback_eth_client =
+            create_client(args.fallback_eth_url, Duration::from_millis(args.fallback_timeout_ms))?;
 
         let fallback_client =
             create_auth_client(args.fallback_url, fallback_jwt, Duration::from_millis(args.fallback_timeout_ms))?;
@@ -105,6 +114,7 @@ impl PortalServer {
         let next_gateway_index = Arc::new(AtomicUsize::new(0));
 
         Ok(Self {
+            fallback_eth_client,
             fallback_client,
             gateway_clients,
             next_gateway,
@@ -116,13 +126,16 @@ impl PortalServer {
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
         let fallback_client = self.fallback_client.clone();
-        let rpc_middleware =
-            RpcServiceBuilder::new().layer_fn(move |s| ProxyService::new(CAPABILITIES, s, fallback_client.clone()));
+        let fallback_eth_client = self.fallback_eth_client.clone();
+
+        let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| {
+            ProxyService::new(CAPABILITIES, s, fallback_eth_client.clone(), fallback_client.clone())
+        });
 
         let server = ServerBuilder::default().set_rpc_middleware(rpc_middleware).build(addr).await?;
 
         let mut module = EngineApiServer::into_rpc(self.clone());
-        module.merge(MinimalEthApiServer::into_rpc(self)).expect("failed to merge modules");
+        module.merge(EthApiServer::into_rpc(self)).expect("failed to merge modules");
 
         let server_handle = server.start(module);
 
@@ -166,7 +179,7 @@ impl PortalServer {
 /// This is a temporary API to broacast transactions to both gateway and fallback. In practice this should not be
 /// receiving user facing calls so we need to find another way to do this
 #[async_trait]
-impl MinimalEthApiServer for PortalServer {
+impl EthApiServer for PortalServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         // send to gateways and fallback
@@ -179,8 +192,182 @@ impl MinimalEthApiServer for PortalServer {
             });
         }
 
-        let response = self.fallback_client.send_raw_transaction(bytes).await?;
+        let response = self.fallback_eth_client.send_raw_transaction(bytes).await?;
         Ok(response)
+    }
+
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>> {
+        debug!(%hash, "new request");
+
+        let fallback_fut = tokio::spawn(
+            {
+                let client = self.fallback_client.clone();
+                async move { client.transaction_receipt(hash).await }
+            }
+            .in_current_span(),
+        );
+        let gateway_fut = tokio::spawn(
+            {
+                let client = self.next_gateway();
+                async move { client.client.transaction_receipt(hash).await }
+            }
+            .in_current_span(),
+        );
+
+        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
+        // ignore join errors
+        let fallback = fallback?;
+        let gateway = gateway?;
+
+        let payload = gateway.or(fallback)?;
+
+        Ok(payload)
+    }
+
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>> {
+        debug!(%number, full, "new request");
+
+        let fallback_fut = tokio::spawn(
+            {
+                let client = self.fallback_client.clone();
+                async move { client.block_by_number(number, full).await }
+            }
+            .in_current_span(),
+        );
+        let gateway_fut = tokio::spawn(
+            {
+                let client = self.next_gateway();
+                async move { client.client.block_by_number(number, full).await }
+            }
+            .in_current_span(),
+        );
+
+        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
+        // ignore join errors
+        let fallback = fallback?;
+        let gateway = gateway?;
+
+        let payload = gateway.or(fallback)?;
+
+        Ok(payload)
+    }
+
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>> {
+        debug!(%hash, full, "new request");
+
+        let fallback_fut = tokio::spawn(
+            {
+                let client = self.fallback_client.clone();
+                async move { client.block_by_hash(hash, full).await }
+            }
+            .in_current_span(),
+        );
+        let gateway_fut = tokio::spawn(
+            {
+                let client = self.next_gateway();
+                async move { client.client.block_by_hash(hash, full).await }
+            }
+            .in_current_span(),
+        );
+
+        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
+        // ignore join errors
+        let fallback = fallback?;
+        let gateway = gateway?;
+
+        let payload = gateway.or(fallback)?;
+
+        Ok(payload)
+    }
+
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    async fn block_number(&self) -> RpcResult<U256> {
+        debug!("block number request");
+
+        let fallback_fut = tokio::spawn(
+            {
+                let client = self.fallback_client.clone();
+                async move { client.block_number().await }
+            }
+            .in_current_span(),
+        );
+        let gateway_fut = tokio::spawn(
+            {
+                let client = self.next_gateway();
+                async move { client.client.block_number().await }
+            }
+            .in_current_span(),
+        );
+
+        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
+        // ignore join errors
+        let fallback = fallback?;
+        let gateway = gateway?;
+
+        let payload = gateway.or(fallback)?;
+
+        Ok(payload)
+    }
+
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
+        debug!(%address, ?block_number, "new request");
+
+        let fallback_fut = tokio::spawn(
+            {
+                let client = self.fallback_client.clone();
+                async move { client.transaction_count(address, block_number).await }
+            }
+            .in_current_span(),
+        );
+        let gateway_fut = tokio::spawn(
+            {
+                let client = self.next_gateway();
+                async move { client.client.transaction_count(address, block_number).await }
+            }
+            .in_current_span(),
+        );
+
+        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
+        // ignore join errors
+        let fallback = fallback?;
+        let gateway = gateway?;
+
+        let payload = gateway.or(fallback)?;
+
+        Ok(payload)
+    }
+
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
+        debug!(%address, ?block_number, "new request");
+
+        let fallback_fut = tokio::spawn(
+            {
+                let client = self.fallback_client.clone();
+                async move { client.balance(address, block_number).await }
+            }
+            .in_current_span(),
+        );
+        let gateway_fut = tokio::spawn(
+            {
+                let client = self.next_gateway();
+                async move { client.client.balance(address, block_number).await }
+            }
+            .in_current_span(),
+        );
+
+        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
+        // ignore join errors
+        let fallback = fallback?;
+        let gateway = gateway?;
+
+        let payload = gateway.or(fallback)?;
+
+        Ok(payload)
     }
 }
 
@@ -348,7 +535,12 @@ impl EngineApiServer for PortalServer {
     }
 }
 
-fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Result<HttpClient> {
+fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
+    let client = HttpClientBuilder::default().request_timeout(timeout).build(url)?;
+    Ok(client)
+}
+
+fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Result<AuthRpcClient> {
     let secret_layer = AuthClientLayer::new(jwt);
     let middleware = tower::ServiceBuilder::default().layer(secret_layer);
 

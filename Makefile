@@ -39,6 +39,7 @@ deps: ## 🚀 Install all dependencies
 
 build: build-portal build-gateway build-op-node build-op-geth ## 🏗️ Build
 
+build-no-gateway: build-portal build-op-node build-op-geth ## 🏗️ Build without gateway
 build-portal: ## 🏗️ Build based portal from based directory
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
@@ -57,7 +58,9 @@ build-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t based_op_geth ./op-geth
 
 run: ## 🚀 Run
-	kurtosis run optimism-package --args-file config.yml --enclave based-op
+	kurtosis run optimism-package --args-file config.yml --enclave based-op && $(MAKE) dump
+
+restart-no-gateway: clean build-no-gateway run ## rip rebuild run
 
 run-follower: ## 🚀 Run a single follower node with RPC enabled.
 	kurtosis run optimism-package --args-file config-geth-cluster.yml --enclave based-op
@@ -72,10 +75,9 @@ gateway: ## 🚀 Run the gateway
 	RUST_LOG=debug cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway -- \
 	--db.datadir ./data \
 	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
-	--chain-spec ./genesis/genesis-2151908.json \
+	--chain ./genesis/genesis-2151908.json \
 	--rpc.port 9997 \
-	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
-	--test
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT)
 
 portal-logs:
 	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
