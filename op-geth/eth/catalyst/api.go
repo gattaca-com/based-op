@@ -1517,7 +1517,7 @@ func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
 }
 
 func (api *ConsensusAPI) ValidateEnvV0(env engine.SignedEnv) error {
-	parent := api.eth.BlockChain().GetBlockByHash(env.Env.ParentHash).Header()
+	parent := api.eth.BlockChain().GetBlockByHash(env.Env.ParentHash)
 
 	if parent == nil {
 		return errors.New("there's no parent block")
@@ -1538,8 +1538,8 @@ func (api *ConsensusAPI) ValidateEnvV0(env engine.SignedEnv) error {
 	}
 
 	// Check the timestamp
-	if env.Env.Timestamp < parent.Time {
-		return fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
+	if env.Env.Timestamp < parentHeader.Time {
+		return fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parentHeader.Time, env.Env.Timestamp)
 	}
 
 	return nil
