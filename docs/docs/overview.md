@@ -3,8 +3,8 @@
 For a more in-depth overview, check out our EthResearch [post](https://ethresear.ch/t/becoming-based-a-path-towards-decentralised-sequencing/21733).
 
 ## Status quo
-- Users currently enjoy an excellent user experience (UX) on L2s, enabled by soft preconfirmations issued by centralized sequencers.
-- By holding the exclusive right to advance the L2 state, these sequencers can
+- Users currently enjoy an excellent UX on L2s, enabled by soft preconfirmations issued by centralized sequencers.
+- By holding the exclusive right to advance the L2 state, these sequencers can give guarantees about the execution of these transactions.
 - L2s avoid the overhead of consensus mechanisms, unlocking a design space that achieves performance and throughput far beyond even the most efficient L1s. 
 
 Currently, most L2s rely on  centralized sequencers that require user trust, raising concerns about censorship resistance and liveness. While some L2s include an "escape hatch" mechanism, it often comes at the cost of degraded user experience due to significant delays.
@@ -26,9 +26,9 @@ Achieving fully decentralized, Based sequencing is the ultimate goal. However, i
 #### 1. Initial deployment
 The existing centralized sequencer is upgraded to a single centralized gateway, using the existing rollup stack as fallback. Additional enhancements such as pipelined block production and replay are available for replica nodes to upgrade
 
-#### 2. Multiple gateways with whitelist
-Additional gateways introduced via a whitelist enforced by the rollup operator
+#### 2. Whitelisted gateways
+Additional gateways are introduced via a whitelist enforced by the rollup operator. Gateways are selected in a round-robin fashion and maintain an SLA-like agreement with the rollup operator. In a second step, the lookahead is introduced so that L1 proposers can opt in and delegate to gateways. Slashing is still not enabled at this step.
 
 #### 3. Permissionless gateways
-Gateways can permissionlessly join the sequencer set, and proposers are able to delegate sequencing responsibilities to gateways. Proposers are expected to monitor the performance and reliability of their delegates. At this stage, slashing mechanisms are activated to address safety and liveness faults. Further research is needed to ensure that full decentralization doesn't compromise liveness and UX of the rollup.
+Gateways can permissionlessly join the sequencer set, and proposers are able to delegate sequencing responsibilities to gateways without any restrictions. Proposers are expected to monitor the performance and reliability of their delegates. At this stage, slashing mechanisms are activated to address safety and liveness faults. Further research is needed to ensure that full decentralization doesn't compromise liveness and UX of the rollup.
 

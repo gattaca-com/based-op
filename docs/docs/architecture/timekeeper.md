@@ -7,8 +7,6 @@ description: Real-time observability
 The gateways ships with a high-performance and low-overhead timing framework allowing users to non-invasively observe the overall live performance of the system.
 One of the main design goals was that the overhead should be low enough so it can be used even in production settings. This latter point is important to monitor and improve performance, given the difficulty of creating realistic performance benchmarks.
 
-A secondary benefit is that it is an implicit way to quickly check that the system is healthy (no timing reports = not good).
-
 ## Design
 There are four main parts to the timing framework:
 - low overhead hardware counter based timestamps using `rdtscp` + `quanta` to convert back to real time

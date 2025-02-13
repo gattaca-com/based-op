@@ -4,10 +4,9 @@ description: A fast pipelined sequencer
 
 # Gateway
 
-The gateway is a specialised, high-performance sequencer that supports fast execution preconfirmations via partial block gossip (frags). It's fully built from the ground-up to be optimised for sequencing, only re-using the bare minimum needed from EL nodes, notably: 1) a database holding state, 2) the EVM implementation.
+The gateway is a specialised, high-performance sequencer that supports fast execution preconfirmations via partial block gossip (frags). It's fully built from the ground-up to be optimised for sequencing, only re-using the bare minimum needed from a EL node, notably: 1) a database holding state, 2) the EVM implementation.
 
-This setup requires the gateway have access to an external RPC node (such as [Geth](https://github.com/ethereum/go-ethereum) or [Reth](https://github.com/paradigmxyz/reth)) for syncing. Other than that the gateway is fully built from scratch to be optimised for sequencing.
-
+This setup requires the gateway have access to an external RPC node (such as [Geth](https://github.com/ethereum/go-ethereum) or [Reth](https://github.com/paradigmxyz/reth)) for syncing.
 
 ![Gateway Architecture](/img/architecture.png)
 

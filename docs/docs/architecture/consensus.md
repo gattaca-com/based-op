@@ -7,17 +7,17 @@ description: Upgrades to the OP node
 The OP node was upgraded to support the new based architecture and process `Frag`s. 
 
 The main changes include:
-- a new capability in the P2P server, to support the [new](/architecture/p2p.md) messages
+- a new capability in the P2P server, to support the [new messages](/architecture/p2p.md) 
 - a new `based_` RPC namespace, used by the local gateway to make the initial push of p2p messages
 - an extended `EngineAPI` to enable processing of `Frag` in the execution layer after signature verification
 
-Importantly, all these changes are incremental and backwards compatible. Non-modified nodes will still be able to join and receive new blocks, they just won't be able to process `Frag`s and provide preconfirmations.
+Importantly, all these changes are incremental and backwards compatible. Non-modified nodes will still be able to stay in the network and receive new blocks, they just won't be able to process `Frag`s and provide preconfirmations.
 
 ![op-node](../../static/img/architecture_consensus.png)
 
 ## P2P Capability
 
-The P2P server is extended to include a new capability to broadcast messages to other OP nodes of the network. The current implementation simply extends the existing libp2p protocol already used by nodes, while in the future we plan to a new faster leader-aware gossip.
+The P2P server is extended to include a new capability to broadcast messages to other OP nodes of the network. The current implementation simply extends the existing libp2p protocol already used by nodes, while in the future we plan to move to a new faster leader-aware gossip.
 
 ## RPC
 
@@ -138,4 +138,4 @@ New methods in the `based_` namespace are added to enable the OP node to send th
 - `engine_sealFragV0`
 - `engine_envV0`
 
-the processing is detailed in the [next](/architecture/execution.md) section.
+The processing is detailed in the [next](/architecture/execution.md) section.
