@@ -363,7 +363,7 @@ func (e *Env) MarshalJSON() ([]byte, error) {
 		Prevrandao       common.Hash    `json:"prevrandao"`
 		ParentHash       common.Hash    `json:"parentHash"`
 		ParentBeaconRoot common.Hash    `json:"parentBeaconRoot"`
-		ExtraData        []byte         `json:"extraData"`
+		ExtraData        hexutil.Bytes  `json:"extraData"`
 	}{
 		Number:           e.Number,
 		Beneficiary:      e.Beneficiary,
