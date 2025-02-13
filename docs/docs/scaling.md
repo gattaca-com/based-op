@@ -1,10 +1,8 @@
 ---
-sidebar_position: 3
+title: Scaling
 ---
 
-# Scaling based rollups
-
-## What is the problem?
+# Scaling
 
 When scaling throughput (increased gas limit / reduced block time), replica (non-sequencing) nodes are under increased pressure to process more and larger blocks. This directly impacts costs for node operators in terms of hardware, bandwidth, and devops.
 
@@ -12,7 +10,7 @@ Increased costs also result in reduced validation of the sequencer, as replicas 
 
 On Ethereum and many L2s, blocks are produced and processed at regular intervals, and nodes process them only once they have been sealed by the sequencer and propagated through the p2p. This means that for most of the block time, nodes are essentially idle, either waiting to produce a new block or waiting for incoming blocks.
 
-## Solution: Pipelining
+## Pipelining
 
 Our approach focuses on targeted changes that are incremental and backwards compatible. These improvements upgrade nodes while still allowing regular, non-modified nodes to follow the chain and process blocks as usual.
 
@@ -22,9 +20,7 @@ Our approach focuses on targeted changes that are incremental and backwards comp
 
 To increase performance, it is essential for the sequencer to transition to continuous block building, ensuring that useful work is performed throughout the entire block time rather than waiting until the end to create a block. Through pipelining, transactions are continuously simulated, cached, and pre-sorted in parallel. This ensures that when block sealing is triggered, a valid block is immediately available.
 
-To further increase performance and throughput, block time is divided into several sub-slots, each of which is individually sorted. These block fragments (`frags` for short) are shared with the network before the block is fully built. This approach enables pipelining of the block replay (discussed below). Frags are lightweight since they are simply a sequence of transactions (without state root etc). 
-
-[link to section]
+To further increase performance and throughput, block time is divided into several sub-slots, each of which is individually sorted. These block fragments (frags for short) are shared with the network before the block is fully built. This approach enables pipelining of the block replay (discussed below). Frags are lightweight since they are simply a sequence of transactions (without state root etc). 
 
 ### Block replay
 
@@ -32,12 +28,8 @@ By sharing frags as the block is being built, the sequencer allows nodes to util
 
 As the sequencer streams batches in the network, nodes process them by reconstructing local “partial blocks”, using an extended endpoint of the Engine API. Nodes are then upgraded to serve RPC calls on the “partial block” before the block is finalized and received, thus unlocking extremely fast transaction confirmation times, unconstrained by block time. 
 
-[link to section]
-
 ### Propagation
 
 Propagation initially occurs via the existing p2p, by adding new message types for new sequenced batches and end of the current block. 
 
 Subsequently, the p2p is upgraded to use a high-performance, leader-aware protocol that classifies peers as sequencing or non-sequencing and prioritizes fast sequencer-to-all communication. In a multi-sequencer environment, the gossip layer is aware of the sequencer schedule and optimizes transitions between the current and next sequencer.
-
-[link to section]

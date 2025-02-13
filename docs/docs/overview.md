@@ -1,8 +1,6 @@
----
-sidebar_position: 2
----
-
 # Overview
+
+For a more in-depth overview, check out our EthResearch [post](https://ethresear.ch/t/becoming-based-a-path-towards-decentralised-sequencing/21733).
 
 ## Status quo
 - Users currently enjoy an excellent user experience (UX) on L2s, enabled by soft preconfirmations issued by centralized sequencers.
@@ -31,4 +29,3 @@ Achieving fully decentralized, Based sequencing is the ultimate goal. However, i
 
 3. Gateways can permissionlessly join the sequencer set, and proposers are able to delegate sequencing responsibilities to gateways. Proposers are expected to monitor the performance and reliability of their delegates. At this stage, slashing mechanisms are activated to address safety and liveness faults. Further research is needed to ensure that full decentralization doesn't compromise liveness and UX of the rollup.
 
-For a more in-depth overview, check out our research post. [link]

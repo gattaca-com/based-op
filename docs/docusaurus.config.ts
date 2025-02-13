@@ -58,7 +58,11 @@ const config: Config = {
       //   alt: 'My Site Logo',
       //   src: 'img/logo.svg',
       // },
-      items: [],
+      items: [{
+        href: 'https://github.com/gattaca-com/based-op',
+        label: 'GitHub',
+        position: 'right',
+      }],
     },
     footer: {
       style: 'dark',
