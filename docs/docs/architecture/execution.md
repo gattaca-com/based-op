@@ -5,11 +5,14 @@ description: Upgrades to the OP execution layer
 
 # Execution
 
-The idea for the OP execution layer is to be able to receive the frags validated by the OP node and start building a new block with them with the advantage of being able to execute frag transactions as they come. This way, it can serve new state to users as far as it executes transactions without the need for the block to be finalized.
+The OP geth was upgraded to receive `Frag`s messages from the OP node, as well as to serve state for RPC calls off the "unsealed block". Because `Frag`s are shared continously from the gateway, the EL can already start pre-processing and preparing for the block seal and sync.
 
 ![op-el](../../static/img/architecture_execution.png)
 
+
 ## Unsealed Block
+
+We define a new structure, `UnsealedBlock` that represents a block being reconstructed locally from `Frag`s.
 
 ```go
 type UnsealedBlock struct {
@@ -22,50 +25,20 @@ type UnsealedBlock struct {
 }
 ```
 
-## Starting a new unsealed block
+### Starting a new unsealed block
 
-For an unsealed block to be started, we first need to receive the `engine_envV0` request from the OP node. This request will contain environment data for the new block. The requests looks like:
-
-```go
-type Env struct {
-    Number           uint64
-    Beneficiary      common.Address
-    Timestamp        uint64
-    GasLimit         uint64
-    Basefee          uint64
-    Difficulty       *big.Int
-    Prevrandao       common.Hash
-    ParentHash       common.Hash
-    ParentBeaconRoot common.Hash
-    ExtraData        []byte
-}
-```
-
-and for it to be valid, the following conditions must be met:
-
+After an `engine_envV0` call is received, the EL initializes a new unsealed blocks and prepares the block environment for frags to be applied.
+For the message to be valid, the following conditions must be met:
 - There must not be a an unsealed block in progress.
 - The timestamp must be greater than the previous block's timestamp.
 - The block number must be the next one in the sequence.
 - The parent hash must match the previous block's hash.
 
-Once validated, we start a new unsealed block with this data but empty of frags, last sequence number set to nil (until the first new frag arrives), hash (we cannot know the hash of a block that is not yet sealed), and receipts (there are none until we start inserting frags and executing their transactions); this is done by `NewUnsealedBlock(env *Env) *UnsealedBlock`.
+After validation, the unsealed block is persisted in the global state via `SetCurrentUnsealedBlock`.
 
-After created, we need to persist it in the blockchain global state, we do this with `(bc *BlockChain) SetCurrentUnsealedBlock(ub *UnsealedBlock) error`.
+### Inserting frags
 
-## Inserting frags to the unsealed block
-
-Once the unsealed block is started, we can start adding frags to it as long as we receive valid `engine_newFragV0` requests. These requests looks like:
-
-```go
-type Frag struct {
-    BlockNumber uint64         `json:"blockNumber"`
-    Seq         uint64         `json:"seq"`
-    IsLast      bool           `json:"isLast"`
-    Txs         []*Transaction `json:"txs"`
-}
-```
-
-and for it to be valid, the following conditions must be met:
+Upon receiving `engine_newFragV0` calls, the EL validates the received frag:
 
 - The block number must match the current unsealed block number and there must be an opened unsealed block.
 - The sequence number must be the next one in the sequence (the current unsealed block persists this number). This has several cases:
@@ -74,37 +47,12 @@ and for it to be valid, the following conditions must be met:
     - If the sequence number is > 0 and the unsealed block did not received the last frag, then the frag should be the next in the sequence.
 
 
-If valid, the frags are added to the unsealed block by `(bc *BlockChain) InsertNewFrag(frag *Frag) error`. This means executing every transaction in the frag and adding the receipts to the unsealed block.
+If valid, the frags are added to the unsealed block. This means executing every transaction in the frag and adding the receipts to the unsealed block.
 
-If the frag is the last one, the unsealed block is considered sealed and ...
+If the frag is marked as last, the node starts sealing the block and computing the state root.
 
-### Sealing the block
+### Seal verification
 
-The unsealed block in progress is sealed if the seal data we've received from the OP node through the `engine_sealFragV0` request matches the local data about the unsealed block execution. If so, the unsealed block is set as canonical and now is the head of the chain. The request looks like:
+With the `engine_sealFragV0` call, the node verifies that the sealed block matches with what the gateway computed. If the verification is successful, the node sets the block as canonical and advances the chain. 
 
-```go
-type Seal struct {
-    TotalFrags       uint64      `json:"totalFrags"`
-    BlockNumber      uint64      `json:"blockNumber"`
-    GasUsed          uint64      `json:"gasUsed"`
-    GasLimit         uint64      `json:"gasLimit"`
-    ParentHash       common.Hash `json:"parentHash"`
-    TransactionsRoot common.Hash `json:"transactionsRoot"`
-    ReceiptsRoot     common.Hash `json:"receiptsRoot"`
-    StateRoot        common.Hash `json:"stateRoot"`
-    BlockHash        common.Hash `json:"blockHash"`
-}
-```
-
-To successfully seal the block, our current unsealed block execution state must match with the following conditions:
-
-- The total frags must match the number of frags we've received.
-- The block number must match the current unsealed block number.
-- The gas used must match the sum of the gas used in the receipts.
-- The gas limit must match the gas limit in the environment.
-- The parent hash must match the parent hash in the environment.
-- The transactions root must match the root of the transactions trie.
-- The receipts root must match the root of the receipts trie.
-- The state root must match the root of the state trie.
-- The block hash must match the hash of the block.
 

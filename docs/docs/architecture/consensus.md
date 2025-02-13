@@ -4,22 +4,31 @@ description: Upgrades to the OP node
 
 # OP Node
 
-The OP node was slightly modified to support the new architecture. We have extended its communications protocols as we added a new namespace to the RPC server, a new capability to the P2P server, and extended the current engine API. The new namespace is called `based` and includes new methods to share new envs, frags, and seals with the root OP node, which will then broadcast them to the network. The new capability is the ability to send messages to the execution layer (EL) once the gateway's signature is verified. Lastly, the engine API was extended to include new methods to send the new messages to the EL.
+The OP node was upgraded to support the new based architecture and process `Frag`s. 
+
+The main changes include:
+- a new capability in the P2P server, to support the [new](/architecture/p2p.md) messages
+- a new `based_` RPC namespace, used by the local gateway to make the initial push of p2p messages
+- an extended `EngineAPI` to enable processing of `Frag` in the execution layer after signature verification
+
+Importantly, all these changes are incremental and backwards compatible. Non-modified nodes will still be able to join and receive new blocks, they just won't be able to process `Frag`s and provide preconfirmations.
 
 ![op-node](../../static/img/architecture_consensus.png)
 
-## Based RPC
+## P2P Capability
 
-A new namespace `based` is added to the RPC server, which includes new methods. These methods are called by the gateway to share new envs, frags, and seals with the root OP node, which will then broadcast them to the network.
+The P2P server is extended to include a new capability to broadcast messages to other OP nodes of the network. The current implementation simply extends the existing libp2p protocol already used by nodes, while in the future we plan to a new faster leader-aware gossip.
+
+## RPC
+
+To avoid re-implementing the full p2p in the gateway, a new `based_` namespace is introduced, used by the gateway to make the initial push of p2p messages, which will then be broacast to the rest of the network.
 
 ### `based_env`
-
-Receives an env envelope, which includes the env itself and the signature of the gateway.
 
 #### Parameters
 
 - `signature`: The signature of the gateway.
-- `message`: The `env` message.
+- `message`: The `EnvV0` message.
 
 #### Returns
 
@@ -28,35 +37,35 @@ Receives an env envelope, which includes the env itself and the signature of the
 
 #### Example
 
-```
-curl --request POST   --url <follower_node_host>:<op_node_port> --header 'Content-Type: application/json' \
---data '{ \
-    "jsonrpc": "2.0", \
-    "id": 1, \
-    "method": "based_newFrag", \
-    "params": [ \
-        { \
-            "signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
-            "frag": { \
-                "blockNumber": $(BLOCK_NUMBER), \
-                "seq": 0, \
-                "isLast": false, \
-                "txs": [], \
-                "version": 0 \
-            } \
-        } \
-    ] \
-}'
+```json
+{
+    "id": 1,
+    "jsonrpc": "2.0",
+    "method": "based_env",
+    "params": [{
+        "message": {
+            "basefee": 4,
+            "beneficiary": "0x1234567890123456789012345678901234567890",
+            "difficulty": "0x5",
+            "extraData": "0x010203",
+            "gasLimit": 3,
+            "number": 1,
+            "parentBeaconBlockRoot": "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758",
+            "parentHash": "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758",
+            "prevrandao": "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758",
+            "timestamp": 2
+        }],
+        "signature": "0x4fc733cc2f0b680e15452db40b9453412ccb25507582b192c1ea4fc4deaf709845002ab44af42327ed4b8b12943412810a8d9984ea1609dfc6f77338f8c395b41c"
+    }
+}
 ```
 
 ### `based_newFrag`
 
-Receives a frag envelope, which includes the frag itself and the signature of the gateway.
-
 #### Parameters
 
 - `signature`: The signature of the gateway.
-- `message`: The `frag` message.
+- `message`: The `FragV0` message.
 
 #### Returns
 
@@ -65,39 +74,31 @@ Receives a frag envelope, which includes the frag itself and the signature of th
 
 #### Example
 
-```Shell
-curl --request POST   --url <follower_node_host>:<op_node_port> --header 'Content-Type: application/json' \
---data '{ \
-    "jsonrpc": "2.0", \
-    "id": 1, \
-    "method": "based_sealFrag", \
-    "params": [ \
-        { \
-            "signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
-            "seal": { \
-                "totalFrags": 2, \
-                "blockNumber": $(BLOCK_NUMBER), \
-                "gasUsed": 0, \
-                "gasLimit": 0, \
-                "parentHash": "0x1234567890123456789012345678901234567890123456789012345678901234", \
-                "transactionsRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
-                "receiptsRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
-                "stateRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
-                "blockHash": "0x1234567890123456789012345678901234567890123456789012345678901234" \
-            } \
-        } \
-    ] \
-}'
+```json
+{
+    "id": 1,
+    "jsonrpc": "2.0",
+    "method": "based_newFrag",
+    "params": [{
+        "message": {
+            "blockNumber": 1,
+            "isLast": true,
+            "seq": 0,
+            "txs": [
+                "0x010203"
+            ]
+        }],
+        "signature": "0xa47da12abd5563f45332e637d1de946c3576902a245511d86826743c8af1f1e2093d4f5efd5b9630c0acc5f2bb23f236b4f7bdbe0d21d281b2bd2ff60c6cf1861b"
+    }
+}
 ```
 
 ### `based_sealFrag`
 
-Receives a frag envelope, which includes the frag itself and the signature of the gateway.
-
 #### Parameters
 
 - `signature`: The signature of the gateway.
-- `message`: The `seal` message.
+- `message`: The `SealV0` message.
 
 #### Returns
 
@@ -106,41 +107,35 @@ Receives a frag envelope, which includes the frag itself and the signature of th
 
 #### Example
 
-```Shell
-curl --request POST   --url <follower_node_host>:<op_node_port> --header 'Content-Type: application/json' \
---data '{ \
-    "jsonrpc": "2.0", \
-    "id": 1, \
-    "method": "based_env", \
-    "params": [ \
-        { \
-            "signature": "0x1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",  \
-            "env": { \
-                "totalFrags": 2, \
-                "number": 0, \
-                "beneficiary": "0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a", \
-                "timestamp": 2739281173, \
-                "gasLimit": 0, \
-                "baseFee": 0, \
-                "difficulty": 0, \
-                "prevrandao": "0x1234567890123456789012345678901234567890123456789012345678901234" \
-                "parentHash": "0x1234567890123456789012345678901234567890123456789012345678901234", \
-                "parentBeaconRoot": "0x1234567890123456789012345678901234567890123456789012345678901234", \
-                "extraData": "0x010203", \
-            } \
-        } \
-    ] \
-}'
+```json
+{
+    "id": 1,
+    "jsonrpc": "2.0",
+    "method": "based_sealFrag",
+    "params": [{
+        "message": {
+            "blockHash": "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758",
+            "blockNumber": 123,
+            "gasLimit": 1000000,
+            "gasUsed": 25000,
+            "parentHash": "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758",
+            "receiptsRoot": "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758",
+            "stateRoot": "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758",
+            "totalFrags": 8,
+            "transactionsRoot": "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"
+        }],
+        "signature": "0x090f69ccf02e0f468cac96f71bbf4b7732c63f3d50a4881f8665c1718570928e4497706eac2fe7da8b47ce355482ada8763614a3575a1af066ad06320b707c531b"
+    }
+}
+
 ```
 
-## Based P2P Capability
+## Engine API Upgrade
 
-The P2P server is extended to include a new capability to broadcast messages to other OP nodes of the network. For more information about the P2P upgrade, please refer to the [P2P documentation](./p2p.md).
-
-## Based Engine API Upgrade
-
-New methods in the namespace are added to enable OP node to send the new messages to the execution layer (EL). We only send the message from the original envelope once the gateway's signature is verified. These methods are:
+New methods in the `based_` namespace are added to enable the OP node to send the `Frag`s payloads to the execution layer (EL). Messages are only sent after singature verification of the gateway identity. The new methods are:
 
 - `engine_newFragV0`
 - `engine_sealFragV0`
 - `engine_envV0`
+
+the processing is detailed in the [next](/architecture/execution.md) section.
