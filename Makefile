@@ -72,7 +72,7 @@ gateway: ## 🚀 Run the gateway
 	RUST_LOG=debug cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway -- \
 	--db.datadir ./data \
 	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
-	--chain-spec ./genesis/genesis-2151908.json \
+	--chain ./genesis/genesis-2151908.json \
 	--rpc.port 9997 \
 	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
 	--test
