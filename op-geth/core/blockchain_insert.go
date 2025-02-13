@@ -204,47 +204,51 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	}
 
 	vmConfig := bc.GetVMConfig()
+	signer := types.MakeSigner(chainConfig, blockContext.BlockNumber, blockContext.Time)
+	evm := vm.NewEVM(blockContext, vm.TxContext{}, statedb, chainConfig, *vmConfig)
 
-	var receipts types.Receipts
+	var (
+		receipts    types.Receipts
+		allLogs     []*types.Log
+		usedGas     uint64
+		blobGasUsed uint64
+	)
+
 	for i, tx := range frag.Txs {
-		log.Info("Inserting transaction", "tx", tx)
-		gp := new(GasPool).AddGas(tx.Gas())
-
-		intermediateRootHash := statedb.IntermediateRoot(chainConfig.IsEIP158(blockContext.BlockNumber)).Bytes()
-
-		signer := types.MakeSigner(bc.Config(), blockContext.BlockNumber, blockContext.Time)
+		statedb.SetTxContext(tx.Hash(), i)
 
 		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
-
 		if err != nil {
 			return fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
 		}
 
-		txContext := NewEVMTxContext(msg)
-
-		evm := vm.NewEVM(blockContext, txContext, statedb, chainConfig, *vmConfig)
-
-		statedb.SetTxContext(tx.Hash(), i)
-
-		txExecutionResult, err := ApplyMessage(evm, msg, gp)
-
+		receipt, err := ApplyTransactionWithEVM(msg, chainConfig, new(GasPool).AddGas(tx.Gas()), statedb, blockContext.BlockNumber, common.Hash{}, tx, &usedGas, evm)
 		if err != nil {
-			return fmt.Errorf("could not apply message %v: %w", tx.Hash().Hex(), err)
+			return fmt.Errorf("could not apply transaction %v: %w", tx.Hash().Hex(), err)
 		}
 
-		txReceipt := MakeReceipt(evm, txExecutionResult, statedb, blockContext.BlockNumber, currentUnsealedBlock.Hash, tx, txExecutionResult.UsedGas, intermediateRootHash, chainConfig, tx.Nonce())
-
-		receipts = append(receipts, txReceipt)
+		receipts = append(receipts, receipt)
+		allLogs = append(allLogs, receipt.Logs...)
+		blobGasUsed += receipt.BlobGasUsed
 	}
 
-	// Update the unsealed block state:
-	// 1. Insert the frag into the current unsealed block
-	// 2. Update the last sequence number
-	// 3. Insert the receipts into the current unsealed block
+	// Read requests if Prague is enabled.
+	var requests types.Requests
+	if chainConfig.IsPrague(blockContext.BlockNumber, blockContext.Time) {
+		_requests, err := ParseDepositLogs(allLogs, chainConfig)
+		requests = _requests
+		if err != nil {
+			return err
+		}
+	}
 
 	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
 	currentUnsealedBlock.LastSequenceNumber = &frag.Seq
 	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, receipts...)
+	currentUnsealedBlock.Logs = append(currentUnsealedBlock.Logs, allLogs...)
+	currentUnsealedBlock.Requests = append(currentUnsealedBlock.Requests, requests...)
+	currentUnsealedBlock.CumulativeGasUsed += usedGas
+	currentUnsealedBlock.CumulativeBlobGasUsed += blobGasUsed
 
 	return nil
 }
