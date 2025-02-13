@@ -1447,9 +1447,6 @@ func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) (string, error) {
 }
 
 func (api *ConsensusAPI) ValidateSealFragV0(seal engine.SignedSeal, currentUnsealedBlock *types.UnsealedBlock) error {
-	// TODO: Validations
-	// Check the total frags is correct
-
 	if !types.IsOpened(api.eth.BlockChain().CurrentUnsealedBlock()) {
 		return errors.New("no unsealed block in progress")
 	}
