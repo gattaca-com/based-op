@@ -31,6 +31,7 @@ $ make
 build-op-geth                  🏗️ Build OP geth from op-eth directory
 build-op-node                  🏗️ Build OP node from optimism directory
 build-portal                   🏗️ Build based portal from based directory
+build-gateway                  🏗️ Build based gateway from based directory
 build                          🏗️ Build
 clean                          🧹 Clean
 deps                           🚀 Install all dependencies
@@ -60,7 +61,8 @@ To view the logs, run the following:
 ```Shell
 make op-node-logs            // OP node logs
 make op-reth-logs            // OP reth logs
-make based-portal-logs       // Based portal logs
+make gateway-logs            // Based gateway logs
+make portal-logs             // Based portal logs
 
 make logs SERVICE=<service>  // Replace <service> with the service name
 ```
@@ -69,6 +71,7 @@ make logs SERVICE=<service>  // Replace <service> with the service name
 
 ```Shell
 make build-portal            // Build the local portal docker image, named `based_portal_local`
+make build-gateway           // Build the local gateway docker image, named `based_gateway_local`
 make build-op-geth           // Builds the modified op-geth image, named `based_op_geth`
 make build-op-node           // Build the modified op-node image, named `based_op_node`
 ```
