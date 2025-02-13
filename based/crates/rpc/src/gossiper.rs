@@ -26,7 +26,7 @@ impl Gossiper {
             return;
         };
 
-        let payload = p2p::SignedMessage::new(&self.signer, msg).to_json();
+        let payload = msg.to_json(&self.signer);
 
         let Ok(res) = self.client.post(url).json(&payload).send() else {
             tracing::error!("couldn't send {}", payload);
@@ -37,7 +37,7 @@ impl Gossiper {
         let body = res.text().expect("couldn't read response");
 
         if code.is_success() {
-            info!(body, %payload, "successfully sent");
+            info!("successfully sent {}", msg.as_ref());
         } else {
             error!(body, %payload, code = code.as_u16(), "failed to send");
         }
