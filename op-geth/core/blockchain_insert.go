@@ -195,7 +195,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		L1CostFunc:  types.NewL1CostFunc(bc.Config(), statedb),
 		Coinbase:    currentUnsealedBlock.Env.Beneficiary,
 		BlockNumber: new(big.Int).SetUint64(currentUnsealedBlock.Env.Number),
-		Time:        uint64(time.Now().Unix()), // TODO: Use currentUnsealedBlock.Env.Timestamp with a valid timestamp
+		Time:        currentUnsealedBlock.Env.Timestamp,
 		Difficulty:  currentUnsealedBlock.Env.Difficulty,
 		GasLimit:    currentUnsealedBlock.Env.GasLimit,
 		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
@@ -214,7 +214,6 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		usedGas  = new(uint64)
 	)
 	for i, tx := range frag.Txs {
-		log.Info("Inserting transaction", "tx", tx)
 		gp := new(GasPool).AddGas(tx.Gas())
 
 		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
@@ -230,8 +229,6 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		if err != nil {
 			return fmt.Errorf("could not apply transaction %v: %w", tx.Hash().Hex(), err)
 		}
-
-		log.Info("FRAG TX RECEIPT", "tx", tx.Hash().Hex(), "receipt", txReceipt)
 
 		receipts = append(receipts, txReceipt)
 		allLogs = append(allLogs, txReceipt.Logs...)
