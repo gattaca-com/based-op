@@ -205,6 +205,9 @@ where
                 let sidecar =
                     ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes));
 
+                // Clear shared state for each NewPayload event
+                ctx.shared_state.reset();
+
                 // NewPayload skipped some blocks. Signal to fetch them all and set state to syncing.
                 let payload_hash = payload.block_hash();
                 // Check if we have already committed this payload.
