@@ -5,6 +5,8 @@ description: Upgrades to the OP execution layer
 
 # Execution
 
+The idea for the OP execution layer is to be able to receive the frags validated by the OP node and start building a new block with them with the advantage of being able to execute frag transactions as they come. This way, it can serve new state to users as far as it executes transactions without the need for the block to be finalized.
+
 ![op-el](../../static/img/architecture_execution.png)
 
 ## Unsealed Block
