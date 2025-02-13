@@ -14,6 +14,9 @@ Depending on the call, the portal will multiplex to one or multiple gateways, as
 - `engine_getPayloadV3`, the portal polls the previously selected gateway for a new execution payload. The payload is the verified with the fallback EL as a sanity check and returned to the OP node if successful, to be added to the canonical chain. If the gateway doesn't return a payload or the payload is invalid, the payload from the fallback is used instead, ensuring liveness.
 - `engine_newPayloadV3`, the portal forwards the calll to all gateways and the fallback. Gateways will optimistically apply blocks to process them faster once the next FCU is received.
 
+### Note
+Currently, the portal also mutliplexes `eth_` calls, sharing transactions with both fallback and gateways, and requesting state sensitive calls (e.g. `eth_getBalance`) from the gateway first. This is a temporary solution and we don't expect this to ship in production.
+Eventually only transactions will be shared between the gateway and fallback. Users will make other RPC calls directly to follower nodes, or listening to frags in gossip.
 
 #### References
 - [OP protocol: external Block Production](https://github.com/ethereum-optimism/design-docs/blob/main/protocol/external-block-production.md)

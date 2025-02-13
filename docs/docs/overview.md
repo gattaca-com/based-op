@@ -23,9 +23,12 @@ Currently, most L2s rely on  centralized sequencers that require user trust, rai
 
 Achieving fully decentralized, Based sequencing is the ultimate goal. However, it's important to recognize that existing rollups with centralized sequencers may prefer to adopt a more gradual approach to decentralization. This framework allows for a progressive transition to Based sequencing while minimizing risks and ensuring operational stability and full backwards compatibility.
 
-1. Initial deployment: the existing centralized sequencer is upgraded to a single centralized gateway, using the existing rollup stack as fallback. Additional enhancements such as pipelined block production and replay are available for replica nodes to upgrade
+#### 1. Initial deployment
+The existing centralized sequencer is upgraded to a single centralized gateway, using the existing rollup stack as fallback. Additional enhancements such as pipelined block production and replay are available for replica nodes to upgrade
 
-2. Additional gateways introduced via a whitelist enforced by the rollup operator
+#### 2. Multiple gateways with whitelist
+Additional gateways introduced via a whitelist enforced by the rollup operator
 
-3. Gateways can permissionlessly join the sequencer set, and proposers are able to delegate sequencing responsibilities to gateways. Proposers are expected to monitor the performance and reliability of their delegates. At this stage, slashing mechanisms are activated to address safety and liveness faults. Further research is needed to ensure that full decentralization doesn't compromise liveness and UX of the rollup.
+#### 3. Permissionless gateways
+Gateways can permissionlessly join the sequencer set, and proposers are able to delegate sequencing responsibilities to gateways. Proposers are expected to monitor the performance and reliability of their delegates. At this stage, slashing mechanisms are activated to address safety and liveness faults. Further research is needed to ensure that full decentralization doesn't compromise liveness and UX of the rollup.
 
