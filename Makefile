@@ -18,6 +18,8 @@ OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-
 BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 
+BOP_PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurtosis | grep 'rpc: 8541/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+
 # Recipes
 
 help: ## 📚 Show help for each of the Makefile recipes
@@ -40,6 +42,7 @@ deps: ## 🚀 Install all dependencies
 build: build-portal build-gateway build-op-node build-op-geth ## 🏗️ Build
 
 build-no-gateway: build-portal build-op-node build-op-geth ## 🏗️ Build without gateway
+
 build-portal: ## 🏗️ Build based portal from based directory
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
@@ -56,6 +59,7 @@ build-op-node: ## 🏗️ Build OP node from optimism directory
 
 build-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t based_op_geth ./op-geth
+
 
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op && $(MAKE) dump
@@ -77,7 +81,7 @@ gateway: ## 🚀 Run the gateway
 	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
 	--chain ./genesis/genesis-2151908.json \
 	--rpc.port 9997 \
-	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT)
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) 
 
 portal-logs:
 	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
@@ -172,3 +176,6 @@ test-env:
 			} \
 		] \
 	}'
+
+test-bn:
+	 curl http://127.0.0.1:$(BOP_PORTAL_PORT) -X POST -s -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber", "id":0}' | jq -r '.result' | xargs printf "%d\n"
