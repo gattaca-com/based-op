@@ -1431,9 +1431,7 @@ func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) (string, error) {
 		return engine.INVALID, errors.New("Cannot update canonical block")
 	}
 
-	if err := api.eth.BlockChain().SetCurrentUnsealedBlock(nil); err != nil {
-		return engine.INVALID, errors.New("Cannot close unsealed block")
-	}
+	api.eth.BlockChain().ResetCurrentUnsealedBlock()
 
 	return engine.VALID, nil
 }
@@ -1484,7 +1482,7 @@ func (api *ConsensusAPI) ValidateSealFragV0(seal engine.SignedSeal, currentUnsea
 }
 
 func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
-	log.Info("EnvV0 received", "forBlock", env.Env.Number, "current", api.eth.BlockChain().CurrentBlock().Number)
+	log.Info("EnvV0 received", "forBlock", env.Env.Number, "current", api.eth.BlockChain().CurrentBlock().Number, "env", env.Env)
 
 	api.unsealedBlockLock.Lock()
 	res, err := api.envV0(env)
@@ -1502,7 +1500,7 @@ func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
 		return engine.INVALID, err
 	}
 
-	unsealedBlock := types.NewUnsealedBlock((*types.Env)(&env.Env))
+	unsealedBlock := types.NewUnsealedBlock(&env.Env)
 	if unsealedBlock == nil {
 		return engine.INVALID, errors.New("nil unsealed block")
 	}
