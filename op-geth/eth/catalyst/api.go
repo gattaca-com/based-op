@@ -1402,102 +1402,86 @@ func (api *ConsensusAPI) ValidateNewFragV0(frag engine.SignedNewFrag, currentUns
 
 func (api *ConsensusAPI) SealFragV0(seal engine.SignedSeal) (string, error) {
 	log.Info("SealFragV0 received", "forBlock", seal.Seal.BlockNumber, "current", api.eth.BlockChain().CurrentBlock().Number)
-	// TODO: Validations
-	// Check the total frags is correct
+
 	api.unsealedBlockLock.Lock()
-
-	if !types.IsOpened(api.eth.BlockChain().CurrentUnsealedBlock()) {
-		error := errors.New("no unsealed block in progress")
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	sealedBlock := api.eth.BlockChain().GetBlockByNumber(seal.Seal.BlockNumber)
-
-	if sealedBlock == nil {
-		error := fmt.Errorf("sealed block %v not found", seal.Seal.BlockNumber)
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	if sealedBlock.Hash().Cmp(seal.Seal.BlockHash) != 0 {
-		error := fmt.Errorf("block hash mismatch, expected %v, got %v", sealedBlock.Hash(), seal.Seal.BlockHash)
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	if sealedBlock.ParentHash().Cmp(seal.Seal.ParentHash) != 0 {
-		error := fmt.Errorf("parent hash mismatch, expected %v, got %v", sealedBlock.ParentHash(), seal.Seal.ParentHash)
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	if sealedBlock.Root().Cmp(seal.Seal.StateRoot) != 0 {
-		error := fmt.Errorf("state root mismatch, expected %v, got %v", sealedBlock.Root(), seal.Seal.StateRoot)
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	if sealedBlock.TxHash().Cmp(seal.Seal.TransactionsRoot) != 0 {
-		error := fmt.Errorf("transactions root mismatch, expected %v, got %v", sealedBlock.TxHash(), seal.Seal.TransactionsRoot)
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	if sealedBlock.ReceiptHash().Cmp(seal.Seal.ReceiptsRoot) != 0 {
-		error := fmt.Errorf("receipts root mismatch, expected %v, got %v", sealedBlock.ReceiptHash(), seal.Seal.ReceiptsRoot)
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	if sealedBlock.GasUsed() != seal.Seal.GasUsed {
-		error := fmt.Errorf("gas used mismatch, expected %v, got %v", sealedBlock.GasUsed(), seal.Seal.GasUsed)
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	if sealedBlock.GasLimit() != seal.Seal.GasLimit {
-		error := fmt.Errorf("gas limit mismatch, expected %v, got %v", sealedBlock.GasLimit(), seal.Seal.GasLimit)
-		log.Error("SealFragV0 failed", "error", error)
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	result, err := api.sealFragV0(seal)
-
+	res, err := api.sealFragV0(seal)
 	api.unsealedBlockLock.Unlock()
 
-	return result, err
+	if err != nil {
+		log.Error("SealFragV0 failed", "error", err)
+	}
+
+	return res, err
 }
 
 func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) (string, error) {
 	log.Info("(api *ConsensusAPI) sealFragV0", "seal", seal)
 
+	ub := api.eth.BlockChain().CurrentUnsealedBlock()
+
+	if err := api.ValidateSealFragV0(seal, ub); err != nil {
+		return engine.INVALID, err
+	}
+
 	block := api.eth.BlockChain().GetBlockByNumber(seal.Seal.BlockNumber)
 	if block == nil {
-		error := fmt.Errorf("Block number not found", "blockNumber", seal.Seal.BlockNumber)
-		log.Error("SealFragV0 failed", "error", error)
-		return engine.INVALID, error
+		return engine.INVALID, fmt.Errorf("Block number not found", "blockNumber", seal.Seal.BlockNumber)
 	}
 
-	// api.eth.BlockChain().InsertHeaderChain(chain []*types.Header)
 	if _, error := api.eth.BlockChain().SetCanonical(block); error != nil {
-		error := fmt.Errorf("Cannot update canonical block")
-		log.Error("SealFragV0 failed", "error", error)
-		return engine.INVALID, error
+		return engine.INVALID, errors.New("Cannot update canonical block")
 	}
 
-	api.eth.BlockChain().SetCurrentUnsealedBlock(nil)
+	if err := api.eth.BlockChain().SetCurrentUnsealedBlock(nil); err != nil {
+		return engine.INVALID, errors.New("Cannot close unsealed block")
+	}
 
 	return engine.VALID, nil
+}
+
+func (api *ConsensusAPI) ValidateSealFragV0(seal engine.SignedSeal, currentUnsealedBlock *types.UnsealedBlock) error {
+	// TODO: Validations
+	// Check the total frags is correct
+
+	if !types.IsOpened(api.eth.BlockChain().CurrentUnsealedBlock()) {
+		return errors.New("no unsealed block in progress")
+	}
+
+	sealedBlock := api.eth.BlockChain().GetBlockByNumber(seal.Seal.BlockNumber)
+
+	if sealedBlock == nil {
+		return fmt.Errorf("sealed block %v not found", seal.Seal.BlockNumber)
+	}
+
+	if sealedBlock.Hash().Cmp(seal.Seal.BlockHash) != 0 {
+		return fmt.Errorf("block hash mismatch, expected %v, got %v", sealedBlock.Hash(), seal.Seal.BlockHash)
+	}
+
+	if sealedBlock.ParentHash().Cmp(seal.Seal.ParentHash) != 0 {
+		return fmt.Errorf("parent hash mismatch, expected %v, got %v", sealedBlock.ParentHash(), seal.Seal.ParentHash)
+	}
+
+	if sealedBlock.Root().Cmp(seal.Seal.StateRoot) != 0 {
+		return fmt.Errorf("state root mismatch, expected %v, got %v", sealedBlock.Root(), seal.Seal.StateRoot)
+	}
+
+	if sealedBlock.TxHash().Cmp(seal.Seal.TransactionsRoot) != 0 {
+		return fmt.Errorf("transactions root mismatch, expected %v, got %v", sealedBlock.TxHash(), seal.Seal.TransactionsRoot)
+	}
+
+	if sealedBlock.ReceiptHash().Cmp(seal.Seal.ReceiptsRoot) != 0 {
+		return fmt.Errorf("receipts root mismatch, expected %v, got %v", sealedBlock.ReceiptHash(), seal.Seal.ReceiptsRoot)
+	}
+
+	if sealedBlock.GasUsed() != seal.Seal.GasUsed {
+		return fmt.Errorf("gas used mismatch, expected %v, got %v", sealedBlock.GasUsed(), seal.Seal.GasUsed)
+	}
+
+	if sealedBlock.GasLimit() != seal.Seal.GasLimit {
+		return fmt.Errorf("gas limit mismatch, expected %v, got %v", sealedBlock.GasLimit(), seal.Seal.GasLimit)
+	}
+
+	return nil
 }
 
 func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
