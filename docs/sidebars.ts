@@ -37,6 +37,7 @@ const sidebars: SidebarsConfig = {
         'architecture/timekeeper',
       ],
     },
+    'get-started',
   ],
 };
 
