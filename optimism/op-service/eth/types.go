@@ -308,30 +308,30 @@ type SignedEnv struct {
 
 // Initial message to set the block environment for the current block
 type Env struct {
-	Number           uint64         `ssz-size:"8"`
-	Beneficiary      common.Address `ssz-size:"20"`
-	Timestamp        uint64         `ssz-size:"8"`
-	GasLimit         uint64         `ssz-size:"8"`
-	Basefee          uint64         `ssz-size:"8"`
-	Difficulty       *big.Int       `ssz-size:"32"`
-	Prevrandao       common.Hash    `ssz-size:"32"`
-	ParentHash       common.Hash    `ssz-size:"32"`
-	ParentBeaconRoot common.Hash    `ssz-size:"32"`
-	ExtraData        []byte         `ssz-max:"4294967296"`
+	Number                uint64         `ssz-size:"8"`
+	Beneficiary           common.Address `ssz-size:"20"`
+	Timestamp             uint64         `ssz-size:"8"`
+	GasLimit              uint64         `ssz-size:"8"`
+	Basefee               uint64         `ssz-size:"8"`
+	Difficulty            *big.Int       `ssz-size:"32"`
+	Prevrandao            common.Hash    `ssz-size:"32"`
+	ParentHash            common.Hash    `ssz-size:"32"`
+	ParentBeaconBlockRoot common.Hash    `ssz-size:"32"`
+	ExtraData             []byte         `ssz-max:"4294967296"`
 }
 
 func (e *Env) UnmarshalJSON(data []byte) error {
 	var env struct {
-		Number           uint64         `json:"number"`
-		Beneficiary      common.Address `json:"beneficiary"`
-		Timestamp        uint64         `json:"timestamp"`
-		GasLimit         uint64         `json:"gasLimit"`
-		Basefee          uint64         `json:"basefee"`
-		Difficulty       *hexutil.Big   `json:"difficulty"`
-		Prevrandao       common.Hash    `json:"prevrandao"`
-		ParentHash       common.Hash    `json:"parentHash"`
-		ParentBeaconRoot common.Hash    `json:"parentBeaconRoot"`
-		ExtraData        hexutil.Bytes  `json:"extraData"`
+		Number                uint64         `json:"number"`
+		Beneficiary           common.Address `json:"beneficiary"`
+		Timestamp             uint64         `json:"timestamp"`
+		GasLimit              uint64         `json:"gasLimit"`
+		Basefee               uint64         `json:"basefee"`
+		Difficulty            *hexutil.Big   `json:"difficulty"`
+		Prevrandao            common.Hash    `json:"prevrandao"`
+		ParentHash            common.Hash    `json:"parentHash"`
+		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
+		ExtraData             hexutil.Bytes  `json:"extraData"`
 	}
 
 	if err := json.Unmarshal(data, &env); err != nil {
@@ -346,7 +346,7 @@ func (e *Env) UnmarshalJSON(data []byte) error {
 	e.Difficulty = env.Difficulty.ToInt()
 	e.Prevrandao = env.Prevrandao
 	e.ParentHash = env.ParentHash
-	e.ParentBeaconRoot = env.ParentBeaconRoot
+	e.ParentBeaconBlockRoot = env.ParentBeaconBlockRoot
 	e.ExtraData = env.ExtraData
 
 	return nil
@@ -354,27 +354,27 @@ func (e *Env) UnmarshalJSON(data []byte) error {
 
 func (e *Env) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Number           uint64         `json:"number"`
-		Beneficiary      common.Address `json:"beneficiary"`
-		Timestamp        uint64         `json:"timestamp"`
-		GasLimit         uint64         `json:"gasLimit"`
-		Basefee          uint64         `json:"basefee"`
-		Difficulty       *hexutil.Big   `json:"difficulty"`
-		Prevrandao       common.Hash    `json:"prevrandao"`
-		ParentHash       common.Hash    `json:"parentHash"`
-		ParentBeaconRoot common.Hash    `json:"parentBeaconRoot"`
-		ExtraData        hexutil.Bytes  `json:"extraData"`
+		Number                uint64         `json:"number"`
+		Beneficiary           common.Address `json:"beneficiary"`
+		Timestamp             uint64         `json:"timestamp"`
+		GasLimit              uint64         `json:"gasLimit"`
+		Basefee               uint64         `json:"basefee"`
+		Difficulty            *hexutil.Big   `json:"difficulty"`
+		Prevrandao            common.Hash    `json:"prevrandao"`
+		ParentHash            common.Hash    `json:"parentHash"`
+		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
+		ExtraData             hexutil.Bytes  `json:"extraData"`
 	}{
-		Number:           e.Number,
-		Beneficiary:      e.Beneficiary,
-		Timestamp:        e.Timestamp,
-		GasLimit:         e.GasLimit,
-		Basefee:          e.Basefee,
-		Difficulty:       (*hexutil.Big)(e.Difficulty),
-		Prevrandao:       e.Prevrandao,
-		ParentHash:       e.ParentHash,
-		ParentBeaconRoot: e.ParentBeaconRoot,
-		ExtraData:        e.ExtraData,
+		Number:                e.Number,
+		Beneficiary:           e.Beneficiary,
+		Timestamp:             e.Timestamp,
+		GasLimit:              e.GasLimit,
+		Basefee:               e.Basefee,
+		Difficulty:            (*hexutil.Big)(e.Difficulty),
+		Prevrandao:            e.Prevrandao,
+		ParentHash:            e.ParentHash,
+		ParentBeaconBlockRoot: e.ParentBeaconBlockRoot,
+		ExtraData:             e.ExtraData,
 	})
 }
 
