@@ -477,7 +477,7 @@ func generateWitness(blockchain *core.BlockChain, block *types.Block) (*stateles
 	statedb.StartPrefetcher("debug_execution_witness", witness)
 	defer statedb.StopPrefetcher()
 
-	res, err := blockchain.Processor().Process(block, statedb, *blockchain.GetVMConfig())
+	res, err := blockchain.Processor().Process(block, statedb, *blockchain.GetVMConfig(), false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process block %d: %w", block.Number(), err)
 	}
