@@ -1488,56 +1488,57 @@ func (api *ConsensusAPI) EnvV0(env engine.SignedEnv) (string, error) {
 	log.Info("EnvV0 received", "forBlock", env.Env.Number, "current", api.eth.BlockChain().CurrentBlock().Number)
 
 	api.unsealedBlockLock.Lock()
+	res, err := api.envV0(env)
+	api.unsealedBlockLock.Unlock()
 
+	if err != nil {
+		log.Error("EnvV0 failed", "error", err)
+	}
+
+	return res, err
+}
+
+func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
+	if err := api.ValidateEnvV0(env); err != nil {
+		return engine.INVALID, err
+	}
+
+	unsealedBlock := types.NewUnsealedBlock((*types.Env)(&env.Env))
+	if unsealedBlock == nil {
+		return engine.INVALID, errors.New("nil unsealed block")
+	}
+
+	err := api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
+	if err != nil {
+		return engine.INVALID, err
+	}
+
+	return engine.VALID, err
+}
+
+func (api *ConsensusAPI) ValidateEnvV0(env engine.SignedEnv) error {
 	parent := api.eth.BlockChain().GetBlockByHash(env.Env.ParentHash).Header()
 
 	if parent == nil {
-		error := errors.New("there's no parent block")
-		log.Error("EnvV0 failed", "error", error.Error())
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
+		return errors.New("there's no parent block")
 	}
 
 	// Check that there's no unsealed block in progress
 	if api.eth.BlockChain().CurrentUnsealedBlock() != nil {
-		error := errors.New("cannot open a new unsealed block while there's one already in progress")
-		log.Error("EnvV0 failed", "error", error.Error())
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
+		return errors.New("cannot open a new unsealed block while there's one already in progress")
 	}
 
 	expectedBlockNumber := parent.Number.Uint64() + 1
 
 	// Check the block number
 	if env.Env.Number != expectedBlockNumber {
-		error := fmt.Errorf("env block number doesn't match expected block number, expected %d, received %d", expectedBlockNumber, env.Env.Number)
-		log.Error("EnvV0 failed", "error", error.Error())
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
+		return fmt.Errorf("env block number doesn't match expected block number, expected %d, received %d", expectedBlockNumber, env.Env.Number)
 	}
 
 	// Check the timestamp
 	if env.Env.Timestamp < parent.Time {
-		error := fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
-		log.Error("EnvV0 failed", "error", error.Error())
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
+		return fmt.Errorf("env timestamp is lower than parent block timestamp, parent timestamp %d, env timestamp %d", parent.Time, env.Env.Timestamp)
 	}
 
-	return api.envV0(env)
-}
-
-func (api *ConsensusAPI) envV0(env engine.SignedEnv) (string, error) {
-	unsealedBlock := types.NewUnsealedBlock((*types.Env)(&env.Env))
-	if unsealedBlock == nil {
-		error := errors.New("nil unsealed block")
-		log.Error("envV0 failed", "error", error.Error())
-		api.unsealedBlockLock.Unlock()
-		return engine.INVALID, error
-	}
-
-	err := api.eth.BlockChain().SetCurrentUnsealedBlock(unsealedBlock)
-
-	api.unsealedBlockLock.Unlock()
-	return engine.VALID, err
+	return nil
 }
