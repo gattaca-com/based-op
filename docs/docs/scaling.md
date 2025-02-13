@@ -33,3 +33,11 @@ As the sequencer streams batches in the network, nodes process them by reconstru
 Propagation initially occurs via the existing p2p, by adding new message types for new sequenced batches and end of the current block. 
 
 Subsequently, the p2p is upgraded to use a high-performance, leader-aware protocol that classifies peers as sequencing or non-sequencing and prioritizes fast sequencer-to-all communication. In a multi-sequencer environment, the gossip layer is aware of the sequencer schedule and optimizes transitions between the current and next sequencer.
+
+### Data Availability
+
+Ethereum imposes a fixed limit on how much blob data can be included in each block. As L2 throughput increases, this constraint becomes a bottleneck. When an L2 posts batches to Ethereum, each transaction, whether it succeeds or reverts, contributes to the overall blob size. In practice, a sizeable fraction of L2 traffic consists of “spam,” such as repeated arbitrage attempts. Because there is no concept of revert protection on L2s (as there is on Ethereum with MEV bundles), spam transactions that revert still occupy space. While these transactions do pay fees, they yield minimal utility once higher-value “real” user transactions start competing for available blob capacity.
+
+By introducing more advanced building algorithms at the gateway layer, it becomes possible to filter or minimise reverting transactions, whether through concepts like ethereum MEV Bundles or outright removal of reverts. This frees up capacity for more meaningful transactions, preventing the fixed blob limit from being overwhelmed by revert spam.
+
+As L2 transaction volume grows, the gateway-based model scales more gracefully by trimming DA waste and reserving space primarily for user transactions.
