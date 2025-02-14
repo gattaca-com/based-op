@@ -180,102 +180,10 @@ func (it *insertIterator) remaining() int {
 func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	currentUnsealedBlock := bc.CurrentUnsealedBlock()
 
-	statedb := bc.unsealedBlockDbState
-
-	if statedb == nil {
+	if bc.unsealedBlockDbState == nil {
 		return fmt.Errorf("unsealed block state db not set")
 	}
 
-	log.Info("Before", "state_root", statedb.GetTrie().Hash(), "accUpdates", statedb.AccountUpdated, "stUpdates", statedb.StorageLoaded)
-	for i, tx := range frag.Txs {
-		log.Info("Before TX", "index", i, "to", tx.To(), "nonce", tx.Nonce(), "value", tx.Value(), "calldata", tx.Data(), "isDeposit", tx.IsDepositTx(), "isSystem", tx.IsSystemTx(), "prevBalance", statedb.GetBalance(*tx.To()))
-		acc, _ := statedb.GetTrie().GetAccount(*tx.To())
-		log.Info("TO info", "nonce", acc.Nonce, "balance", acc.Balance, "codehash", acc.CodeHash, "storagehash", acc.Root)
-	}
-
-	// chainConfig := bc.Config()
-
-	// blockContext := vm.BlockContext{
-	// 	CanTransfer: CanTransfer,
-	// 	Transfer:    Transfer,
-	// 	L1CostFunc:  types.NewL1CostFunc(bc.Config(), statedb),
-	// 	Coinbase:    currentUnsealedBlock.Env.Beneficiary,
-	// 	BlockNumber: new(big.Int).SetUint64(currentUnsealedBlock.Env.Number),
-	// 	Time:        currentUnsealedBlock.Env.Timestamp,
-	// 	Difficulty:  currentUnsealedBlock.Env.Difficulty,
-	// 	GasLimit:    currentUnsealedBlock.Env.GasLimit,
-	// 	GetHash:     func(num uint64) common.Hash { return common.Hash{} },
-	// 	BaseFee:     new(big.Int).SetUint64(currentUnsealedBlock.Env.Basefee),
-	// 	Random:      &currentUnsealedBlock.Env.Prevrandao,
-	// }
-
-	// vmConfig := bc.GetVMConfig()
-	// signer := types.MakeSigner(chainConfig, blockContext.BlockNumber, blockContext.Time)
-	// evm := vm.NewEVM(blockContext, vm.TxContext{}, statedb, chainConfig, *vmConfig)
-
-	// var (
-	// 	receipts    types.Receipts
-	// 	allLogs     []*types.Log
-	// 	usedGas     uint64
-	// 	blobGasUsed uint64
-	// )
-
-	// for i, tx := range frag.Txs {
-	// 	statedb.SetTxContext(tx.Hash(), i)
-
-	// 	msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
-	// 	if err != nil {
-	// 		return fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
-	// 	}
-
-	// 	receipt, err := ApplyTransactionWithEVM(msg, chainConfig, new(GasPool).AddGas(tx.Gas()), statedb, blockContext.BlockNumber, common.Hash{}, tx, &usedGas, evm)
-	// 	if err != nil {
-	// 		return fmt.Errorf("could not apply transaction %v: %w", tx.Hash().Hex(), err)
-	// 	}
-
-	// 	receipts = append(receipts, receipt)
-	// 	allLogs = append(allLogs, receipt.Logs...)
-	// 	blobGasUsed += receipt.BlobGasUsed
-	// }
-
-	// // Read requests if Prague is enabled.
-	// var requests types.Requests
-	// if chainConfig.IsPrague(blockContext.BlockNumber, blockContext.Time) {
-	// 	_requests, err := ParseDepositLogs(allLogs, chainConfig)
-	// 	requests = _requests
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	// block := types.NewBlock(&types.Header{
-	// 	ParentHash:       [32]byte{},
-	// 	UncleHash:        [32]byte{},
-	// 	Coinbase:         [20]byte{},
-	// 	Root:             [32]byte{},
-	// 	TxHash:           [32]byte{},
-	// 	ReceiptHash:      [32]byte{},
-	// 	Bloom:            [256]byte{},
-	// 	Difficulty:       &big.Int{},
-	// 	Number:           &big.Int{},
-	// 	GasLimit:         0,
-	// 	GasUsed:          0,
-	// 	Time:             0,
-	// 	Extra:            []byte{},
-	// 	MixDigest:        [32]byte{},
-	// 	Nonce:            [8]byte{},
-	// 	BaseFee:          &big.Int{},
-	// 	WithdrawalsHash:  &[32]byte{},
-	// 	BlobGasUsed:      new(uint64),
-	// 	ExcessBlobGas:    new(uint64),
-	// 	ParentBeaconRoot: &[32]byte{},
-	// 	RequestsHash:     &[32]byte{},
-	// }, &types.Body{
-	// 	Transactions: frag.Txs,
-	// 	Uncles:       []*types.Header{},
-	// 	Withdrawals:  []*types.Withdrawal{},
-	// 	Requests:     []*types.Request{},
-	// }, types.Receipts{}, , bc.Config())
 	block := types.NewBlockWithHeader(&types.Header{
 		ParentHash:       [32]byte{},
 		UncleHash:        [32]byte{},
@@ -305,15 +213,14 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		Requests:     []*types.Request{},
 	})
 
-	res, _ := bc.Processor().Process(block, statedb, bc.vmConfig)
+	res, err := bc.Processor().Process(block, bc.unsealedBlockDbState, bc.vmConfig)
 
-	log.Info("after_dbs", "state_root", statedb.IntermediateRoot(false), "accUpdates", statedb.AccountUpdated, "stUpdates", statedb.StorageLoaded)
-	log.Info("after", "state_root", bc.unsealedBlockDbState.GetTrie().Hash(), "accUpdates", bc.unsealedBlockDbState.AccountUpdated, "stUpdates", bc.unsealedBlockDbState.StorageLoaded)
+	if err != nil {
+		return err
+	}
 
-	for i, tx := range frag.Txs {
-		log.Info("After", "index", i, "To", tx.To(), "balance", statedb.GetBalance(*tx.To()))
-		acc, _ := bc.unsealedBlockDbState.GetTrie().GetAccount(*tx.To())
-		log.Info("TO info", "nonce", acc.Nonce, "balance", acc.Balance, "codehash", acc.CodeHash, "storagehash", acc.Root)
+	for _, receipt := range res.Receipts {
+		currentUnsealedBlock.CumulativeBlobGasUsed += receipt.BlobGasUsed
 	}
 
 	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
@@ -322,7 +229,6 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	currentUnsealedBlock.Logs = append(currentUnsealedBlock.Logs, res.Logs...)
 	currentUnsealedBlock.Requests = append(currentUnsealedBlock.Requests, res.Requests...)
 	currentUnsealedBlock.CumulativeGasUsed += res.GasUsed
-	currentUnsealedBlock.CumulativeBlobGasUsed += 0
 
 	return nil
 }

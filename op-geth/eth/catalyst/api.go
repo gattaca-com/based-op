@@ -1368,6 +1368,7 @@ func (api *ConsensusAPI) newFragV0(f engine.SignedNewFrag) (string, error) {
 	log.Info("new frag inserted", "forBlock", f.Frag.BlockNumber, "current", ub.Env.Number)
 
 	if err != nil {
+		log.Error("failed to insert new frag", "error", err)
 		return engine.INVALID, fmt.Errorf("failed to insert new frag: %w", err)
 	}
 
