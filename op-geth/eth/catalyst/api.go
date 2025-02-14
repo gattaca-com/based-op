@@ -1431,9 +1431,9 @@ func (api *ConsensusAPI) sealFragV0(seal engine.SignedSeal) (string, error) {
 		return engine.INVALID, err
 	}
 
-	block := api.eth.BlockChain().GetBlockByNumber(seal.Seal.BlockNumber)
+	block := api.eth.BlockChain().GetBlock(seal.Seal.BlockHash, seal.Seal.BlockNumber)
 	if block == nil {
-		return engine.INVALID, fmt.Errorf("Block number not found", "blockNumber", seal.Seal.BlockNumber)
+		return engine.INVALID, fmt.Errorf("Block number %v not found", seal.Seal.BlockNumber)
 	}
 
 	if _, error := api.eth.BlockChain().SetCanonical(block); error != nil {
@@ -1452,7 +1452,7 @@ func (api *ConsensusAPI) ValidateSealFragV0(seal engine.SignedSeal, currentUnsea
 		return errors.New("no unsealed block in progress")
 	}
 
-	sealedBlock := api.eth.BlockChain().GetBlockByNumber(seal.Seal.BlockNumber)
+	sealedBlock := api.eth.BlockChain().GetBlock(seal.Seal.BlockHash, seal.Seal.BlockNumber)
 
 	if sealedBlock == nil {
 		return fmt.Errorf("sealed block %v not found", seal.Seal.BlockNumber)
