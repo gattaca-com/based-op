@@ -1,14 +1,12 @@
 [package]
+default-run = "bop-gateway"
 edition.workspace = true
 name = "bop-gateway"
 rust-version.workspace = true
 version.workspace = true
-default-run = "bop-gateway"
 
 [dependencies]
 alloy-consensus.workspace = true
-op-alloy-consensus.workspace = true
-op-alloy-rpc-types.workspace = true
 alloy-eips.workspace = true
 alloy-provider.workspace = true
 bop-common.workspace = true
@@ -17,23 +15,14 @@ bop-rpc.workspace = true
 bop-sequencer.workspace = true
 clap.workspace = true
 eyre.workspace = true
+op-alloy-consensus.workspace = true
+op-alloy-rpc-types.workspace = true
 reqwest.workspace = true
 revm-primitives.workspace = true
 serde_json.workspace = true
 
-
-
-
-
-
-
-
-
-
-
-
-tokio.workspace = true
 serde.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 
 [[bin]]
