@@ -17,7 +17,6 @@
 package engine
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -422,56 +421,40 @@ func (v *ClientVersionV1) String() string {
 }
 
 func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, error) {
-	versionedHashes := []common.Hash{}
-	deposits := types.Deposits{}
-	for i, _ := range ub.Receipts {
-		if hashes := ub.Transactions()[i].BlobHashes(); hashes != nil {
-			versionedHashes = append(versionedHashes, hashes...)
-		}
-	}
-	// keccak256("")
-	emptyHash := common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-
-	requests, err := core.ParseDepositLogs(ub.Logs, bc.Config())
-	if err != nil {
-		return nil, err
-	}
-	for _, request := range requests {
-		deposit, ok := request.Inner().(*types.Deposit)
-		if !ok {
-			return nil, errors.New("invalid request type")
-		}
-		deposits = append(deposits, deposit)
+	if bc.CurrentUnsealedBlockState() == nil {
+		return nil, fmt.Errorf("unsealed block state db not set")
 	}
 
-	block, err := ExecutableDataToBlockNoHash(ExecutableData{
-		ParentHash:       bc.GetCanonicalHash(ub.Env.Number - 1),
-		FeeRecipient:     ub.Env.Beneficiary,
-		StateRoot:        bc.CurrentUnsealedBlockState().GetTrie().Hash(),
-		ReceiptsRoot:     types.DeriveSha(ub.Receipts, trie.NewStackTrie(nil)),
-		LogsBloom:        types.CreateBloom(ub.Receipts).Bytes(),
-		Random:           ub.Env.Prevrandao,
-		Number:           ub.Env.Number,
+	block := types.NewBlockWithHeader(&types.Header{
+		ParentHash:       ub.Env.ParentHash,
+		UncleHash:        types.EmptyUncleHash,
+		Coinbase:         ub.Env.Beneficiary,
+		Root:             bc.CurrentUnsealedBlockState().IntermediateRoot(bc.Config().IsEIP158(new(big.Int).SetUint64(ub.Env.Number))),
+		TxHash:           types.DeriveSha(types.Transactions(ub.Transactions()), trie.NewStackTrie(nil)),
+		ReceiptHash:      types.DeriveSha(ub.Receipts, trie.NewStackTrie(nil)),
+		Bloom:            types.CreateBloom(ub.Receipts),
+		Difficulty:       ub.Env.Difficulty,
+		Number:           new(big.Int).SetUint64(ub.Env.Number),
 		GasLimit:         ub.Env.GasLimit,
 		GasUsed:          ub.CumulativeGasUsed,
-		Timestamp:        ub.Env.Timestamp,
-		ExtraData:        ub.Env.ExtraData,
-		BaseFeePerGas:    new(big.Int).SetUint64(ub.Env.Basefee),
-		BlockHash:        [32]byte{}, // This is calculated inside the function, it's not needed here
-		Transactions:     ub.ByteTransactions(),
-		Withdrawals:      []*types.Withdrawal{},
-		BlobGasUsed:      &ub.CumulativeBlobGasUsed,
+		Time:             ub.Env.Timestamp,
+		Extra:            ub.Env.ExtraData,
+		MixDigest:        ub.Env.Prevrandao,
+		Nonce:            types.EncodeNonce(0),
+		BaseFee:          new(big.Int).SetUint64(ub.Env.Basefee),
+		WithdrawalsHash:  &types.EmptyWithdrawalsHash,
+		BlobGasUsed:      new(uint64),
 		ExcessBlobGas:    new(uint64),
-		Deposits:         deposits,                  // TODO
-		ExecutionWitness: &types.ExecutionWitness{}, // TODO
-		WithdrawalsRoot:  &emptyHash,
-	}, versionedHashes, &ub.Env.ParentBeaconBlockRoot, bc.Config())
+		ParentBeaconRoot: &ub.Env.ParentBeaconBlockRoot,
+		// RequestsHash:     &types.EmptyRequestsHash, // TODO: Double check this is ok, in the Rust side it is done this way, but we have an types.EmptyRequestsHash available to use.
+	}).WithBody(types.Body{
+		Transactions: ub.Transactions(),
+		Uncles:       nil,
+		Withdrawals:  []*types.Withdrawal{},
+		Requests:     ub.Requests,
+	})
 
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = bc.Processor().Process(block, bc.CurrentUnsealedBlockState(), *bc.GetVMConfig())
+	_, err := bc.InsertBlockWithoutSetHead(block, false)
 	if err != nil {
 		return nil, err
 	}
