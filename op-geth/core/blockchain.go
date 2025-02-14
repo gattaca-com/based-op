@@ -637,14 +637,24 @@ func (bc *BlockChain) SetSafe(header *types.Header) {
 }
 
 func (bc *BlockChain) SetCurrentUnsealedBlock(block *types.UnsealedBlock) error {
-	new_state, err := state.New(bc.CurrentBlock().Root, bc.statedb)
+	parentBlock := bc.GetBlockByHash(block.Env.ParentHash)
+	if parentBlock == nil {
+		return fmt.Errorf("parent block %s not found", block.Env.ParentHash)
+	}
+
+	newState, err := bc.StateAt(parentBlock.Root())
 	if err != nil {
 		return err
 	}
-	bc.unsealedBlockDbState = new_state
+	bc.unsealedBlockDbState = newState
 	bc.currentUnsealedBlock = block
 
 	return nil
+}
+
+func (bc *BlockChain) ResetCurrentUnsealedBlock() {
+	bc.currentUnsealedBlock = nil
+	bc.unsealedBlockDbState = nil
 }
 
 // rewindHashHead implements the logic of rewindHead in the context of hash scheme.
