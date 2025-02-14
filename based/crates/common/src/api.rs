@@ -20,7 +20,7 @@ pub const CAPABILITIES: &[&str] = &[
     "eth_getBlockByHash",
     "eth_blockNumber",
     "eth_getTransactionCount",
-    "eth_balance",
+    "eth_getBalance",
 ];
 
 pub type OpRpcBlock = alloy_rpc_types::Block<OpTxEnvelope>;

@@ -14,6 +14,9 @@ use tracing::{trace, warn, Level};
 
 use crate::RpcServer;
 
+/// Note: this is a temporary RPC implementation that only serves the lastest state from the sequencer.
+/// It doesn't adhere to the specific block number or hash requests.
+/// This will ultimately be replaced by the RPC server in the EL when the full Frag handling is implemented.
 #[async_trait]
 impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
@@ -45,16 +48,9 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>> {
         trace!(%number, full, "new request");
 
-        let block = match number {
-            BlockNumberOrTag::Latest => self.shared_state.get_latest_block(),
-            BlockNumberOrTag::Number(bn) => self.shared_state.get_block_by_number(bn),
-            _ => None,
-        };
-
-        if block.is_none() {
-            Ok(self.fallback.block_by_number(number, full).await?)
-        } else {
-            Ok(block)
+        match self.shared_state.get_latest_block(full) {
+            Some(block) => Ok(Some(block)),
+            None => Ok(self.fallback.block_by_number(number, full).await?),
         }
     }
 
@@ -62,17 +58,15 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>> {
         trace!(%hash, full, "new request");
 
-        let block = match self.shared_state.get_block_by_hash(hash) {
-            Some(block) => Some(block),
-            None => self.fallback.block_by_hash(hash, full).await?,
-        };
-
-        Ok(block)
+        match self.shared_state.get_latest_block(full) {
+            Some(block) => Ok(Some(block)),
+            None => Ok(self.fallback.block_by_hash(hash, full).await?),
+        }
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn block_number(&self) -> RpcResult<U256> {
-        trace!("block number request");
+        trace!("new request");
 
         let bn = match self.shared_state.get_latest_block_number() {
             Some(bn) => U256::from(bn),
@@ -91,17 +85,13 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
         trace!(%address, ?block_number, "new request");
-        let is_latest = block_number.map(|bn| bn.is_latest()).unwrap_or(true);
-        let nonce = if is_latest {
-            match self.shared_state.as_ref().get_nonce(address) {
-                Ok(nonce) => U256::from(nonce),
-                Err(err) => {
-                    warn!(%err, "failed db fetch");
-                    self.fallback.transaction_count(address, block_number).await?
-                }
+
+        let nonce = match self.shared_state.as_ref().get_nonce(address) {
+            Ok(nonce) => U256::from(nonce),
+            Err(err) => {
+                warn!(%err, "failed db fetch");
+                self.fallback.transaction_count(address, block_number).await?
             }
-        } else {
-            self.fallback.transaction_count(address, block_number).await?
         };
 
         Ok(nonce)
@@ -111,17 +101,12 @@ impl<D: DatabaseRead> EthApiServer for RpcServer<D> {
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
         trace!(%address, ?block_number, "new request");
 
-        let is_latest = block_number.map(|bn| bn.is_latest()).unwrap_or(true);
-        let balance = if is_latest {
-            match self.shared_state.as_ref().get_balance(address) {
-                Ok(balance) => U256::from(balance),
-                Err(err) => {
-                    warn!(%err, "failed db fetch");
-                    self.fallback.balance(address, block_number).await?
-                }
+        let balance = match self.shared_state.as_ref().get_balance(address) {
+            Ok(balance) => U256::from(balance),
+            Err(err) => {
+                warn!(%err, "failed db fetch");
+                self.fallback.balance(address, block_number).await?
             }
-        } else {
-            self.fallback.balance(address, block_number).await?
         };
 
         Ok(balance)

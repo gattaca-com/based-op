@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use alloy_consensus::Header;
+use alloy_rpc_types::BlockTransactions;
+use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use parking_lot::RwLock;
 use revm_primitives::{BlockEnv, HashMap, B256};
@@ -16,7 +18,9 @@ pub struct SharedState<Db> {
     receipts: Arc<RwLock<HashMap<B256, OpTransactionReceipt>>>,
     /// This is a dummy block that is set while we are building frags.
     /// We use it so that we can return a block for the pending block that is getting built.
-    /// Txs will always be empty and the "hash" header fields will be random.
+    /// The "hash" header fields will be random.
+    ///
+    /// Note: this is just temporary while we serve state from the sequencer directly.
     latest_block: Arc<RwLock<Option<OpRpcBlock>>>,
 }
 
@@ -34,7 +38,7 @@ impl<Db> SharedState<Db> {
     }
 
     /// Should be called as soon as we have applied the first frag.
-    pub fn initialise_for_new_block(&self, env: &BlockEnv, parent_hash: B256) {
+    pub fn initialise_for_new_block(&self, env: &BlockEnv, parent_hash: B256, txs: Vec<OpTxEnvelope>) {
         let mut guard = self.latest_block.write();
         debug_assert!(guard.is_none(), "latest block already set");
 
@@ -51,42 +55,50 @@ impl<Db> SharedState<Db> {
         };
         let block = OpRpcBlock {
             header: alloy_rpc_types::Header { hash: B256::random(), inner: header, total_difficulty: None, size: None },
+            transactions: BlockTransactions::Full(txs),
             ..Default::default()
         };
 
         *guard = Some(block);
     }
 
-    pub fn insert_receipt(&mut self, tx_hash: B256, receipt: OpTransactionReceipt) {
-        self.receipts.write().insert(tx_hash, receipt);
+    pub fn insert_confirmed_tx(&mut self, tx: OpTxEnvelope, receipt: OpTransactionReceipt) {
+        self.receipts.write().insert(tx.tx_hash(), receipt);
+
+        let mut guard = self.latest_block.write();
+        debug_assert!(guard.is_some(), "latest block must be set");
+
+        let block = guard.as_mut().unwrap();
+        match &mut block.transactions {
+            BlockTransactions::Full(txs) => txs.push(tx),
+            _ => {
+                block.transactions = BlockTransactions::Full(vec![tx]);
+            }
+        }
     }
 
     pub fn get_receipt(&self, tx_hash: &B256) -> Option<OpTransactionReceipt> {
         self.receipts.read().get(tx_hash).cloned()
     }
 
-    pub fn get_latest_block(&self) -> Option<OpRpcBlock> {
-        self.latest_block.read().clone()
+    pub fn get_latest_block(&self, full: bool) -> Option<OpRpcBlock> {
+        self.latest_block.read().as_ref().map(|block| {
+            let mut block = block.clone();
+            if !full {
+                if let BlockTransactions::Full(items) = &mut block.transactions {
+                    block.transactions = BlockTransactions::Hashes(items.iter().map(|tx| tx.tx_hash()).collect());
+                }
+            }
+            block
+        })
     }
 
     pub fn get_latest_block_hash(&self) -> Option<B256> {
-        self.latest_block.read().as_ref().map(|info| info.header.hash)
+        self.latest_block.read().as_ref().map(|block| block.header.hash)
     }
 
     pub fn get_latest_block_number(&self) -> Option<u64> {
         self.latest_block.read().as_ref().map(|info| info.header.number)
-    }
-
-    /// Returns the latest block if its number matches the requested number.
-    /// Returns None if the block number differs or no latest block exists.
-    pub fn get_block_by_number(&self, number: u64) -> Option<OpRpcBlock> {
-        self.latest_block.read().as_ref().and_then(|info| (info.header.number == number).then_some(info.clone()))
-    }
-
-    /// Returns the latest block if its hash matches the requested hash.
-    /// Returns None if the block hash differs or no latest block exists.
-    pub fn get_block_by_hash(&self, hash: B256) -> Option<OpRpcBlock> {
-        self.latest_block.read().as_ref().and_then(|info| (info.header.hash == hash).then_some(info.clone()))
     }
 }
 
