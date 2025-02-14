@@ -5,7 +5,7 @@ optimism_package:
         - el_type: op-reth
           cl_type: op-node
           cl_image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:latest
-        # # Follower Node Stack (BOP-Node, BOP-EL)
+        # Follower Node Stack (BOP-Node, BOP-EL)
         - el_type: op-geth
           el_image: based_op_geth
           # el_extra_params:
@@ -18,10 +18,9 @@ optimism_package:
       mev_type: based-portal
       mev_params:
         based_portal_image: based_portal_local
-        gateway_image: based_gateway_local
-        # Uncomment for local development, with the gateway starting out of the enclave via make dump gateway
-        # builder_host: "host.docker.internal"
-        # builder_port: "9997"
+        # gateway_image: based_gateway_local
+        builder_host: "172.17.0.1"
+        builder_port: "9997"
         # portal_extra_params:
         #   - --gateway.update_url=http://172.17.0.1:9099/gateways.example.json
       additional_services:

@@ -43,10 +43,10 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
+[features]
+default = []
+shmem = ["bop-common/shmem"]
+
 [[bin]]
 name = "bulk-insert-headers"
 path = "bin/bulk_insert_headers.rs"
-
-[features]
-shmem = ["bop-common/shmem"]
-default = []
