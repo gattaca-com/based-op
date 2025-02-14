@@ -51,14 +51,14 @@ where
 
                 inner.call(req).await
             } else {
-                debug!(method = %req.method_name(), "forwarding request to fallback");
-
                 let params = WrapParams(req.params());
 
                 let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =
                     if req.method_name().contains("engine_") {
+                        debug!(method = %req.method_name(), "forwarding request to fallback");
                         fallback_client.request(req.method_name(), params).await
                     } else {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
                         fallback_eth_client.request(req.method_name(), params).await
                     };
 
