@@ -24,7 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -187,68 +186,54 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		return fmt.Errorf("unsealed block state db not set")
 	}
 
-	chainConfig := bc.Config()
+	emptyHash := common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+	block := types.NewBlockWithHeader(&types.Header{
+		ParentHash:       bc.currentUnsealedBlock.Env.ParentHash,
+		UncleHash:        [32]byte{},
+		Coinbase:         bc.currentUnsealedBlock.Env.Beneficiary,
+		Root:             statedb.GetTrie().Hash(),
+		TxHash:           [32]byte{},
+		ReceiptHash:      [32]byte{},
+		Bloom:            [256]byte{},
+		Difficulty:       bc.currentUnsealedBlock.Env.Difficulty,
+		Number:           new(big.Int).SetUint64(frag.BlockNumber),
+		GasLimit:         bc.currentUnsealedBlock.Env.GasLimit,
+		GasUsed:          bc.currentUnsealedBlock.CumulativeGasUsed,
+		Time:             bc.currentUnsealedBlock.Env.Timestamp,
+		Extra:            bc.currentUnsealedBlock.Env.ExtraData,
+		MixDigest:        [32]byte{},
+		Nonce:            [8]byte{},
+		BaseFee:          new(big.Int).SetUint64(bc.currentUnsealedBlock.Env.Basefee),
+		WithdrawalsHash:  &emptyHash,
+		BlobGasUsed:      &bc.currentUnsealedBlock.CumulativeBlobGasUsed,
+		ExcessBlobGas:    new(uint64),
+		ParentBeaconRoot: &bc.currentUnsealedBlock.Env.ParentBeaconBlockRoot,
+		RequestsHash:     &common.Hash{},
+	}).WithBody(types.Body{
+		Transactions: frag.Txs,
+		Uncles:       []*types.Header{},
+		Withdrawals:  []*types.Withdrawal{},
+		Requests:     []*types.Request{},
+	})
 
-	blockContext := vm.BlockContext{
-		CanTransfer: CanTransfer,
-		Transfer:    Transfer,
-		L1CostFunc:  types.NewL1CostFunc(bc.Config(), statedb),
-		Coinbase:    currentUnsealedBlock.Env.Beneficiary,
-		BlockNumber: new(big.Int).SetUint64(currentUnsealedBlock.Env.Number),
-		Time:        currentUnsealedBlock.Env.Timestamp,
-		Difficulty:  currentUnsealedBlock.Env.Difficulty,
-		GasLimit:    currentUnsealedBlock.Env.GasLimit,
-		GetHash:     func(num uint64) common.Hash { return common.Hash{} },
-		BaseFee:     new(big.Int).SetUint64(currentUnsealedBlock.Env.Basefee),
-		Random:      &currentUnsealedBlock.Env.Prevrandao,
+	res, err := bc.Processor().Process(block, statedb, bc.vmConfig)
+
+	if err != nil {
+		return err
 	}
 
-	vmConfig := bc.GetVMConfig()
-	signer := types.MakeSigner(chainConfig, blockContext.BlockNumber, blockContext.Time)
-	evm := vm.NewEVM(blockContext, vm.TxContext{}, statedb, chainConfig, *vmConfig)
-
-	var (
-		receipts    types.Receipts
-		allLogs     []*types.Log
-		usedGas     uint64
-		blobGasUsed uint64
-	)
-
-	for i, tx := range frag.Txs {
-		statedb.SetTxContext(tx.Hash(), i)
-
-		msg, err := TransactionToMessage(tx, signer, blockContext.BaseFee)
-		if err != nil {
-			return fmt.Errorf("could not make transaction into message %v: %w", tx.Hash().Hex(), err)
-		}
-
-		receipt, err := ApplyTransactionWithEVM(msg, chainConfig, new(GasPool).AddGas(tx.Gas()), statedb, blockContext.BlockNumber, common.Hash{}, tx, &usedGas, evm)
-		if err != nil {
-			return fmt.Errorf("could not apply transaction %v: %w", tx.Hash().Hex(), err)
-		}
-
-		receipts = append(receipts, receipt)
-		allLogs = append(allLogs, receipt.Logs...)
-		blobGasUsed += receipt.BlobGasUsed
-	}
-
-	// Read requests if Prague is enabled.
-	var requests types.Requests
-	if chainConfig.IsPrague(blockContext.BlockNumber, blockContext.Time) {
-		_requests, err := ParseDepositLogs(allLogs, chainConfig)
-		requests = _requests
-		if err != nil {
-			return err
-		}
+	blobGas := uint64(0)
+	for _, receipt := range res.Receipts {
+		blobGas += receipt.BlobGasUsed
 	}
 
 	currentUnsealedBlock.Frags = append(currentUnsealedBlock.Frags, frag)
 	currentUnsealedBlock.LastSequenceNumber = &frag.Seq
-	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, receipts...)
-	currentUnsealedBlock.Logs = append(currentUnsealedBlock.Logs, allLogs...)
-	currentUnsealedBlock.Requests = append(currentUnsealedBlock.Requests, requests...)
-	currentUnsealedBlock.CumulativeGasUsed += usedGas
-	currentUnsealedBlock.CumulativeBlobGasUsed += blobGasUsed
+	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, res.Receipts...)
+	currentUnsealedBlock.Logs = append(currentUnsealedBlock.Logs, res.Logs...)
+	currentUnsealedBlock.Requests = append(currentUnsealedBlock.Requests, res.Requests...)
+	currentUnsealedBlock.CumulativeGasUsed += res.GasUsed
+	currentUnsealedBlock.CumulativeBlobGasUsed += blobGas
 
 	return nil
 }
