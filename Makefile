@@ -81,10 +81,14 @@ gateway: ## 🚀 Run the gateway
 	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
 	--chain ./genesis/genesis-2151908.json \
 	--rpc.port 9997 \
-	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) 
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
+	--test
 
 portal-logs:
 	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
+
+batcher-logs:
+	$(MAKE) logs SERVICE=op-batcher-op-kurtosis
 
 gateway-logs:
 	$(MAKE) logs SERVICE=gateway-1-gateway-op-kurtosis
@@ -94,6 +98,10 @@ op-node-logs:
 
 op-geth-logs:
 	$(MAKE) logs SERVICE=op-el-2-op-geth-op-node-op-kurtosis
+
+op-cl1-logs:
+	$(MAKE) logs SERVICE=op-cl-1-op-node-op-reth-op-kurtosis
+
 
 clean: ## 🧹 Clean
 	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data
