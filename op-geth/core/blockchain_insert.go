@@ -195,7 +195,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		Difficulty:       &big.Int{},
 		Number:           new(big.Int).SetUint64(frag.BlockNumber),
 		GasLimit:         bc.currentUnsealedBlock.Env.GasLimit,
-		GasUsed:          0,
+		GasUsed:          bc.currentUnsealedBlock.CumulativeGasUsed,
 		Time:             bc.currentUnsealedBlock.Env.Timestamp,
 		Extra:            []byte{},
 		MixDigest:        [32]byte{},
@@ -213,7 +213,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		Requests:     []*types.Request{},
 	})
 
-	res, err := bc.Processor().Process(block, bc.unsealedBlockDbState, bc.vmConfig)
+	res, err := bc.Processor().ProcessWithCumulativeGas(block, bc.unsealedBlockDbState, bc.vmConfig, &bc.currentUnsealedBlock.CumulativeGasUsed)
 
 	if err != nil {
 		return err
@@ -228,7 +228,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, res.Receipts...)
 	currentUnsealedBlock.Logs = append(currentUnsealedBlock.Logs, res.Logs...)
 	currentUnsealedBlock.Requests = append(currentUnsealedBlock.Requests, res.Requests...)
-	currentUnsealedBlock.CumulativeGasUsed += res.GasUsed
+	currentUnsealedBlock.CumulativeGasUsed = res.GasUsed
 
 	return nil
 }

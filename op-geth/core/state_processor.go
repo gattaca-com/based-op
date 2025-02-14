@@ -46,6 +46,10 @@ func NewStateProcessor(config *params.ChainConfig, chain *HeaderChain) *StatePro
 	}
 }
 
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (*ProcessResult, error) {
+	return p.ProcessWithCumulativeGas(block, statedb, cfg, new(uint64))
+}
+
 // Process processes the state changes according to the Ethereum rules by running
 // the transaction messages using the statedb and applying any rewards to both
 // the processor (coinbase) and any included uncles.
@@ -53,10 +57,10 @@ func NewStateProcessor(config *params.ChainConfig, chain *HeaderChain) *StatePro
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (*ProcessResult, error) {
+func (p *StateProcessor) ProcessWithCumulativeGas(block *types.Block, statedb *state.StateDB, cfg vm.Config, cumulativeGas *uint64) (*ProcessResult, error) {
 	var (
 		receipts    types.Receipts
-		usedGas     = new(uint64)
+		usedGas     = cumulativeGas
 		header      = block.Header()
 		blockHash   = block.Hash()
 		blockNumber = block.Number()
