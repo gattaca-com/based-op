@@ -95,7 +95,7 @@ op-geth-logs:
 clean: ## 🧹 Clean
 	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data
 
-restart: clean run dump ## 🔄 Restart
+restart: clean run ## 🔄 Restart
 
 # Testing
 
