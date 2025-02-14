@@ -17,6 +17,7 @@
 OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurtosis | grep 'rpc: 8541/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 
 # Recipes
 
@@ -39,6 +40,7 @@ deps: ## 🚀 Install all dependencies
 
 build: build-portal build-gateway build-op-node build-op-geth ## 🏗️ Build
 
+build-no-gateway: build-portal build-op-node build-op-geth ## 🏗️ Build without gateway
 build-portal: ## 🏗️ Build based portal from based directory
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
@@ -57,7 +59,9 @@ build-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t based_op_geth ./op-geth
 
 run: ## 🚀 Run
-	kurtosis run optimism-package --args-file config.yml --enclave based-op
+	kurtosis run optimism-package --args-file config.yml --enclave based-op && $(MAKE) dump
+
+restart-no-gateway: clean build-no-gateway run ## rip rebuild run
 
 run-follower: ## 🚀 Run a single follower node with RPC enabled.
 	kurtosis run optimism-package --args-file config-geth-cluster.yml --enclave based-op
@@ -72,10 +76,9 @@ gateway: ## 🚀 Run the gateway
 	RUST_LOG=debug cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway -- \
 	--db.datadir ./data \
 	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
-	--chain-spec ./genesis/genesis-2151908.json \
+	--chain ./genesis/genesis-2151908.json \
 	--rpc.port 9997 \
-	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
-	--test
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT)
 
 portal-logs:
 	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
@@ -84,10 +87,10 @@ gateway-logs:
 	$(MAKE) logs SERVICE=gateway-1-gateway-op-kurtosis
 
 op-node-logs:
-	$(MAKE) logs SERVICE=op-cl-1-op-node-op-geth-op-kurtosis
+	$(MAKE) logs SERVICE=op-cl-2-op-node-op-geth-op-kurtosis
 
 op-geth-logs:
-	$(MAKE) logs SERVICE=op-el-1-op-geth-op-node-op-kurtosis
+	$(MAKE) logs SERVICE=op-el-2-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
 	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data
@@ -100,6 +103,9 @@ FOLLOWER_NODE_HOST?=http://localhost
 BLOCK_NUMBER?=$(shell echo $$(( $$(cast block-number --rpc-url http://localhost:$(BOP_EL_PORT)) + 1 )))
 DUMMY_RICH_WALLET_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 DUMMY_TX=$(shell cast mktx --rpc-url  $(FOLLOWER_NODE_HOST):$(BOP_EL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a | xxd -r -p | base64)
+
+test-tx:
+	cast send --rpc-url  http://127.0.0.1:$(PORTAL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a
 
 test-frag:
 	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \

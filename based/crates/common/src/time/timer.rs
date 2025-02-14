@@ -40,7 +40,7 @@ impl From<TimingMessage> for Duration {
     }
 }
 
-const QUEUE_SIZE: usize = 2usize.pow(17);
+const QUEUE_SIZE: usize = 16384;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -54,20 +54,29 @@ impl Timer {
     pub fn new<S: Display>(name: S) -> Self {
         let dirstr = queues_dir_string();
         let _ = std::fs::create_dir_all(&dirstr);
+        if cfg!(feature = "shmem") {
+            let file = format!("{dirstr}/timing-{name}");
 
-        let file = format!("{dirstr}/timing-{name}");
+            let timing_queue =
+                Queue::create_or_open_shared(file, QUEUE_SIZE, QueueType::MPMC).expect("couldn't open timing queue");
 
-        let timing_queue =
-            Queue::create_or_open_shared(file, QUEUE_SIZE, QueueType::MPMC).expect("couldn't open timing queue");
+            let file = format!("{dirstr}/latency-{name}");
+            let latency_queue =
+                Queue::create_or_open_shared(file, QUEUE_SIZE, QueueType::MPMC).expect("couldn't open latency queue");
+            Timer {
+                curmsg: Default::default(),
+                timing_producer: Producer::from(timing_queue),
+                latency_producer: Producer::from(latency_queue),
+            }
+        } else {
+            let timing_queue = Queue::new(QUEUE_SIZE, QueueType::MPMC).expect("couldn't open timing queue");
 
-        let file = format!("{dirstr}/latency-{name}");
-        let latency_queue =
-            Queue::create_or_open_shared(file, QUEUE_SIZE, QueueType::MPMC).expect("couldn't open latency queue");
-
-        Timer {
-            curmsg: Default::default(),
-            timing_producer: Producer::from(timing_queue),
-            latency_producer: Producer::from(latency_queue),
+            let latency_queue = Queue::new(QUEUE_SIZE, QueueType::MPMC).expect("couldn't open latency queue");
+            Timer {
+                curmsg: Default::default(),
+                timing_producer: Producer::from(timing_queue),
+                latency_producer: Producer::from(latency_queue),
+            }
         }
     }
 }

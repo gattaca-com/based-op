@@ -124,22 +124,12 @@ pub struct SealV0 {
     pub block_hash: B256,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SignedMessage {
-    pub signature: Bytes,
-    pub message: VersionedMessage,
-}
+impl VersionedMessage {
+    pub fn to_json(&self, signer: &ECDSASigner) -> serde_json::Value {
+        let signature = signer.sign_message(self.tree_hash_root()).expect("couldn't sign message");
+        let signature = Bytes::from(signature.as_bytes());
 
-impl SignedMessage {
-    pub fn new(signer: &ECDSASigner, message: VersionedMessage) -> Self {
-        let signature = signer.sign_message(message.tree_hash_root()).expect("couldn't sign message");
-        let signature = signature.as_bytes().into();
-
-        Self { signature, message }
-    }
-
-    pub fn to_json(self) -> serde_json::Value {
-        let method = match self.message {
+        let method = match &self {
             VersionedMessage::FragV0(_) => "based_newFrag",
             VersionedMessage::SealV0(_) => "based_sealFrag",
             VersionedMessage::EnvV0(_) => "based_env",
@@ -148,7 +138,7 @@ impl SignedMessage {
         serde_json::json!({
             "jsonrpc": "2.0",
             "method": method,
-            "params": [self],
+            "params": [{"signature": signature, "message": self}],
             "id": 1
         })
     }

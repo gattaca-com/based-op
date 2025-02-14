@@ -66,7 +66,10 @@ impl AlloyDB {
     }
 }
 
-impl DatabaseRef for AlloyDB {
+impl DatabaseRef for AlloyDB
+where
+    Error: Debug,
+{
     type Error = ProviderError;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
