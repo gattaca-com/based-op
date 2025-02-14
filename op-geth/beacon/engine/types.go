@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
@@ -419,8 +420,46 @@ func (v *ClientVersionV1) String() string {
 	return fmt.Sprintf("%s-%s-%s-%s", v.Code, v.Name, v.Version, v.Commit)
 }
 
-func SealBlock(ub *types.UnsealedBlock) (*types.Block, error) {
-	return nil, fmt.Errorf("not implemented")
+func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, error) {
+	if bc.CurrentUnsealedBlockState() == nil {
+		return nil, fmt.Errorf("unsealed block state db not set")
+	}
+
+	block := types.NewBlockWithHeader(&types.Header{
+		ParentHash:       ub.Env.ParentHash,
+		UncleHash:        types.EmptyUncleHash,
+		Coinbase:         ub.Env.Beneficiary,
+		Root:             bc.CurrentUnsealedBlockState().IntermediateRoot(bc.Config().IsEIP158(new(big.Int).SetUint64(ub.Env.Number))),
+		TxHash:           types.DeriveSha(types.Transactions(ub.Transactions()), trie.NewStackTrie(nil)),
+		ReceiptHash:      types.DeriveSha(ub.Receipts, trie.NewStackTrie(nil)),
+		Bloom:            types.CreateBloom(ub.Receipts),
+		Difficulty:       ub.Env.Difficulty,
+		Number:           new(big.Int).SetUint64(ub.Env.Number),
+		GasLimit:         ub.Env.GasLimit,
+		GasUsed:          ub.CumulativeGasUsed,
+		Time:             ub.Env.Timestamp,
+		Extra:            ub.Env.ExtraData,
+		MixDigest:        ub.Env.Prevrandao,
+		Nonce:            types.EncodeNonce(0),
+		BaseFee:          new(big.Int).SetUint64(ub.Env.Basefee),
+		WithdrawalsHash:  &types.EmptyWithdrawalsHash,
+		BlobGasUsed:      new(uint64),
+		ExcessBlobGas:    new(uint64),
+		ParentBeaconRoot: &ub.Env.ParentBeaconBlockRoot,
+		// RequestsHash:     &types.EmptyRequestsHash, // TODO: Double check this is ok, in the Rust side it is done this way, but we have an types.EmptyRequestsHash available to use.
+	}).WithBody(types.Body{
+		Transactions: ub.Transactions(),
+		Uncles:       nil,
+		Withdrawals:  []*types.Withdrawal{},
+		Requests:     ub.Requests,
+	})
+
+	_, err := bc.InsertBlockWithoutSetHead(block, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return block, nil
 }
 
 type Bytes65 [65]byte
