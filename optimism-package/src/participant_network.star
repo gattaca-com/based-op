@@ -85,7 +85,7 @@ def launch_participant_network(
         plan,
         "op-batcher-{0}".format(l2_services_suffix),
         op_batcher_image,
-        all_el_contexts[0],
+        all_el_contexts[2], # FIXME: This should be the portal, right now it is the vanilla OP-EL
         all_cl_contexts[0],
         l1_config_env_vars,
         batcher_key,
