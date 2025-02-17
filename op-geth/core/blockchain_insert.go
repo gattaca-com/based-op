@@ -185,35 +185,34 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	}
 
 	block := types.NewBlockWithHeader(&types.Header{
-		ParentHash:       [32]byte{},
-		UncleHash:        [32]byte{},
-		Coinbase:         [20]byte{},
+		ParentHash:       currentUnsealedBlock.Env.ParentHash,
+		UncleHash:        types.EmptyUncleHash,
+		Coinbase:         currentUnsealedBlock.Env.Beneficiary,
 		Root:             [32]byte{},
 		TxHash:           [32]byte{},
 		ReceiptHash:      [32]byte{},
 		Bloom:            [256]byte{},
-		Difficulty:       &big.Int{},
+		Difficulty:       currentUnsealedBlock.Env.Difficulty,
 		Number:           new(big.Int).SetUint64(frag.BlockNumber),
-		GasLimit:         bc.currentUnsealedBlock.Env.GasLimit,
-		GasUsed:          0,
-		Time:             bc.currentUnsealedBlock.Env.Timestamp,
-		Extra:            []byte{},
-		MixDigest:        [32]byte{},
-		Nonce:            [8]byte{},
-		BaseFee:          &big.Int{},
-		WithdrawalsHash:  &common.Hash{},
+		GasLimit:         currentUnsealedBlock.Env.GasLimit,
+		GasUsed:          currentUnsealedBlock.CumulativeGasUsed,
+		Time:             currentUnsealedBlock.Env.Timestamp,
+		Extra:            currentUnsealedBlock.Env.ExtraData,
+		MixDigest:        currentUnsealedBlock.Env.Prevrandao,
+		Nonce:            types.EncodeNonce(0),
+		BaseFee:          new(big.Int).SetUint64(currentUnsealedBlock.Env.Basefee),
+		WithdrawalsHash:  &types.EmptyWithdrawalsHash,
 		BlobGasUsed:      new(uint64),
 		ExcessBlobGas:    new(uint64),
-		ParentBeaconRoot: &bc.currentUnsealedBlock.Env.ParentBeaconBlockRoot,
-		RequestsHash:     &common.Hash{},
+		ParentBeaconRoot: &currentUnsealedBlock.Env.ParentBeaconBlockRoot,
 	}).WithBody(types.Body{
 		Transactions: frag.Txs,
-		Uncles:       []*types.Header{},
+		Uncles:       nil,
 		Withdrawals:  []*types.Withdrawal{},
 		Requests:     []*types.Request{},
 	})
 
-	res, err := bc.Processor().Process(block, bc.unsealedBlockDbState, bc.vmConfig)
+	res, err := bc.Processor().ProcessWithCumulativeGas(block, bc.unsealedBlockDbState, bc.vmConfig, &bc.currentUnsealedBlock.CumulativeGasUsed)
 
 	if err != nil {
 		return err
@@ -228,7 +227,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, res.Receipts...)
 	currentUnsealedBlock.Logs = append(currentUnsealedBlock.Logs, res.Logs...)
 	currentUnsealedBlock.Requests = append(currentUnsealedBlock.Requests, res.Requests...)
-	currentUnsealedBlock.CumulativeGasUsed += res.GasUsed
+	currentUnsealedBlock.CumulativeGasUsed = res.GasUsed
 
 	return nil
 }
