@@ -49,6 +49,7 @@ type Processor interface {
 	// the transaction messages using the statedb and applying any rewards to both
 	// the processor (coinbase) and any included uncles.
 	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (*ProcessResult, error)
+	ProcessWithCumulativeGas(block *types.Block, statedb *state.StateDB, cfg vm.Config, cumulativeGas *uint64) (*ProcessResult, error)
 }
 
 // ProcessResult contains the values computed by Process.
