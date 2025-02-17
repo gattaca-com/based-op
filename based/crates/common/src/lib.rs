@@ -4,7 +4,6 @@ pub mod communication;
 pub mod config;
 pub mod db;
 pub mod p2p;
-pub mod runtime;
 pub mod shared;
 pub mod signing;
 pub mod time;

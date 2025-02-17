@@ -27,7 +27,7 @@ pub struct Simulator<'a, Db: DatabaseRef> {
     /// Top of frag evm.
     evm_tof: Evm<'a, (), State<DBFrag<Db>>>,
     /// Evm on top of partially built frag
-    evm_sorting: Evm<'a, (), State<DBSorting<Db>>>,
+    pub evm_sorting: Evm<'a, (), State<DBSorting<Db>>>,
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
     /// How to create an EVM.
@@ -51,7 +51,7 @@ where
     }
 
     /// Simulates a transaction at the state of the `db` parameter.
-    fn simulate_transaction<SimulateTxDb: DatabaseRef>(
+    pub fn simulate_transaction<SimulateTxDb: DatabaseRef>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
         evm: &mut Evm<'a, (), State<SimulateTxDb>>,
@@ -68,7 +68,7 @@ where
 
     /// Updates internal EVM environments with new configuration
     #[inline]
-    fn update_evm_environments(&mut self, evm_block_params: EvmBlockParams) {
+    pub fn update_evm_environments(&mut self, evm_block_params: EvmBlockParams) {
         let timestamp = u64::try_from(evm_block_params.env.block.timestamp).unwrap();
         self.evm_tof.modify_spec_id(evm_block_params.spec_id);
         self.evm_tof.context.evm.env = evm_block_params.env.clone();

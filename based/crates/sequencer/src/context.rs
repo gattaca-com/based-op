@@ -191,15 +191,18 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         let seq = FragSequence::new(self.gas_limit(), self.block_number(), self.timestamp());
         let mut sorting = SortingData::new(&seq, self);
 
-        // Initialise the shared state for this new pending block
-        self.shared_state.initialise_for_new_block(&env_with_handler_cfg.block, self.parent_header.parent_hash);
-
-        sorting.apply_block_start_to_state(self, env_with_handler_cfg).expect("shouldn't fail");
+        // Apply must include
+        sorting.apply_block_start_to_state(self, env_with_handler_cfg.clone()).expect("shouldn't fail");
         self.tx_pool.remove_mined_txs(sorting.txs.iter());
+
+        // Initialise the shared state for this new pending block
+        let txs = sorting.txs.iter().map(|tx| tx.tx.tx.clone()).collect();
+        self.shared_state.initialise_for_new_block(&env_with_handler_cfg.block, self.parent_header.parent_hash, txs);
+
         (seq, sorting)
     }
 
-    fn new_block_params(&mut self) -> (EvmBlockParams, EnvWithHandlerCfg) {
+    pub fn new_block_params(&mut self) -> (EvmBlockParams, EnvWithHandlerCfg) {
         let attributes = &self.payload_attributes;
         let env_attributes = NextBlockEnvAttributes {
             timestamp: attributes.payload_attributes.timestamp,
@@ -319,7 +322,6 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
     pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
         let blocks_to_fetch = self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
-        self.shared_state.reset();
 
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();

@@ -412,12 +412,13 @@ def launch(
                     all_el_contexts,
                     el_context,
                     el_builder_context,
+                    mev_params.portal_extra_params,
                 )
 
                 # use sidecar RPC in place of the sequencer RPC to broadcast txs
                 # (this will be removed at some point)
                 all_el_contexts.append(sidecar_context)
-                # all_el_contexts.append(el_builder_context)
+                all_el_contexts.append(el_builder_context)
             elif mev_type:
                 fail("UNSUPPORTED MEV TYPE: {0}".format(mev_type))
 

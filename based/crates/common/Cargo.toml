@@ -75,3 +75,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[features]
+shmem = []
+default = []
