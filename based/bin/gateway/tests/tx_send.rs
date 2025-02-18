@@ -186,7 +186,7 @@ fn tx_spammer() {
                 }
             }
         }
-        println!("avg receipt response time for {n} reqs: {}", tot/n);
+        println!("avg receipt response time for {n} reqs: {}", tot / n);
     }
 }
 

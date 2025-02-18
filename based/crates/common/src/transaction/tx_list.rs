@@ -16,7 +16,7 @@ impl TxList {
     #[inline]
     pub fn empty_for_sender(sender: Address) -> Self {
         debug_assert_ne!(sender, Address::default(), "should never have sender {sender}");
-        Self {sender, txs: VecDeque::new()}
+        Self { sender, txs: VecDeque::new() }
     }
 
     #[inline]
