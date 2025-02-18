@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bop_common::{
     actor::{Actor, ActorConfig},
-    communication::{verify_or_remove_queue_files, Spine},
+    communication::Spine,
     config::GatewayArgs,
     shared::SharedState,
     time::Duration,
@@ -29,7 +29,8 @@ fn main() {
 
     let args = GatewayArgs::parse();
     let _guards = init_tracing((&args).into());
-    verify_or_remove_queue_files();
+    #[cfg(feature = "shmem")]
+    bop_common::communication::verify_or_remove_queue_files();
 
     match run(args) {
         Ok(_) => {
