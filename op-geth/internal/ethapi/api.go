@@ -2056,10 +2056,8 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash commo
 func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber uint64, signer types.Signer, tx *types.Transaction, txIndex int, baseFee *big.Int, chainConfig *params.ChainConfig) map[string]interface{} {
 	from, _ := types.Sender(signer, tx)
 
-	// TODO: Change this with something real
 	effectiveGasPrice := receipt.EffectiveGasPrice
 	if effectiveGasPrice == nil {
-		// TODO: Check this
 		effectiveGasPrice = tx.EffectiveGasPrice(baseFee)
 	}
 	fields := map[string]interface{}{
