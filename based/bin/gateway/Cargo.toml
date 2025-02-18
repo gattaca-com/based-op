@@ -18,3 +18,7 @@ reth-optimism-chainspec.workspace = true
 revm-primitives.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+
+[features]
+default = []
+shmem = ["bop-common/shmem"]
