@@ -1405,7 +1405,11 @@ func (api *ConsensusAPI) ValidateNewFragV0(frag engine.SignedNewFrag, currentUns
 
 	// Check that the frag sequence number is the next one
 	if !currentUnsealedBlock.IsNextFrag(&frag.Frag) {
-		return fmt.Errorf("frag sequence number is not the next one, expected %d, received %d", *currentUnsealedBlock.LastSequenceNumber+1, frag.Frag.Seq)
+		var expected uint64
+		if currentUnsealedBlock.LastSequenceNumber != nil {
+			expected = *currentUnsealedBlock.LastSequenceNumber + 1
+		}
+		return fmt.Errorf("frag sequence number is not the next one, expected %d, received %d", expected, frag.Frag.Seq)
 	}
 
 	return nil
