@@ -653,6 +653,11 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 	return &Transaction{inner: cpy, time: tx.time}, nil
 }
 
+func (tx *Transaction) EffectiveGasPrice(baseFee *big.Int) *big.Int {
+	dst := new(big.Int)
+	return tx.inner.effectiveGasPrice(dst, baseFee)
+}
+
 // Transactions implements DerivableList for transactions.
 type Transactions []*Transaction
 

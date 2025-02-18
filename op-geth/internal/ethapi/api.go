@@ -1047,7 +1047,7 @@ func (api *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rp
 
 	result := make([]map[string]interface{}, len(receipts))
 	for i, receipt := range receipts {
-		result[i] = marshalReceipt(receipt, block.Hash(), block.NumberU64(), signer, txs[i], i, api.b.ChainConfig())
+		result[i] = marshalReceipt(receipt, block.Hash(), block.NumberU64(), signer, txs[i], i, new(big.Int), api.b.ChainConfig())
 	}
 
 	return result, nil
@@ -2028,7 +2028,7 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash commo
 				if receipt.TxHash.Cmp(hash) == 0 {
 					signer := types.MakeSigner(api.b.ChainConfig(), new(big.Int).SetUint64(ub.Env.Number), ub.Env.Timestamp)
 					log.Info("Sending receipt from Unsealed block", "txHash", hash)
-					return marshalReceipt(receipt, ub.Hash, ub.Env.Number, signer, ub.Transactions()[i], i, api.b.ChainConfig()), nil
+					return marshalReceipt(receipt, ub.Hash, ub.Env.Number, signer, ub.Transactions()[i], i, new(big.Int).SetUint64(ub.Env.Basefee), api.b.ChainConfig()), nil
 				}
 			}
 		}
@@ -2049,18 +2049,18 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash commo
 
 	// Derive the sender.
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
-	return marshalReceipt(receipt, blockHash, blockNumber, signer, tx, int(index), api.b.ChainConfig()), nil
+	return marshalReceipt(receipt, blockHash, blockNumber, signer, tx, int(index), new(big.Int), api.b.ChainConfig()), nil
 }
 
 // marshalReceipt marshals a transaction receipt into a JSON object.
-func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber uint64, signer types.Signer, tx *types.Transaction, txIndex int, chainConfig *params.ChainConfig) map[string]interface{} {
+func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber uint64, signer types.Signer, tx *types.Transaction, txIndex int, baseFee *big.Int, chainConfig *params.ChainConfig) map[string]interface{} {
 	from, _ := types.Sender(signer, tx)
 
 	// TODO: Change this with something real
-	gasPrice := receipt.EffectiveGasPrice
-	if gasPrice == nil {
+	effectiveGasPrice := receipt.EffectiveGasPrice
+	if effectiveGasPrice == nil {
 		// TODO: Check this
-		gasPrice = new(big.Int).SetInt64(0)
+		effectiveGasPrice = tx.EffectiveGasPrice(baseFee)
 	}
 	fields := map[string]interface{}{
 		"blockHash":         blockHash,
@@ -2075,7 +2075,7 @@ func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber u
 		"logs":              receipt.Logs,
 		"logsBloom":         receipt.Bloom,
 		"type":              hexutil.Uint(tx.Type()),
-		"effectiveGasPrice": (*hexutil.Big)(gasPrice),
+		"effectiveGasPrice": (*hexutil.Big)(effectiveGasPrice),
 	}
 
 	if chainConfig.Optimism != nil && !tx.IsDepositTx() {
