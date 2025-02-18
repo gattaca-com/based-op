@@ -182,3 +182,6 @@ test-env:
 			} \
 		] \
 	}'
+
+follower-node-proxy:
+	docker run --rm --network kt-based-op -p 8545:8545 cars10/simprox simprox --skip-ssl-verify=true -l 0.0.0.0:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545
