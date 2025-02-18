@@ -64,6 +64,9 @@ build-op-geth: ## 🏗️ Build OP geth from op-eth directory
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op && $(MAKE) dump
 
+run-maxgas: ## 🚀 Run
+	kurtosis run optimism-package --args-file config_maxgas.yml --enclave based-op && $(MAKE) dump
+
 restart-no-gateway: clean build-no-gateway run ## rip rebuild run
 
 run-follower: ## 🚀 Run a single follower node with RPC enabled.
@@ -76,12 +79,13 @@ dump:
 	bash -c 'kurtosis files download based-op $$(kurtosis enclave inspect based-op | grep op-deployer-configs | awk "{print \$$1}") ./genesis'
 
 gateway: ## 🚀 Run the gateway
-	RUST_LOG=debug cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway -- \
+	RUST_LOG=debug cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway --features shmem -- \
 	--db.datadir ./data \
 	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
 	--chain ./genesis/genesis-2151908.json \
 	--rpc.port 9997 \
 	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT)
+
 
 batcher-logs:
 	$(MAKE) logs SERVICE=op-batcher-op-kurtosis
@@ -93,10 +97,10 @@ gateway-logs:
 	$(MAKE) logs SERVICE=gateway-1-gateway-op-kurtosis
 
 op-node-logs:
-	$(MAKE) logs SERVICE=op-cl-1-op-node-op-geth-op-kurtosis
+	$(MAKE) logs SERVICE=op-cl-2-op-node-op-geth-op-kurtosis
 
 op-geth-logs:
-	$(MAKE) logs SERVICE=op-el-1-op-geth-op-node-op-kurtosis
+	$(MAKE) logs SERVICE=op-el-2-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
 	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data

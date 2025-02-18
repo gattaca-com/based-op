@@ -35,8 +35,9 @@ fn tx_roundtrip() {
     });
 
     let response = client.post(portal_url.clone()).json(&payload).send().expect("couldn't send message to portal");
-
-    let response: RpcResponse<U256> = serde_json::from_str(&response.text().expect("couldn't get response text"))
+    let t =response.text().expect("couldn't get response text");
+    println!("response {t}");
+    let response: RpcResponse<U256> = serde_json::from_str(&t)
         .expect("couldn't parse tx response");
 
     let tx = TxEip1559 {
