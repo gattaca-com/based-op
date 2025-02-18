@@ -74,6 +74,19 @@ func (ub *UnsealedBlock) ByteTransactions() [][]byte {
 	return txs
 }
 
+func (ub *UnsealedBlock) TempHeader() *Header {
+	return &Header {
+		ParentHash:            ub.Env.ParentHash,
+		ParentBeaconRoot:      &ub.Env.ParentBeaconBlockRoot,
+		Number:                new(big.Int).SetUint64(ub.Env.Number),
+		Time:                  ub.Env.Timestamp,
+		Extra:                 ub.Env.ExtraData,
+		GasLimit:              ub.Env.GasLimit,
+		BaseFee:               new(big.Int).SetUint64(ub.Env.Basefee),
+		Difficulty:            ub.Env.Difficulty,
+	}
+}
+
 type Frag struct {
 	BlockNumber uint64
 	Seq         uint64
