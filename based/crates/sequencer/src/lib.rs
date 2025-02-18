@@ -429,7 +429,7 @@ where
                     return self;
                 }
                 data.timers.handle_sim.start();
-                sort_data.handle_sim(simulated_tx, &sender, data.as_ref().basefee.to(), simtime);
+                sort_data.handle_sim(simulated_tx, sender, data.as_ref().basefee.to(), simtime);
                 data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
@@ -480,13 +480,13 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
                 data.timers.handle_deposits.stop();
 
                 data.timers.send_next.start();
-                let new_sorting_data = sorting_data.send_next(data.config.n_per_loop, connections);
-                if new_sorting_data.in_flight_sims > 1 {
+                sorting_data.send_next(data.config.n_per_loop, connections);
+                if sorting_data.in_flight_sims > 1 {
                     data.timers.waiting_for_sims.stop();
                     data.timers.send_next.stop();
                     data.timers.waiting_for_sims.start();
                 }
-                Sorting(seq, new_sorting_data)
+                Sorting(seq, sorting_data)
             }
 
             _ => self,

@@ -11,6 +11,7 @@ pub(crate) use sorting_data::SortingData;
 pub(crate) mod frag_sequence;
 
 pub(crate) use frag_sequence::FragSequence;
+use tracing::debug;
 
 #[derive(Clone, Debug, Default)]
 pub struct ActiveOrders {
@@ -36,18 +37,22 @@ impl ActiveOrders {
 
     /// Removes all pending txs for a sender list.
     /// We remove all as nonces needed to be mined in sequential order.
-    pub fn remove_from_sender(&mut self, sender: &Address, base_fee: u64) {
+    pub fn remove_from_sender(&mut self, sender: Address, base_fee: u64) {
         if self.is_empty() {
             return;
         }
         for i in (0..self.len()).rev() {
             let order = &mut self.orders[i];
-            // tracing::info!("checked from {} vs {sender}", order.sender());
-            if &order.sender() == sender && order.pop(base_fee) {
-                self.orders.swap_remove_back(i);
+            debug_assert_ne!(order.sender(), Address::default(), "should never have an order with default sender");
+
+            if order.sender() == sender {
+                if order.pop(base_fee) {
+                    self.orders.swap_remove_back(i);
+                }
                 return;
             }
         }
+        unreachable!("this should never happen");
     }
 
     pub fn put(&mut self, tx: SimulatedTx) {
@@ -68,13 +73,8 @@ impl ActiveOrders {
     }
 
     /// Checks whether we have enough gas remaining for order at id.
-    /// If not: swap remove and return true
-    pub fn verify_gas(&mut self, id: usize, gas_remaining: u64) -> bool {
-        if self.orders[id].gas_limit().is_none_or(|gas| gas_remaining < gas) {
-            self.orders.swap_remove_back(id);
-            return true;
-        }
-        false
+    pub fn not_enough_gas(&mut self, id: usize, gas_remaining: u64) -> bool {
+        self.orders[id].gas_limit().is_none_or(|gas| gas_remaining < gas)
     }
 }
 

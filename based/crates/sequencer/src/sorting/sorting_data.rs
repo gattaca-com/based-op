@@ -20,9 +20,10 @@ use reth_evm::{
     ConfigureEvm,
 };
 use reth_optimism_evm::OpBlockExecutionError;
+use reth_optimism_primitives::transaction::TransactionSenderInfo;
 use revm::{Database, DatabaseRef};
 use revm_primitives::{Address, EnvWithHandlerCfg, U256};
-use tracing::trace;
+use tracing::{debug, trace};
 
 use super::FragSequence;
 use crate::{context::SequencerContext, simulator::simulate_tx_inner, sorting::ActiveOrders};
@@ -40,7 +41,11 @@ impl SortingTelemetry {
         tracing::info!(
             "{} total sims: {}% success, tot simtime {}",
             self.n_sims_sent,
-            (self.n_sims_succesful * 10000 / self.n_sims_errored.max(1)) as f64 / 100.0,
+            if self.n_sims_errored == 0 {
+                100.0
+            } else {
+                (self.n_sims_succesful * 10000 / self.n_sims_errored) as f64 / 100.0
+            },
             self.tot_sim_time
         );
     }
@@ -143,7 +148,7 @@ impl<Db> SortingData<Db> {
     pub fn handle_sim(
         &mut self,
         simulated_tx: SimulationResult<SimulatedTx>,
-        sender: &Address,
+        sender: Address,
         base_fee: u64,
         simtime: Duration,
     ) {
@@ -223,17 +228,17 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         }
     }
 
-    pub fn send_next(mut self, n_sims_per_loop: usize, senders: &mut SpineConnections<Db>) -> Self {
+    pub fn send_next(&mut self, n_sims_per_loop: usize, senders: &mut SpineConnections<Db>) {
         if self.tof_snapshot.len() == 0 {
-            return self;
+            return;
         }
         let mut i = self.tof_snapshot.len() - 1;
         while self.in_flight_sims < n_sims_per_loop {
             // check if we even have enough gas left for next order
-            if self.tof_snapshot.verify_gas(i, self.gas_remaining) {
+            if self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
                 self.tof_snapshot.swap_remove_back(i);
                 if i == 0 {
-                    return self;
+                    return;
                 }
                 i -= 1;
                 continue;
@@ -245,12 +250,10 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
             self.in_flight_sims += 1;
             self.telemetry.n_sims_sent += 1;
             if i == 0 {
-                return self;
+                return;
             }
             i -= 1;
         }
-
-        self
     }
 
     pub fn state(&self) -> DBSorting<Db> {
@@ -271,7 +274,7 @@ impl<Db: DatabaseRef> SortingData<Db> {
 
     pub fn maybe_apply(&mut self, base_fee: u64) {
         if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
-            self.tof_snapshot.remove_from_sender(&tx_to_apply.sender(), base_fee);
+            self.tof_snapshot.remove_from_sender(tx_to_apply.sender(), base_fee);
             self.apply_tx(tx_to_apply);
         }
     }
