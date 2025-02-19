@@ -125,3 +125,13 @@ ethereum_package:
       el_image: ethereum/client-go:v1.14.13
 
 ```
+
+## Wallets
+
+Wallets commonly use a high polling interval for the transaction receipt. To be able to see the preconfirmation speed, we modify Rabby to speed up that interval. You can test it compiling it:
+
+```sh
+make build-rabby
+```
+
+And importing it to your browser locally (see [Firefox](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/) or [Chrome](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world?hl=es-419#load-unpacked) references). The compiled extension directory is `rabby/dist`
