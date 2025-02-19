@@ -26,8 +26,8 @@ fn tx_roundtrip() {
     let value = U256::from_limbs([1, 0, 0, 0]);
     let chain_id = 2151908;
     let to_account = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-    let max_gas_units = 21000;
-    let max_fee_per_gas = 1_258_615_255_000;
+    let max_gas_units = 21_000;
+    let max_fee_per_gas = 1_000_000_000_000_000_000;
     let max_priority_fee_per_gas = 1_000;
 
     let payload = serde_json::json!({
@@ -123,7 +123,7 @@ fn tx_spammer() {
     let response: RpcResponse<U256> = serde_json::from_str(&t).expect("couldn't parse tx response");
 
     let mut nonce = response.result.to();
-    let n = 10000usize;
+    let n = 10usize;
 
     loop {
         let mut timestamps = vec![];

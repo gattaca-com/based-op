@@ -67,6 +67,9 @@ run: ## 🚀 Run
 run-maxgas: ## 🚀 Run
 	kurtosis run optimism-package --args-file config_maxgas.yml --enclave based-op && $(MAKE) dump
 
+run-multiple: ## 🚀 Run
+	kurtosis run optimism-package --args-file config_multiple_gateways.yml --enclave based-op && $(MAKE) dump
+
 restart-no-gateway: clean build-no-gateway run ## rip rebuild run
 
 run-follower: ## 🚀 Run a single follower node with RPC enabled.
@@ -80,10 +83,10 @@ dump:
 
 gateway: ## 🚀 Run the gateway
 	cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway --features shmem -- \
-	--db.datadir ./data \
+	--db.datadir $(datadir) \
 	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
 	--chain ./genesis/genesis-2151908.json \
-	--rpc.port 9997 \
+	--rpc.port $(port) \
 	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT)
 
 
