@@ -147,6 +147,13 @@ export const CustomTestnetForm = ({
         >
           <Input autoComplete="off" disabled={disabled} />
         </Form.Item>
+        <Form.Item
+          label={t('page.customTestnet.CustomTestnetForm.txPollingInterval')}
+          name="pollingInterval"
+          rules={[{ pattern: /^\d+$/, message: t('page.customTestnet.CustomTestnetForm.txPollingIntervalInvalidNumber'), }]}
+        >
+          <Input autoComplete="off" disabled={disabled} type="number" />
+        </Form.Item>
       </Form>
     </Warper>
   );

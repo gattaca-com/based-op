@@ -30,6 +30,7 @@ export interface TestnetChainBase {
   nativeTokenSymbol: string;
   rpcUrl: string;
   scanLink?: string;
+  pollingInterval?: number;
 }
 
 export interface TestnetChain extends TestnetChainBase {

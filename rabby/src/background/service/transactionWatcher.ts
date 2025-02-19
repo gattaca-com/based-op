@@ -10,8 +10,11 @@ import { format, getTxScanLink } from '@/utils';
 import eventBus from '@/eventBus';
 import { EVENTS } from '@/constant';
 import interval from 'interval-promise';
-import { findChain, findChainByEnum } from '@/utils/chain';
-import { customTestnetService } from './customTestnet';
+import { findChain, findChainByEnum, isTestnetChainId } from '@/utils/chain';
+import { customTestnetService, TestnetChain } from './customTestnet';
+
+const DEFAULT_TX_POLLING_INTERVAL = 5000 // 5 seconds
+const FAST_TX_POLLING_INTERVAL = 200 // 200 milliseconds
 
 class Transaction {
   createdTime = 0;
@@ -143,10 +146,26 @@ class TransactionWatcher {
     });
   };
 
-  // fetch pending txs status every 5s
+  // fetch pending txs status every 200ms, 5s or any custom amount of time
   roll = () => {
-    interval(async () => {
+    let intervalMs = FAST_TX_POLLING_INTERVAL;
+    const poll = async () => {
       const list = Object.keys(this.store.pendingTx);
+      if (list.length > 0) {
+        const intervals = list.map((tx) => {
+          const chain = findChain({
+            enum: tx.split('_').slice(2).join('_') ?? '',
+          });
+          if (!chain?.isTestnet) {
+            return DEFAULT_TX_POLLING_INTERVAL;
+          }
+          return (chain as TestnetChain).pollingInterval ?? DEFAULT_TX_POLLING_INTERVAL;
+        });
+        intervalMs = Math.min(...intervals);
+      } else {
+        intervalMs = FAST_TX_POLLING_INTERVAL;
+      }
+
       // order by address, chain, nonce
       const idQueue = list.sort((a, b) => {
         const [aAddress, aNonceStr, aChain] = a.split('_');
@@ -165,8 +184,10 @@ class TransactionWatcher {
         return aNonce > bNonce ? 1 : -1;
       });
 
-      return this._queryList(idQueue);
-    }, 200);
+      this._queryList(idQueue);
+      setTimeout(poll, intervalMs);
+    };
+    setTimeout(poll, intervalMs);
   };
 
   _queryList = async (ids: string[]) => {

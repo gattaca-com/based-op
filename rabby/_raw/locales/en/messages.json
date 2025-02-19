@@ -2171,7 +2171,9 @@
         "rpcUrlRequired": "Please input RPC URL",
         "nativeTokenSymbol": "Currency symbol",
         "nativeTokenSymbolRequired": "Please input currency symbol",
-        "blockExplorerUrl": "Block explorer URL (Optional)"
+        "blockExplorerUrl": "Block explorer URL (Optional)",
+        "txPollingInterval": "Receipts polling interval in milliseconds (Optional)",
+        "txPollingIntervalInvalidNumber": "Polling interval must be a number"
       },
       "AddFromChainList": {
         "title": "Quick add from Chainlist",
