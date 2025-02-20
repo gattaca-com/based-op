@@ -195,10 +195,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         sorting.apply_block_start_to_state(self, env_with_handler_cfg.clone()).expect("shouldn't fail");
         self.tx_pool.remove_mined_txs(sorting.txs.iter());
 
-        // Initialise the shared state for this new pending block
-        let txs = sorting.txs.iter().map(|tx| tx.tx.tx.clone()).collect();
-        self.shared_state.initialise_for_new_block(&env_with_handler_cfg.block, self.parent_header.parent_hash, txs);
-
         (seq, sorting)
     }
 
@@ -298,7 +294,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         };
         let mgas = (gas_used / 10_000) as f64 / 100.0;
         info!(
-            "sealed block with {} txs, {mgas} MGas ({:.2} MGas/s)",
+            "sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)",
+            seal.block_number,
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );

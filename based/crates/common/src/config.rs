@@ -70,7 +70,7 @@ pub struct GatewayArgs {
     #[arg(long = "log.filters")]
     pub log_filters: Option<String>,
     /// If true will commit locally sequenced blocks to the db before getting payload from the engine api.
-    #[arg(long = "sequencer.commit_sealed_frags_to_db", default_value_t = false)]
+    #[arg(long = "sequencer.commit_sealed_frags_to_db", default_value_t = true)]
     pub commit_sealed_frags_to_db: bool,
 }
 

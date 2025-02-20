@@ -109,7 +109,7 @@ impl TxPool {
     /// Removes a transaction with sender and nonce from the pool.
     pub fn remove(&mut self, sender: &Address, nonce: u64) {
         if let Some(tx_list) = self.pool_data.get_mut(sender) {
-            if tx_list.forward(&nonce) {
+            if tx_list.forward(nonce) {
                 self.pool_data.remove(sender);
             }
         }
@@ -121,9 +121,9 @@ impl TxPool {
         // Clear all mined nonces from the pool
         for tx in mined_txs {
             let sender = tx.sender();
-            let nonce = tx.nonce() + 1;
+            let nonce = tx.nonce();
             if let Some(sender_tx_list) = self.pool_data.get_mut(&sender) {
-                if sender_tx_list.forward(&nonce) {
+                if sender_tx_list.forward(nonce) {
                     self.pool_data.remove(&sender);
                 }
             }
