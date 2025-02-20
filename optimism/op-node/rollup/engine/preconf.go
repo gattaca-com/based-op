@@ -114,6 +114,7 @@ func (s *PreconfState) putFrag(sFrag *eth.SignedNewFrag) {
 
 		// When a frag is sent we should check if the next is present or if the seal is present
 		if frag.IsLast {
+			s.lastFragSent[idx.BlockNumber] = true
 			nextSeal, ok := s.pendingSeals[idx.BlockNumber]
 			if ok {
 				delete(s.pendingSeals, idx.BlockNumber)
