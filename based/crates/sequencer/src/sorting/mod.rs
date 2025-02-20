@@ -11,7 +11,6 @@ pub(crate) use sorting_data::SortingData;
 pub(crate) mod frag_sequence;
 
 pub(crate) use frag_sequence::FragSequence;
-use tracing::debug;
 
 #[derive(Clone, Debug, Default)]
 pub struct ActiveOrders {

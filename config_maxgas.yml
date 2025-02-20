@@ -30,8 +30,8 @@ optimism_package:
         builder_port: "9997"
         # portal_extra_params:
         #   - --gateway.update_url=http://172.17.0.1:9099/gateways.example.json
-      additional_services:
-        - blockscout
+      # additional_services:
+      #   - blockscout
 
 ethereum_package:
   participants:

@@ -77,8 +77,14 @@ where
     Db: DatabaseWrite + DatabaseRead,
 {
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
+        let block_sync_receive_duration = if matches!(self.state, SequencerState::Syncing{..}) {
+            // we're syncing anyway
+            Duration::MAX
+        } else {
+            Duration::from_millis(10)
+        };
         // handle block sync
-        connections.receive_for(Duration::from_millis(10), |msg, senders| {
+        connections.receive_for(block_sync_receive_duration, |msg, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_block_sync(msg, &mut self.data, senders);
         });
@@ -137,6 +143,7 @@ impl<Db> SequencerState<Db> {
     fn sync_until(start: u64, stop: u64, senders: &SendersSpine<Db>) -> Self {
         let s = senders.send_timeout(BlockFetch::FromTo(start, stop), Duration::from_millis(10));
         debug_assert!(s.is_ok(), "Coulnd't send BlockFetch for more than 10 millis");
+        info!("Start Syncing from {start} to {stop}");
         Self::Syncing { last_block_number: stop }
     }
 }
@@ -287,6 +294,7 @@ where
                             // We are on the wrong head. Switch to syncing and request the head block.
                             let head_block_number =
                                 ctx.db.head_block_number().expect("couldn't get db head block number");
+                            ctx.shared_state.reset();
                             Self::sync_until(head_block_number, head_block_number, senders)
                         } else {
                             WaitingForForkChoiceWithAttributes
@@ -353,6 +361,8 @@ where
                     let block = payload_to_block(ExecutionPayload::V3(block.execution_payload), sidecar)
                         .expect("couldn't get block from payload");
                     ctx.commit_block(&block);
+                    ctx.shared_state.reset();
+                    info!("committing to db");
                 }
 
                 WaitingForNewPayload

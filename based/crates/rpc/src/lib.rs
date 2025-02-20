@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use bop_common::{
-    api::{EngineApiServer, EthApiServer},
+    api::{EngineApiServer, EthApiServer, MinimalEthApiServer},
     communication::{messages::EngineApi, Sender, Spine},
     config::GatewayArgs,
     db::DatabaseRead,
@@ -58,7 +58,7 @@ impl<Db: DatabaseRead> RpcServer<Db> {
         info!(%addr, "starting RPC server");
 
         let server = ServerBuilder::default().build(addr).await.expect("failed to create eth RPC server");
-        let mut module = EthApiServer::into_rpc(self.clone());
+        let mut module = MinimalEthApiServer::into_rpc(self.clone());
         module.merge(EngineApiServer::into_rpc(self)).expect("failed to merge modules");
 
         let server_handle = server.start(module);

@@ -5,6 +5,7 @@ use alloy_network::TxSignerSync;
 use alloy_primitives::{hex, hex::FromHexError, Address, PrimitiveSignature, B256};
 use alloy_signer::SignerSync;
 use alloy_signer_local::PrivateKeySigner;
+use op_alloy_consensus::OpTxEnvelope;
 use rand::RngCore;
 
 #[derive(Debug, thiserror::Error)]

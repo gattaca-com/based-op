@@ -23,7 +23,7 @@ use reth_optimism_evm::OpBlockExecutionError;
 use reth_optimism_primitives::transaction::TransactionSenderInfo;
 use revm::{Database, DatabaseRef};
 use revm_primitives::{Address, EnvWithHandlerCfg, U256};
-use tracing::{debug, trace};
+use tracing::trace;
 
 use super::FragSequence;
 use crate::{context::SequencerContext, simulator::simulate_tx_inner, sorting::ActiveOrders};
@@ -41,10 +41,10 @@ impl SortingTelemetry {
         tracing::info!(
             "{} total sims: {}% success, tot simtime {}",
             self.n_sims_sent,
-            if self.n_sims_errored == 0 {
+            if self.n_sims_sent == 0 {
                 100.0
             } else {
-                (self.n_sims_succesful * 10000 / self.n_sims_errored) as f64 / 100.0
+                (self.n_sims_succesful * 10000 / self.n_sims_sent) as f64 / 100.0
             },
             self.tot_sim_time
         );

@@ -89,8 +89,6 @@ impl TxList {
     #[inline]
     pub fn first_ready(&self, curr_nonce: u64, base_fee: u64) -> Option<&Arc<Transaction>> {
         let next_tx = self.peek()?;
-        tracing::info!(%curr_nonce, next_tx_nonce = %next_tx.nonce());
-
         if next_tx.nonce() != curr_nonce || !next_tx.valid_for_block(base_fee) {
             return None;
         }

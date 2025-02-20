@@ -68,7 +68,7 @@ impl SimulatedTxList {
             return true;
         }
         if let Some(nonce) = self.current.take().map(|t| t.nonce()) {
-            self.pending.first_ready(nonce, base_fee).is_none()
+            self.pending.first_ready(nonce + 1, base_fee).is_none()
         } else {
             self.pending.peek().is_none_or(|t| base_fee > t.max_fee_per_gas() as u64)
         }
