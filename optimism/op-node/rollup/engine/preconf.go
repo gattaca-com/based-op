@@ -39,25 +39,38 @@ func (fi FragIndex) prev() FragIndex {
 	return FragIndex{BlockNumber: fi.BlockNumber, Sequence: fi.Sequence - 1}
 }
 
+func (fi FragIndex) next() FragIndex {
+	return FragIndex{BlockNumber: fi.BlockNumber, Sequence: fi.Sequence + 1}
+}
+
 // In charge of holding the current known preconf state and sending ready
 // events to the engine api. The events that are not ready yet will be held
 // until they are.
 type PreconfState struct {
 	JustStarted  bool
-	pendingEnvs  map[uint64]eth.Env
+	pendingEnvs  map[uint64]eth.SignedEnv
 	sentEnvs     map[uint64]bool
 	lastFragSent map[uint64]bool
-	pendingFrags map[FragIndex]eth.NewFrag
+	pendingFrags map[FragIndex]eth.SignedNewFrag
 	sentFrags    map[FragIndex]bool
-	pendingSeals map[uint64]eth.Seal
+	pendingSeals map[uint64]eth.SignedSeal
 	sentSeals    map[uint64]bool
+	ctx          context.Context
+	e            ExecEngine
 }
 
-func NewPreconfState() PreconfState {
+func NewPreconfState(ctx context.Context, e ExecEngine) PreconfState {
 	return PreconfState{
-		JustStarted: true,
-		pendingEnvs: make(map[uint64]eth.Env),
-		sentEnvs:    make(map[uint64]bool),
+		JustStarted:  true,
+		pendingEnvs:  make(map[uint64]eth.SignedEnv),
+		sentEnvs:     make(map[uint64]bool),
+		lastFragSent: make(map[uint64]bool),
+		pendingFrags: make(map[FragIndex]eth.SignedNewFrag),
+		sentFrags:    make(map[FragIndex]bool),
+		pendingSeals: make(map[uint64]eth.SignedSeal),
+		sentSeals:    make(map[uint64]bool),
+		ctx:          ctx,
+		e:            e,
 	}
 }
 
@@ -69,67 +82,87 @@ func StartPreconf(ctx context.Context, e ExecEngine) PreconfChannels {
 }
 
 // Checks if the state is new or if the previous block is sealed.
-// Returns true if the env is ready to be sent to EL
-func (s *PreconfState) putEnv(env eth.Env) bool {
+func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
+	env := sEnv.Env
 	if s.JustStarted || s.sentSeals[env.Number-1] {
 		s.sentEnvs[env.Number] = true
 		s.JustStarted = false
-		return true
+		s.e.Env(s.ctx, sEnv)
+
+		// When an env is sent we should check if we have the first frag of the block and put it.
+		nextIndex := FragIndex{BlockNumber: env.Number, Sequence: 0}
+		nextFrag, ok := s.pendingFrags[nextIndex]
+		if ok {
+			delete(s.pendingFrags, nextIndex)
+			s.putFrag(&nextFrag)
+		}
+	} else {
+		s.pendingEnvs[env.Number] = *sEnv
 	}
-	s.pendingEnvs[env.Number] = env
-	return false
 }
 
 // Checks if the frag is the first of the block and the env is present,
 // or if the previous frag is sent.
-// Returns true if the frag is ready to be sent to EL
-func (s *PreconfState) putFrag(frag eth.NewFrag) bool {
+func (s *PreconfState) putFrag(sFrag *eth.SignedNewFrag) {
+	frag := sFrag.Frag
 	idx := index(frag)
 	isFirst := frag.Seq == 0 && s.sentEnvs[frag.BlockNumber]
 	previousSent := s.sentFrags[idx.prev()]
 	if isFirst || previousSent {
-		s.sentFrags[FragIndex{BlockNumber: frag.BlockNumber, Sequence: frag.Seq}] = true
+		s.sentFrags[idx] = true
+		s.e.NewFrag(s.ctx, sFrag)
+
+		// When a frag is sent we should check if the next is present or if the seal is present
 		if frag.IsLast {
-			s.lastFragSent[frag.BlockNumber] = true
+			nextSeal, ok := s.pendingSeals[idx.BlockNumber]
+			if ok {
+				delete(s.pendingSeals, idx.BlockNumber)
+				s.putSeal(&nextSeal)
+			}
+		} else {
+			nextFrag, ok := s.pendingFrags[idx.next()]
+			if ok {
+				delete(s.pendingFrags, idx.next())
+				s.putFrag(&nextFrag)
+			}
 		}
-		return true
+	} else {
+		s.pendingFrags[idx] = *sFrag
 	}
-	s.pendingFrags[idx] = frag
-	return false
 }
 
 // Checks if the last frag of the block is sent.
-// Returns true if the seal is ready to be sent to EL
-func (s *PreconfState) putSeal(seal eth.Seal) bool {
+func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
+	seal := sSeal.Seal
 	if s.lastFragSent[seal.BlockNumber] {
 		s.sentSeals[seal.BlockNumber] = true
-		return true
+		s.e.SealFrag(s.ctx, sSeal)
+		// When we put a seal we should check if the env of the next is present.
+		nextEnv, ok := s.pendingEnvs[seal.BlockNumber+1]
+		if ok {
+			delete(s.pendingEnvs, seal.BlockNumber+1)
+			s.putEnv(&nextEnv)
+		}
+	} else {
+		s.pendingSeals[seal.BlockNumber] = *sSeal
 	}
-	s.pendingSeals[seal.BlockNumber] = seal
-	return true
 }
 
 // TODO: handle pending after something is put.
 func preconfHandler(ctx context.Context, c PreconfChannels, e ExecEngine) {
-	state := NewPreconfState()
+	state := NewPreconfState(ctx, e)
 
 	for {
 		select {
 		case env := <-c.EnvCh:
 			fmt.Println("Env received by the preconf handler")
-			if state.putEnv(env.Env) {
-				e.Env(ctx, env)
-			}
+			state.putEnv(env)
 		case frag := <-c.NewFragCh:
 			fmt.Println("Frag receved by the preconf handler")
-			if state.putFrag(frag.Frag) {
-				e.NewFrag(ctx, frag)
-			}
+			state.putFrag(frag)
 		case seal := <-c.SealCh:
 			fmt.Println("Seal received by the preconf handler")
-			if state.putSeal(seal.Seal) {
-				e.SealFrag(ctx, seal)
-			}
+			state.putSeal(seal)
 		}
 	}
 }
