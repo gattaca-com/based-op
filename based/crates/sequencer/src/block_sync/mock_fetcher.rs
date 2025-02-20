@@ -404,7 +404,6 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
         //     }
         //     return;
         // }
-
     }
 }
 
