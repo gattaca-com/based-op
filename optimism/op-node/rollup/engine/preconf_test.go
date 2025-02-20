@@ -228,3 +228,86 @@ func TestFragsOutOfOrder(t *testing.T) {
 		t.Fatalf("The second frag was not pushed even after the env was")
 	}
 }
+
+func TestSealBeforeLastFrag(t *testing.T) {
+	// General setup
+	var m MockEngine
+	state := NewPreconfState(context.Background(), &m)
+
+	// Data for the first block
+	e := env()
+	f := frag()
+	f2 := f
+	f2.Frag.Seq = 1
+	f2.Frag.IsLast = true
+	s := seal()
+
+	state.putEnv(&e)
+	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The first env was not sent to the engine api.")
+	}
+
+	state.putFrag(&f)
+	if !cmp.Equal(m.SeenNewFrags[0], f) {
+		t.Fatalf("The first frag was not pushed even after the env was")
+	}
+
+	state.putSeal(&s)
+	if !cmp.Equal(len(m.SeenSeals), 0) {
+		t.Fatalf("The seal was pushed even if the last frag wasn't")
+	}
+
+	state.putFrag(&f2)
+	if !cmp.Equal(m.SeenNewFrags[1], f2) {
+		t.Fatalf("The second frag was not pushed even after the env was")
+	}
+
+	// The seal should be pushed now.
+	if !cmp.Equal(m.SeenSeals[0], s) {
+		t.Fatalf("The seal wasn't pushed even though the last frag was")
+	}
+}
+
+// Similar to the in order test, but the first env is pushed at the end.
+func TestEverythingOutOfOrderAllAtOnce(t *testing.T) {
+	// General setup
+	var m MockEngine
+	state := NewPreconfState(context.Background(), &m)
+
+	// Data for the first block
+	e := env()
+	f := frag()
+	f2 := f
+	f2.Frag.Seq = 1
+	f2.Frag.IsLast = true
+	s := seal()
+
+	state.putFrag(&f)
+	if !cmp.Equal(len(m.SeenNewFrags), 0) {
+		t.Fatalf("The first frag was pushed without an env")
+	}
+	state.putFrag(&f2)
+	if !cmp.Equal(len(m.SeenNewFrags), 0) {
+		t.Fatalf("The second frag was pushed without an env")
+	}
+	state.putSeal(&s)
+	if !cmp.Equal(len(m.SeenSeals), 0) {
+		t.Fatalf("The block was sealed without an env")
+	}
+
+	state.putEnv(&e)
+	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The first env was not sent to the engine api.")
+	}
+
+	// Now the rest of the things should be pushed
+	if !cmp.Equal(m.SeenNewFrags[0], f) {
+		t.Fatalf("The first frag was not sent to the engine api")
+	}
+	if !cmp.Equal(m.SeenNewFrags[1], f2) {
+		t.Fatalf("The second frag was not sent to the engine api")
+	}
+	if !cmp.Equal(m.SeenSeals[0], s) {
+		t.Fatalf("The first seal was not sent to the engine api")
+	}
+}
