@@ -3,7 +3,6 @@ use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpd
 use bop_common::{
     api::EngineApiServer,
     communication::messages::{self, RpcError, RpcResult},
-    db::DatabaseRead,
 };
 use jsonrpsee::core::async_trait;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
@@ -12,14 +11,14 @@ use tracing::{trace, Level};
 
 use crate::RpcServer;
 
-impl<Db: DatabaseRead> RpcServer<Db> {
+impl RpcServer {
     fn send(&self, msg: messages::EngineApi) {
         let _ = self.engine_rpc_tx.send(msg.into());
     }
 }
 
 #[async_trait]
-impl<Db: DatabaseRead> EngineApiServer for RpcServer<Db> {
+impl EngineApiServer for RpcServer {
     #[tracing::instrument(skip_all, ret(level = Level::TRACE))]
     async fn fork_choice_updated_v3(
         &self,

@@ -2,7 +2,10 @@ use std::{collections::VecDeque, ops::Deref};
 
 use alloy_consensus::TxEip1559;
 use alloy_eips::eip2718::Encodable2718;
-use bop_common::{signing::ECDSASigner, time::Instant};
+use bop_common::{
+    signing::ECDSASigner,
+    time::{Duration, Instant},
+};
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use reqwest::{blocking::Client, Url};
@@ -149,9 +152,9 @@ impl SpammerClient {
         self.request("eth_getBalance", json!([address])).unwrap_or_default()
     }
 
-    // fn get_receipt(&self, tx_id: B256) -> Option<OpTransactionReceipt> {
-    //     self.request("eth_getTransactionReceipt", json!([tx_id]))
-    // }
+    fn get_receipt(&self, tx_id: B256) -> Option<OpTransactionReceipt> {
+        self.request("eth_getTransactionReceipt", json!([tx_id]))
+    }
 
     fn new_tx(&self, from: &mut TestAccount, to: Address, value: Option<U256>) -> (B256, U256) {
         let value = value.unwrap_or(U256::from_limbs([1, 0, 0, 0]));
@@ -227,28 +230,27 @@ fn tx_spammer() {
     let mut main_account = TestAccount::main(&client);
     info!("using main account: {main_account:#?}");
 
-    let mut test_accounts = generate_random_accounts(10000);
+    let mut test_accounts = generate_random_accounts(100);
     let mut pending = VecDeque::new();
 
     for t in &mut test_accounts {
         let (id, value) = client.new_tx(&mut main_account, t.address, Some(U256::from(1_000_000_000_000_000_000usize)));
         t.balance += value;
-        // Duration::from_micros(250).sleep();
         pending.push_front((id, Instant::now()));
     }
 
-    // let mut tot = Duration::ZERO;
-    // let mut n = 0usize;
-    // while let Some((id, tstamp)) = pending.pop_front() {
-    //     loop {
-    //         if let Some(receipt) = client.get_receipt(id) {
-    //             tot += tstamp.elapsed();
-    //             n += 1;
-    //             break;
-    //         }
-    //     }
-    // }
-    // println!("received {n} receipt after on avg {}", tot / n);
+    let mut tot = Duration::ZERO;
+    let mut n = 0usize;
+    while let Some((id, tstamp)) = pending.pop_front() {
+        loop {
+            if let Some(_) = client.get_receipt(id) {
+                tot += tstamp.elapsed();
+                n += 1;
+                break;
+            }
+        }
+    }
+    println!("received {n} receipt after on avg {}", tot / n);
 
     loop {
         for i1 in 0..test_accounts.len() {
@@ -258,25 +260,24 @@ fn tx_spammer() {
                 }
                 let to = test_accounts[i2].address;
                 let a1 = &mut test_accounts[i1];
-                let (_id, value) = client.new_tx(a1, to, None);
+                let (id, value) = client.new_tx(a1, to, None);
                 test_accounts[i2].balance += value;
-                // Duration::from_micros(250).sleep();
-                // pending.push_front((id, Instant::now()));
+                pending.push_front((id, Instant::now()));
             }
         }
-        // let mut tot = Duration::ZERO;
-        // let mut n = 0usize;
-        // while let Some((id, tstamp)) = pending.pop_front() {
-        //     loop {
-        //         if let Some(receipt) = client.get_receipt(id) {
-        //             info!("got receipt for {id}");
-        //             tot += tstamp.elapsed();
-        //             n += 1;
-        //             break;
-        //         }
-        //     }
-        // }
-        // println!("received {n} receipt after on avg {}", tot / n);
+        let mut tot = Duration::ZERO;
+        let mut n = 0usize;
+        while let Some((id, tstamp)) = pending.pop_front() {
+            loop {
+                if let Some(_receipt) = client.get_receipt(id) {
+                    info!("got receipt for {id}");
+                    tot += tstamp.elapsed();
+                    n += 1;
+                    break;
+                }
+            }
+        }
+        println!("received {n} receipt after on avg {}", tot / n);
     }
 }
 
