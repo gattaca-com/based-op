@@ -51,10 +51,6 @@ func decodeOrPanic(s string) []byte {
 	return decoded
 }
 
-func decodeB32(s string) eth.Bytes32 {
-	return eth.Bytes32(decodeOrPanic(s))
-}
-
 func decodeB20(s string) common.Address {
 	return common.BytesToAddress(decodeOrPanic(s))
 }
