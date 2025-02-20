@@ -149,7 +149,9 @@ func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
 	}
 }
 
-// TODO: handle pending after something is put.
+// Listens for env, frag and seal events and updates the local state.
+// If the events are ready, they are sent to the engine api. If not, they are
+// saved in the local state as pending until they are.
 func preconfHandler(ctx context.Context, c PreconfChannels, e ExecEngine) {
 	state := NewPreconfState(ctx, e)
 
