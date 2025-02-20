@@ -15,12 +15,12 @@ pub const CAPABILITIES: &[&str] = &[
     "engine_getPayloadV3",
     "engine_newPayloadV3",
     "eth_sendRawTransaction",
-    "eth_getTransactionReceipt",
-    "eth_getBlockByNumber",
-    "eth_getBlockByHash",
-    "eth_blockNumber",
-    "eth_getTransactionCount",
-    "eth_getBalance",
+    // "eth_getTransactionReceipt",
+    // "eth_getBlockByNumber",
+    // "eth_getBlockByHash",
+    // "eth_blockNumber",
+    // "eth_getTransactionCount",
+    // "eth_getBalance",
 ];
 
 pub type OpRpcBlock = alloy_rpc_types::Block<OpTxEnvelope>;
