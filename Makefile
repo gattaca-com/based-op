@@ -192,3 +192,6 @@ test-env:
 
 follower-node-proxy:
 	docker run --rm --network kt-based-op -p 8545:8545 cars10/simprox simprox --skip-ssl-verify=true -l 0.0.0.0:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545
+
+spam: ## 🚀 Run the gateway
+	PORTAL_PORT=$(PORTAL_PORT) BOP_EL_PORT=$(BOP_EL_PORT) cargo test --manifest-path ./based/Cargo.toml --release -- tx_spammer --ignored --nocapture
