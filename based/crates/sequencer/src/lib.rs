@@ -90,7 +90,7 @@ where
         });
 
         // handle new transaction
-        connections.receive_for(Duration::from_millis(10), |msg, senders| {
+        connections.receive(|msg, senders| {
             self.state.handle_new_tx(msg, &mut self.data, senders);
         });
 
@@ -101,7 +101,7 @@ where
         });
 
         // handle engine API messages from rpc
-        connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
+        connections.receive(|msg: messages::EngineApi, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
         });

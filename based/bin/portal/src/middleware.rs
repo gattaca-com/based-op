@@ -114,8 +114,12 @@ mod tests {
         let received_eth_fallback = Arc::new(AtomicBool::new(false));
         let received_mux = Arc::new(AtomicBool::new(false));
 
-        let fallback_server =
-            ServerBuilder::default().build("127.0.0.1:9090".parse::<SocketAddr>().unwrap()).await.unwrap();
+        let fallback_server = ServerBuilder::default()
+            .max_request_body_size(u32::MAX)
+            .max_response_body_size(u32::MAX)
+            .build("127.0.0.1:9090".parse::<SocketAddr>().unwrap())
+            .await
+            .unwrap();
         let mut module = RpcModule::new(());
         let rcv = received_fallback.clone();
         module
@@ -126,8 +130,12 @@ mod tests {
 
         let _fallback_handle = fallback_server.start(module);
 
-        let eth_fallback_server =
-            ServerBuilder::default().build("127.0.0.1:9091".parse::<SocketAddr>().unwrap()).await.unwrap();
+        let eth_fallback_server = ServerBuilder::default()
+            .max_request_body_size(u32::MAX)
+            .max_response_body_size(u32::MAX)
+            .build("127.0.0.1:9091".parse::<SocketAddr>().unwrap())
+            .await
+            .unwrap();
         let mut eth_module = RpcModule::new(());
         let rcv = received_eth_fallback.clone();
         eth_module
@@ -140,16 +148,26 @@ mod tests {
 
         let secret_layer = AuthClientLayer::new(JwtSecret::random());
         let middleware = tower::ServiceBuilder::default().layer(secret_layer);
-        let fallback_client =
-            HttpClientBuilder::default().set_http_middleware(middleware).build("http://127.0.0.1:9090").unwrap();
+        let fallback_client = HttpClientBuilder::default()
+            .max_request_size(u32::MAX)
+            .max_response_size(u32::MAX)
+            .set_http_middleware(middleware)
+            .build("http://127.0.0.1:9090")
+            .unwrap();
 
-        let fallback_eth_client = HttpClientBuilder::default().build("http://127.0.0.1:9091").unwrap();
+        let fallback_eth_client = HttpClientBuilder::default()
+            .max_request_size(u32::MAX)
+            .max_response_size(u32::MAX)
+            .build("http://127.0.0.1:9091")
+            .unwrap();
 
         let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| {
             ProxyService::new(&["hello_mux"], s, fallback_eth_client.clone(), fallback_client.clone())
         });
 
         let mux_server = ServerBuilder::default()
+            .max_request_body_size(u32::MAX)
+            .max_response_body_size(u32::MAX)
             .set_rpc_middleware(rpc_middleware)
             .build("127.0.0.1:9092".parse::<SocketAddr>().unwrap())
             .await
@@ -167,7 +185,11 @@ mod tests {
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-        let client = HttpClient::builder().build("http://127.0.0.1:9092").unwrap();
+        let client = HttpClient::builder()
+            .max_request_size(u32::MAX)
+            .max_response_size(u32::MAX)
+            .build("http://127.0.0.1:9092")
+            .unwrap();
 
         let _: serde_json::Value = client.request("hello_mux", vec![""]).await.unwrap();
         assert!(received_mux.load(std::sync::atomic::Ordering::Relaxed));
