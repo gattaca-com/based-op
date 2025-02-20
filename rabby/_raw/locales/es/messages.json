@@ -2167,8 +2167,7 @@
         "id": "Chain ID",
         "name": "Nombre de la red",
         "idRequired": "Por favor, introduzca el id de la cadena",
-        "txPollingInterval": "Intervalo de confirmación de transactiones, en milisegundos (Opcional)",
-        "txPollingIntervalInvalidNumber": "Por favor, introduzca un intervalo correcto"
+        "hasPreconfs": "Esta red soporta preconfirmaciones"
       },
       "AddFromChainList": {
         "tips": {

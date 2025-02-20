@@ -13,8 +13,8 @@ import interval from 'interval-promise';
 import { findChain, findChainByEnum, isTestnetChainId } from '@/utils/chain';
 import { customTestnetService, TestnetChain } from './customTestnet';
 
-const DEFAULT_TX_POLLING_INTERVAL = 5000 // 5 seconds
-const FAST_TX_POLLING_INTERVAL = 200 // 200 milliseconds
+const DEFAULT_TX_POLLING_INTERVAL = 5000; // 5 seconds
+const FAST_TX_POLLING_INTERVAL = 200; // 200 milliseconds
 
 class Transaction {
   createdTime = 0;
@@ -146,24 +146,29 @@ class TransactionWatcher {
     });
   };
 
-  // fetch pending txs status every 200ms, 5s or any custom amount of time
+  // fetch pending txs status every 200ms or 5s
+  // based on if there are pending transactions in
+  // networks with preconfs
   roll = () => {
     let intervalMs = FAST_TX_POLLING_INTERVAL;
     const poll = async () => {
       const list = Object.keys(this.store.pendingTx);
-      if (list.length > 0) {
-        const intervals = list.map((tx) => {
-          const chain = findChain({
-            enum: tx.split('_').slice(2).join('_') ?? '',
-          });
-          if (!chain?.isTestnet) {
-            return DEFAULT_TX_POLLING_INTERVAL;
-          }
-          return (chain as TestnetChain).pollingInterval ?? DEFAULT_TX_POLLING_INTERVAL;
+      const isPendingPreconf = list.some((tx) => {
+        const chain = findChain({
+          enum: tx.split('_').slice(2).join('_') ?? '',
         });
-        intervalMs = Math.min(...intervals);
-      } else {
+        return (
+          (chain?.isTestnet && (chain as TestnetChain).hasPreconfs) ?? false
+        );
+      });
+
+      // If no pending transaction, interval have to be
+      // fast so when a new preconf tx is sent, the loop
+      // doesn't delay to update
+      if (isPendingPreconf || list.length === 0) {
         intervalMs = FAST_TX_POLLING_INTERVAL;
+      } else {
+        intervalMs = DEFAULT_TX_POLLING_INTERVAL;
       }
 
       // order by address, chain, nonce
