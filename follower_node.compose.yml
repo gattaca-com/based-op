@@ -1,0 +1,83 @@
+services:
+  setup:
+    image: bash
+    command:
+      - bash
+      - /scripts/setup.sh
+    volumes:
+      - ./scripts/setup.sh:/scripts/setup.sh
+      - jwt:/jwt
+
+  op-node:
+    image: based_op_node
+    command:
+      - op-node
+      - --l2=http://op-geth:8551
+      - --l2.jwt-secret=/jwt/jwtsecret
+      - --verifier.l1-confs=1
+      - --rollup.config=/network-configs/rollup-2151908.json
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=8547
+      - --rpc.enable-admin
+      - --l1=$L1_RPC_URL
+      - --l1.rpckind=standard
+      - --l1.beacon=$BEACON_URL
+      - --p2p.advertise.ip=$SELF_HOSTNAME
+      - --p2p.advertise.tcp=9003
+      - --p2p.advertise.udp=9003
+      - --p2p.listen.ip=0.0.0.0
+      - --p2p.listen.tcp=9003
+      - --p2p.listen.udp=9003
+      - --safedb.path=/data/op-node/op-node-beacon-data
+      - --metrics.enabled=true
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=9001
+      - --p2p.bootnodes=$P2P_BOOTNODE
+      - --rpc.enable-based
+    ports:
+      - 8547:8547  # RPC
+      - 9003:9003  # P2P
+      - 9001:9001  # Metrics
+    volumes:
+      - node_data:/data/op-node
+      - ./genesis/rollup-2151908.json:/network-configs/rollup-2151908.json
+      - jwt:/jwt
+    # networks:
+    #   - kt-based-op
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+  op-geth:
+    image: based_op_geth
+    entrypoint:
+      - sh
+      - /scripts/start_op_geth.sh
+    ports:
+      - 8546:8545  # HTTP-RPC
+      - 8546:8546  # WS-RPC
+      - 8551:8551  # AuthRPC
+      - 9002:9001  # Metrics
+      - 30303:30303  # Discovery
+    environment:
+      - SEQUENCER_URL=$SEQUENCER_URL
+      - GETH_BOOTNODE=$GETH_BOOTNODE
+    volumes:
+      - ./scripts/start_op_geth.sh:/scripts/start_op_geth.sh
+      - geth_data:/data/geth
+      - ./genesis/genesis-2151908.json:/network-configs/genesis-2151908.json
+      - jwt:/jwt
+    # networks:
+    #   - kt-based-op
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+# networks:
+#   kt-based-op:
+#     external: true
+
+volumes:
+  node_data:
+  geth_data:
+  jwt:
