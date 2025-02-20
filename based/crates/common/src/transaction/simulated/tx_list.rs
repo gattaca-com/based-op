@@ -38,7 +38,7 @@ impl SimulatedTxList {
     }
 
     /// Updates the pending tx list.
-    /// Will optionally trim the current tx from the pending list.
+    /// If current is the same as the first pending we advance the pending.
     #[inline]
     pub fn new_pending(&mut self, mut pending: TxList) {
         if let Some(current) = &self.current {
@@ -70,27 +70,20 @@ impl SimulatedTxList {
         if let Some(nonce) = self.current.take().map(|t| t.nonce()) {
             self.pending.first_ready(nonce + 1, base_fee).is_none()
         } else {
-            self.pending.peek().is_some_and(|t| t.max_fee_per_gas() as u64 > base_fee)
+            self.pending.peek().is_none_or(|t| base_fee > t.max_fee_per_gas() as u64)
         }
     }
 
     pub fn put(&mut self, tx: SimulatedTx) {
-        if self.pending.peek_nonce().is_some_and(|nonce| nonce == tx.nonce()) {
-            self.pending.pop_front();
-        }
         self.current = Some(tx);
     }
 
-    pub fn next_to_sim(&self) -> Option<Arc<Transaction>> {
-        self.current.as_ref().map(|t| t.tx.clone()).or_else(|| self.pending.peek().cloned())
+    pub fn next_to_sim(&mut self) -> Option<Arc<Transaction>> {
+        self.current.as_ref().map(|t| t.tx.clone()).or_else(|| self.pending.pop_front())
     }
 
     pub fn sender(&self) -> Address {
-        if let Some(tx) = &self.current {
-            tx.tx.sender
-        } else {
-            self.pending.peek().map(|t| t.sender).unwrap_or_default()
-        }
+        self.pending.sender()
     }
 
     pub fn nonce(&self) -> u64 {
@@ -102,6 +95,14 @@ impl SimulatedTxList {
     }
 
     pub fn push(&mut self, tx: Arc<Transaction>) {
+        debug_assert_eq!(
+            tx.sender(),
+            self.sender(),
+            "shouldn't ever push a tx from a different sender: current {} vs pushed {}. txhash: {}",
+            self.sender(),
+            tx.sender(),
+            tx.tx_hash()
+        );
         self.pending.push(tx);
     }
 
@@ -122,14 +123,13 @@ impl SimulatedTxList {
     }
 
     pub fn gas_limit(&self) -> Option<u64> {
-        let o = self.current.as_ref().map(|c| c.gas_limit()).or_else(|| self.pending.peek().map(|t| t.gas_limit()));
-        debug_assert!(o.is_some(), "both current and pending have no gas limit, this should mean that this should have been removed from the orders before");
-        o
+        self.current.as_ref().map(|c| c.gas_limit()).or_else(|| self.pending.peek().map(|t| t.gas_limit()))
     }
 }
 
 impl From<SimulatedTx> for SimulatedTxList {
     fn from(current: SimulatedTx) -> Self {
-        Self { current: Some(current), pending: TxList::default() }
+        let sender = current.sender();
+        Self { current: Some(current), pending: TxList::empty_for_sender(sender) }
     }
 }

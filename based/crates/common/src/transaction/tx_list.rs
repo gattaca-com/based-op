@@ -1,16 +1,29 @@
 use std::{collections::VecDeque, ops::Deref, sync::Arc};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
+use revm_primitives::Address;
 
 use crate::transaction::Transaction;
 
 /// A nonce-sorted list of transactions from a single sender.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct TxList {
+    sender: Address,
     txs: VecDeque<Arc<Transaction>>,
 }
 
 impl TxList {
+    #[inline]
+    pub fn empty_for_sender(sender: Address) -> Self {
+        debug_assert_ne!(sender, Address::default(), "should never have sender {sender}");
+        Self { sender, txs: VecDeque::new() }
+    }
+
+    #[inline]
+    pub fn sender(&self) -> Address {
+        self.sender
+    }
+
     /// Inserts a new transaction into the ordered list, maintaining nonce order.
     /// If a transaction already exists with the same nonce, it's overwritten.
     #[inline]
@@ -28,36 +41,19 @@ impl TxList {
         }
     }
 
-    /// Removes all transactions with nonce lower than the provided threshold.
+    /// Removes all transactions with nonce lower or equal than the provided threshold.
     /// Returns true if list becomes empty after removal.
     #[inline]
-    pub fn forward(&mut self, nonce: &u64) -> bool {
-        let len = self.txs.len();
-        if len == 0 {
-            return true;
-        }
-
-        if self.txs[0].nonce() >= *nonce {
+    pub fn forward(&mut self, nonce: u64) -> bool {
+        if self.txs.front().is_some_and(|t| t.nonce() > nonce) {
             return false;
         }
-
-        // if last tx nonce is < target, clear all
-        if self.txs[len - 1].nonce() < *nonce {
-            self.txs.drain(..);
-            return true;
+        while let Some(t) = self.txs.pop_front() {
+            if t.nonce() == nonce {
+                break;
+            }
         }
-
-        // Find split point
-        let split_idx = match self.txs.binary_search_by_key(nonce, |tx| tx.nonce()) {
-            Ok(idx) => idx + 1,
-            Err(idx) => idx,
-        };
-
-        if split_idx > 0 {
-            self.txs.drain(0..split_idx);
-        }
-
-        self.txs.is_empty()
+        self.is_empty()
     }
 
     /// Ready retrieves a sequentially increasing list of transactions starting at the
@@ -69,7 +65,7 @@ impl TxList {
             return None;
         }
 
-        let mut ready_txs = Self::default();
+        let mut ready_txs = Self::empty_for_sender(self.sender);
         for next_tx in self.iter() {
             if next_tx.nonce() != curr_nonce || !next_tx.valid_for_block(base_fee) {
                 break;
@@ -93,7 +89,6 @@ impl TxList {
     #[inline]
     pub fn first_ready(&self, curr_nonce: u64, base_fee: u64) -> Option<&Arc<Transaction>> {
         let next_tx = self.peek()?;
-
         if next_tx.nonce() != curr_nonce || !next_tx.valid_for_block(base_fee) {
             return None;
         }
@@ -177,13 +172,17 @@ impl TxList {
 
 impl From<Arc<Transaction>> for TxList {
     fn from(tx: Arc<Transaction>) -> Self {
-        Self { txs: VecDeque::from(vec![tx]) }
+        let sender = tx.sender();
+        debug_assert_ne!(sender, Address::default(), "should never have sender {sender}");
+        Self { sender, txs: VecDeque::from(vec![tx]) }
     }
 }
 
 impl From<Vec<Arc<Transaction>>> for TxList {
     fn from(txs: Vec<Arc<Transaction>>) -> Self {
-        Self { txs: VecDeque::from(txs) }
+        let sender = txs[0].sender();
+        debug_assert_ne!(sender, Address::default(), "should never have sender {sender}");
+        Self { sender, txs: VecDeque::from(txs) }
     }
 }
 
