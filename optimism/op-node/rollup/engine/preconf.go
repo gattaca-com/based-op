@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
@@ -158,13 +157,10 @@ func preconfHandler(ctx context.Context, c PreconfChannels, e ExecEngine) {
 	for {
 		select {
 		case env := <-c.EnvCh:
-			fmt.Println("Env received by the preconf handler")
 			state.putEnv(env)
 		case frag := <-c.NewFragCh:
-			fmt.Println("Frag receved by the preconf handler")
 			state.putFrag(frag)
 		case seal := <-c.SealCh:
-			fmt.Println("Seal received by the preconf handler")
 			state.putSeal(seal)
 		}
 	}
