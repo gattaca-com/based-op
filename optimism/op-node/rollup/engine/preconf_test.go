@@ -143,10 +143,39 @@ func TestInOrder(t *testing.T) {
 	}
 	state.putSeal(&s)
 	if !cmp.Equal(m.SeenSeals[0], s) {
-		t.Fatalf("The seal was not sent to the engine api")
+		t.Fatalf("The first seal was not sent to the engine api")
 	}
+
+	// Second block, just to check that they don't collide with the first block events.
+	f21 := f
+	f21.Frag.BlockNumber = 2
+	f21.Frag.Seq = 0
+	f22 := f21
+	f22.Frag.Seq = 1
+	f23 := f21
+	f23.Frag.Seq = 2
+	f23.Frag.IsLast = true
+	s2 := s
+	s2.Seal.BlockNumber = 2
+
 	state.putEnv(&e2)
 	if !cmp.Equal(m.SeenEnvs[1], e2, cmp.AllowUnexported(big.Int{})) {
 		t.Fatalf("The second env was not sent to the engine api.")
+	}
+	state.putFrag(&f21)
+	if !cmp.Equal(m.SeenNewFrags[2], f21) {
+		t.Fatalf("The first frag of the second block was not sent to the engine api")
+	}
+	state.putFrag(&f22)
+	if !cmp.Equal(m.SeenNewFrags[3], f22) {
+		t.Fatalf("The second frag of the second block was not sent to the engine api")
+	}
+	state.putFrag(&f23)
+	if !cmp.Equal(m.SeenNewFrags[4], f23) {
+		t.Fatalf("The second frag of the second block was not sent to the engine api")
+	}
+	state.putSeal(&s2)
+	if !cmp.Equal(m.SeenSeals[1], s2) {
+		t.Fatalf("The second seal was not sent to the engine api")
 	}
 }
