@@ -75,7 +75,7 @@ impl Active {
         };
 
         let tx_list = &mut self.txs[index];
-        if tx_list.pending.forward(&nonce) {
+        if tx_list.pending.forward(nonce) {
             self.remove(index, address);
             return;
         }

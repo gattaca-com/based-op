@@ -69,7 +69,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
-            .worker_threads(2)
+            .worker_threads(10)
             .enable_all()
             .build()
             .expect("failed to create runtime")
@@ -77,7 +77,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, shared_state.clone(), &rt);
+            start_rpc(&args, &spine, &rt);
             move || rt.block_on(wait_for_signal())
         });
 
