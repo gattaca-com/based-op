@@ -125,3 +125,47 @@ ethereum_package:
       el_image: ethereum/client-go:v1.14.13
 
 ```
+
+## Wallets
+
+Wallets commonly use a high polling interval for the transaction receipt. To be able to see the preconfirmation speed, we modify Rabby to speed up that interval. You can test it compiling it:
+
+```sh
+make build-rabby
+```
+
+And importing it to your browser locally (see [Firefox](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/) or [Chrome](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world?hl=es-419#load-unpacked) references). The compiled extension directory is `rabby/dist` for Google Chrome, and `rabby/dist-mv2` for Mozilla Firefox.
+
+### Connecting your local wallet to your local follower node
+
+> [!WARNING]
+> You need to have our modified Rabby extension installed.
+
+1. Open your Rabby extension.
+2. Import, create a new wallet, or use your existing one.
+3. Click on "More".
+4. Scroll down to the "Settings" section.
+5. Click on "Add Custom Network".
+6. Fill the form with the following values:
+   - Network Name: `Based-OP`
+   - RPC URL: `http://localhost:8545`
+   - Chain ID: `2151908`
+   - Symbol: `ETH`
+   - Block Explorer URL: `<TODO>`
+7. Check the "This network supports preconfirmations" option.
+8. Click on "Confirm".
+
+Now, you have added your local follower node RPC as the custom network.
+
+### Witnessing Preconfirmations
+
+> [!WARNING]
+> You need to have our modified Rabby extension installed and connected to your local follower node.
+
+1. Open your Rabby extension.
+2. Click on "Send".
+3. Click on the "Chain" dropdown and select "Based-OP".
+4. Fill the form.
+5. Click on "Send".
+6. Sign the transaction.
+7. Enjoy.

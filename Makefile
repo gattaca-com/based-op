@@ -61,6 +61,12 @@ build-op-node: ## 🏗️ Build OP node from optimism directory
 build-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t based_op_geth ./op-geth
 
+build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and Firefox
+	cd rabby && \
+		yarn && \
+		yarn build:pro && \
+		yarn build:pro:mv2
+
 run: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op && $(MAKE) dump
 

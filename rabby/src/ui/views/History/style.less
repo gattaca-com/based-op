@@ -1,0 +1,207 @@
+@import '../../style/mixin.less';
+
+.txs-history {
+  .page();
+  display: flex;
+  flex-direction: column;
+  padding: 0 20px;
+  font-size: 12px;
+  line-height: 14px;
+  height: 100vh;
+  overflow: auto;
+
+  .page-header-container {
+    height: 64px;
+    .page-header {
+      padding-top: 20px;
+      margin-bottom: 0;
+    }
+  }
+
+  .ant-tabs,
+  .ant-tabs-content-holder,
+  .ant-tabs-content,
+  .tabpanel {
+    height: 100%;
+  }
+
+  .filter-scam-nav {
+    display: inline-flex;
+    height: 40px;
+    padding: 11px;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 12px;
+    border-radius: 6px;
+    background: var(--r-neutral-card-1, #fff);
+    gap: 16px;
+    width: 100%;
+    margin-bottom: 12px;
+    cursor: pointer;
+
+    color: var(--r-neutral-body, #3e495e);
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 500;
+    border: 1px solid transparent;
+  }
+
+  .filter-scam-loading-text {
+    color: var(--r-neutral-body, #3e495e);
+    text-align: center;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 14px;
+    position: fixed;
+    top: 55px;
+    left: 0;
+    right: 0;
+    z-index: 100;
+  }
+
+  &-card {
+    position: relative;
+    background: var(--r-neutral-card-1, rgba(255, 255, 255, 0.06));
+    border-radius: 6px;
+    padding: 0 12px;
+    margin-bottom: 12px;
+
+    &.is-gray {
+      opacity: 0.5;
+    }
+    &-header {
+      display: flex;
+      align-items: center;
+      padding: 9px 0;
+      min-height: 38px;
+      gap: 9px 12px;
+      flex-wrap: wrap;
+      &-inner {
+        flex: 1;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        white-space: nowrap;
+      }
+      .time {
+        color: var(--r-neutral-foot, #babec5);
+      }
+    }
+    &-body {
+      padding-top: 8px;
+      padding-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    &-footer {
+      border-top: 1px solid var(--r-neutral-line, rgba(255, 255, 255, 0.1));
+      border-top: 0.5px solid var(--r-neutral-line, rgba(255, 255, 255, 0.1));
+      padding: 12px 0;
+      display: flex;
+      color: var(--r-neutral-foot, #babec5);
+      .tx-status {
+        margin-left: auto;
+        &.is-failed {
+          color: #f24822;
+        }
+      }
+    }
+  }
+  .tag-scam {
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 14px;
+    color: var(--r-neutral-foot, #babec5);
+    padding: 3px 6px;
+    background: var(--r-neutral-line, rgba(255, 255, 255, 0.1));
+    border-radius: 2px;
+  }
+  .tx-id {
+    color: var(--r-neutral-foot, #babec5);
+    text-decoration: underline;
+    &-chain {
+      color: var(--r-neutral-body, #d3d8e0);
+      margin-right: 8px;
+    }
+    &-container {
+      margin-left: auto;
+    }
+  }
+  .tx-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 2px;
+    object-fit: cover;
+  }
+
+  &__empty {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    .no-data {
+      width: 100px;
+      height: 100px;
+      margin: 135px auto 0;
+    }
+  }
+
+  &-loading {
+    background-color: var(--r-neutral-card-1, rgba(255, 255, 255, 0.06));
+    border-radius: 6px;
+    padding: 8px 14px 16px;
+    .ant-skeleton-input {
+      background-color: var(--r-neutral-card-1, rgba(255, 255, 255, 0.06));
+    }
+    &:not(:last-child) {
+      margin-bottom: 12px;
+    }
+  }
+}
+
+.J_tipInputData .ant-tooltip-inner {
+  padding: 8px 6px !important;
+  background-color: var(--r-neutral-title-1, #192945) !important;
+}
+
+.view-tx-message-modal {
+  @body-padding: 16px;
+  .ant-modal-header {
+    border-bottom-color: transparent;
+  }
+
+  .ant-modal-header,
+  .ant-modal-content {
+    background: var(--r-neutral-card-1, #fff);
+  }
+
+  .ant-modal-content {
+    min-height: 110px;
+    padding-bottom: @body-padding;
+  }
+
+  .ant-modal-title {
+    text-align: center;
+    color: var(--r-neutral-title-1, #192945);
+  }
+
+  .ant-modal-body {
+    max-height: 400px;
+    overflow: auto;
+    padding: @body-padding;
+    padding-bottom: 0;
+  }
+
+  .parsed-content {
+    color: var(--r-neutral-body, #3e495e);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 16px;
+    letter-spacing: 0.5px;
+    word-break: break-all;
+  }
+}
