@@ -77,7 +77,7 @@ where
     Db: DatabaseWrite + DatabaseRead,
 {
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
-        let block_sync_receive_duration = if matches!(self.state, SequencerState::Syncing{..}) {
+        let block_sync_receive_duration = if matches!(self.state, SequencerState::Syncing { .. }) {
             // we're syncing anyway
             Duration::MAX
         } else {

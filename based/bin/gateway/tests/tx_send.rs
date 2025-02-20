@@ -5,7 +5,8 @@ use alloy_eips::eip2718::Encodable2718;
 use alloy_provider::network::TxSigner;
 use bop_common::{
     signing::ECDSASigner,
-    time::{Duration, Instant}, utils::init_tracing,
+    time::{Duration, Instant},
+    utils::init_tracing,
 };
 use op_alloy_consensus::{OpTxEnvelope, TxDeposit};
 use op_alloy_rpc_types::OpTransactionReceipt;
@@ -110,7 +111,7 @@ impl Default for SpammerClient {
             .expect("invalid PORTAL_RPC_URL");
         let follower_url = Url::parse(&std::env::var("FOLLOWER_RPC_URL").expect("Please set FOLLOWER_RPC_URL env var"))
             .expect("invalid FOLLOWER_RPC_URL");
-        Self { client, portal_url, follower_url}
+        Self { client, portal_url, follower_url }
     }
 }
 impl SpammerClient {
@@ -210,14 +211,13 @@ fn generate_random_accounts(n_accounts: usize) -> Vec<TestAccount> {
     (0..n_accounts).map(|_| TestAccount::random()).collect()
 }
 fn init_test_logging() {
-        tracing_subscriber::fmt()
+    tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_max_level(LevelFilter::INFO)
         .with_thread_names(true)
         .with_file(true) // Enable file display
         .with_line_number(true) // Enable line number display
         .init(); // just console
-
 }
 #[ignore = "Requires setting PORTAL_RPC_URL"]
 #[test]
