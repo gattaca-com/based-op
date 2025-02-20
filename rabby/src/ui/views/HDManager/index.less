@@ -1,0 +1,450 @@
+@import '../../style/mixin.less';
+
+.HDManager {
+  font-weight: 500;
+  line-height: 1.15;
+  background: var(--r-neutral-bg-2);
+  overflow-x: auto;
+  min-height: 100vh;
+
+  main {
+    min-width: 1200px;
+    position: relative;
+    padding-top: 20px;
+    margin: 20px 120px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  @media (max-width: 1536px) {
+    main {
+      margin: 20px 10px;
+    }
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    margin: 0 auto 24px;
+    .icon {
+      width: 32px;
+      height: 32px;
+      margin-right: 12px;
+    }
+    .title {
+      font-size: 20px;
+      color: var(--r-neutral-title-1);
+      margin-bottom: 0;
+    }
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    position: absolute;
+    right: 0;
+    top: 106px;
+    column-gap: 20px;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--r-neutral-body);
+    z-index: 1;
+  }
+
+  .toolbar-item {
+    display: flex;
+    column-gap: 4px;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .tabs {
+    .ant-tabs-nav {
+      margin-bottom: 24px;
+    }
+    .ant-tabs-nav::before {
+      display: none;
+    }
+    .ant-tabs-nav-list {
+      margin: auto;
+      background: var(--r-neutral-line);
+      border-radius: 8px;
+      padding: 4px;
+    }
+    .ant-tabs-ink-bar {
+      display: none;
+    }
+    .ant-tabs-tab {
+      padding: 7px 34px;
+      border-radius: 6px;
+      color: var(--r-neutral-body);
+      font-size: 15px;
+      transition: all 0.3s ease-in-out;
+      margin: 0;
+      &.ant-tabs-tab-active {
+        background: var(--r-neutral-bg-1);
+        .ant-tabs-tab-btn {
+          color: var(--r-blue-default);
+        }
+      }
+    }
+  }
+}
+
+.AccountList {
+  .ant-spin-darkmode;
+
+  .ant-table {
+    background: var(--r-neutral-bg-2);
+  }
+  .ant-table-cell {
+    height: 55px;
+    padding: 0 16px;
+    background-color: var(--r-neutral-card-1);
+    color: var(--r-neutral-title-1);
+  }
+  tr > td {
+    border-bottom: 1px solid var(--r-neutral-bg-2);
+  }
+  .ant-table-header {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+  }
+  .ant-table-body {
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+  }
+  &.is-win32 .ant-table-body {
+    .chromelike-scrollbar();
+  }
+  .ant-table-thead {
+    font-size: 12px;
+    line-height: 14px;
+    background: var(--r-neutral-card-3);
+    
+    .ant-table-cell {
+      padding: 8px 16px;
+      background: var(--r-neutral-card-3);
+      border-bottom: none;
+      height: auto;
+    }
+
+    .column-group {
+      color: var(--r-neutral-foot);
+      text-align: left;
+      font-weight: normal;
+      padding: 10px 0 0;
+
+      a {
+        color: var(--r-neutral-foot);
+        text-decoration: underline;
+      }
+    }
+
+    .column-group-wrap {
+      border-right: 1px solid var(--r-neutral-bg-2);
+      padding-top: 0;
+      padding-bottom: 0;
+
+      &:nth-last-child(-n+2) {
+        border-right-color: transparent;
+      }
+    }
+  }
+  .ant-table-tbody {
+    background-color: var(--r-neutral-bg-2);
+    .ant-empty-description {
+      color: var(--r-neutral-foot);
+    }
+  }
+  .ant-table-tbody > tr.ant-table-row:hover > td {
+    background-color: var(--r-blue-light-1);
+  }
+  .ant-table-cell-scrollbar {
+    box-shadow: none;
+  }
+
+  .cell-address {
+    display: flex;
+    align-items: center;
+    padding-left: 3px;
+    padding-right: 20px;
+    text-align: left;
+  }
+
+  &-skeleton {
+    background: var(--r-neutral-bg-2);
+    padding: 4px 6px;
+    border-radius: 4px;
+    color: var(--r-neutral-foot);
+    font-size: 13px;
+    display: block;
+    margin: auto;
+  }
+
+  .cell-index {
+    color: var(--r-neutral-foot);
+    font-weight: 400;
+    padding-right: 3px;
+  }
+
+  .cell-note {
+    border-right: 1px solid var(--r-neutral-bg-2);
+  }
+
+  .cell-add {
+    border-right: 1px solid var(--r-neutral-bg-2);
+  }
+
+  .copy-icon {
+    width: 14px;
+    margin-left: 4px;
+  }
+
+  .info-mask {
+    cursor: pointer;
+    position: absolute;
+    right: 0;
+    background-color: rgba(var(--r-neutral-title-1-rgb), 0.1);
+    // backdrop-filter: blur(100px);
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 108px;
+
+    &--center {
+      justify-content: center;
+      padding-top: 0;
+    }
+
+    td {
+      color: var(--r-neutral-title-1);
+      border-bottom: none;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      .icon {
+        margin-right: 12px;
+      }
+    }
+  }
+
+  .AliasName {
+    &--disabled {
+      color: var(--r-neutral-foot);
+    }
+    .label {
+      display: flex;
+      align-items: center;
+    }
+    .text {
+      margin-right: 4px;
+    }
+    .input-group {
+      display: flex;
+      align-items: center;
+      width: auto;
+    }
+    .icon {
+      cursor: pointer;
+    }
+    .alias-input {
+      margin-right: 8px;
+      flex: 1;
+    }
+  }
+
+  .ChainList {
+    display: flex;
+    align-items: center;
+
+    .chain-item {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      border-radius: 100%;
+      background: var(--r-neutral-line);
+      color: var(--r-neutral-foot);
+      font-size: 12px;
+      line-height: 14px;
+      font-weight: 400;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      &:last-child {
+        margin-right: 0;
+      }
+    }
+  }
+}
+
+.AdvancedSettings {
+  .group {
+    margin-bottom: 40px;
+   
+    .label {
+      color: var(--r-neutral-title-1);
+      font-size: 15px;
+      line-height: 17.5px;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .ant-input-number {
+      border-radius: 6px;
+    }
+
+    .tip {
+      color: var(--r-neutral-body);
+      font-size: 13px;
+      line-height: 15px;
+      font-weight: 500;
+    }
+
+    .group-field {
+      margin-bottom: 12px;
+      width: 100%;
+      display: flex;
+
+      .ant-input-number-handler-wrap {
+        display: none;
+      }
+
+      .ant-input-number-input-wrap {
+        width: 100%;
+      }
+    }
+  }
+}
+
+.AdvancedModal {
+  .ant-modal-footer {
+    border-top: none;
+    padding: 0;
+  }
+
+  .ant-modal-header {
+    border-bottom: none;
+    padding: 40px 0;
+    background: var(--r-neutral-bg-1);
+  }
+
+  .ant-modal-title {
+    color: var(--r-neutral-title-1);
+  }
+
+  .ant-modal-body {
+    padding: 0 74px;
+  }
+
+  .ant-modal-content {
+    background: var(--r-neutral-bg-1);
+    border-radius: 12px;
+  }
+
+  .advanced-button {
+    padding: 17px 0;
+    height: auto;
+    font-size: 15px;
+    line-height: 1;
+    width: 360px;
+    margin: auto;
+    display: block;
+  }
+
+  .footer {
+    margin: 80px 0 60px;
+  }
+}
+
+.HDPathTypeButton {
+  background: var(--r-neutral-card-2);
+  border-radius: 6px;
+  color: var(--r-neutral-title-1);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 17.5px;
+  padding: 17px 0;
+  width: 220px;
+  position: relative;
+  margin-right: 16px;
+  transition: all 0.3s ease-in-out;
+  &:last-child {
+    margin-right: 0;
+  }
+
+  &--selected {
+    background: var(--r-blue-light-1);
+    color: var(--r-blue-default);
+  }
+
+  &--on-chain::before {
+    content: '';
+    background: var(--r-green-default);
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    border-radius: 50%;
+    width: 8px;
+    height: 8px;
+  }
+}
+
+.AddToRabby {
+  min-width: 50px;
+  height: 20px;
+  line-height: 20px;
+  border-radius: 90px;
+  background-color: var(--r-neutral-line);
+  .icon {
+    position: absolute;
+    top: 6px;
+    left: 5px;
+  }
+  .icon-loading {
+    position: absolute;
+    left: 1px;
+    top: 2px;
+
+    path {
+      stroke: var(--r-blue-default, #7084ff);
+    }
+  }
+  &.ant-switch-checked {
+    background-color: var(--r-blue-default, #7084ff);
+    .ant-switch-handle {
+      left: calc(100% - 22px);
+      &::before {
+        border-color: rgba(134, 151, 255, 0.2);
+        box-shadow: 0px 1px 2px rgba(29, 40, 109, 0.1);
+      }
+    }
+  }
+  .ant-switch-handle {
+    width: 24px;
+    height: 24px;
+    top: -2px;
+    left: -2px;
+    &::before {
+      border-radius: 50%;
+      border: 1px solid #D9DEE5;
+      box-shadow: 0px 1px 2px rgba(29, 40, 109, 0.1);
+    }
+  }
+}
+
+.hd-manager-switch-modal {
+  width: 520px!important;
+
+  .ant-modal-confirm-body .ant-modal-confirm-content {
+    color: var(--r-neutral-title-1);
+    text-align: center;
+    font-size: 15px;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 24px;
+  }
+}
+  

@@ -1,0 +1,155 @@
+@import '../../style/var.less';
+
+.address-group-list {
+  & > li {
+    margin-bottom: 8px;
+    &:nth-last-child(1) {
+      margin-bottom: 0;
+    }
+
+    & > .subtitle {
+      margin-bottom: 8px;
+      a {
+        color: currentColor;
+        margin-left: 2px;
+      }
+    }
+    .addresses {
+      & > li {
+        background-color: #fff;
+        padding: 12px;
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        border-radius: 6px;
+        .ant-skeleton-element {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+        }
+        .icon-hardware {
+          width: 24px;
+          height: 24px;
+        }
+        &:nth-last-child(1) {
+          margin-bottom: 0;
+        }
+      }
+    }
+  }
+  &.switch {
+    & > li {
+      .addresses {
+        & > li {
+          cursor: pointer;
+        }
+      }
+    }
+  }
+}
+.edit-name {
+  margin-left: 7px;
+  width: 12px;
+  height: 12px;
+  align-self: center;
+  cursor: pointer;
+}
+.number-index {
+  font-weight: normal;
+  font-size: 12px;
+  color: @color-comment-2;
+  margin-right: 22px;
+}
+.address-info {
+  display: flex;
+  flex-direction: column;
+  align-self: center;
+  align-items: flex-start;
+  margin-left: 11px;
+  .display-name {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .ant-input {
+    width: 160px;
+    height: 24px;
+    background: @color-bg;
+    border: 1px solid @color-border;
+    box-sizing: border-box;
+    border-radius: 2px;
+    padding-left: 2px;
+  }
+  .balance {
+    color: #3b3e4a;
+    font-size: 15px;
+    font-weight: 500;
+    margin-right: 8px;
+    position: relative;
+  }
+}
+.highlight-address {
+  border: 1px solid var(--r-blue-default, #7084ff);
+  border-radius: 6px;
+}
+.item-right-icon {
+  width: 24px;
+  height: 24px;
+  position: absolute;
+  right: 16px;
+}
+
+.addressType__tooltip {
+  .ant-tooltip-content {
+    transform: translate(-3px, 5px);
+  }
+  .ant-tooltip-arrow {
+    right: 10px !important;
+    bottom: -13.071068px !important;
+  }
+}
+.address-wrap {
+  margin-bottom: 8px;
+  & > .subtitle {
+    margin-bottom: 8px;
+    a {
+      color: currentColor;
+      margin-left: 2px;
+    }
+  }
+}
+.address-wrap-with-padding {
+  .address-wrap;
+  &:nth-last-child(1) {
+    padding-bottom: 200px;
+  }
+}
+.addresses {
+  height: 64px;
+  background: @color-bg;
+  & > li {
+    background-color: #fff;
+    padding: 10px;
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    border-radius: 6px;
+    .ant-skeleton-element {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+    }
+    .icon-hardware {
+      width: 32px;
+      height: 32px;
+    }
+    &:nth-last-child(1) {
+      margin-bottom: 0;
+    }
+  }
+}
