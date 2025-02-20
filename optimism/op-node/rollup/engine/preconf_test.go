@@ -17,14 +17,6 @@ type MockEngine struct {
 	SeenSeals    []eth.SignedSeal
 }
 
-func NewMockEngine() MockEngine {
-	return MockEngine{
-		SeenEnvs:     make([]eth.SignedEnv, 10),
-		SeenNewFrags: make([]eth.SignedNewFrag, 10),
-		SeenSeals:    make([]eth.SignedSeal, 10),
-	}
-}
-
 func (m *MockEngine) GetPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error) {
 	return nil, nil
 }
@@ -117,17 +109,17 @@ func seal() eth.SignedSeal {
 }
 
 func TestInOrder(t *testing.T) {
+	// General setup
 	var m MockEngine
+	state := NewPreconfState(context.Background(), &m)
+
+	// Data for the first block
 	e := env()
 	f := frag()
 	f2 := f
 	f2.Frag.Seq = 1
 	f2.Frag.IsLast = true
 	s := seal()
-	e2 := e
-	e2.Env.Number += 1
-
-	state := NewPreconfState(context.Background(), &m)
 
 	state.putEnv(&e)
 	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
@@ -147,6 +139,8 @@ func TestInOrder(t *testing.T) {
 	}
 
 	// Second block, just to check that they don't collide with the first block events.
+	e2 := e
+	e2.Env.Number += 1
 	f21 := f
 	f21.Frag.BlockNumber = 2
 	f21.Frag.Seq = 0
@@ -177,5 +171,60 @@ func TestInOrder(t *testing.T) {
 	state.putSeal(&s2)
 	if !cmp.Equal(m.SeenSeals[1], s2) {
 		t.Fatalf("The second seal was not sent to the engine api")
+	}
+}
+
+func TestFragSealOutOfOrder(t *testing.T) {
+	// General setup
+	var m MockEngine
+	state := NewPreconfState(context.Background(), &m)
+
+	// Data for the first block. Same as the happy path.
+	e := env()
+	f := frag()
+
+	state.putFrag(&f)
+	if !cmp.Equal(len(m.SeenNewFrags), 0) {
+		t.Fatalf("The first frag was pushed even if it shouldn't have been")
+	}
+
+	state.putEnv(&e)
+	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The first env was not sent to the engine api.")
+	}
+	// Now the frag should be pushed
+	if !cmp.Equal(m.SeenNewFrags[0], f) {
+		t.Fatalf("The first frag was not pushed even after the env was")
+	}
+}
+
+func TestFragsOutOfOrder(t *testing.T) {
+	// General setup
+	var m MockEngine
+	state := NewPreconfState(context.Background(), &m)
+
+	// Data for the first block. Same as the happy path.
+	e := env()
+	f := frag()
+	f2 := f
+	f2.Frag.Seq = 1
+	f2.Frag.IsLast = true
+
+	state.putEnv(&e)
+	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The first env was not sent to the engine api.")
+	}
+
+	state.putFrag(&f2)
+	if !cmp.Equal(len(m.SeenNewFrags), 0) {
+		t.Fatalf("The second frag was pushed even if it shouldn't have been")
+	}
+
+	state.putFrag(&f)
+	if !cmp.Equal(m.SeenNewFrags[0], f) {
+		t.Fatalf("The first frag was not pushed even after the env was")
+	}
+	if !cmp.Equal(m.SeenNewFrags[1], f2) {
+		t.Fatalf("The second frag was not pushed even after the env was")
 	}
 }
