@@ -1,0 +1,117 @@
+@import '../../style/mixin.less';
+
+.import-gnosis {
+  overflow: auto;
+  background: var(--r-neutral-bg-2, #f2f4f7);
+  .header {
+    background: var(--r-blue-default, #7084ff);
+  }
+
+  .ant-input-darkmode();
+
+  .unlock-logo {
+    border: 1px solid #fff;
+    border-radius: 100%;
+  }
+  .rabby-container {
+    .ant-input  {
+      &:focus {
+        border-color: var(--r-blue-default, #7084ff);
+      }
+    }
+  }
+  
+  .ant-form-item-explain {
+    display: none !important;
+  }
+  .error {
+    margin-top: 12px;
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 15px;
+    color: #ec5151;
+  }
+  .loading {
+    margin-top: 20px;
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 15px;
+    color: var(--r-neutral-body, #3e495e);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .chain-list-container {
+    margin-top: 20px;
+    .desc {
+      text-align: left;
+      font-weight: 400;
+      font-size: 13px;
+      line-height: 15px;
+      color: var(--r-neutral-body, #3e495e);
+      margin-bottom: 12px;
+    }
+    .chain-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px 12px;
+
+      &-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        font-weight: 500;
+        font-size: 13px;
+        line-height: 15px;
+        color: var(--r-neutral-title-1, #192945);
+
+        .chain-logo {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+        }
+      }
+    }
+  }
+  .footer {
+    border-top: 0.5px solid var(--r-neutral-line, #d3d8e0);
+    background: var(--r-neutral-card-1, #fff);
+    text-align: center;
+
+    .ant-btn {
+      font-weight: 500;
+      font-size: 15px;
+      line-height: 18px;
+
+      &:disabled {
+        background: #8998ff;
+        opacity: 0.4;
+        border-radius: 6px;
+        &::before {
+          display: none;
+        }
+      }
+    }
+  }
+  .field {
+    max-width: 100%;
+  }
+  .step2 {
+    .ant-input-affix-wrapper {
+      border-radius: 6px;
+    }
+    .ant-btn-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      .ant-btn-loading-icon {
+        svg {
+          width: 12px;
+          height: 12px;
+        }
+      }
+    }
+  }
+}
