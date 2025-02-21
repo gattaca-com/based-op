@@ -78,8 +78,9 @@ run-multiple: ## 🚀 Run
 
 restart-no-gateway: clean build-no-gateway run ## rip rebuild run
 
-run-follower: ## 🚀 Run a single follower node with RPC enabled.
-	docker compose -f follower_node.compose.yml up -d
+run-follower: build-op-node build-op-geth ## 🚀 Run a single follower node with RPC enabled.
+	cd follower-node && \
+		docker compose -f compose.yml up -d
 
 logs: ## 📜 Show logs
 	kurtosis service logs -f based-op $(SERVICE)
