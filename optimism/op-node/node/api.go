@@ -199,6 +199,14 @@ func NewBasedAPI(node p2p.Node, log log.Logger, metrics metrics.RPCMetricer) *ba
 }
 
 func verifySignature(log log.Logger, signatureBytes []byte, messageBytes []byte) error {
+	if len(signatureBytes) != 65 {
+		log.Warn("invalid signature length", "signature", signatureBytes)
+		return fmt.Errorf("Invalid signature length")
+	}
+	if signatureBytes[64] == 27 || signatureBytes[64] == 28 {
+		signatureBytes[64] -= 27
+	}
+
 	_, err := crypto.SigToPub(messageBytes, signatureBytes)
 	if err != nil {
 		log.Warn("invalid signature", "err", err)
@@ -215,7 +223,10 @@ func (n *basedAPI) NewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) (s
 	n.log.Info("NewFrag RPC request received")
 
 	root := signedFrag.Frag.Root()
-	verifySignature(n.log, signedFrag.Signature[:], root[:])
+
+	if err := verifySignature(n.log, signedFrag.Signature[:], root[:]); err != nil {
+		return "", err
+	}
 
 	if err := n.p2p.GossipOut().PublishNewFrag(ctx, n.p2p.Host().ID(), &signedFrag); err != nil {
 		return "", fmt.Errorf("failed to publish new frag: %w", err)
@@ -231,7 +242,10 @@ func (n *basedAPI) SealFrag(ctx context.Context, signedSeal eth.SignedSeal) (str
 	n.log.Info("SealFrag RPC request received", "seal", signedSeal.Seal)
 
 	root := signedSeal.Seal.Root()
-	verifySignature(n.log, signedSeal.Signature[:], root[:])
+
+	if err := verifySignature(n.log, signedSeal.Signature[:], root[:]); err != nil {
+		return "", err
+	}
 
 	if err := n.p2p.GossipOut().PublishSealFrag(ctx, n.p2p.Host().ID(), &signedSeal); err != nil {
 		return "", fmt.Errorf("failed to publish new seal: %w", err)
@@ -240,13 +254,18 @@ func (n *basedAPI) SealFrag(ctx context.Context, signedSeal eth.SignedSeal) (str
 	return "OK", nil
 }
 
-func (n *basedAPI) Env(ctx context.Context, env eth.SignedEnv) (string, error) {
+func (n *basedAPI) Env(ctx context.Context, signedEnv eth.SignedEnv) (string, error) {
 	recordDur := n.metrics.RecordRPCServerRequest("based_env")
 	defer recordDur()
 
-	n.log.Info("Env RPC request received", "env", env.Env)
+	n.log.Info("Env RPC request received", "env", signedEnv.Env)
 
-	if err := n.p2p.GossipOut().PublishEnv(ctx, n.p2p.Host().ID(), &env); err != nil {
+	root := signedEnv.Env.Root()
+	if err := verifySignature(n.log, signedEnv.Signature[:], root[:]); err != nil {
+		return "", err
+	}
+
+	if err := n.p2p.GossipOut().PublishEnv(ctx, n.p2p.Host().ID(), &signedEnv); err != nil {
 		return "", fmt.Errorf("failed to publish new env: %w", err)
 	}
 

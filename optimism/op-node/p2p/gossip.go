@@ -352,6 +352,10 @@ func BuildEnvValidator(log log.Logger, runCfg GossipRuntimeConfig, envVersion En
 			return pubsub.ValidationReject
 		}
 
+		if result := verifyEnvSignature(log, runCfg, id, signedEnv); result != pubsub.ValidationAccept {
+			return result
+		}
+
 		message.ValidatorData = &signedEnv
 		return pubsub.ValidationAccept
 	}
@@ -561,7 +565,7 @@ func verifySignature(log log.Logger, id peer.ID, signatureBytes []byte, messageB
 	addr := crypto.PubkeyToAddress(*pub)
 
 	if addr != expectedSigner {
-		log.Warn("unexpected signer", "err", err, "peer", id, "addr", addr, "expected", expectedSigner)
+		log.Warn("unexpected signer", "peer", id, "addr", addr, "expected", expectedSigner)
 		return pubsub.ValidationReject
 	}
 
