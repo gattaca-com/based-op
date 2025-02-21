@@ -36,7 +36,7 @@ services:
       - 9003:9003 # P2P
     volumes:
       - node_data:/data/op-node
-      - .:/network-configs
+      - ./config:/network-configs
       - jwt:/jwt
     # networks:
     #   - kt-based-op
@@ -60,7 +60,7 @@ services:
     volumes:
       - ./scripts/start_op_geth.sh:/scripts/start_op_geth.sh
       - geth_data:/data/geth
-      - .:/network-configs
+      - ./config:/network-configs
       - jwt:/jwt
     # networks:
     #   - kt-based-op
