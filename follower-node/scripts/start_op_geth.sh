@@ -30,8 +30,5 @@ geth \
     --rpc.allow-unprotected-txs \
     --discovery.port=30303 \
     --port=30303 \
-    --metrics \
-    --metrics.addr=0.0.0.0 \
-    --metrics.port=9001 \
     --rollup.sequencerhttp=$SEQUENCER_URL \
     --bootnodes=$GETH_BOOTNODE
