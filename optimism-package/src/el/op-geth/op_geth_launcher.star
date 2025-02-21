@@ -172,6 +172,8 @@ def get_config(
 
     subcommand_strs = []
 
+    extip = participant.el_extra_env_vars.get("ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER)
+
     cmd = [
         "geth",
         "--networkid={0}".format(launcher.network_id),
@@ -195,7 +197,7 @@ def get_config(
         "--authrpc.vhosts=*",
         "--authrpc.jwtsecret=" + ethereum_package_constants.JWT_MOUNT_PATH_ON_CONTAINER,
         "--syncmode=full",
-        "--nat=extip:" + ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER,
+        "--nat=extip:" + extip,
         "--rpc.allow-unprotected-txs",
         "--discovery.port={0}".format(discovery_port),
         "--port={0}".format(discovery_port),
@@ -278,7 +280,6 @@ def get_config(
         "cmd": [command_str],
         "files": files,
         "entrypoint": ENTRYPOINT_ARGS,
-        "private_ip_address_placeholder": ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER,
         "env_vars": env_vars,
         "labels": ethereum_package_shared_utils.label_maker(
             client=constants.EL_TYPE.op_geth,
@@ -290,6 +291,9 @@ def get_config(
         "tolerations": tolerations,
         "node_selectors": node_selectors,
     }
+
+    if extip == ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER:
+        config_args["private_ip_address_placeholder"] = ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER
 
     # configure resources
 
