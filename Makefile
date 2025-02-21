@@ -1,7 +1,8 @@
 .PHONY: deps run clean restart help \
 		build build-portal build-op-node build-op-geth \
 		logs op-node-logs op-geth-logs \
-		test-frag test-seal
+		test-frag test-seal \
+		docs
 
 .DEFAULT_GOAL := help
 
@@ -23,6 +24,12 @@ PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurto
 
 help: ## 📚 Show help for each of the Makefile recipes
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+docs: ## 📚 Build local docs
+	cd docs && \
+	npm i && \
+	npm run build && \
+	npm run start
 
 deps: ## 🚀 Install all dependencies
 	# Kurtosis
