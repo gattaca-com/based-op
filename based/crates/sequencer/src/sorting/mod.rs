@@ -46,7 +46,7 @@ impl ActiveOrders {
 
             if order.sender() == sender {
                 if order.pop(base_fee) {
-                    self.orders.swap_remove_back(i);
+                    self.orders.swap_remove_back(i).unwrap();
                 }
                 return;
             }

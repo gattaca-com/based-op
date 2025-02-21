@@ -38,6 +38,7 @@ reth-primitives-traits.workspace = true
 reth-trie-common.workspace = true
 revm.workspace = true
 revm-primitives.workspace = true
+rand.workspace = true
 strum_macros.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

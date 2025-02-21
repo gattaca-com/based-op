@@ -201,3 +201,22 @@ follower-node-proxy:
 
 spam: ## 🚀 Run the gateway
 	PORTAL_PORT=$(PORTAL_PORT) BOP_EL_PORT=$(BOP_EL_PORT) cargo test --manifest-path ./based/Cargo.toml --release -- tx_spammer --ignored --nocapture
+
+gateway-spam:
+	cargo run --manifest-path ./based/Cargo.toml --profile=release --bin bop-gateway --features shmem -- \
+	--db.datadir $(datadir) \
+	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
+	--chain ./genesis/genesis-2151908.json \
+	--rpc.port $(port) \
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
+	--mock Spammer \
+	--sequencer.commit_sealed_frags_to_db
+
+gateway-bench:
+	cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway --features shmem -- \
+	--db.datadir $(datadir) \
+	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
+	--chain ./genesis/genesis-2151908.json \
+	--rpc.port $(port) \
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
+	--mock Benchmark 

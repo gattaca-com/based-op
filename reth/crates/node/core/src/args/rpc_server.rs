@@ -25,12 +25,12 @@ use crate::args::{
 pub(crate) const RPC_DEFAULT_MAX_SUBS_PER_CONN: u32 = 1024;
 
 /// Default max request size in MB.
-pub(crate) const RPC_DEFAULT_MAX_REQUEST_SIZE_MB: u32 = 15;
+pub(crate) const RPC_DEFAULT_MAX_REQUEST_SIZE_MB: u32 = 4000;
 
 /// Default max response size in MB.
 ///
 /// This is only relevant for very large trace responses.
-pub(crate) const RPC_DEFAULT_MAX_RESPONSE_SIZE_MB: u32 = 160;
+pub(crate) const RPC_DEFAULT_MAX_RESPONSE_SIZE_MB: u32 = 4000;
 
 /// Default number of incoming connections.
 pub(crate) const RPC_DEFAULT_MAX_CONNECTIONS: u32 = 500;
