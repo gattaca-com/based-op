@@ -280,7 +280,7 @@ const (
 	EnvV0 EnvVersion = iota
 )
 
-func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
+func BuildNewFragValidator(log log.Logger, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		var signedFrag eth.SignedNewFrag
 
@@ -290,12 +290,28 @@ func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRunt
 			return pubsub.ValidationReject
 		}
 
+		if result := verifyFragSignature(log, runCfg, id, signedFrag); result != pubsub.ValidationAccept {
+			return result
+		}
+
 		message.ValidatorData = &signedFrag
 		return pubsub.ValidationAccept
 	}
 }
 
-func BuildSealFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, sealFragVersion SealFragVersion) pubsub.ValidatorEx {
+func verifyFragSignature(log log.Logger, runCfg GossipRuntimeConfig, id peer.ID, signedFrag eth.SignedNewFrag) pubsub.ValidationResult {
+	root := signedFrag.Frag.Root()
+
+	expected := runCfg.P2PSequencerAddress()
+	if expected == (common.Address{}) {
+		log.Warn("no configured p2p sequencer address, ignoring gossiped frag", "peer", id)
+		return pubsub.ValidationIgnore
+	}
+
+	return verifySignature(log, id, signedFrag.Signature[:], root[:], expected)
+}
+
+func BuildSealFragValidator(log log.Logger, runCfg GossipRuntimeConfig, sealFragVersion SealFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		var signedSeal eth.SignedSeal
 
@@ -305,12 +321,28 @@ func BuildSealFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRun
 			return pubsub.ValidationReject
 		}
 
+		if result := verifySealSignature(log, runCfg, id, signedSeal); result != pubsub.ValidationAccept {
+			return result
+		}
+
 		message.ValidatorData = &signedSeal
 		return pubsub.ValidationAccept
 	}
 }
 
-func BuildEnvValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, envVersion EnvVersion) pubsub.ValidatorEx {
+func verifySealSignature(log log.Logger, runCfg GossipRuntimeConfig, id peer.ID, signedSeal eth.SignedSeal) pubsub.ValidationResult {
+	root := signedSeal.Seal.Root()
+
+	expected := runCfg.P2PSequencerAddress()
+	if expected == (common.Address{}) {
+		log.Warn("no configured p2p sequencer address, ignoring gossiped seal", "peer", id)
+		return pubsub.ValidationIgnore
+	}
+
+	return verifySignature(log, id, signedSeal.Signature[:], root[:], expected)
+}
+
+func BuildEnvValidator(log log.Logger, runCfg GossipRuntimeConfig, envVersion EnvVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		var signedEnv eth.SignedEnv
 
@@ -320,9 +352,25 @@ func BuildEnvValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeC
 			return pubsub.ValidationReject
 		}
 
+		if result := verifyEnvSignature(log, runCfg, id, signedEnv); result != pubsub.ValidationAccept {
+			return result
+		}
+
 		message.ValidatorData = &signedEnv
 		return pubsub.ValidationAccept
 	}
+}
+
+func verifyEnvSignature(log log.Logger, runCfg GossipRuntimeConfig, id peer.ID, signedEnv eth.SignedEnv) pubsub.ValidationResult {
+	root := signedEnv.Env.Root()
+
+	expected := runCfg.P2PSequencerAddress()
+	if expected == (common.Address{}) {
+		log.Warn("no configured p2p sequencer address, ignoring gossiped env", "peer", id)
+		return pubsub.ValidationIgnore
+	}
+
+	return verifySignature(log, id, signedEnv.Signature[:], root[:], expected)
 }
 
 func BuildBlocksValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, blockVersion eth.BlockVersion) pubsub.ValidatorEx {
@@ -494,25 +542,33 @@ func verifyBlockSignature(log log.Logger, cfg *rollup.Config, runCfg GossipRunti
 		return pubsub.ValidationReject
 	}
 
-	pub, err := crypto.SigToPub(signingHash[:], signatureBytes)
-	if err != nil {
-		log.Warn("invalid block signature", "err", err, "peer", id)
-		return pubsub.ValidationReject
-	}
-	addr := crypto.PubkeyToAddress(*pub)
-
 	// In the future we may load & validate block metadata before checking the signature.
 	// And then check the signer based on the metadata, to support e.g. multiple p2p signers at the same time.
 	// For now we only have one signer at a time and thus check the address directly.
 	// This means we may drop old payloads upon key rotation,
 	// but this can be recovered from like any other missed unsafe payload.
-	if expected := runCfg.P2PSequencerAddress(); expected == (common.Address{}) {
-		log.Warn("no configured p2p sequencer address, ignoring gossiped block", "peer", id, "addr", addr)
+	expected := runCfg.P2PSequencerAddress()
+	if expected == (common.Address{}) {
+		log.Warn("no configured p2p sequencer address, ignoring gossiped block", "peer", id)
 		return pubsub.ValidationIgnore
-	} else if addr != expected {
-		log.Warn("unexpected block author", "err", err, "peer", id, "addr", addr, "expected", expected)
+	}
+
+	return verifySignature(log, id, signatureBytes, signingHash[:], expected)
+}
+
+func verifySignature(log log.Logger, id peer.ID, signatureBytes []byte, messageBytes []byte, expectedSigner common.Address) pubsub.ValidationResult {
+	pub, err := crypto.SigToPub(messageBytes, signatureBytes)
+	if err != nil {
+		log.Warn("invalid signature", "err", err, "peer", id)
 		return pubsub.ValidationReject
 	}
+	addr := crypto.PubkeyToAddress(*pub)
+
+	if addr != expectedSigner {
+		log.Warn("unexpected signer", "peer", id, "addr", addr, "expected", expectedSigner)
+		return pubsub.ValidationReject
+	}
+
 	return pubsub.ValidationAccept
 }
 
@@ -764,7 +820,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 	}
 
 	newFragV0Logger := log.New("topic", "newFragV0")
-	newFragV0Validator := guardGossipValidator(log, logValidationResult(self, "validated newFragV0", newFragV0Logger, BuildNewFragValidator(newFragV0Logger, cfg, runCfg, NewFragV0)))
+	newFragV0Validator := guardGossipValidator(log, logValidationResult(self, "validated newFragV0", newFragV0Logger, BuildNewFragValidator(newFragV0Logger, runCfg, NewFragV0)))
 	newFragV0, err := newNewFragTopic(p2pCtx, newFragV0(cfg), ps, newFragV0Logger, gossipIn, newFragV0Validator)
 	if err != nil {
 		p2pCancel()
@@ -772,7 +828,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 	}
 
 	sealFragV0Logger := log.New("topic", "sealFragV0")
-	sealFragV0Validator := guardGossipValidator(log, logValidationResult(self, "validated sealFragV0", sealFragV0Logger, BuildSealFragValidator(sealFragV0Logger, cfg, runCfg, SealFragV0)))
+	sealFragV0Validator := guardGossipValidator(log, logValidationResult(self, "validated sealFragV0", sealFragV0Logger, BuildSealFragValidator(sealFragV0Logger, runCfg, SealFragV0)))
 	sealFragV0, err := sealFragFragTopic(p2pCtx, sealFragV0(cfg), ps, sealFragV0Logger, gossipIn, sealFragV0Validator)
 	if err != nil {
 		p2pCancel()
@@ -780,7 +836,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 	}
 
 	envV0Logger := log.New("topic", "envV0")
-	envV0Validator := guardGossipValidator(log, logValidationResult(self, "validated envV0", envV0Logger, BuildEnvValidator(envV0Logger, cfg, runCfg, EnvV0)))
+	envV0Validator := guardGossipValidator(log, logValidationResult(self, "validated envV0", envV0Logger, BuildEnvValidator(envV0Logger, runCfg, EnvV0)))
 	envV0, err := newEnvTopic(p2pCtx, envV0(cfg), ps, envV0Logger, gossipIn, envV0Validator)
 	if err != nil {
 		p2pCancel()
