@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Deref, sync::Arc};
+use std::{ops::Deref, sync::Arc};
 
 use alloy_consensus::{BlockHeader, TxEip1559};
 use alloy_eips::eip2718::Encodable2718;
@@ -10,6 +10,7 @@ use bop_common::{
         messages::{self, BlockFetch, BlockSyncMessage, EngineApi},
         SpineConnections,
     },
+    config::MockMode,
     db::{DBFrag, DatabaseRead},
     signing::ECDSASigner,
     time::{utils::vsync_busy, Duration, Instant},
@@ -18,8 +19,9 @@ use bop_common::{
 use futures::future::join_all;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
+use rand::seq::{IndexedMutRandom, IndexedRandom};
 use reqwest::Url;
-use revm_primitives::{address, b256, Address, TxKind, B256, U256};
+use revm_primitives::{b256, Address, TxKind, B256, U256};
 use tokio::{runtime::Runtime, sync::oneshot};
 use tracing::{info, warn};
 
@@ -92,10 +94,11 @@ impl Deref for TestAccount {
 #[derive(Debug, Clone)]
 pub struct SpamData {
     accounts: Vec<TestAccount>,
+    funded: bool
 }
 impl Default for SpamData {
     fn default() -> Self {
-        Self { accounts: TestAccount::generate_random(10000) }
+        Self { accounts: TestAccount::generate_random(10000), funded: false }
     }
 }
 
@@ -129,20 +132,26 @@ pub struct MockFetcher<Db> {
     next_block: u64,
     sync_until: u64,
     provider: AlloyProvider,
-    db: DBFrag<Db>,
+    _db: DBFrag<Db>,
     main: TestAccount,
 }
 impl<Db: DatabaseRead> MockFetcher<Db> {
-    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64, db: DBFrag<Db>, mode: Mode) -> Self {
+    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64, db: DBFrag<Db>, mode: MockMode) -> Self {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
             .build()
             .expect("couldn't build local tokio runtime");
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let mode = match mode {
+            MockMode::Benchmark => Mode::Benchmark(BenchmarkData::default()),
+            MockMode::Spammer => Mode::Spammer(SpamData::default()),
+            MockMode::Verification => Mode::Verification,
+        };
+
         let main = if matches!(mode, Mode::Spammer(_)) { TestAccount::main(&db) } else { TestAccount::random() };
 
-        Self { mode, executor, next_block, sync_until, provider, db, main }
+        Self { mode, executor, next_block, sync_until, provider, _db: db, main }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
@@ -158,7 +167,12 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
         }
     }
 
-    fn send_tx(connections: &mut SpineConnections<Db>, from: &mut TestAccount, to: Address, value: Option<U256>) {
+    fn send_tx(
+        connections: &mut SpineConnections<Db>,
+        from: &mut TestAccount,
+        to: Address,
+        value: Option<U256>,
+    ) -> B256 {
         let value = value.unwrap_or(U256::from_limbs([1, 0, 0, 0]));
         let tx = TxEip1559 {
             chain_id: 2151908,
@@ -176,21 +190,25 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
 
         let signed_tx = from.sign_tx(tx).unwrap();
         let tx = OpTxEnvelope::Eip1559(signed_tx);
+        let hash = tx.tx_hash();
         let envelope = tx.encoded_2718().into();
         let tx = Arc::new(Transaction::new(tx, from.address, envelope));
         connections.send(tx);
+        hash
     }
 
     fn fund_accounts(&mut self, connections: &mut SpineConnections<Db>) {
-        let Mode::Spammer(SpamData { accounts }) = &mut self.mode else {
+        let Mode::Spammer(SpamData { accounts, funded }) = &mut self.mode else {
             return;
         };
         // let mut pending = VecDeque::new();
 
         for t in accounts {
             Self::send_tx(connections, &mut self.main, t.address, Some(U256::from(1_000_000_000_000_000_000usize)));
+            Duration::from_micros(400).sleep();
         }
 
+        *funded = true;
         // let mut tot = Duration::ZERO;
         // let mut n = 0usize;
         // while let Some((id, tstamp)) = pending.pop_front() {
@@ -275,7 +293,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
                     debug_assert!(false, "state_root doesn't match");
                 };
 
-                println!("ACTUAL BLOCK:");
+                // println!("ACTUAL BLOCK:");
             }
 
             assert_eq!(
@@ -356,20 +374,23 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
 }
 impl<Db: DatabaseRead> MockFetcher<Db> {
     fn run_spam_body(&mut self, connections: &mut SpineConnections<Db>) {
-        if let Mode::Spammer(SpamData { accounts }) = &mut self.mode {
-            for i1 in 0..accounts.len() {
-                for i2 in 0..accounts.len() {
-                    if i1 == i2 {
-                        continue;
-                    }
-                    let to = accounts[i2].address;
-                    let a1 = &mut accounts[i1];
-                    Self::send_tx(connections, a1, to, None);
-                    // accounts[i2].balance += 1;
-                }
+        let mut rng = rand::rng();
+        let mut n = 0;
+        if let Mode::Spammer(SpamData { funded: false, .. }) = self.mode {
+            self.fund_accounts(connections);
+            return;
+        }
+        if let Mode::Spammer(SpamData { accounts, .. }) = &mut self.mode {
+            // let mut pending = VecDeque::new();
+            while n < 3000 {
+                let to = accounts.choose(&mut rng).unwrap().address;
+                let a1 = accounts.choose_mut(&mut rng).unwrap();
+                Self::send_tx(connections, a1, to, None);
+                n += 1;
+                // pending.push_back((Instant::now(), );
             }
         }
-
+        Duration::from_millis(200).sleep();
         // if self.next_block >= self.sync_until {
         //     let from_account = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
         //     let signing_wallet = ECDSASigner::try_from_secret(
@@ -418,9 +439,6 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
         });
         self.next_block = (self.next_block + 1).min(self.sync_until);
 
-        if matches!(self.mode, Mode::Spammer(_)) {
-            self.fund_accounts(connections);
-        }
 
         let Mode::Benchmark(BenchmarkData { txs, fcu, attributes, .. }) = &mut self.mode else {
             return;
@@ -450,6 +468,10 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
     }
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
+        if matches!(self.mode, Mode::Benchmark(_)) {
+            self.run_benchmark_body(connections);
+            return;
+        }
         if self.next_block < self.sync_until {
             let stop = (self.next_block + 50).min(self.sync_until);
             self.executor.block_on(async_fetch_blocks_and_send_sequentially(
@@ -463,7 +485,7 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
             match &mut self.mode {
                 Mode::Verification => self.run_verification_body(connections),
                 Mode::Benchmark(_) => {
-                    self.run_benchmark_body(connections);
+                    unreachable!();
                 }
                 Mode::Spammer(_) => {
                     self.run_spam_body(connections);

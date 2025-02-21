@@ -11,10 +11,7 @@ use bop_common::{
 use bop_db::{init_database, DatabaseRead};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
-    block_sync::{
-        block_fetcher::BlockFetcher,
-        mock_fetcher::{MockFetcher, Mode},
-    },
+    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
     Sequencer, SequencerConfig, Simulator,
 };
 use clap::Parser;
@@ -88,16 +85,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         });
 
         let fragdb_clone = shared_state.as_ref().clone();
-        if args.test {
+        if let Some(mode) = args.mock {
             s.spawn(|| {
-                MockFetcher::new(
-                    args.rpc_fallback_url,
-                    start_fetch,
-                    start_fetch + 100,
-                    fragdb_clone,
-                    Mode::Spammer(Default::default()),
-                )
-                .run(spine.to_connections("BlockFetch"), ActorConfig::default());
+                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone, mode)
+                    .run(spine.to_connections("BlockFetch"), ActorConfig::default());
             });
         } else {
             s.spawn(|| {

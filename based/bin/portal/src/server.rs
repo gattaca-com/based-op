@@ -536,7 +536,11 @@ impl EngineApiServer for PortalServer {
 }
 
 fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
-    let client = HttpClientBuilder::default().max_request_size(u32::MAX).request_timeout(timeout).build(url)?;
+    let client = HttpClientBuilder::default()
+        .max_request_size(500_000_000u32)
+        .max_response_size(500_000_000u32)
+        .request_timeout(timeout)
+        .build(url)?;
     Ok(client)
 }
 
@@ -545,7 +549,8 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
     let middleware = tower::ServiceBuilder::default().layer(secret_layer);
 
     let client = HttpClientBuilder::default()
-        .max_request_size(u32::MAX)
+        .max_request_size(500_000_000u32)
+        .max_response_size(500_000_000u32)
         .set_http_middleware(middleware)
         .request_timeout(timeout)
         .build(url)?;

@@ -11,7 +11,6 @@ pub(crate) use sorting_data::SortingData;
 pub(crate) mod frag_sequence;
 
 pub(crate) use frag_sequence::FragSequence;
-use tracing::Instrument;
 
 #[derive(Clone, Debug, Default)]
 pub struct ActiveOrders {
@@ -47,10 +46,7 @@ impl ActiveOrders {
 
             if order.sender() == sender {
                 if order.pop(base_fee) {
-                    let os = self.orders.swap_remove_back(i).unwrap();
-                    if !os.is_empty() {
-                        tracing::info!("removed os for {} with {} txs left", os.sender(), os.len());
-                    }
+                    self.orders.swap_remove_back(i).unwrap();
                 }
                 return;
             }
