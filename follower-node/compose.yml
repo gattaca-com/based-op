@@ -29,18 +29,14 @@ services:
       - --p2p.listen.tcp=9003
       - --p2p.listen.udp=9003
       - --safedb.path=/data/op-node/op-node-beacon-data
-      - --metrics.enabled=true
-      - --metrics.addr=0.0.0.0
-      - --metrics.port=9001
       - --p2p.bootnodes=$P2P_BOOTNODE
       - --rpc.enable-based
     ports:
-      - 8547:8547  # RPC
-      - 9003:9003  # P2P
-      - 9001:9001  # Metrics
+      - 8547:8547 # RPC
+      - 9003:9003 # P2P
     volumes:
       - node_data:/data/op-node
-      - ./genesis/rollup-2151908.json:/network-configs/rollup-2151908.json
+      - .:/network-configs
       - jwt:/jwt
     # networks:
     #   - kt-based-op
@@ -54,18 +50,17 @@ services:
       - sh
       - /scripts/start_op_geth.sh
     ports:
-      - 8546:8545  # HTTP-RPC
-      - 8546:8546  # WS-RPC
-      - 8551:8551  # AuthRPC
-      - 9002:9001  # Metrics
-      - 30303:30303  # Discovery
+      - 8545:8545 # HTTP-RPC
+      - 8546:8546 # WS-RPC
+      - 8551:8551 # AuthRPC
+      - 30303:30303 # Discovery
     environment:
       - SEQUENCER_URL=$SEQUENCER_URL
       - GETH_BOOTNODE=$GETH_BOOTNODE
     volumes:
       - ./scripts/start_op_geth.sh:/scripts/start_op_geth.sh
       - geth_data:/data/geth
-      - ./genesis/genesis-2151908.json:/network-configs/genesis-2151908.json
+      - .:/network-configs
       - jwt:/jwt
     # networks:
     #   - kt-based-op
