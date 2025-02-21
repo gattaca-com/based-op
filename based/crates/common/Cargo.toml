@@ -1,92 +1,81 @@
 [package]
-name = "bop-common"
-version.workspace = true
 edition.workspace = true
+name = "bop-common"
 rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
-# alloy
-alloy-primitives.workspace = true
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
-alloy-rpc-types.workspace = true
+alloy-network.workspace = true
+alloy-primitives.workspace = true
+alloy-provider.workspace = true
 alloy-rlp.workspace = true
-
+alloy-rpc-types.workspace = true
 alloy-signer.workspace = true
 alloy-signer-local.workspace = true
-alloy-network.workspace = true
-alloy-provider.workspace = true
 alloy-transport.workspace = true
 alloy-transport-http.workspace = true
-
-# op alloy
-op-alloy-rpc-types.workspace = true
-op-alloy-rpc-types-engine.workspace = true
+auto_impl.workspace = true
+chrono.workspace = true
+clap.workspace = true
+crossbeam-channel.workspace = true
+directories.workspace = true
+ethereum_ssz.workspace = true
+eyre.workspace = true
+jsonrpsee.workspace = true
+moka.workspace = true
 op-alloy-consensus.workspace = true
 op-alloy-network.workspace = true
-
-#revm
-revm-primitives.workspace = true
-revm.workspace = true
-
-
+op-alloy-rpc-types.workspace = true
+op-alloy-rpc-types-engine.workspace = true
+parking_lot.workspace = true
+paste.workspace = true
+quanta.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+reth-chainspec.workspace = true
 reth-cli.workspace = true
-
-
-# networkingreth-optimism-evm.workspace = true
-reth-optimism-chainspec.workspace = true
+reth-db.workspace = true
+reth-db-api.workspace = true
 reth-evm.workspace = true
+reth-execution-errors.workspace = true
+reth-node-ethereum.workspace = true
+reth-node-types.workspace = true
+reth-optimism-chainspec.workspace = true
+reth-optimism-cli.workspace = true
+reth-optimism-consensus.workspace = true
+reth-optimism-forks.workspace = true
+reth-optimism-node.workspace = true
+reth-optimism-primitives.workspace = true
 reth-primitives.workspace = true
 reth-primitives-traits.workspace = true
-reth-optimism-primitives.workspace = true
-reth-node-types.workspace = true
-reth-db.workspace = true
-reth-node-ethereum.workspace = true
 reth-provider.workspace = true
-reth-trie-common.workspace = true
 reth-storage-api.workspace = true
-reth-db-api.workspace = true
-reth-chainspec.workspace = true
 reth-storage-errors.workspace = true
-crossbeam-channel.workspace = true
+reth-trie-common.workspace = true
+reth-trie-parallel.workspace = true
+revm.workspace = true
+revm-interpreter.workspace = true
+revm-primitives.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shared_memory.workspace = true
+signal-hook.workspace = true
+ssz_types.workspace = true
+strum_macros.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 tracing-appender.workspace = true
-reth-optimism-node.workspace = true
-reth-optimism-cli.workspace = true
-reth-execution-errors.workspace = true
-reth-optimism-consensus.workspace = true
-reth-trie-parallel.workspace = true
-reqwest.workspace = true
-reth-optimism-forks.workspace = true
-
-# serde
-serde.workspace = true
-thiserror.workspace = true
-eyre.workspace = true
-chrono.workspace = true
-quanta.workspace = true
-directories.workspace = true
-shared_memory.workspace = true
-
-
-jsonrpsee.workspace = true
-core_affinity.workspace = true
-signal-hook.workspace = true
-parking_lot.workspace = true
-moka.workspace = true
-
-rand.workspace = true
-strum_macros.workspace = true
-paste.workspace = true
-auto_impl.workspace = true
-ethereum_ssz.workspace = true
-ssz_types.workspace = true
+tracing-subscriber.workspace = true
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
-
-clap.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[features]
+shmem = []
+default = []

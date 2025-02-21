@@ -1,0 +1,121 @@
+.transfer-nft {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+
+  .ant-form {
+    margin-left: -20px;
+    margin-right: -20px;
+    padding: 0 20px;
+    position: relative;
+    overflow: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .footer {
+    padding: 20px 0;
+    margin-left: -20px;
+    margin-right: -20px;
+    width: 100vw;
+
+    background-color: var(--r-neutral-card-1, #FFF);
+    border-top: 0.5px solid var(--r-neutral-line, #D3D8E0);
+  }
+
+  .footer .whitelist-alert {
+    margin-top: 0;
+    margin-bottom: 16px;
+  }
+
+  .nft-info {
+    padding-bottom: 16px;
+    border-bottom: 0.5px solid var(--r-neutral-line, rgba(255, 255, 255, 0.10));
+    .nft-avatar {
+      margin-right: 12px;
+      border: none;
+    }
+    &__detail {
+      flex: 1;
+      h3 {
+        font-weight: 500;
+        font-size: 15px;
+        line-height: 18px;
+        color: var(--r-neutral-title-1, #F7FAFC);
+        margin-bottom: 12px;
+      }
+      p {
+        margin-bottom: 8px;
+        font-weight: 400;
+        font-size: 12px;
+        line-height: 14px;
+        color: var(--r-neutral-foot, #BABEC5);
+        display: flex;
+        .field-name {
+          width: 67px;
+        }
+        .value {
+          display: flex;
+          font-weight: 500;
+          font-size: 12px;
+          line-height: 14px;
+          color: var(--r-neutral-body, #D3D8E0);
+        }
+        .address-viewer-text.normal {
+          font-weight: 500;
+          font-size: 12px;
+          line-height: 14px;
+          color: var(--r-neutral-body, #D3D8E0);
+        }
+        .icon-copy {
+          cursor: pointer;
+        }
+      }
+    }
+  }
+  .section {
+    margin-bottom: 16px;
+  }
+  .section-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 14px;
+    color: var(--r-neutral-body, #D3D8E0);
+    margin-top: 20px;
+    .ant-input {
+      padding: 0;
+      text-align: center;
+    }
+  }
+  .token-validation {
+    margin-top: 32px;
+  }
+ 
+  .whitelist-alert {
+    display: flex;
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--r-red-dark, #ae2a19);
+    margin-top: -4px;
+    margin-bottom: 16px;
+    justify-content: center;
+    .icon-check {
+      width: 16px;
+      height: 16px;
+      margin-right: 4px;
+    }
+    &__content {
+      max-width: 312px;
+      margin-bottom: 0;
+    }
+    &.granted {
+      color: var(--r-neutral-foot, #babec5);
+    }
+  }
+}

@@ -91,7 +91,14 @@ SUBCATEGORY_PARAMS = {
         "cannon_prestates_url",
     ],
     "proposer_params": ["image", "extra_params", "game_type", "proposal_interval"],
-    "mev_params": ["rollup_boost_image", "builder_host", "builder_port"],
+    "mev_params": [
+        "rollup_boost_image",
+        "based_portal_image",
+        "gateway_image",
+        "builder_host",
+        "builder_port",
+        "portal_extra_params",
+    ],
 }
 
 OP_CONTRACT_DEPLOYER_PARAMS = [
@@ -105,7 +112,6 @@ OP_CONTRACT_DEPLOYER_GLOBAL_DEPLOY_OVERRIDES = ["faultGameAbsolutePrestate"]
 
 ADDITIONAL_SERVICES_PARAMS = [
     "blockscout",
-    "rollup-boost",
 ]
 
 ROOT_PARAMS = [
@@ -234,6 +240,7 @@ def sanity_check(plan, optimism_config):
             combined_root_params.append("additional_services")
             combined_root_params.append("op_contract_deployer_params")
             combined_root_params.append("supervisor_params")
+            combined_root_params.append("mev_type")
 
             if param not in combined_root_params:
                 fail(

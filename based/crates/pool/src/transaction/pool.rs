@@ -1,18 +1,14 @@
-#![allow(unused)] // TODO: remove
-
 use std::{collections::HashMap, sync::Arc};
 
 use alloy_consensus::Transaction as TransactionTrait;
 use alloy_primitives::Address;
 use bop_common::{
-    communication::{messages::SequencerToSimulator, Sender, SendersSpine, TrackedSenders},
+    communication::{messages::SequencerToSimulator, SendersSpine, TrackedSenders},
     db::{DBFrag, DatabaseRead},
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
 };
-use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpTransactionSigned};
-use reth_primitives_traits::transaction::signed::SignedTransaction;
-use revm::db::CacheDB;
+use reth_optimism_primitives::transaction::TransactionSenderInfo;
 
 use crate::transaction::active::Active;
 
@@ -113,7 +109,7 @@ impl TxPool {
     /// Removes a transaction with sender and nonce from the pool.
     pub fn remove(&mut self, sender: &Address, nonce: u64) {
         if let Some(tx_list) = self.pool_data.get_mut(sender) {
-            if tx_list.forward(&nonce) {
+            if tx_list.forward(nonce) {
                 self.pool_data.remove(sender);
             }
         }
@@ -121,19 +117,17 @@ impl TxPool {
         self.active_txs.forward(sender, nonce);
     }
 
-    pub fn remove_mined_txs<'a, T: TransactionSenderInfo + 'a>(
-        &mut self,
-        mined_txs: impl Iterator<Item = &'a T>,
-        base_fee: u64,
-    ) {
+    pub fn remove_mined_txs<'a, T: TransactionSenderInfo + 'a>(&mut self, mined_txs: impl Iterator<Item = &'a T>) {
         // Clear all mined nonces from the pool
         for tx in mined_txs {
             let sender = tx.sender();
+            let nonce = tx.nonce();
             if let Some(sender_tx_list) = self.pool_data.get_mut(&sender) {
-                if sender_tx_list.forward(&tx.nonce()) {
+                if sender_tx_list.forward(nonce) {
                     self.pool_data.remove(&sender);
                 }
             }
+            self.active_txs.forward(&sender, nonce);
         }
     }
 
@@ -141,7 +135,7 @@ impl TxPool {
     /// This gets called in two places:
     /// 1) When we sync a new block.
     /// 2) When we commit a new Frag.
-    pub fn handle_new_mined_txs<'a, Db: DatabaseRead, T: TransactionSenderInfo + 'a>(
+    pub fn handle_new_block<'a, Db: DatabaseRead, T: TransactionSenderInfo + 'a>(
         &mut self,
         mined_txs: impl Iterator<Item = &'a T>,
         base_fee: u64,
@@ -149,9 +143,9 @@ impl TxPool {
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
     ) {
-        self.remove_mined_txs(mined_txs, base_fee);
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
         self.active_txs.clear();
+        self.remove_mined_txs(mined_txs);
 
         // If enabled, fill the active list with non-simulated txs and send off the first tx for each sender to
         // simulator.
@@ -199,5 +193,11 @@ impl TxPool {
     #[inline]
     pub fn active_empty(&self) -> bool {
         self.active_txs.is_empty()
+    }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.active_txs.clear();
+        self.pool_data.clear();
     }
 }

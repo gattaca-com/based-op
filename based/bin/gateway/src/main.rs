@@ -2,20 +2,23 @@ use std::sync::Arc;
 
 use bop_common::{
     actor::{Actor, ActorConfig},
-    communication::{verify_or_remove_queue_files, Spine},
+    communication::Spine,
     config::GatewayArgs,
-    db::DBFrag,
+    shared::SharedState,
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{init_database, DatabaseRead};
-use bop_rpc::start_rpc;
+use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
-    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
-    Sequencer, SequencerConfig,
+    block_sync::{
+        block_fetcher::BlockFetcher,
+        mock_fetcher::{MockFetcher, Mode},
+    },
+    Sequencer, SequencerConfig, Simulator,
 };
-use bop_simulator::Simulator;
 use clap::Parser;
+use revm_primitives::B256;
 use tokio::runtime::Runtime;
 use tracing::{error, info};
 
@@ -25,9 +28,9 @@ fn main() {
     }
 
     let args = GatewayArgs::parse();
-    verify_or_remove_queue_files();
-
-    let _guards = init_tracing(None, 100, None);
+    let _guards = init_tracing((&args).into());
+    #[cfg(feature = "shmem")]
+    bop_common::communication::verify_or_remove_queue_files();
 
     match run(args) {
         Ok(_) => {
@@ -45,17 +48,22 @@ fn main() {
 fn run(args: GatewayArgs) -> eyre::Result<()> {
     let spine = Spine::default();
 
-    let db_bop = init_database(
-        args.db_datadir.clone(),
-        args.max_cached_accounts,
-        args.max_cached_storages,
-        args.chain_spec.clone(),
-    )?;
+    let db_bop =
+        init_database(args.db_datadir.clone(), args.max_cached_accounts, args.max_cached_storages, args.chain.clone())?;
 
-    tracing::info!("Starting gateway at block {}", db_bop.head_block_number().expect("couldn't get head block number"));
+    let db_block = db_bop.head_block_number()?;
+    let db_hash = db_bop.head_block_hash()?;
 
-    let db_frag: DBFrag<_> = db_bop.clone().into();
-    let start_fetch = db_bop.head_block_number().expect("couldn't get head block number") + 1;
+    info!(db_block, %db_hash, "starting gateway");
+
+    let shared_state = SharedState::new(db_bop.clone().into());
+    let head_block_number = db_bop.head_block_number().expect("couldn't get head block number");
+    let start_fetch = if db_bop.head_block_hash().expect("couldn't get head block hash") == B256::ZERO {
+        // genesis
+        head_block_number
+    } else {
+        head_block_number + 1
+    };
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
 
@@ -68,41 +76,50 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             .into();
 
         s.spawn({
-            let db_frag = db_frag.clone();
             let rt = rt.clone();
-            start_rpc(&args, &spine, db_frag, &rt);
+            start_rpc(&args, &spine, &rt);
             move || rt.block_on(wait_for_signal())
         });
 
-        let sequencer = Sequencer::new(db_bop, db_frag.clone(), sequencer_config);
+        let state_clone = shared_state.clone();
         s.spawn(|| {
-            sequencer.run(spine.to_connections("Sequencer"), ActorConfig::default().with_core(0));
+            Sequencer::new(db_bop, state_clone, sequencer_config)
+                .run(spine.to_connections("Sequencer"), ActorConfig::default());
         });
 
+        let fragdb_clone = shared_state.as_ref().clone();
         if args.test {
             s.spawn(|| {
-                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100).run(
-                    spine.to_connections("BlockFetch"),
-                    ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
-                );
+                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone, Mode::Spammer)
+                    .run(
+                        spine.to_connections("BlockFetch"),
+                        ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
+                    );
             });
         } else {
             s.spawn(|| {
-                BlockFetcher::new(args.rpc_fallback_url).run(
+                BlockFetcher::new(args.rpc_fallback_url, db_block).run(
                     spine.to_connections("BlockFetch"),
-                    ActorConfig::default().with_core(1).with_min_loop_duration(Duration::from_millis(10)),
+                    ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
                 );
             });
         }
+        let root_peer_url = args.gossip_root_peer_url.clone();
+        s.spawn(|| {
+            Gossiper::new(root_peer_url).run(
+                spine.to_connections("Gossiper"),
+                ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
+            );
+        });
 
-        for core in 2..5 {
-            let connections = spine.to_connections(format!("sim-{core}"));
+        for id in 0..args.sim_threads {
             s.spawn({
-                let db_frag = db_frag.clone();
-                let evm_config_c = evm_config.clone();
+                let evm_config = evm_config.clone();
+                let connections = spine.to_connections(format!("Simulator-{id}"));
+                let db_frag = (&shared_state).into();
                 move || {
-                    let simulator = Simulator::new(db_frag, &evm_config_c, core);
-                    simulator.run(connections, ActorConfig::default().with_core(core));
+                    let simulator = Simulator::new(db_frag, &evm_config, id);
+                    simulator.run(connections, ActorConfig::default());
                 }
             });
         }

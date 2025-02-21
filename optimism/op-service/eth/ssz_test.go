@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -613,12 +614,52 @@ func TestMarshalUnmarshalSignedSeal(t *testing.T) {
 	}
 }
 
-func decodeOrPanic(s string) Bytes32 {
+func TestMarshalUnmarshalSignedEnv(t *testing.T) {
+	e := SignedEnv{
+		Signature: Bytes65{0x01, 0x42, 0x65, 0x07, 0x01, 0x42, 0x65, 0x07, 0x01, 0x42, 0x65, 0x07},
+		Env: Env{
+			Number:                1,
+			Beneficiary:           decodeB20("1234567890123456789012345678901234567890"),
+			Timestamp:             2,
+			GasLimit:              3,
+			Basefee:               4,
+			Difficulty:            big.NewInt(5),
+			Prevrandao:            common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+			ParentHash:            common.BytesToHash(decodeOrPanic("69c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db")),
+			ParentBeaconBlockRoot: common.BytesToHash(decodeOrPanic("c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db69")),
+			ExtraData:             []byte{0x01, 0x02, 0x03},
+		},
+	}
+
+	var buf bytes.Buffer
+
+	err := e.MarshalSSZ(&buf)
+	require.NoError(t, err)
+
+	data := buf.Bytes()
+
+	unmarshalled := &SignedEnv{}
+	err = unmarshalled.UnmarshalSSZ(uint32(len(data)), bytes.NewBuffer(data))
+	require.NoError(t, err)
+	if diff := cmp.Diff(e, *unmarshalled, cmp.AllowUnexported(big.Int{})); diff != "" {
+		t.Fatalf("The data did not round trip correctly:\n%s", diff)
+	}
+}
+
+func decodeOrPanic(s string) []byte {
 	decoded, err := hex.DecodeString(s)
 	if err != nil {
 		panic(err)
 	}
-	return Bytes32(decoded)
+	return decoded
+}
+
+func decodeB32(s string) Bytes32 {
+	return Bytes32(decodeOrPanic(s))
+}
+
+func decodeB20(s string) common.Address {
+	return common.BytesToAddress(decodeOrPanic(s))
 }
 
 func TestSealRoot(t *testing.T) {
@@ -627,14 +668,14 @@ func TestSealRoot(t *testing.T) {
 		BlockNumber:      123,
 		GasUsed:          25_000,
 		GasLimit:         1_000_000,
-		ParentHash:       decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
-		TransactionsRoot: decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
-		ReceiptsRoot:     decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
-		StateRoot:        decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
-		BlockHash:        decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		ParentHash:       decodeB32("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		TransactionsRoot: decodeB32("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		ReceiptsRoot:     decodeB32("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		StateRoot:        decodeB32("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+		BlockHash:        decodeB32("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
 	}
 
-	expected := decodeOrPanic("e86afda21ddc7338c7e84561681fde45e2ab55cce8cde3163e0ae5f1c378439e")
+	expected := decodeB32("e86afda21ddc7338c7e84561681fde45e2ab55cce8cde3163e0ae5f1c378439e")
 	root := s.Root()
 
 	if expected != root {
@@ -651,8 +692,30 @@ func TestFragRoot(t *testing.T) {
 		Txs:         transactions,
 	}
 
-	expected := decodeOrPanic("2a5ebad20a81878e5f229928e5c2043580051673b89a7a286008d30f62b10963")
+	expected := decodeB32("2a5ebad20a81878e5f229928e5c2043580051673b89a7a286008d30f62b10963")
 	root := f.Root()
+
+	if expected != root {
+		t.Fatalf("Expected root %s, found %s", expected.String(), root.String())
+	}
+}
+
+func TestEnvRoot(t *testing.T) {
+	e := Env{
+		Number:                1,
+		Beneficiary:           decodeB20("1234567890123456789012345678901234567890"),
+		Timestamp:             2,
+		GasLimit:              3,
+		Basefee:               4,
+		Difficulty:            big.NewInt(5),
+		Prevrandao:            common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+		ParentHash:            common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+		ParentBeaconBlockRoot: common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
+		ExtraData:             []byte{0x01, 0x02, 0x03},
+	}
+
+	expected := decodeB32("fa09df7670737568ba783dfd934e19b06e6681e367a866a5647449bd4e5ca324")
+	root := e.Root()
 
 	if expected != root {
 		t.Fatalf("Expected root %s, found %s", expected.String(), root.String())

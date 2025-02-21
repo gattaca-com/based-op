@@ -1,0 +1,2779 @@
+{
+  "page": {
+    "transactions": {
+      "title": "Транзакции",
+      "empty": {
+        "title": "Нет транзакций",
+        "desc": "Транзакции не найдены в <1>поддерживаемых сетях</1>"
+      },
+      "explain": {
+        "approve": "Подтвердить {{amount}} {{symbol}} для {{project}}",
+        "unknown": "Вызов контракта",
+        "cancel": "Отменена ожидающая транзакция"
+      },
+      "txHistory": {
+        "tipInputData": "Транзакция включает сообщение",
+        "parseInputDataError": "Ошибка при разборе сообщения",
+        "scamToolTip": "Эта транзакция инициирована мошенниками для отправки фиктивных токенов и NFT. Пожалуйста, воздержитесь от взаимодействия с ней."
+      },
+      "modalViewMessage": {
+        "title": "Просмотр сообщения"
+      },
+      "filterScam": {
+        "title": "Скрыть скам транзакции",
+        "loading": "Загрузка займёт немного времени, возможны задержки",
+        "btn": "Скрыть скам транзакции"
+      }
+    },
+    "chainList": {
+      "title": "{{count}} встроенных сетей",
+      "mainnet": "Mainnets",
+      "testnet": "Testnets"
+    },
+    "signTx": {
+      "nftIn": "Входящее NFT",
+      "gasLimitNotEnough": "Лимит газа меньше 21000. Транзакция не может быть отправлена",
+      "gasLimitLessThanExpect": "Лимит газа низкий. Есть 1% шанс, что транзакция может не выполниться.",
+      "gasLimitLessThanGasUsed": "Лимит газа слишком низкий. Есть 95% шанс, что транзакция может не выполниться.",
+      "nativeTokenNotEngouthForGas": "У вас недостаточно газа на кошельке",
+      "nonceLowerThanExpect": "Nonce слишком низкий, минимальное значение должно быть {{0}}",
+      "canOnlyUseImportedAddress": "Вы можете использовать только импортированные адреса для подписи",
+      "multiSigChainNotMatch": "Мультиподписные адреса не принадлежат этой цепочке и не могут инициировать транзакции",
+      "safeAddressNotSupportChain": "Текущий Safe адрес не поддерживается на цепочке {{0}}",
+      "noGasRequired": "Газ не требуется",
+      "gasSelectorTitle": "Газ",
+      "failToFetchGasCost": "Не удалось получить стоимость газа",
+      "gasMoreButton": "Больше",
+      "manuallySetGasLimitAlert": "Вы вручную установили лимит газа на",
+      "gasNotRequireForSafeTransaction": "Плата за газ не требуется для безопасных транзакций",
+      "gasPriceTitle": "Цена газа (Gwei)",
+      "maxPriorityFee": "Максимальная приоритетная плата (Gwei)",
+      "eip1559Desc1": "На цепочках, которые поддерживают EIP-1559, приоритетная плата является чаевыми для майнеров за обработку вашей транзакции. Вы можете сэкономить на окончательной стоимости газа, уменьшив приоритетную плату, что может занять больше времени для обработки транзакции.",
+      "eip1559Desc2": "Здесь в Rabby, приоритетная плата (чаевые) = Максимальная плата - Базовая плата. После установки Максимальной приоритетной платы, она будет вычтена из Базовой платы, а остаток будет уплачен майнерам.",
+      "hardwareSupport1559Alert": "Убедитесь, что прошивка вашего аппаратного кошелька была обновлена до версии, поддерживающей EIP 1559",
+      "gasLimitTitle": "Лимит газа",
+      "recommendGasLimitTip": "Предполагаемый {{est}}. Текущий {{current}}x, рекомендуется ",
+      "nonceTitle": "Nonce",
+      "gasLimitModifyOnlyNecessaryAlert": "Изменяйте только при необходимости",
+      "gasPriceMedian": "Медиана последних 100 транзакций на цепочке: ",
+      "myNativeTokenBalance": "Мой баланс Газ: ",
+      "gasLimitEmptyAlert": "Пожалуйста, введите лимит газа",
+      "gasLimitMinValueAlert": "Лимит газа должен быть больше 21000",
+      "balanceChange": {
+        "successTitle": "Результаты моделирования транзакции",
+        "failedTitle": "Моделирование транзакции не удалось",
+        "noBalanceChange": "Баланс не изменился",
+        "tokenOut": "Токен отправлен",
+        "tokenIn": "Токен получен",
+        "errorTitle": "Не удалось получить изменение баланса",
+        "notSupport": "Моделирование транзакций не поддерживается",
+        "nftOut": "NFT отправлен"
+      },
+      "enoughSafeSigCollected": "Собрано достаточно подписей",
+      "moreSafeSigNeeded": "Требуется еще {{0}} подтверждений",
+      "safeAdminSigned": "Подписано",
+      "customRPCErrorModal": {
+        "title": "Ошибка добавленного RPC",
+        "content": "Добавленный RPC сейчас недоступен. Вы можете удалить его чтобы рабоать через встроенный RPC",
+        "button": "Отключить добавленный RPC"
+      },
+      "swap": {
+        "title": "Обмен токенов",
+        "payToken": "Оплатить",
+        "receiveToken": "Получить",
+        "failLoadReceiveToken": "Не удалось загрузить",
+        "valueDiff": "Разница в значениях",
+        "simulationFailed": "Моделирование транзакции не удалось",
+        "simulationNotSupport": "Моделирование транзакций не поддерживается в этой сети",
+        "minReceive": "Минимум к получению",
+        "slippageFailToLoad": "Не удалось загрузить допустимое отклонение курса",
+        "slippageTolerance": "Допустимое отклонение курса",
+        "receiver": "Получатель",
+        "notPaymentAddress": "Не адрес оплаты",
+        "unknownAddress": "Неизвестный адрес"
+      },
+      "crossChain": {
+        "title": "Кросс-чейн"
+      },
+      "swapAndCross": {
+        "title": "Обмен токенов и кросс-чейн"
+      },
+      "wrapToken": "Обернуть токен",
+      "unwrap": "Распаковать токен",
+      "send": {
+        "title": "Отправить токен",
+        "sendToken": "Отправить токен",
+        "sendTo": "Отправить на",
+        "receiverIsTokenAddress": "Адрес токена",
+        "contractNotOnThisChain": "Контракт не в этой сети",
+        "notTopupAddress": "Не адрес пополнения",
+        "tokenNotSupport": "{{0}} не поддерживается",
+        "onMyWhitelist": "В моем белом списке",
+        "notOnThisChain": "Не в этой сети",
+        "cexAddress": "Адрес CEX",
+        "addressBalanceTitle": "Баланс адреса",
+        "whitelistTitle": "Белый список",
+        "notOnWhitelist": "Не в моем белом списке",
+        "scamAddress": "Адрес мошенника",
+        "fromMySeedPhrase": "Из моей сид фразы",
+        "fromMyPrivateKey": "Из моего приватного ключа"
+      },
+      "tokenApprove": {
+        "title": "Разрешить трату",
+        "approveToken": "Подтвердить токен",
+        "myBalance": "Мой баланс",
+        "approveTo": "Подтвердить",
+        "eoaAddress": "Адрес EOA",
+        "trustValueLessThan": "Доверительное значение ≤ {{value}}",
+        "deployTimeLessThan": "Время развертывания < {{value}} дней",
+        "amountPopupTitle": "Сумма",
+        "flagByRabby": "Отмечено Rabby",
+        "contractTrustValueTip": "Доверенная стоимость относится к общему количеству токенов, подтвержденных и относящихся к этому контракту. Низкая доверенная стоимость указывает на риск или бездействие в течение 180 дней.",
+        "exceed": "Превышает ваш текущий баланс",
+        "amount": "Утверждённая сумма:"
+      },
+      "revokeTokenApprove": {
+        "title": "Отмена аппрува токена",
+        "revokeFrom": "Отозвать от",
+        "revokeToken": "Отозвать токен"
+      },
+      "sendNFT": {
+        "title": "Отправить NFT",
+        "nftNotSupport": "NFT не поддерживается"
+      },
+      "nftApprove": {
+        "title": "Разрешение на NFT",
+        "approveNFT": "Разрешить NFT",
+        "nftContractTrustValueTip": "Доверенная стоимость опирается на топ NFT, подтвержденный и управляемый этим контрактом. Низкое доверительное значение указывает на риск или бездействие в течение 180 дней."
+      },
+      "revokeNFTApprove": {
+        "title": "Отозвать разрешение на NFT",
+        "revokeNFT": "Отозвать"
+      },
+      "nftCollectionApprove": {
+        "title": "Разрешение на NFT коллекцию",
+        "approveCollection": "Разрешить коллекцию"
+      },
+      "revokeNFTCollectionApprove": {
+        "title": "Отзыв разрешенияя на NFT коллекцию",
+        "revokeCollection": "Отозвать"
+      },
+      "deployContract": {
+        "title": "Развертывание контракта",
+        "descriptionTitle": "Описание",
+        "description": "Вы развертываете смарт-контракт"
+      },
+      "cancelTx": {
+        "title": "Отменить ожидающую транзакцию",
+        "txToBeCanceled": "Транзакция, которую нужно отменить",
+        "gasPriceAlert": "Установите текущую цену газа выше, чем {{value}} Gwei, чтобы отменить ожидающую транзакцию"
+      },
+      "submitMultisig": {
+        "title": "Отправить транзакцию Multisig",
+        "multisigAddress": "Адрес Multisig"
+      },
+      "contractCall": {
+        "title": "Вызов контракта",
+        "operation": "Операция",
+        "operationABIDesc": "Операция декодируется из ABI",
+        "operationCantDecode": "Операцию не удалось декодировать",
+        "payNativeToken": "Оплатить {{symbol}}",
+        "suspectedReceiver": "Подозрительный адрес",
+        "receiver": "Адрес получателя"
+      },
+      "revokePermit2": {
+        "title": "Отменить подтверждение токена Permit2"
+      },
+      "revokePermit": {
+        "title": "Revoke Permit Token Approval"
+      },
+      "assetOrder": {
+        "title": "Asset Order",
+        "listAsset": "List asset",
+        "receiveAsset": "Receive asset"
+      },
+      "unknownAction": "Неизвестный тип подписи",
+      "interactContract": "Вызов контракта",
+      "markAsTrust": "Отметить как доверенный",
+      "markAsBlock": "Отметить как заблокированный",
+      "interacted": "Ранее взаимодействовал",
+      "neverInteracted": "Никогда не взаимодействовал",
+      "transacted": "Ранее проводил транзакции",
+      "neverTransacted": "Никогда не проводил транзакции",
+      "importedAddress": "Импортированный адрес",
+      "fakeTokenAlert": "Это мошеннический токен, отмеченный Rabby",
+      "scamTokenAlert": "Это потенциально низкокачественный и мошеннический токен согласно обнаружению Rabby",
+      "trusted": "Доверенный",
+      "blocked": "Заблокированный",
+      "noMark": "Без отметки",
+      "markRemoved": "Отметка удалена",
+      "speedUpTooltip": "Это ускоренная транзакция, исходная транзакция, из которых только одна в конечном итоге будет завершена",
+      "decodedTooltip": "Эта подпись раскодирована Rabby Wallet",
+      "signTransactionOnChain": "Подписать транзакцию {{chain}}",
+      "viewRaw": "Посмотреть исходный код",
+      "chain": "Цепочка",
+      "unknownActionType": "Неизвестный тип действия",
+      "sigCantDecode": "Эту подпись не удается раскодировать с помощью Rabby Wallet",
+      "nftCollection": "Коллекция NFT",
+      "floorPrice": "Минимальная цена",
+      "contractAddress": "Адрес контракта",
+      "protocolTitle": "Протокол",
+      "deployTimeTitle": "Время развертывания",
+      "popularity": "Популярность",
+      "contractPopularity": "№{{0}} на {{1}}",
+      "addressNote": "Примечание к адресу",
+      "myMarkWithContract": "Моя отметка на контракте {{chainName}}",
+      "myMark": "Моя отметка",
+      "collectionTitle": "Коллекция",
+      "addressTypeTitle": "Тип адреса",
+      "firstOnChain": "Первый на цепочке",
+      "trustValue": "Значение доверия",
+      "importedDelegatedAddress": "Импортированный делегированный адрес",
+      "noDelegatedAddress": "Нет импортированных делегированных адресов",
+      "coboSafeNotPermission": "Этот делегированный адрес не имеет разрешения на инициирование этой транзакции",
+      "l2GasEstimateTooltip": "Оценка газа для цепочки L2 не включает газовую комиссию L1. Фактическая комиссия будет выше текущей оценки.",
+      "BroadcastMode": {
+        "instant": {
+          "title": "Мгновенный",
+          "desc": "Транзакции будут немедленно транслироваться в сеть"
+        },
+        "lowGas": {
+          "title": "Экономия газа",
+          "desc": "Транзакции будут транслироваться, когда количество газа в сети будет низким"
+        },
+        "mev": {
+          "title": "Защищенный MEV",
+          "desc": "Транзакции будут транслироваться на назначенный узел MEV"
+        },
+        "title": "Режим трансляции",
+        "tips": {
+          "walletConnect": "Не поддерживается WalletConnect",
+          "notSupportChain": "Не поддерживается в этой сети",
+          "customRPC": "Не поддерживается при использовании пользовательского RPC",
+          "notSupported": "Не поддерживается"
+        },
+        "lowGasDeadline": {
+          "label": "Время ожидания",
+          "1h": "1 ч",
+          "4h": "4 ч",
+          "24h": "24 ч"
+        }
+      },
+      "SafeNonceSelector": {
+        "explain": {
+          "contractCall": "Вызов контракта",
+          "send": "Отправить токен",
+          "unknown": "Неизвестная транзакция"
+        },
+        "optionGroup": {
+          "recommendTitle": "Рекомендуемый nonce",
+          "replaceTitle": "Заменить транзакцию в Очереди "
+        },
+        "option": {
+          "new": "Новая транзакция"
+        },
+        "error": {
+          "pendingList": "Не удалось загрузить ожидающие транзакции, <1/><2>Повторить</2>"
+        }
+      },
+      "coboSafeCreate": {
+        "safeWalletTitle": "Safe{Wallet}",
+        "descriptionTitle": "Описание",
+        "title": "Создать Cobo Safe"
+      },
+      "coboSafeModificationRole": {
+        "title": "Submit Safe Role Modification",
+        "safeWalletTitle": "Safe{Wallet}",
+        "descriptionTitle": "Описание"
+      },
+      "coboSafeModificationDelegatedAddress": {
+        "title": "Submit Delegated Address Modification",
+        "safeWalletTitle": "Safe{Wallet}",
+        "descriptionTitle": "DescriОписание"
+      },
+      "coboSafeModificationTokenApproval": {
+        "title": "Submit Token Approval Modification",
+        "safeWalletTitle": "Safe{Wallet}",
+        "descriptionTitle": "Описание"
+      },
+      "common": {
+        "description": "Описание",
+        "interactContract": "Вызов контракта",
+        "descTipSafe": "Подпись не вызывает изменение активов и не подтверждает владение адресом",
+        "descTipWarningPrivacy": "Подпись может подтвердить владение адресом",
+        "descTipWarningAssets": "Подпись может вызвать изменение активов",
+        "descTipWarningBoth": "Подпись может вызвать изменение активов и подтвердить владение адресом"
+      },
+      "protocol": "Протокол",
+      "yes": "Да",
+      "no": "Нет",
+      "hasInteraction": "Взаимодействовал ранее",
+      "address": "Адрес",
+      "advancedSettings": "Расширенные настройки",
+      "amount": "Сумма",
+      "contract": "Смарт-контракт",
+      "trustValueTitle": "Уровень риска",
+      "typedDataMessage": "Сообщение с типизированными данными",
+      "label": "Метка",
+      "addressSource": "Источник адреса",
+      "maxPriorityFeeDisabledAlert": "Сначала установите Цену газа",
+      "gasAccount": {
+        "totalCost": "Общая стоимость: ",
+        "currentTxCost": "Отправленная на ваш адрес сумма Gas:",
+        "maxGas": "Макс. Gas:",
+        "gasCost": "Стоимость газа для перевода газа на ваш адрес:",
+        "sendGas": "Перевод Gas для текущей транзакции:",
+        "estimatedGas": "Оценочная комиссия за газ:"
+      },
+      "transferOwner": {
+        "description": "Описание",
+        "transferTo": "Перевести на",
+        "title": "Передача права собственности на активы"
+      },
+      "swapLimitPay": {
+        "title": "Обмен Токен Предел Оплата",
+        "maxPay": "Максимальная оплата"
+      },
+      "batchRevokePermit2": {
+        "title": "Одновременная отмена разрешения Permit2"
+      },
+      "nativeTokenForGas": "Используйте токен {{tokenName}} в {{chainName}} для оплаты газа",
+      "gasAccountForGas": "Использовать USD с моего GasAccount для оплаты газа"
+    },
+    "signFooterBar": {
+      "requestFrom": "Запрос от",
+      "processRiskAlert": "Пожалуйста, обработайте предупреждение перед подписанием",
+      "ignoreAll": "Игнорировать все",
+      "gridPlusConnected": "GridPlus подключен",
+      "gridPlusNotConnected": "GridPlus не подключен",
+      "connectButton": "Подключить",
+      "connecting": "Подключение...",
+      "ledgerNotConnected": "Ledger не подключен",
+      "keystoneNotConnected": "Keystone не подключен",
+      "keystoneConnected": "Keystone подключен",
+      "ledgerConnected": "Ledger подключен",
+      "signAndSubmitButton": "Подписать и отправить",
+      "gasless": {
+        "unavailable": "Недостаточно газа и нет права на бесплатный газ",
+        "notEnough": "Недостаточный баланс газа",
+        "GetFreeGasToSign": "Получить бесплатный газ для подписи",
+        "rabbyPayGas": "Rabby оплатит необходимый газ – просто подпишите",
+        "customRpcUnavailableTip": "Пользовательские RPC не поддерживаются для бесплатного газа",
+        "walletConnectUnavailableTip": "Мобильный кошелек, подключенный через WalletConnect, не поддерживается для бесплатного газа",
+        "watchUnavailableTip": "Адрес только для просмотра не поддерживается для бесплатного газа"
+      },
+      "walletConnect": {
+        "connectedButCantSign": "Подключено, но невозможно подписать.",
+        "switchToCorrectAddress": "Пожалуйста, переключитесь на правильный адрес в мобильном кошельке",
+        "switchChainAlert": "Пожалуйста, переключитесь на {{chain}} в мобильном кошельке",
+        "notConnectToMobile": "Не подключено к {{brand}}",
+        "connected": "Подключено и готово к подписи",
+        "howToSwitch": "Как переключить",
+        "wrongAddressAlert": "Вы переключились на другой адрес в мобильном кошельке. Пожалуйста, переключитесь на правильный адрес в мобильном кошельке",
+        "connectBeforeSign": "{{0}} не подключен к Rabby, пожалуйста, подключитесь перед подписью",
+        "chainSwitched": "Вы переключились на другую цепочку в мобильном кошельке. Пожалуйста, переключитесь на {{0}} в мобильном кошельке",
+        "latency": "Задержка",
+        "requestSuccessToast": "Запрос успешно отправлен",
+        "sendingRequest": "Отправка запроса на подпись",
+        "signOnYourMobileWallet": "Пожалуйста, подпишите в своем мобильном кошельке.",
+        "requestFailedToSend": "Не удалось отправить запрос на подпись"
+      },
+      "beginSigning": "Начать процесс подписи",
+      "addressTip": {
+        "onekey": "Адрес OneKey",
+        "trezor": "Адрес Trezor",
+        "bitbox": "Адрес BitBox02",
+        "keystone": "Адрес Keystone",
+        "airgap": "Адрес AirGap",
+        "coolwallet": "Адрес CoolWallet",
+        "privateKey": "Адрес приватного ключа",
+        "seedPhrase": "Адрес Seed фразы",
+        "watchAddress": "Невозможно подписать адресом для просмотра",
+        "safe": "Адрес Safe",
+        "coboSafe": "Адрес Cobo Argus",
+        "seedPhraseWithPassphrase": "Адрес из сид фразы (Passphrase)"
+      },
+      "qrcode": {
+        "signWith": "Подписать с помощью {{brand}}",
+        "failedToGetExplain": "Не удалось получить объяснение",
+        "txFailed": "Ошибка отправки",
+        "sigReceived": "Подпись получена",
+        "sigCompleted": "Транзакция отправлена",
+        "getSig": "Получить подпись",
+        "qrcodeDesc": "Сканируйте с помощью {{brand}}, чтобы подписать<br></br>После подписи нажмите кнопку ниже, чтобы получить подпись",
+        "misMatchSignId": "Несоответствующие данные транзакции. Пожалуйста, проверьте детали транзакции.",
+        "unknownQRCode": "Ошибка: мы не смогли идентифицировать этот QR-код",
+        "afterSignDesc": "После подписи поместите QR-код с {{brand}} перед веб-камерой вашего ПК"
+      },
+      "keystone": {
+        "signWith": "Переключиться на {{method}} для подписи",
+        "qrcodeDesc": "Сканируйте для подписи. После подписания нажмите ниже, чтобы получить подпись. Для USB подключите устройство снова и разрешите доступ, чтобы начать процесс подписания заново.",
+        "misMatchSignId": "Несоответствие данных транзакции. Пожалуйста, проверьте детали транзакции.",
+        "unsupportedType": "Ошибка: тип транзакции не поддерживается или неизвестен.",
+        "siging": "Отправка запроса на подпись",
+        "txRejected": "Транзакция отклонена",
+        "shouldRetry": "Произошла ошибка. Пожалуйста, попробуйте снова.",
+        "hardwareRejectError": "Запрос Keystone был отменен. Чтобы продолжить, пожалуйста, повторно авторизуйтесь.",
+        "mismatchedWalletError": "Несоответствие кошелька",
+        "verifyPasswordError": "Ошибка подписи, попробуйте снова после разблокировки",
+        "shouldOpenKeystoneHomePageError": "Убедитесь, что ваш Keystone 3 Pro находится на домашней странице."
+      },
+      "ledger": {
+        "resent": "Повторно отправлено",
+        "signError": "Ошибка подписи Ledger:",
+        "notConnected": "Ваш кошелек не подключен. Пожалуйста, подключите его повторно.",
+        "siging": "Отправка запроса на подпись",
+        "txRejected": "Транзакция отклонена",
+        "unlockAlert": "Пожалуйста, подключите и разблокируйте ваш Ledger, откройте приложение Ethereum на нем",
+        "updateFirmwareAlert": "Пожалуйста, обновите прошивку и приложение Ethereum на вашем Ledger",
+        "txRejectedByLedger": "Транзакция отклонена на вашем Ledger",
+        "blindSigTutorial": "Инструкция по слепой подписи от Ledger",
+        "submitting": "Подписано. Отправка транзакции",
+        "resubmited": "Повторно отправлено"
+      },
+      "common": {
+        "notSupport": "{{0}} не поддерживается"
+      },
+      "resend": "Повторить",
+      "submitTx": "Отправить транзакцию",
+      "testnet": "Тестовая сеть",
+      "mainnet": "Основная сеть",
+      "cancelTransaction": "Отменить транзакцию",
+      "detectedMultipleRequestsFromThisDapp": "Обнаружено несколько запросов от этого Dapp",
+      "cancelCurrentTransaction": "Отменить текущую транзакцию",
+      "cancelAll": "Отменить все {{count}} запроса от Dapp",
+      "blockDappFromSendingRequests": "Заблокировать отправку запросов от Dapp на 1 мин",
+      "cancelConnection": "Отменить подключение",
+      "cancelCurrentConnection": "Отменить текущее подключение",
+      "imKeyNotConnected": "imKey не подключен",
+      "imKeyConnected": "imKey подключен",
+      "gasAccount": {
+        "gotIt": "Понял",
+        "deposit": "Депозит",
+        "loginFirst": "Пожалуйста, сначала войдите в GasAccount.",
+        "WalletConnectTips": "GasAccount не поддерживает WalletConnect",
+        "customRPC": "Не поддерживается при использовании пользовательского RPC",
+        "chainNotSupported": "Эта цепочка не поддерживается GasAccount",
+        "notEnough": "GasAccount is not enough",
+        "login": "Войти",
+        "useGasAccount": "Используйте GasAccount"
+      }
+    },
+    "signTypedData": {
+      "signTypeDataOnChain": "Подписать Типизированные данные {{chain}}",
+      "safeCantSignText": "Это адрес Safe, и его нельзя использовать для подписи текста.",
+      "permit": {
+        "title": "Подтверждение токена"
+      },
+      "permit2": {
+        "title": "Подтверждение токена Permit2",
+        "sigExpireTimeTip": "Срок действия этой подписи в сети",
+        "sigExpireTime": "Срок действия подписи",
+        "approvalExpiretime": "Срок действия подтверждения"
+      },
+      "swapTokenOrder": {
+        "title": "Ордер на обмен токенов"
+      },
+      "sellNFT": {
+        "title": "Ордер на продажу NFT",
+        "receiveToken": "Получить токен",
+        "listNFT": "Выставить NFT",
+        "specificBuyer": "Конкретный покупатель"
+      },
+      "signMultiSig": {
+        "title": "Подтвердить транзакцию"
+      },
+      "createKey": {
+        "title": "Создать ключ"
+      },
+      "verifyAddress": {
+        "title": "Подтвердить адрес"
+      },
+      "buyNFT": {
+        "payToken": "Заплатить токеном",
+        "receiveNFT": "Получить NFT",
+        "expireTime": "Время истечения",
+        "listOn": "Выставлен на"
+      },
+      "contractCall": {
+        "operationDecoded": "Операция декодирована из сообщения"
+      }
+    },
+    "activities": {
+      "title": "История подписей",
+      "signedTx": {
+        "label": "Транзакции",
+        "empty": {
+          "title": "Пока нет подписанных транзакций",
+          "desc": "Все транзакции, подписанные через Rabby, будут перечислены здесь."
+        },
+        "common": {
+          "unlimited": "безлимитно",
+          "unknownProtocol": "Неизвестный протокол",
+          "unknown": "Неизвестно",
+          "speedUp": "Ускорить",
+          "cancel": "Отменить",
+          "pendingDetail": "Подробности ожидания"
+        },
+        "tips": {
+          "pendingDetail": "Выполнится только одна транзакция, и почти всегда это та, у которой самая высокая цена газа",
+          "canNotCancel": "Невозможно ускорить или отменить: не первая ожидающая транзакция",
+          "pendingBroadcast": "Режим экономии газа: ожидание более низких комиссий сети. Макс. ожидание {{deadline}} ч.",
+          "pendingBroadcastBtn": "Передать сейчас",
+          "pendingBroadcastRetry": "Ошибка передачи. Последняя попытка: {{pushAt}}",
+          "pendingBroadcastRetryBtn": "Повторная передача"
+        },
+        "status": {
+          "canceled": "Отменено",
+          "failed": "Не выполнено",
+          "submitFailed": "Ошибка отправки",
+          "pending": "В ожидании",
+          "withdrawed": "Быстрая отмена",
+          "pendingBroadcasted": "В ожидании: передано",
+          "pendingBroadcast": "В ожидании: передача",
+          "pendingBroadcastFailed": "В ожидании: отправка не удалась"
+        },
+        "txType": {
+          "initial": "Исходная транзакция",
+          "cancel": "Транзакция отмены",
+          "speedUp": "Транзакция ускорения"
+        },
+        "explain": {
+          "unknown": "Неизвестная транзакция",
+          "send": "Отправлено {{amount}} {{symbol}}",
+          "cancel": "Отменено подтверждение {{token}} для {{protocol}}",
+          "approve": "Подтверждено {{count}} {{token}} для {{protocol}}",
+          "cancelNFTCollectionApproval": "Отменено подтверждение коллекции NFT для {{protocol}}",
+          "cancelSingleNFTApproval": "Отменено подтверждение отдельного NFT для {{protocol}}",
+          "singleNFTApproval": "Подтверждение отдельного NFT для {{protocol}}",
+          "nftCollectionApproval": "Подтверждение коллекции NFT для {{protocol}}"
+        },
+        "CancelTxPopup": {
+          "title": "Отменить транзакцию",
+          "options": {
+            "quickCancel": {
+              "title": "Быстрая отмена",
+              "desc": "Отменить до отправки, без комиссии за газ",
+              "tips": "Только для транзакций, которые еще не отправлены"
+            },
+            "onChainCancel": {
+              "title": "Отмена ончейн",
+              "desc": "Новая транзакция для отмены, требует газа"
+            },
+            "removeLocalPendingTx": {
+              "title": "Удалить транзакцию локально",
+              "desc": "Исправить блокировку транзакции, вызванную длительным временем ожидания"
+            }
+          },
+          "removeLocalPendingTx": {
+            "title": "Удалить транзакцию локально",
+            "desc": "Это действие удалит ожидающую транзакцию локально. \nОжидающая транзакция может быть успешно отправлена ​​в будущем."
+          }
+        },
+        "MempoolList": {
+          "empty": "Не найдено ни в одном узле",
+          "reBroadcastBtn": "Повторная передача",
+          "title": "Найдено в следующих мемпулах"
+        },
+        "message": {
+          "reBroadcastSuccess": "Повторно передано",
+          "broadcastSuccess": "Передано",
+          "cancelSuccess": "Отменено",
+          "deleteSuccess": "Удалено успешно"
+        },
+        "gas": {
+          "noCost": "Без стоимости газа"
+        },
+        "SkipNonceAlert": {
+          "alert": "Nonce #{{nonce}} пропущен в цепочке {{chainName}}. Это может вызвать ожидание транзакций впереди. <5></5> <6>Отправить транзакцию</6> <7></7> в сеть, чтобы решить проблему",
+          "clearPendingAlert": "Транзакция {{chainName}} номер ({{nonces}}) в ожидании более 3 минут. Можно <5></5> <6>очисить очередь транзакций на этой сети</6> <7></7> и отправить новую."
+        },
+        "PredictTime": {
+          "time": "Предполагаемое время упаковки {{time}}",
+          "noTime": "Время упаковки предположено",
+          "failed": "Время упаковки не определено"
+        }
+      },
+      "signedText": {
+        "label": "Текст",
+        "empty": {
+          "title": "Пока нет подписанных текстов",
+          "desc": "Все тексты, подписанные через Rabby, будут перечислены здесь."
+        }
+      }
+    },
+    "receive": {
+      "title": "Получить {{token}} в {{chain}}",
+      "watchModeAlert1": "Это адрес Режима Наблюдения.",
+      "watchModeAlert2": "Вы уверены, что хотите использовать его для получения активов?"
+    },
+    "sendToken": {
+      "addressNotInContract": "Не в списке адресов. <1></1><2>Добавить в контакты</2>",
+      "AddToContactsModal": {
+        "addedAsContacts": "Добавлено в контакты",
+        "editAddr": {
+          "placeholder": "Введите примечание к адресу",
+          "validator__empty": "Введите примечание к адресу"
+        },
+        "editAddressNote": "Изменить примечание к адресу",
+        "error": "Не удалось добавить в контакты"
+      },
+      "allowTransferModal": {
+        "error": "неверный пароль",
+        "placeholder": "Введите пароль для подтверждения",
+        "validator__empty": "Пожалуйста, введите пароль",
+        "addWhitelist": "Добавить в белый список"
+      },
+      "GasSelector": {
+        "confirm": "Подтвердить",
+        "level": {
+          "$unknown": "Неизвестно",
+          "custom": "Вручную",
+          "fast": "Мгновенно",
+          "normal": "Быстро",
+          "slow": "Стандарт"
+        },
+        "popupDesc": "Стоимость газа будет зарезервирована из суммы перевода на основе установленной вами цены газа",
+        "popupTitle": "Установите цену газа (Gwei)"
+      },
+      "header": {
+        "title": "Отправить"
+      },
+      "modalConfirmAddToContacts": {
+        "confirmText": "Подтвердить",
+        "title": "Добавить в контакты"
+      },
+      "modalConfirmAllowTransferTo": {
+        "cancelText": "Отменить",
+        "confirmText": "Подтвердить",
+        "title": "Введите пароль для подтверждения"
+      },
+      "sectionBalance": {
+        "title": "Баланс"
+      },
+      "sectionChain": {
+        "title": "Сеть"
+      },
+      "sectionFrom": {
+        "title": "От"
+      },
+      "sectionTo": {
+        "addrValidator__empty": "Пожалуйста, введите адрес",
+        "addrValidator__invalid": "Неверный адрес",
+        "searchInputPlaceholder": "Введите адрес или поиск",
+        "title": "Кому"
+      },
+      "sendButton": "Отправить",
+      "tokenInfoFieldLabel": {
+        "chain": "Сеть",
+        "contract": "Адрес контракта"
+      },
+      "tokenInfoPrice": "Цена",
+      "whitelistAlert__disabled": "Белый список отключен. Вы можете отправлять средства на любые адреса.",
+      "whitelistAlert__notWhitelisted": "Адрес не в белом списке. <1 /> Я согласен предоставить временное разрешение на перевод.",
+      "whitelistAlert__temporaryGranted": "Временное разрешение предоставлено",
+      "whitelistAlert__whitelisted": "Адрес в белом списке",
+      "balanceWarn": {
+        "gasFeeReservation": "Требуется резервирование стоимости газа"
+      },
+      "balanceError": {
+        "insufficientBalance": "Недостаточный баланс"
+      },
+      "max": "МАКС.",
+      "sectionMsgDataForEOA": {
+        "placeholder": "Необязательно",
+        "title": "Сообщение",
+        "currentIsOriginal": "Текущий ввод - оригинальные данные. UTF-8:",
+        "currentIsUTF8": "Текущий ввод - UTF-8. Оригинальные данные:"
+      },
+      "sectionMsgDataForContract": {
+        "placeholder": "Необязательно",
+        "title": "Вызов контракта",
+        "parseError": "Ошибка декодирования вызова контракта",
+        "simulation": "Симуляция вызова контракта:",
+        "notHexData": "Поддерживаются только шестнадцатеричные данные"
+      }
+    },
+    "sendTokenComponents": {
+      "GasReserved": "Резерв <1>0</1> {{ tokenName }} для оплаты газа",
+      "SwitchReserveGas": "Резерв газа <1 />"
+    },
+    "sendNFT": {
+      "header": {
+        "title": "Отправить"
+      },
+      "sectionChain": {
+        "title": "Сеть"
+      },
+      "sectionFrom": {
+        "title": "От"
+      },
+      "sectionTo": {
+        "title": "Кому",
+        "addrValidator__empty": "Пожалуйста, введите адрес",
+        "addrValidator__invalid": "Неверный адрес",
+        "searchInputPlaceholder": "Введите адрес или поиск"
+      },
+      "nftInfoFieldLabel": {
+        "Collection": "Коллекция",
+        "Contract": "Контракт",
+        "sendAmount": "Количество"
+      },
+      "sendButton": "Отправить",
+      "whitelistAlert__disabled": "Белый список отключен. Вы можете отправлять средства на любые адреса.",
+      "whitelistAlert__whitelisted": "Адрес в белом списке",
+      "whitelistAlert__temporaryGranted": "Временное разрешение предоставлено",
+      "whitelistAlert__notWhitelisted": "Адрес не в белом списке. <1 /> Я согласен предоставить временное разрешение на перевод.",
+      "tipNotOnAddressList": "Не в списке адресов.",
+      "tipAddToContacts": "Добавить в контакты",
+      "confirmModal": {
+        "title": "Введите пароль для подтверждения"
+      }
+    },
+    "approvals": {
+      "header": {
+        "title": "Аппрувы токенов {{ address }}"
+      },
+      "tab-switch": {
+        "contract": "По контрактам",
+        "assets": "По активам"
+      },
+      "component": {
+        "table": {
+          "bodyEmpty": {
+            "loadingText": "Загрузка...",
+            "noDataText": "Нет аппрувов",
+            "noMatchText": "Нет совпадений"
+          }
+        },
+        "ApprovalContractItem": {
+          "ApprovalCount_one": "Аппрув",
+          "ApprovalCount_other": "Аппрувы"
+        },
+        "RevokeButton": {
+          "btnText_zero": "Отозвать",
+          "btnText_one": "Отозвать ({{count}})",
+          "btnText_other": "Отозвать ({{count}})",
+          "permit2Batch": {
+            "modalTitle_one": "Всего требуется <2>{{count}}</2> подпись.",
+            "modalContent": "Разрешения от одного и того же контракта Permit2 будут упакованы вместе под одной и той же подписью.",
+            "modalTitle_other": "Для завершения требуется всего <2>{{count}}</2> подписей"
+          }
+        },
+        "ViewMore": {
+          "text": "Показать ещё"
+        }
+      },
+      "search": {
+        "placeholder": "Поиск {{ type }} по имени/адресу"
+      },
+      "tableConfig": {
+        "byContracts": {
+          "columnTitle": {
+            "contract": "Контракт",
+            "contractTrustValue": "Доверие к контракту",
+            "revokeTrends": "Тренды отзыва за 24 ч",
+            "myApprovedAssets": "Мои одобренные активы",
+            "myApprovalTime": "Дата аппрува"
+          },
+          "columnTip": {
+            "contractTrustValue": "Доверие относится к общей стоимости активов, подтвержденных и предоставленных этому контракту. Низкое значение указывает либо на риск, либо на отсутствие активности в течение 180 дней.",
+            "contractTrustValueWarning": "Доверие к контракту < $100,000",
+            "contractTrustValueDanger": "Доверие к контракту < $10,000"
+          }
+        },
+        "byAssets": {
+          "columnTitle": {
+            "asset": "Актив",
+            "type": "Тип",
+            "approvedAmount": "Подтверждено",
+            "approvedSpender": "Получатель подтверждения",
+            "myApprovalTime": "Время моего подтверждения"
+          },
+          "columnCell": {
+            "approvedAmount": {
+              "tipApprovedAmount": "Подтверждено",
+              "tipMyBalance": "Мой баланс"
+            }
+          }
+        }
+      },
+      "RevokeApprovalModal": {
+        "subTitleTokenAndNFT": "Подтвержденные токены и NFT",
+        "subTitleContract": "Подтверждено для следующих Контрактов",
+        "selectAll": "Выбрать все",
+        "confirm": "Подтвердить {{ selectedCount }}",
+        "title": "Аппрувы",
+        "unSelectAll": "Отменить выбор всех",
+        "tooltipPermit2": "Это утверждение одобрено через контракт Permit2: {{ permit2Id }}"
+      },
+      "revokeModal": {
+        "revoked": "Отменено:",
+        "totalRevoked": "Итого:",
+        "approvalCount_one": "{{count}} approval",
+        "done": "Готово",
+        "stillRevoke": "Все еще Revoke",
+        "submitTxFailed": "Не удалось отправить",
+        "cancelTitle": "Отменить оставшиеся отзывания",
+        "resume": "Продолжить",
+        "revokeOneByOne": "Отменить по одному",
+        "connectLedger": "Подключить Ledger",
+        "revokeWithLedger": "Начать отзыв с Ledger",
+        "confirmTitle": "Отозвать все доступы одним кликом",
+        "paused": "Приостановлено",
+        "approvalCount_zero": "{{count}} approval",
+        "gasTooHigh": "Gas fee is high",
+        "confirmRevokePrivateKey": "Используя seed phrase или private key address, вы можете одним щелчком мыши отозвать {{count}} разрешений.",
+        "ledgerSended": "Пожалуйста, подпишите запрос на Ledger ({{current}}/{{total}})",
+        "confirmRevokeLedger": "Используя адрес Ledger, вы можете одним нажатием отменить {{count}} разрешений.",
+        "batchRevoke": "Пакетный отзыв",
+        "approvalCount_other": "{{count}} approvals",
+        "cancelBody": "Если вы закроете эту страницу, оставшиеся отзывы не будут выполнены.",
+        "confirm": "Подтвердить",
+        "waitInQueue": "Ожидайте в очереди",
+        "signAndStartRevoke": "Подпишите и начните отмену",
+        "gasNotEnough": "Недостаточно Gas для отправки",
+        "defaultFailed": "Транзакция не выполнена",
+        "pause": "Пауза",
+        "ledgerSending": "Отправка запроса на подпись ({{current}}/{{total}})",
+        "useGasAccount": "Ваш газовый баланс низкий. Ваш GasAccount покроет комиссию за газ.",
+        "ledgerAlert": "Пожалуйста, откройте Ethereum App на вашем устройстве Ledger.",
+        "simulationFailed": "Симуляция не удалась",
+        "ledgerSigned": "Подписано. Создание транзакции ({{current}}/{{total}})"
+      }
+    },
+    "gasTopUp": {
+      "title": "Пополнить газ",
+      "description": "Пополните газ, отправив нам доступные токены из другой сети. Мгновенный перевод сразу после подтверждения вашего платежа, без ожидания его необратимости.",
+      "topUpChain": "Сеть пополнения",
+      "Amount": "Сумма",
+      "Continue": "Продолжить",
+      "InsufficientBalance": "На адресе контракта Rabby для текущей сети недостаточно средств. Пожалуйста, попробуйте позже.",
+      "hightGasFees": "Эта сумма пополнения слишком мала из-за высоких комиссий за газ в целевой сети.",
+      "No_Tokens": "Нет токенов",
+      "InsufficientBalanceTips": "Недостаточный баланс",
+      "payment": "Оплата пополнения газа",
+      "Loading_Tokens": "Загрузка токенов...",
+      "Including-service-fee": "Включая комиссию {{fee}}",
+      "service-fee-tip": "Предоставляя услугу пополнения газа, Rabby несет убытки от колебания курса токена и комиссии за газ для пополнения. Поэтому взимается комиссия за обслуживание 20%.",
+      "Confirm": "Подтвердить",
+      "Select-from-supported-tokens": "Выбрать из поддерживаемых токенов",
+      "Value": "Стоимость",
+      "Payment-Token": "Токен оплаты",
+      "Select-payment-token": "Выберите токен оплаты",
+      "Token": "Токен",
+      "Balance": "Баланс"
+    },
+    "swap": {
+      "title": "Обмен",
+      "pendingTip": "Транзакция отправлена. Если транзакция долго находится в ожидании, вы можете попробовать очистить ожидающие в настройках.",
+      "Pending": "В ожидании",
+      "completedTip": "Транзакция в сети, декодируются данные для генерации записи",
+      "Completed": "Завершено",
+      "slippage_tolerance": "Допустимое отклонение:",
+      "actual-slippage": "Фактическое отклонение:",
+      "gas-x-price": "Цена газа: {{price}} Gwei.",
+      "no-transaction-records": "Нет записей о транзакциях",
+      "swap-history": "История обменов",
+      "InSufficientTip": "Недостаточный баланс для симуляции транзакции и оценки газа. Отображаются исходные котировки агрегатора",
+      "testnet-is-not-supported": "",
+      "not-supported": "Не поддерживается",
+      "slippage-adjusted-refresh-quote": "Отклонение скорректировано. Обновить котировку.",
+      "price-expired-refresh-quote": "Цена устарела. Обновить котировку.",
+      "approve-x-symbol": "Подтвердить {{symbol}}",
+      "swap-via-x": "Обменять через {{name}}",
+      "get-quotes": "Получить котировки",
+      "chain": "Сеть",
+      "swap-from": "Обменять из",
+      "to": "В",
+      "search-by-name-address": "Поиск по Имени / Адресу",
+      "amount-in": "Сумма {{symbol}}",
+      "unlimited-allowance": "Неограниченный лимит",
+      "insufficient-balance": "Недостаточный баланс",
+      "rabby-fee": "Комиссия Rabby",
+      "preferMEV": "Выбрать защиту от MEV",
+      "preferMEVTip": "Включить \"MEV Guarded\" функцию для Ethereum обмена чтобы снизить риск сендвич-атак. Примечание: функция работает только со встроенным RPC и кошельком",
+      "minimum-received": "Минимум к получению",
+      "there-is-no-fee-and-slippage-for-this-trade": "Для этой сделки нет комиссии и отклонения",
+      "approve-tips": "1.Подтвердить → 2.Обменять",
+      "best": "Лучший",
+      "unable-to-fetch-the-price": "Не удается получить цену",
+      "fail-to-simulate-transaction": "Не удалось смоделировать транзакцию",
+      "security-verification-failed": "Ошибка проверки безопасности",
+      "need-to-approve-token-before-swap": "Необходимо подтвердить токен перед обменом",
+      "this-exchange-is-not-enabled-to-trade-by-you": "Эта биржа не разрешена для торговли вами.",
+      "enable-it": "Включить",
+      "this-token-pair-is-not-supported": "Пара токенов не поддерживается",
+      "QuoteLessWarning": "Получаемая сумма оценивается по симуляции транзакции Rabby. Предложение, предоставленное DEX, составляет {{receive}}. Вы получите на {{diff}} меньше ожидаемого предложения.",
+      "by-transaction-simulation-the-quote-is-valid": "По симуляции транзакции котировка действительна",
+      "wrap-contract": "Wrap контракт",
+      "directlySwap": "Обернуть токены {{symbol}} напрямую через смарт-контракт",
+      "rates-from-cex": "Курсы из CEX",
+      "edit": "Изменить",
+      "tradingSettingTips": "{{viewCount}} бирж дают котировки, на {{tradeCount}} разрешен обмен",
+      "the-following-swap-rates-are-found": "Найденные курсы обмена",
+      "sort-with-gas": "Сортировка по газу",
+      "est-payment": "Расч. оплата:",
+      "est-receiving": "Расч. получение:",
+      "est-difference": "Расч. разница:",
+      "selected-offer-differs-greatly-from-current-rate-may-cause-big-losses": "Выбранное предложение сильно отличается от текущего курса, что может привести к большим убыткам",
+      "rate": "Курс",
+      "low-slippage-may-cause-failed-transactions-due-to-high-volatility": "Низкое отклонение может привести к невыполненным транзакциям из-за высокой волатильности",
+      "transaction-might-be-frontrun-because-of-high-slippage-tolerance": "Транзакция может быть перехвачена из-за высокого допустимого отклонения",
+      "recommend-slippage": "Чтобы предотвратить перехват, мы рекомендуем отклонение <2>{{ slippage }}</2>%",
+      "slippage-tolerance": "Допустимое отклонение",
+      "select-token": "Выбрать токен",
+      "enable-exchanges": "Включить обменники",
+      "exchanges": "Обменники",
+      "view-quotes": "Просмотреть котировки",
+      "trade": "Торговать",
+      "dex": "DEX",
+      "cex": "CEX",
+      "enable-trading": "Разрешить торговлю",
+      "i-understand-and-accept-it": "Я понимаю и принимаю это",
+      "confirm": "Подтвердить",
+      "tradingSettingTip1": "1. После включения вы будете взаимодействовать с контрактом обменника напрямую",
+      "tradingSettingTip2": "2. Rabby не несет ответственности за любые риски, возникающие из контракта обменников",
+      "gas-fee": "Комиссия за газ: {{gasUsed}}",
+      "actual": "Факт:",
+      "estimate": "Примерно:",
+      "rabbyFee": {
+        "rate": "Ставка комиссии",
+        "wallet": "Кошелек",
+        "button": "Понял",
+        "title": "Комиссия Rabby",
+        "bridgeDesc": "Rabby Wallet всегда будет находить наилучший возможный курс у лучших агрегаторов и проверять надежность их предложений. Rabby взимает комиссию в размере 0,25%, которая автоматически включается в котировку.",
+        "swapDesc": "Кошелек Rabby всегда находит лучшие возможные курсы от лучших агрегаторов и проверяет надежность их предложений. Rabby взимает комиссию в размере 0,25% (0% за обертывание), которая автоматически включается в предложение."
+      },
+      "lowCreditModal": {
+        "title": "Этот токен имеет низкую кредитную стоимость.",
+        "desc": "Низкое кредитное значение часто указывает на высокий риск, такой как honeypot token или очень низкая ликвидность."
+      },
+      "from": "От",
+      "price-impact": "Влияние на цену",
+      "no-fees-for-wrap": "Нет комиссии Rabby за Wrap",
+      "max": "МАКС",
+      "Gas-fee-too-high": "Комиссия за Gas слишком высокая",
+      "approve-and-swap": "Утвердите и обменяйте через {{name}}",
+      "hidden-no-quote-rates_one": "{{count}} курс недоступен",
+      "Auto": "Авто",
+      "process-with-two-step-approve": "Продолжить двухэтапное подтверждение",
+      "fetch-best-quote": "Получение лучшего котирования",
+      "no-quote-found": "Цитаты не найдены",
+      "source": "Источник",
+      "loss-tips": "Вы теряете {{usd}}. Попробуйте меньшую сумму на небольшом рынке.",
+      "no-fee-for-wrap": "Без комиссии Rabby за Wrap",
+      "hidden-no-quote-rates_other": "{{count}} rates unavailable",
+      "usd-after-fees": "≈ {{usd}} ",
+      "approve-swap": "Утвердить и Обменять",
+      "two-step-approve": "Подпишите 2 транзакции для изменения allowance",
+      "two-step-approve-details": "Токен USDT требует 2 транзакции для изменения разрешения. Сначала вам нужно сбросить разрешение до нуля, а затем установить новое значение разрешения.",
+      "No-available-quote": "Нет доступной котировки",
+      "no-slippage-for-wrap": "Отсутствие проскальзывания для Wrap"
+    },
+    "manageAddress": {
+      "no-address": "Нет адресов",
+      "no-match": "Нет совпадений",
+      "current-address": "Текущий адрес",
+      "address-management": "Управление адресами",
+      "update-balance-data": "Обновить данные о балансе",
+      "search": "Поиск",
+      "manage-address": "Управление адресами",
+      "deleted": "Удалено",
+      "whitelisted-address": "Адрес в белом списке",
+      "addressTypeTip": "Импортирован через {{type}}",
+      "delete-desc": "Перед удалением учтите следующие моменты, чтобы понимать как защитить ваши активы.",
+      "delete-checklist-1": "Я понимаю, что если я удалю этот адрес, соответствующие приватный ключ и фраза восстановления для этого адреса будут удалены, и Rabby НЕ сможет их восстановить.",
+      "delete-checklist-2": "Я подтверждаю, что у меня есть резервная копия приватного ключа или фразы восстановления, и я готов удалить его сейчас.",
+      "confirm": "Подтвердить",
+      "cancel": "Отменить",
+      "delete-private-key-modal-title_one": "Удалить {{count}} адрес приватного ключа",
+      "delete-private-key-modal-title_other": "Удалить {{count}} адресов приватных ключей",
+      "delete-seed-phrase-title_one": "Удалить фразу восстановления и ее {{count}} адрес",
+      "delete-seed-phrase-title_other": "Удалить фразу восстановления и её {{count}} адресов",
+      "delete-title_one": "Удалить {{count}} адрес {{brand}}",
+      "delete-title_other": "Удалить {{count}} адресов {{brand}}",
+      "delete-empty-seed-phrase": "Удалить фразу восстановления и её 0 адресов",
+      "hd-path": "HD путь:",
+      "no-address-under-seed-phrase": "Вы еще не импортировали никаких адресов с этой фразой восстановления.",
+      "add-address": "Добавить адрес",
+      "delete-seed-phrase": "Удалить фразу восстановления",
+      "confirm-delete": "Подтвердить удаление",
+      "private-key": "Приватный ключ",
+      "seed-phrase": "Фраза восстановления",
+      "watch-address": "Адрес для просмотра",
+      "backup-seed-phrase": "Резервная копия фразы восстановления",
+      "delete-all-addresses-but-keep-the-seed-phrase": "Удалить все адреса, но сохранить фразу восстановления",
+      "delete-all-addresses-and-the-seed-phrase": "Удалить все адреса и фразу восстановления",
+      "seed-phrase-delete-title": "Удалить фразу восстановления?",
+      "sort-by-balance": "Сортировать по балансу",
+      "sort-by-address-type": "Сортировать по типу адреса",
+      "sort-by-address-note": "Сортировать по примечанию к адресу",
+      "sort-address": "Сортировать адреса",
+      "enterThePassphrase": "Введите пароль",
+      "enterPassphraseTitle": "Введите пароль для Подписи",
+      "passphraseError": "Неверный пароль",
+      "addNewAddress": "Добавить новый адрес"
+    },
+    "dashboard": {
+      "home": {
+        "offline": "Сеть отключена и данные не получены",
+        "panel": {
+          "swap": "Обмен",
+          "send": "Отправить",
+          "receive": "Получить",
+          "gasTopUp": "Пополнить газ",
+          "queue": "Очередь",
+          "transactions": "Транзакции",
+          "approvals": "Аппрувы",
+          "feedback": "Обратная связь",
+          "rabbyPoints": "Rabby Points",
+          "more": "Еще",
+          "manageAddress": "Управление адресами",
+          "nft": "NFT",
+          "bridge": "Мост",
+          "ecology": "Экосистема"
+        },
+        "comingSoon": "Скоро будет",
+        "soon": "Скоро",
+        "refreshTheWebPageToTakeEffect": "Обновите веб-страницу, чтобы изменения вступили в силу",
+        "rabbyIsInUseAndMetamaskIsBanned": "Rabby используется, а Metamask заблокирован",
+        "flip": "Поменять",
+        "metamaskIsInUseAndRabbyIsBanned": "MetaMask используется, а Rabby заблокирован",
+        "transactionNeedsToSign": "транзакция требует подписи",
+        "transactionsNeedToSign": "транзакции требуют подписи",
+        "view": "Просмотреть",
+        "viewFirstOne": "Просмотреть первую",
+        "rejectAll": "Отклонить все",
+        "pendingCount": "1 в ожидании",
+        "pendingCountPlural": "{{countStr}} ожидающих",
+        "queue": {
+          "title": "Очередь",
+          "count": "{{count}} в"
+        },
+        "whatsNew": "Что нового",
+        "importType": "Импортировано по {{type}}",
+        "missingDataTooltip": "Баланс может быть не актуальным из за задержек в сети {{text}}.",
+        "chain": " сети, ",
+        "chainEnd": " сеть"
+      },
+      "recentConnection": {
+        "disconnected": "Отключено",
+        "rpcUnavailable": "Пользовательский RPC недоступен",
+        "metamaskTooltip": "Вы предпочитаете использовать MetaMask с этим dapp. Вы можете изменить эту настройку в любое время в Настройках > MetaMask Предпочтительные Dapps",
+        "connected": "Подключено",
+        "notConnected": "Не подключено",
+        "connectedDapp": "Rabby не подключен к текущему Dapp. Чтобы подключиться, найдите и нажмите кнопку подключения на веб-странице Dapp.",
+        "noDappFound": "Dapp не найден",
+        "disconnectAll": "Отключить все",
+        "disconnectRecentlyUsed": {
+          "title_one": "Отключить <strong>{{count}}</strong> подключенных Dapp",
+          "title_other": "Отключить <strong>{{count}}</strong> подключенных Dapps",
+          "description": "Закрепленные DApps останутся подключенными",
+          "title": "Откючить недавние <strong>{{count}}</strong> DApps"
+        },
+        "title": "Подключенный Dapp",
+        "pinned": "Закреплено",
+        "noPinnedDapps": "Нет закрепленных dapps",
+        "dragToSort": "Перетащите для сортировки",
+        "recentlyConnected": "Недавно подключенные",
+        "noRecentlyConnectedDapps": "Нет недавно подключенных Dapps",
+        "noConnectedDapps": "Нет подключенных Dapps",
+        "dapps": "Dapps",
+        "metamaskModeTooltip": "Не удается подключить Rabby на этом Dapp? Попробуйте включить <1>режим MetaMask</1>."
+      },
+      "feedback": {
+        "directMessage": {
+          "content": "Прямое сообщение",
+          "description": "Чат с официальным представителем Rabby Wallet на DeBank"
+        },
+        "proposal": {
+          "content": "Предложение",
+          "description": "Отправьте предложение для Rabby Wallet на DeBank"
+        },
+        "title": "Обратная связь"
+      },
+      "nft": {
+        "empty": "NFT не найдены в поддерживаемых коллекциях",
+        "collectionList": {
+          "collections": {
+            "label": "Коллекции"
+          },
+          "all_nfts": {
+            "label": "Все NFT"
+          }
+        },
+        "listEmpty": "У вас еще нет NFT",
+        "modal": {
+          "collection": "Коллекция",
+          "chain": "Сеть",
+          "lastPrice": "Последняя цена",
+          "purchaseDate": "Дата покупки",
+          "sendTooltip": "В настоящее время поддерживаются только NFT ERC 721 и ERC 1155",
+          "send": "Отправить"
+        }
+      },
+      "rabbyBadge": {
+        "imageLabel": "значок Rabby",
+        "title": "Получить значок Rabby для",
+        "freeGasTitle": "Получить Free Gas Badge за",
+        "enterClaimCode": "Введите код получения",
+        "swapTip": "Сначала вам нужно выполнить обмен с помощью поддерживаемого dex в кошельке Rabby.",
+        "freeGasTip": "Сделайте транзакцию с запросом Free Gas. Кнопка 'Free Gas' появится автоматически, когда газа в поддерживаемой сети не хватает.",
+        "learnMore": "Learn More",
+        "goToSwap": "Перейти к обмену",
+        "claim": "Получить",
+        "viewYourClaimCode": "Посмотреть ваш код для получения",
+        "noCode": "У вас еще не активирован код для получения",
+        "freeGasNoCode": "Для начала нажмите кнопку внизу для перехода в DeBank и получите код для текущего кошелька.",
+        "learnMoreOnDebank": "Узнайте больше на DeBank",
+        "rabbyValuedUserNo": "Ценный пользователь Rabby №{{num}}",
+        "rabbyFreeGasUserNo": "Rabby Free Gas User No.{{num}}",
+        "claimSuccess": "Успешное получение",
+        "viewOnDebank": "Посмотреть на DeBank"
+      },
+      "contacts": {
+        "noDataLabel": "нет данных",
+        "noData": "Нет данных",
+        "oldContactList": "Старый список контактов",
+        "oldContactListDescription": "Из-за объединения контактов и адресов режима просмотра старые контакты будут здесь для вас сохранены, и через некоторое время мы удалим список. Пожалуйста, добавьте своевременно, если вы продолжаете использовать."
+      },
+      "security": {
+        "tokenApproval": "Разрешение токенов",
+        "nftApproval": "Разрешение NFT",
+        "comingSoon": "Больше функций появится в будущем",
+        "title": "Безопасность"
+      },
+      "settings": {
+        "lock": {
+          "never": "Никогда"
+        },
+        "7Days": "7 дней",
+        "1Day": "1 день",
+        "4Hours": "4 часа",
+        "1Hour": "1 час",
+        "10Minutes": "10 минут",
+        "backendServiceUrl": "URL-адрес бэкенд-сервиса",
+        "inputOpenapiHost": "Пожалуйста, введите хост openapi",
+        "pleaseCheckYourHost": "Пожалуйста, проверьте ваш хост",
+        "host": "Хост",
+        "reset": "Восстановить начальную настройку",
+        "save": "Сохранить",
+        "pendingTransactionCleared": "Очищены ожидающие транзакции",
+        "clearPending": "Очистить ожидающие",
+        "clearPendingTip1": "Это приведет к локальному удалению всех ожидающих транзакций и поможет решить проблемы, вызванные длительным временем ожидания.",
+        "clearPendingTip2": "Это не повлияет на баланс вашего счета и не потребует повторного ввода исходной фразы. \nВсе ваши активы и информация об учетной записи останутся в безопасности.",
+        "autoLockTime": "Время автоматической блокировки",
+        "claimRabbyBadge": "Получить значок Rabby!",
+        "claimFreeGasBadge": "Получить значок Rabby Free Gas!",
+        "cancel": "Отменить",
+        "enableWhitelist": "Включить белый список",
+        "disableWhitelist": "Отключить белый список",
+        "enableWhitelistTip": "После включения вы сможете отправлять активы только на адреса из белого списка, используя Rabby.",
+        "disableWhitelistTip": "Вы можете отправлять активы на любой адрес после отключения",
+        "warning": "Предупреждение",
+        "clearWatchAddressContent": "Вы уверены, что хотите удалить все адреса режима просмотра?",
+        "updateVersion": {
+          "content": "Доступно обновление для кошелька Rabby. Нажмите, чтобы узнать, как обновить вручную.",
+          "okText": "Смотреть руководство",
+          "successTip": "У вас последняя версия",
+          "title": "Доступно обновление"
+        },
+        "features": {
+          "label": "Возможности",
+          "lockWallet": "Заблокировать кошелек",
+          "signatureRecord": "Запись подписей",
+          "manageAddress": "Управление адресами",
+          "connectedDapp": "Подключенные dApp",
+          "searchDapps": "Найти Dapps",
+          "rabbyPoints": "Rabby Points",
+          "gasTopUp": "Пополнение Gas"
+        },
+        "settings": {
+          "label": "Настройки",
+          "enableWhitelistForSendingAssets": "Включить белый список для отправки активов",
+          "customRpc": "",
+          "metamaskPreferredDapps": "Предпочитаемые dApp для MetaMask",
+          "currentLanguage": "Текущий язык",
+          "enableTestnets": "Включить тестовые сети",
+          "toggleThemeMode": "Theme Mode",
+          "themeMode": "Theme Mode",
+          "customTestnet": "Добавить свою сеть",
+          "metamaskMode": "MetaMask Mode"
+        },
+        "aboutUs": "О нас",
+        "currentVersion": "Текущая версия",
+        "updateAvailable": "Доступно обновление",
+        "supportedChains": "",
+        "followUs": "Подписаться",
+        "testnetBackendServiceUrl": "URL сервиса для тестовых сетей",
+        "clearWatchMode": "Очистить Режим Просмотра",
+        "requestDeBankTestnetGasToken": "Запросить тестовые токены газа DeBank",
+        "clearPendingWarningTip": "Ожидающие транзакции могут быть успешно отправлены в будущем."
+      },
+      "tokenDetail": {
+        "blockedTip": "Заблокированный токен не будет отображаться в списке токенов",
+        "blocked": "Заблокирован",
+        "selectedCustom": "Токен не указан в списке Rabby. Вы добавили его в список токенов вручную.",
+        "notSelectedCustom": "Токен не указан в списке Rabby. Он будет добавлен в список токенов, если вы включите переключатель.",
+        "customized": "Настроено",
+        "scamTx": "Scam tx",
+        "txFailed": "Failed",
+        "notSupported": "Токен в этой сети не поддерживается",
+        "swap": "Обмен",
+        "send": "Отправить",
+        "receive": "Получить",
+        "noTransactions": "Нет транзакций",
+        "customizedButton": "настроено",
+        "blockedButton": "заблокировано",
+        "blockedButtons": "заблокированные токены",
+        "customizedButtons": "пользовательские токены"
+      },
+      "assets": {
+        "usdValue": "ОЦЕНКА В USD",
+        "amount": "КОЛ-ВО",
+        "portfolio": {
+          "nftTips": "Рассчитано на основе нижней цены, определенной этим протоколом.",
+          "fractionTips": "Рассчитано на основе цены связанного токена ERC20."
+        },
+        "tokenButton": {
+          "subTitle": "Токен из этого списка не будет включен в общий баланс."
+        },
+        "table": {
+          "assetAmount": "Актив / Количество",
+          "price": "Цена",
+          "useValue": "Стоимость в USD",
+          "healthRate": "Коэф. обеспеченности",
+          "debtRatio": "Коэф. задолженности",
+          "unlockAt": "Разблокировать в",
+          "lentAgainst": "ВЫДАНО В ЗАЛОГ",
+          "type": "Тип",
+          "strikePrice": "Цена исполнения",
+          "exerciseEnd": "Окончание исполнения",
+          "tradePair": "Торговая пара",
+          "side": "Сторона",
+          "leverage": "Кредитное плечо",
+          "PL": "P&L",
+          "unsupportedPoolType": "Неподдерживаемый тип пула",
+          "claimable": "Доступно к выводу",
+          "endAt": "Заканчивается в",
+          "dailyUnlock": "Ежедневная разблокировка",
+          "pool": "ПУЛ",
+          "token": "Токен",
+          "balanceValue": "Баланс / Стоимость",
+          "percent": "Процент",
+          "summaryTips": "Стоимость активов, разделенная на общую чистую стоимость",
+          "summaryDescription": "Все активы в протоколах (например, токены LP) преобразуются в базовые активы для статистических расчетов",
+          "noMatch": "Нет совпадений",
+          "lowValueDescription": "Активы с низкой стоимостью будут показаны здесь",
+          "lowValueAssets": "{{count}} активов с низкой стоимостью",
+          "lowValueAssets_one": "{{count}} low value token",
+          "lowValueAssets_0": "{{count}} с низкой стоимостью token",
+          "lowValueAssets_other": "{{count}} токенов с низкой стоимостью"
+        },
+        "noAssets": "Нет активов",
+        "blockLinkText": "Искать адрес, чтобы заблокировать токен",
+        "blockDescription": "Заблокированные вами токены будут показаны здесь",
+        "unfoldChain": "Развернуть 1 сеть",
+        "unfoldChainPlural": "Развернуть {{moreLen}} сетей",
+        "customLinkText": "Искать адрес, чтобы добавить пользовательский токен",
+        "customDescription": "Добавленные вами пользовательские токены будут показаны здесь",
+        "comingSoon": "Скоро...",
+        "searchPlaceholder": "Токены",
+        "AddMainnetToken": {
+          "title": "Добавить пользовательский токен",
+          "selectChain": "Выбрать сеть",
+          "searching": "Поиск токена",
+          "tokenAddress": "Адрес токена",
+          "tokenAddressPlaceholder": "Адрес токена",
+          "notFound": "Токен не найден",
+          "isBuiltInToken": "Токен уже поддерживается"
+        },
+        "AddTestnetToken": {
+          "title": "Добавить токен тестовой сети",
+          "selectChain": "Выбрать сеть",
+          "searching": "Поиск токена",
+          "tokenAddress": "Адрес токена",
+          "tokenAddressPlaceholder": "Адрес токена",
+          "notFound": "Токен не найден"
+        },
+        "TestnetAssetListContainer": {
+          "add": "Токен",
+          "addTestnet": "Сеть"
+        },
+        "noTestnetAssets": "Нет активов пользовательской сети",
+        "addTokenEntryText": "Токен",
+        "customButtonText": "Добавить пользовательский токен"
+      },
+      "hd": {
+        "howToConnectLedger": "Как подключить Ledger",
+        "howToConnectKeystone": "Как подключить Keystone",
+        "userRejectedTheRequest": "Пользователь отклонил запрос.",
+        "ledger": {
+          "doc1": "Подключите один Ledger",
+          "doc2": "Введите pin",
+          "doc3": "Откройте Ethereum App",
+          "reconnect": "Если не работает, <1>начните подключение с начала.</1>",
+          "connected": "Ledger подключен"
+        },
+        "keystone": {
+          "title": "Убедитесь, что ваш Keystone 3 Pro находится на домашней странице",
+          "doc1": "Подключите один Keystone",
+          "doc2": "Введите пароль",
+          "doc3": "Разрешите соединение к ПК",
+          "reconnect": "Если не работает, попробуйте <1>подключить с начала.</1>"
+        },
+        "howToSwitch": "Как переключить",
+        "imkey": {
+          "doc1": "Plug in a single imKey",
+          "doc2": "Enter pin to unlock"
+        },
+        "howToConnectImKey": "How to Connect imKey",
+        "ledgerIsDisconnected": "Ваш Ledger не подключен"
+      },
+      "GnosisWrongChainAlertBar": {
+        "warning": "Safe адрес не поддерживается в сети {{chain}}"
+      },
+      "echologyPopup": {
+        "title": "Экосистема"
+      },
+      "MetamaskModePopup": {
+        "title": "Режим MetaMask",
+        "enableDesc": "Включите, если Dapp работает только с MetaMask",
+        "footerText": "Добавьте больше Dapps в режим MetaMask в разделе Ещё > Режим MetaMask",
+        "desc": "Если вы не можете подключить Rabby в Dapp, включите MetaMask Mode и подключитесь, выбрав опцию MetaMask.",
+        "toastSuccess": "Включено. Обновите страницу, чтобы переподключиться."
+      }
+    },
+    "nft": {
+      "floorPrice": "/ Floor Price:",
+      "title": "NFT",
+      "all": "Все",
+      "starred": "Отмечено ({{count}})",
+      "empty": {
+        "title": "Нет отмеченных NFT",
+        "description": "Вы можете выбрать NFT из \"Все\" и добавить в \"Отмеченные\""
+      },
+      "noNft": "Нет NFT"
+    },
+    "newAddress": {
+      "title": "Добавить адрес",
+      "importSeedPhrase": "Импортировать секретную фразу",
+      "importPrivateKey": "Импортировать приватный ключ",
+      "importMyMetamaskAccount": "Импортировать мой аккаунт MetaMask",
+      "addContacts": {
+        "content": "Добавить контакты",
+        "description": "Вы также можете использовать его как адрес только для просмотра",
+        "required": "Пожалуйста, введите адрес",
+        "notAValidAddress": "Недействительный адрес",
+        "scanViaMobileWallet": "Сканировать через мобильный кошелек",
+        "scanViaPcCamera": "Сканировать через камеру ПК",
+        "scanQRCode": "Сканировать QR-коды с кошельками, совместимыми с WalletConnect",
+        "walletConnect": "Подключение кошелька",
+        "walletConnectVPN": "WalletConnect будет нестабильным, если вы используете VPN.",
+        "cameraTitle": "Пожалуйста, отсканируйте QR-код вашей камерой",
+        "addressEns": "Адрес / ENS"
+      },
+      "unableToImport": {
+        "title": "Невозможно импортировать",
+        "description": "Импорт нескольких аппаратных кошельков на основе QR-кода не поддерживается. Пожалуйста, удалите все адреса из {{0}} перед импортом другого устройства."
+      },
+      "connectHardwareWallets": "Подключить аппаратные кошельки",
+      "connectMobileWalletApps": "Подключить приложения мобильных кошельков",
+      "connectInstitutionalWallets": "Подключить институциональные кошельки",
+      "createNewSeedPhrase": "Создать новую секретную фразу",
+      "importKeystore": "Импортировать KeyStore",
+      "selectImportMethod": "Выберите метод импорта",
+      "theSeedPhraseIsInvalidPleaseCheck": "Секретная фраза недействительна, пожалуйста, проверьте!",
+      "seedPhrase": {
+        "importTips": "Вы можете вставить всю свою секретную фразу восстановления в первое поле",
+        "whatIsASeedPhrase": {
+          "question": "Что такое секретная фраза?",
+          "answer": "Фраза из 12, 18 или 24 слов, используемая для управления вашими активами."
+        },
+        "isItSafeToImportItInRabby": {
+          "question": "Безопасно ли импортировать его в Rabby?",
+          "answer": "Да, он будет храниться локально в вашем браузере и доступен только вам."
+        },
+        "importError": "[CreateMnemonics] неожиданный шаг {{0}}",
+        "importQuestion1": "Если я потеряю свою секретную фразу, мои активы будут потеряны навсегда.",
+        "importQuestion2": "Если я поделюсь своей секретной фразой с другими, мои активы будут украдены.",
+        "importQuestion3": "Секретная фраза хранится только на моем компьютере, и Rabby к ней не имеет доступа.",
+        "importQuestion4": "Если я удалю Rabby без резервного копирования секретной фразы, Rabby не сможет ее для меня восстановить.",
+        "riskTips": "Прежде чем начать, пожалуйста, прочитайте и запомните следующие советы по безопасности.",
+        "showSeedPhrase": "Показать секретную фразу",
+        "backup": "Резервное копирование секретной фразы",
+        "backupTips": "Убедитесь, что никто другой не смотрит на ваш экран, когда вы делаете резервную копию секретной фразы",
+        "copy": "Скопировать секретную фразу",
+        "saved": "Я сохранил фразу",
+        "pleaseSelectWords": "Пожалуйста, выберите слова",
+        "verificationFailed": "Проверка не удалась",
+        "createdSuccessfully": "Успешно создано",
+        "verifySeedPhrase": "Проверить секретную фразу",
+        "fillInTheBackupSeedPhraseInOrder": "Заполните резервную секретную фразу в порядке",
+        "wordPhrase": "У меня есть <1>{{count}}</1>-словная фраза",
+        "wordPhraseAndPassphrase": "У меня есть сид фраза из <1>{{count}}</1> слов с паролем",
+        "slip39SeedPhrase": "У меня есть <0>{{SLIP39}}</0> Seed Phrase",
+        "slip39SeedPhraseWithPassphrase": "У меня есть <0>{{SLIP39}}</0> сид фразы с паролем",
+        "slip39SeedPhrasePlaceholder_one": "Введите {{count}}ю часть сид фразы",
+        "slip39SeedPhrasePlaceholder_two": "Введите {{count}}ю часть сид фразы",
+        "slip39SeedPhrasePlaceholder_few": "Введите {{count}}ю часть сид фразы",
+        "slip39SeedPhrasePlaceholder_other": "Введите {{count}}ю часть сид фразы",
+        "clearAll": "Очистить все",
+        "pastedAndClear": "Вставлено и очищен буфер",
+        "invalidContent": "Содержимое не подходит",
+        "inputInvalidCount_one": "1 не похоже на стандартную сид фразу, проверьте.",
+        "inputInvalidCount_other": "{{count}} не похоже на стандартную сид фразу, проверьте.",
+        "passphrase": "Пароль"
+      },
+      "metamask": {
+        "step1": "Экспорт секретной фразы или приватного ключа из MetaMask <br /> <1>Нажмите, чтобы просмотреть руководство<1/></1>",
+        "step2": "Импорт секретной фразы или приватного ключа в Rabby",
+        "step3": "Импорт завершен, и все ваши активы автоматически появятся",
+        "how": "Как импортировать мой аккаунт MetaMask?",
+        "step": "Шаг",
+        "importSeedPhrase": "Импортировать секретную фразу или приватный ключ",
+        "importSeedPhraseTips": "Он будет храниться только локально в браузере. У Rabby никогда не будет доступа к вашей конфиденциальной информации.",
+        "tips": "Советы:",
+        "tipsDesc": "Ваша секретная фраза/приватный ключ не принадлежит MetaMask или какому-либо конкретному кошельку; он принадлежит только вам."
+      },
+      "privateKey": {
+        "required": "Пожалуйста, введите приватный ключ",
+        "placeholder": "Введите ваш приватный ключ",
+        "whatIsAPrivateKey": {
+          "question": "Что такое приватный ключ?",
+          "answer": "Это последовательность букв и цифр, используемая для управления вашими активами."
+        },
+        "repeatImportTips": "Адрес уже импортирован, хотите переключиться?",
+        "isItSafeToImportItInRabby": {
+          "question": "Безопасно ли импортировать его в Rabby?",
+          "answer": "Да, он будет храниться локально в вашем браузере и доступен только вам."
+        },
+        "isItPossibleToImportKeystore": {
+          "question": "Возможно импортировать KeyStore?",
+          "answer": "Да, вы можете <1> импортировать KeyStore </1> сюда."
+        },
+        "notAValidPrivateKey": "Приватный ключ не действителен"
+      },
+      "importedSuccessfully": "Успешный импорт",
+      "ledger": {
+        "title": "Подключить Ledger",
+        "cameraPermissionTitle": "Разрешить Rabby доступ к камере",
+        "cameraPermission1": "Разрешите Rabby доступ к камере во всплывающем окне браузера",
+        "allowRabbyPermissionsTitle": "Разрешить Rabby следующие разрешения:",
+        "ledgerPermission1": "Подключиться к устройству HID",
+        "ledgerPermissionTip": "Пожалуйста, нажмите \\\"Разрешить\\\" ниже и авторизуйте доступ к вашему Ledger в следующем всплывающем окне.",
+        "permissionsAuthorized": "Разрешения авторизованы",
+        "nowYouCanReInitiateYourTransaction": "Теперь вы можете повторно инициировать вашу транзакцию.",
+        "allow": "Разрешить",
+        "error": {
+          "ethereum_app_unconfirmed_error": "Вы отклонили запрос на открытие приложения Ethereum.",
+          "ethereum_app_not_installed_error": "Пожалуйста, установите приложение Ethereum на ваше устройство Ledger.",
+          "ethereum_app_open_error": "Пожалуйста, установите/примите приложение Ethereum на вашем устройстве Ledger.",
+          "running_app_close_error": "Не удалось закрыть запущенное приложение на вашем устройстве Ledger."
+        }
+      },
+      "keystone": {
+        "title": "Подключить Keystone",
+        "allowRabbyPermissionsTitle": "Дать Rabby разрешение на:",
+        "keystonePermission1": "Подключение к USB устройству",
+        "keystonePermissionTip": "Пожалуйста, нажмите «Разрешить» ниже, чтобы авторизовать доступ к вашему Keystone в следующем всплывающем окне, и убедитесь, что ваш Keystone 3 Pro находится на домашней странице.",
+        "noDeviceFoundError": "Подключите один Keystone",
+        "deviceIsLockedError": "Введите пароль",
+        "deviceRejectedExportAddress": "Разрешите подключение к Rabby",
+        "deviceIsBusy": "Устройсво занято",
+        "exportAddressJustAllowedOnHomePage": "Экспорт адреса разрешен на домашней странице",
+        "unknowError": "Неизвестная ошибка, попробуйте еще раз"
+      },
+      "walletConnect": {
+        "connectYour": "Подключите ваш",
+        "viaWalletConnect": "через Wallet Connect",
+        "connectedSuccessfully": "Успешно подключено",
+        "qrCodeError": "Пожалуйста, проверьте вашу сеть или обновите QR-код",
+        "qrCode": "QR-код",
+        "url": "URL",
+        "changeBridgeServer": "Изменить сервер моста",
+        "status": {
+          "received": "Сканирование успешно. Ожидание подтверждения",
+          "rejected": "Соединение отменено. Пожалуйста, отсканируйте QR-код для повтора.",
+          "brandError": "Неправильное приложение кошелька.",
+          "brandErrorDesc": "Пожалуйста, используйте {{brandName}} для подключения",
+          "accountError": "Адрес не совпадает.",
+          "accountErrorDesc": "Пожалуйста, переключитесь на правильный адрес в вашем мобильном кошельке",
+          "connected": "Подключено",
+          "duplicate": "Адрес, который вы пытаетесь импортировать, дублируется",
+          "default": "Сканируйте с помощью вашего {{brand}}"
+        },
+        "title": "Подключиться с {{brandName}}",
+        "disconnected": "Отключено",
+        "accountError": {},
+        "tip": {
+          "accountError": {
+            "tip1": "Подключено, но не может подписать.",
+            "tip2": "Пожалуйста, переключитесь на правильный адрес в мобильном кошельке"
+          },
+          "disconnected": {
+            "tip": "{{brandName}} не подключен"
+          },
+          "connected": {
+            "tip": "{{brandName}} подключен"
+          }
+        },
+        "button": {
+          "disconnect": "Отключить",
+          "connect": "Подключить",
+          "howToSwitch": "Как переключиться"
+        }
+      },
+      "hd": {
+        "tooltip": {
+          "removed": "Адрес удален из Rabby",
+          "added": "Адрес добавлен в Rabby",
+          "connectError": "Соединение прервано. Пожалуйста, обновите страницу, чтобы снова подключиться.",
+          "disconnected": "Не удается подключиться к аппаратному кошельку. Пожалуйста, попробуйте переподключиться."
+        },
+        "waiting": "Ожидание",
+        "clickToGetInfo": "Нажмите, чтобы получить информацию из сети",
+        "addToRabby": "Добавить в Rabby",
+        "basicInformation": "Основная информация",
+        "addresses": "Адреса",
+        "loadingAddress": "Загрузка {{0}}/{{1}} адресов",
+        "notes": "Примечания",
+        "getOnChainInformation": "Получить информацию из сети",
+        "hideOnChainInformation": "Скрыть информацию из сети",
+        "usedChains": "Используемые сети",
+        "firstTransactionTime": "Время первой транзакции",
+        "balance": "Баланс",
+        "ledger": {
+          "hdPathType": {
+            "ledgerLive": "Ledger Live: Официальный HD путь Ledger. В первых 3 адресах есть адреса, использованные в сети.",
+            "bip44": "BIP44 Стандарт: HD путь, определенный протоколом BIP44. В первых 3 адресах есть адреса, использованные в сети.",
+            "legacy": "Устаревший: HD путь, используемый MEW / Mycrypto. В первых 3 адресах есть адреса, использованные в сети."
+          },
+          "hdPathTypeNoChain": {
+            "ledgerLive": "Ledger Live: Официальный HD путь Ledger. В первых 3 адресах нет адресов, использованных в сети.",
+            "bip44": "BIP44 Стандарт: HD путь, определенный протоколом BIP44. В первых 3 адресах нет адресов, использованных в сети.",
+            "legacy": "Устаревший: HD путь, используемый MEW / Mycrypto. В первых 3 адресах нет адресов, использованных в сети."
+          }
+        },
+        "trezor": {
+          "hdPathType": {
+            "bip44": "BIP44: HD путь, определенный протоколом BIP44.",
+            "legacy": "Legacy: HD path used by MEW / Mycrypto.",
+            "ledgerLive": "Ledger Live: официальная HD-путь Ledger."
+          },
+          "hdPathTypeNoChain": {
+            "bip44": "BIP44: HD путь, определенный протоколом BIP44.",
+            "ledgerLive": "Ledger Live: официальный HD-путь Ledger.",
+            "legacy": "Устаревший: путь HD, используемый MEW / Mycrypto."
+          },
+          "message": {
+            "disconnected": "{{0}}Подключение прервано. Обновите страницу, чтобы подключиться снова."
+          }
+        },
+        "onekey": {
+          "hdPathType": {
+            "bip44": "BIP44: HD путь, определенный протоколом BIP44."
+          },
+          "hdPathTypeNoChain": {
+            "bip44": "BIP44: HD путь, определенный протоколом BIP44."
+          }
+        },
+        "mnemonic": {
+          "hdPathType": {
+            "default": "По умолчанию: используется HD путь по умолчанию для импорта фразы восстановления.",
+            "bip44": "BIP44 Standard: HDpath defined by the BIP44 protocol.",
+            "ledgerLive": "Ledger Live: Ledger official HD path.",
+            "legacy": "Legacy: HD path used by MEW / Mycrypto."
+          },
+          "hdPathTypeNoChain": {
+            "default": "По умолчанию: используется HD путь по умолчанию для импорта фразы восстановления."
+          }
+        },
+        "gridplus": {
+          "hdPathType": {
+            "ledgerLive": "Ledger Live: Официальный HD путь Ledger. В первых 3 адресах есть адреса, использованные в сети.",
+            "bip44": "BIP44 Стандарт: HD путь, определенный протоколом BIP44. В первых 3 адресах есть адреса, использованные в сети.",
+            "legacy": "Устаревший: HD путь, используемый MEW / Mycrypto. В первых 3 адресах есть адреса, использованные в сети."
+          },
+          "hdPathTypeNochain": {
+            "ledgerLive": "Ledger Live: Официальный HD путь Ledger. В первых 3 адресах нет адресов, использованных в сети.",
+            "bip44": "BIP44 Стандарт: HD путь, определенный протоколом BIP44. В первых 3 адресах нет адресов, использованных в сети.",
+            "legacy": "Устаревший: HD путь, используемый MEW / Mycrypto. В первых 3 адресах нет адресов, использованных в сети."
+          },
+          "switch": {
+            "title": "Переключиться на новое устройство GridPlus",
+            "content": "Не поддерживается импорт нескольких устройств GridPlus. Если вы переключитесь на новое устройство GridPlus, список адресов текущего устройства будет удален перед началом процесса импорта."
+          },
+          "switchToAnotherGridplus": "Переключиться на другой GridPlus"
+        },
+        "keystone": {
+          "hdPathType": {
+            "bip44": "BIP44: HDpath, определенный протоколом BIP44.",
+            "ledgerLive": "Ledger Live: Ledger official HD path. You can only manage 10 addresses with Ledger Live path.",
+            "legacy": "Legacy: HD path used by MEW / Mycrypto."
+          },
+          "hdPathTypeNochain": {
+            "bip44": "BIP44: HDpath, определенный протоколом BIP44.",
+            "ledgerLive": "Ledger Live: Ledger official HD path. You can only manage 10 addresses with Ledger Live path.",
+            "legacy": "Legacy: HD path used by MEW / Mycrypto."
+          }
+        },
+        "bitbox02": {
+          "hdPathType": {
+            "bip44": "BIP44: HDpath, определенный протоколом BIP44."
+          },
+          "hdPathTypeNoChain": {
+            "bip44": "BIP44: HDpath, определенный протоколом BIP44."
+          },
+          "disconnected": "Не удается подключиться к BitBox02. Пожалуйста, обновите страницу, чтобы снова подключиться. Причина: {{0}}"
+        },
+        "selectHdPath": "Выберите HD путь:",
+        "selectIndexTip": "Выберите порядковый номер адресов для начала:",
+        "manageAddressFrom": "Управление адресами от {{0}} до {{1}}",
+        "advancedSettings": "Расширенные настройки",
+        "customAddressHdPath": "Пользовательский HD путь адреса",
+        "connectedToLedger": "Подключено к Ledger",
+        "connectedToTrezor": "Подключено к Trezor",
+        "connectedToOnekey": "Подключено к OneKey",
+        "manageSeedPhrase": "Управление секретной фразой",
+        "manageGridplus": "Управление GridPlus",
+        "manageKeystone": "Управление Keystone",
+        "manageAirgap": "Управление AirGap",
+        "manageImtokenOffline": "Управление imToken",
+        "manageCoolwallet": "Управление CoolWallet",
+        "manageBitbox02": "Управление BitBox02",
+        "manageNgraveZero": "Управление NGRAVE ZERO",
+        "done": "Готово",
+        "addressesIn": "Адреса в {{0}}",
+        "addressesInRabby": "Адреса в Rabby{{0}}",
+        "qrCode": {
+          "switch": {
+            "title": "Переключиться на новое устройство {{0}}",
+            "content": "Не поддерживается импорт нескольких устройств {{0}} Если вы переключаетесь на новое устройство {{0}}, список адресов текущего устройства будет удален перед началом процесса импорта."
+          },
+          "switchAnother": "Переключиться на другой {{0}}"
+        },
+        "manageImKey": "Manage imKey",
+        "importBtn": "Импортировать ({{count}})"
+      },
+      "importYourKeystore": "Импортируйте ваш KeyStore",
+      "incorrectPassword": "неверный пароль",
+      "keystore": {
+        "description": "Выберите файл keystore, который вы хотите импортировать, и введите соответствующий пароль",
+        "password": {
+          "required": "Пожалуйста, введите пароль",
+          "placeholder": "Пароль"
+        }
+      },
+      "coboSafe": {
+        "inputSafeModuleAddress": "Введите адрес модуля Safe",
+        "invalidAddress": "Неверный адрес",
+        "whichChainIsYourCoboAddressOn": "На какой цепочке находится ваш адрес cobo",
+        "addCoboArgusAddress": "Добавить адрес Cobo Argus",
+        "findTheAssociatedSafeAddress": "Найти связанный адрес Safe",
+        "import": "Импорт"
+      },
+      "imkey": {
+        "title": "Подкючить imKey",
+        "imkeyPermissionTip": "Пожалуйста, нажмите «Разрешить» ниже и подтвердите доступ к вашему imKey в следующем всплывающем окне."
+      },
+      "addFromCurrentSeedPhrase": "Добавить из текущей сид фразы",
+      "firefoxLedgerDisableTips": "Ledger не совместим с Firefox"
+    },
+    "unlock": {
+      "btn": {
+        "unlock": "Разблокировать"
+      },
+      "password": {
+        "required": "Введите пароль для разблокировки",
+        "placeholder": "Введите пароль для разблокировки",
+        "error": "неверный пароль"
+      },
+      "title": "Кошелек Rabby",
+      "btnForgotPassword": "Забыли пароль?",
+      "description": "Прорывной кошелек для Ethereum и всех EVM цепочек"
+    },
+    "addToken": {
+      "noTokenFound": "Токен не найден",
+      "tokenSupported": "Токен поддерживается в Rabby",
+      "tokenCustomized": "Текущий токен уже добавлен в пользовательские",
+      "tokenNotFound": "Токен не найден по этому адресу контракта",
+      "title": "Добавить пользовательский токен в Rabby",
+      "balance": "Баланс",
+      "tokenOnMultiChains": "Адрес токена в нескольких сетях. Пожалуйста, выберите одну",
+      "noTokenFoundOnThisChain": "В этой сети токен не найден",
+      "hasAdded": "Вы добавили этот токен."
+    },
+    "switchChain": {
+      "title": "",
+      "chainNotSupport": "Запрошенная сеть еще не поддерживается Rabby",
+      "testnetTip": "Пожалуйста, включите \"Включить тестовые сети\" в разделе \"Еще\" перед подключением к тестовым сетям",
+      "chainNotSupportYet": "Запрошенная сеть пока не поддерживается Rabby",
+      "chainId": "Chain ID:",
+      "unknownChain": "Unknown chain",
+      "requestsReceived": "1 запрос получен",
+      "requestsReceivedPlural": "{{count}} запросов получено",
+      "requestRabbyToSupport": "Запросить поддержку в Rabby",
+      "chainNotSupportAddChain": "Запрошенная сеть не поддерживается Rabby, но вы можете добавить её вручную",
+      "addChain": "Добавить тестнет",
+      "desc": "Запрошенная сеть не поддерживается Rabby, но вы можете добавить её вручную"
+    },
+    "signText": {
+      "title": "Подписать текст",
+      "message": "Сообщение",
+      "createKey": {
+        "interactDapp": "Взаимодействовать с Dapp",
+        "description": "Описание"
+      },
+      "sameSafeMessageAlert": "То же самое сообщение подтверждено; дополнительная подпись не требуется."
+    },
+    "securityEngine": {
+      "yes": "Да",
+      "no": "Нет",
+      "whenTheValueIs": "когда значение равно {{value}}",
+      "currentValueIs": "Текущее значение равно {{value}}",
+      "viewRules": "Просмотреть правила безопасности",
+      "undo": "Отменить",
+      "riskProcessed": "Риск обработан",
+      "ignoreAlert": "Игнорировать предупреждение",
+      "ruleDisabled": "Правила безопасности были отключены. Для вашей безопасности вы можете включить их в любое время.",
+      "unknownResult": "Неизвестный результат, потому что правило безопасности недоступно",
+      "alertTriggerReason": "Причина срабатывания предупреждения:",
+      "understandRisk": "Я понимаю и принимаю ответственность за любые потери",
+      "forbiddenCantIgnore": "Обнаружен запрещенный риск, который нельзя игнорировать.",
+      "ruleDetailTitle": "Детали правила",
+      "enableRule": "Включить правило",
+      "viewRiskLevel": "Просмотреть уровень риска"
+    },
+    "connect": {
+      "listedBy": "Перечислено",
+      "sitePopularity": "Популярность сайта",
+      "myMark": "Моя отметка",
+      "flagByRabby": "Отмечено Rabby",
+      "flagByMM": "Отмечено MetaMask",
+      "flagByScamSniffer": "Отмечено ScamSniffer",
+      "verifiedByRabby": "Проверено Rabby",
+      "foundForbiddenRisk": "Найдены запрещенные риски. Соединение заблокировано.",
+      "markAsTrustToast": "Отметить как \"Доверенный\"",
+      "markAsBlockToast": "Отметить как \"Заблокированный\"",
+      "markRemovedToast": "Отметка удалена",
+      "title": "Подключиться к Dapp",
+      "selectChainToConnect": "Выберите цепь для подключения",
+      "markRuleText": "Моя отметка",
+      "connectBtn": "Подключить",
+      "noWebsite": "Нет сайта",
+      "popularLevelHigh": "Высокий",
+      "popularLevelMedium": "Средний",
+      "popularLevelLow": "Низкий",
+      "popularLevelVeryLow": "Очень низкий",
+      "noMark": "Нет отметки",
+      "blocked": "Заблокировано",
+      "trusted": "Доверенный",
+      "addedToWhitelist": "Добавлено в белый список",
+      "addedToBlacklist": "Добавлено в черный список",
+      "removedFromAll": "Удалено из всех списков",
+      "notOnAnyList": "Не в списке",
+      "onYourBlacklist": "В вашем черном списке",
+      "onYourWhitelist": "В вашем белом списке",
+      "manageWhiteBlackList": "Управление белым/черным списком",
+      "SignTestnetPermission": {
+        "title": "Разрешение на подписание"
+      },
+      "ignoreAll": "Игнорировать все",
+      "SelectWallet": {
+        "title": "Выберите кошелек для подключения",
+        "desc": "Выберите из кошельков, которые вы установили"
+      },
+      "otherWalletBtn": "Подключиться к другому кошельку"
+    },
+    "addressDetail": {
+      "add-to-whitelist": "Добавить в белый список",
+      "remove-from-whitelist": "Удалить из белого списка",
+      "address-detail": "Детали адреса",
+      "backup-private-key": "Резервное копирование приватного ключа",
+      "backup-seed-phrase": "Резервное копирование секретной фразы",
+      "delete-address": "Удалить адрес",
+      "delete-desc": "Прежде чем вы удалите, учтите следующие моменты, чтобы понять, как защитить свои активы.",
+      "direct-delete-desc": "Этот адрес является адресом {{renderBrand}}, Rabby не хранит приватный ключ или секретную фразу для этого адреса, вы можете просто удалить его",
+      "admins": "Администраторы",
+      "tx-requires": "Любая транзакция требует <2>{{num}}</2> подтверждений",
+      "edit-memo-title": "Редактировать заметку адреса",
+      "please-input-address-note": "Пожалуйста, введите заметку адреса",
+      "address": "Адрес",
+      "address-note": "Заметка адреса",
+      "assets": "Активы",
+      "qr-code": "QR-код",
+      "source": "Источник",
+      "hd-path": "HD путь",
+      "manage-seed-phrase": "Управление секретной фразой",
+      "manage-addresses-under-this-seed-phrase": "Управление адресами под этой секретной фразой",
+      "safeModuleAddress": "Адрес модуля Safe",
+      "coboSafeErrorModule": "Адрес устарел, пожалуйста, удалите и импортируйте адрес снова.",
+      "importedDelegatedAddress": "Импортирован делегированный адрес",
+      "manage-addresses-under": "Управляйте адресами под этим {{brand}}"
+    },
+    "preferMetamaskDapps": {
+      "title": "Предпочтительные Dapps MetaMask",
+      "desc": "Следующие dapps останутся подключенными через MetaMask, независимо от кошелька, на который вы переключились",
+      "howToAdd": "Как добавить",
+      "howToAddDesc": "Щелкните правой кнопкой мыши на веб-сайте и найдите эту опцию",
+      "empty": "Нет dapps"
+    },
+    "customRpc": {
+      "opened": "Открыто",
+      "closed": "Закрыто",
+      "empty": "",
+      "title": "",
+      "desc": "",
+      "add": "",
+      "EditRPCModal": {
+        "invalidRPCUrl": "Недействительный URL RPC",
+        "invalidChainId": "Недействительный ID цепи",
+        "rpcAuthFailed": "Аутентификация RPC не удалась",
+        "title": "",
+        "rpcUrl": "URL RPC",
+        "rpcUrlPlaceholder": "Введите URL RPC"
+      },
+      "EditCustomTestnetModal": {
+        "title": "Добавить свою сеть",
+        "quickAdd": "Быстрый импорт из Chainlist"
+      }
+    },
+    "requestDebankTestnetGasToken": {
+      "title": "Запросить тестовый токен газа DeBank",
+      "mintedTip": "Владельцы значка Rabby могут запрашивать его один раз в день",
+      "notMintedTip": "Запрос доступен только для владельцев значка Rabby",
+      "claimBadgeBtn": "Запросить значок Rabby",
+      "time": "В день",
+      "requested": "Вы запрашивали сегодня",
+      "requestBtn": "Запрос"
+    },
+    "safeQueue": {
+      "title": "Очередь",
+      "sameNonceWarning": "Эти транзакции конфликтуют, так как используют один и тот же nonce. Выполнение одной автоматически заменит другие.",
+      "loading": "Загрузка ожидающих транзакций",
+      "noData": "Нет ожидающих транзакций",
+      "loadingFaild": "Из-за нестабильности сервера Safe данные недоступны, пожалуйста, проверьте снова через 5 минут",
+      "accountSelectTitle": "Вы можете отправить эту транзакцию с любого адреса",
+      "LowerNonceError": "Транзакция с nonce {{nonce}} должна быть выполнена в первую очередь",
+      "submitBtn": "Отправить транзакцию",
+      "unknownTx": "Неизвестная транзакция",
+      "cancelExplain": "Отменить {{token}} Approve для {{protocol}}",
+      "unknownProtocol": "Неизвестный протокол",
+      "approvalExplain": "Подтвердить {{count}} {{token}} для {{protocol}}",
+      "unlimited": "неограниченный",
+      "action": {
+        "send": "Отправить",
+        "cancel": "Отмена ожидающей транзакции"
+      },
+      "viewBtn": "Посмотреть",
+      "replaceBtn": "Заменить",
+      "ReplacePopup": {
+        "options": {
+          "send": "Послать токен",
+          "reject": "Отмена транзы"
+        },
+        "viewBtn": "Просмотр",
+        "desc": " Подписанная транзакция не может быть отменена, но может быть заменена           новой с тем же значением nonce.",
+        "title": "Выберите, как заменить эту транзакцию"
+      }
+    },
+    "importSuccess": {
+      "title": "Успешно импортировано",
+      "addressCount": "{{count}} адресов",
+      "gnosisChainDesc": "Этот адрес был найден развернутым на {{count}} цепях"
+    },
+    "backupSeedPhrase": {
+      "title": "Резервное копирование секретной фразы",
+      "alert": "Эта секретная фраза является учетными данными для ваших активов. НЕ теряйте ее или не раскрывайте другим, иначе вы можете навсегда потерять свои активы. Пожалуйста, просмотрите ее в безопасной среде и храните аккуратно.",
+      "clickToShow": "Нажмите, чтобы показать секретную фразу",
+      "copySeedPhrase": "Скопировать секретную фразу",
+      "showQrCode": "Показать QR Code",
+      "qrCodePopupTitle": "QR Code",
+      "qrCodePopupTips": "Никому не показывайте QR code. Открывайте только в безопасном месте."
+    },
+    "backupPrivateKey": {
+      "title": "Резервное копирование приватного ключа",
+      "alert": "Этот приватный ключ является учетными данными для ваших активов. НЕ теряйте его или не раскрывайте другим, иначе вы можете навсегда потерять свои активы. Пожалуйста, просмотрите его в безопасной среде и храните аккуратно.",
+      "clickToShow": "Кликните чтобы показать приватный ключ",
+      "clickToShowQr": "Кликните чтобы показать QR код приватного ключа"
+    },
+    "ethSign": {
+      "alert": "Подписание с помощью 'eth_sign' может привести к потере активов. Для вашей безопасности Rabby не поддерживает этот метод."
+    },
+    "createPassword": {
+      "title": "Установить пароль",
+      "passwordRequired": "Пожалуйста, введите пароль",
+      "passwordMin": "Пароль должен быть не менее 8 символов",
+      "passwordPlaceholder": "Пароль должен быть не менее 8 символов",
+      "confirmRequired": "Пожалуйста, подтвердите пароль",
+      "confirmError": "Пароли не совпадают",
+      "confirmPlaceholder": "Подтвердите пароль",
+      "agree": "Я прочитал и согласен с <1/> <2>Условиями использования</2>"
+    },
+    "welcome": {
+      "step1": {
+        "title": "Доступ ко всем Dapps",
+        "desc": "Rabby подключается ко всем Dapps, которые поддерживает MetaMask"
+      },
+      "step2": {
+        "title": "Самоуправляемый",
+        "desc": "Приватные ключи хранятся локально и доступны только вам",
+        "btnText": "Начать"
+      }
+    },
+    "importSafe": {
+      "title": "Добавить адрес Safe",
+      "placeholder": "Пожалуйста, введите адрес",
+      "error": {
+        "invalid": "Недействительный адрес",
+        "required": "Пожалуйста, введите адрес"
+      },
+      "loading": "Поиск развернутой сети этого адреса",
+      "gnosisChainDesc": "Этот адрес был найден развернутым на {{count}} сетях"
+    },
+    "importQrBase": {
+      "desc": "Сканируйте QR-код на аппаратном кошельке {{brandName}}",
+      "btnText": "Попробовать снова"
+    },
+    "pendingDetail": {
+      "Header": {
+        "predictTime": "Предположительно будет упаковано через"
+      },
+      "TxStatus": {
+        "completed": "Завершено",
+        "pendingBroadcasted": "Ожидание: Отправлено",
+        "pendingBroadcast": "Ожидание: Будет отправлено",
+        "reBroadcastBtn": "Переотправить"
+      },
+      "TxHash": {
+        "hash": "Tx Hash"
+      },
+      "TxTimeline": {
+        "pending": "Проверяем статус...",
+        "created": "Транзакция создана",
+        "broadcasted": "Недавно отправлено",
+        "broadcastedCount_ordinal_one": "{{count}}й отправлен",
+        "broadcastedCount_ordinal_two": "{{count}}й отправлен",
+        "broadcastedCount_ordinal_few": "{{count}} отправлено",
+        "broadcastedCount_ordinal_other": "{{count}} отправлен"
+      },
+      "MempoolList": {
+        "col": {
+          "nodeName": "Имя ноды",
+          "nodeOperator": "Оператор ноды",
+          "txStatus": "Статус транзакции"
+        },
+        "txStatus": {
+          "appeared": "Появилась",
+          "appearedOnce": "Появилась однажды",
+          "notFound": "Не найдено"
+        },
+        "title": "Найдено на {{count}} RPC нодах"
+      },
+      "PendingTxList": {
+        "title": "Рейтинг по GasPrice #{{rank}} среди Ожидающих Txs",
+        "titleNotFound": "Нет рейтинга среди Ожидающих Txs",
+        "filterBaseFee": {
+          "label": "Удовлетворяет только Base fee",
+          "tooltip": "Показывает только транзакции с достаточным Base fee"
+        },
+        "col": {
+          "gasPrice": "Цена газа",
+          "action": "Действие транзакции",
+          "balanceChange": "Изменение баланса",
+          "actionType": "Тип действия",
+          "interact": "Вызов"
+        },
+        "titleSame": "Рейтинг по GasPrice #{{rank}} в таких же, как текущая",
+        "titleSameNotFound": "нет рейтинга в таких же, как текущая"
+      },
+      "Empty": {
+        "noData": "Нет данных"
+      },
+      "PrePackInfo": {
+        "col": {
+          "prePackContent": "Предупакованное содержание",
+          "expectations": "Ожидание",
+          "prePackResults": "Результат предупаковки",
+          "difference": "Проверить результат"
+        },
+        "type": {
+          "pay": "Оплатить",
+          "receive": "Получить"
+        },
+        "noLoss": "Потерь не найдено",
+        "noError": "Ошибок не найдено",
+        "title": "Проверка предупаковки",
+        "error": "Найдено {{count}} ошибок",
+        "loss": "{{lossCount}} потерь найдено",
+        "desc": "Симуляция запущена в последнем блоке, обновлено {{time}}"
+      },
+      "Predict": {
+        "completed": "Транзакция успешна",
+        "predictFailed": "Предположение времени упаковки не успешно",
+        "skipNonce": "Nonce вашей транзакции пропущен на Ethereum, что вызвало невозможность обработки транзакции"
+      }
+    },
+    "dappSearch": {
+      "selectChain": "Выбрать сеть",
+      "searchResult": {
+        "foundDapps": "Найдено <2>{{count}}</2> Dapps",
+        "totalDapps": "Всего <2>{{count}}</2> Dapps"
+      },
+      "expand": "Развернуть",
+      "emptyFavorite": "Нет избранных Dapp",
+      "favorite": "Избранное",
+      "emptySearch": "Dapp не найден",
+      "listBy": "Dapp перечислены"
+    },
+    "rabbyPoints": {
+      "title": "Очки Rabby",
+      "out-of-x-current-total-points": "Из {{total}} всего распределённых очков",
+      "share-on": "Поделиться на",
+      "referral-code-copied": "Реферальный код скопирован",
+      "earn-points": "Заработать очки",
+      "top-100": "Топ 100",
+      "claimItem": {
+        "claim": "Получить",
+        "disabledTip": "Нет очков для получения сейчас",
+        "go": "Перейти",
+        "earnTip": "Лимит один раз в день. Пожалуйста, зарабатывайте очки после 00:00 UTC+0",
+        "claimed": "Получено"
+      },
+      "claimModal": {
+        "title": "Получить начальные очки",
+        "snapshotTime": "Время снимка: {{time}}",
+        "placeholder": "Введите реферальный код для дополнительных очков (необязательно)",
+        "claim": "Получить",
+        "addressBalance": "Баланс кошелька",
+        "MetaMaskSwap": "Обмен MetaMask",
+        "rabbyUser": "Активный пользователь Rabby",
+        "rabbyValuedUserBadge": "Значок ценного пользователя Rabby",
+        "rabbyDesktopGenesisNft": "Rabby Desktop Genesis NFT",
+        "walletBalance": "Wallet Balance",
+        "activeStats": "Active Status",
+        "referral-code": "Реферальный код",
+        "invalid-code": "Недействительный код",
+        "cantUseOwnCode": "You cannot use your own referral code.",
+        "season2": "Season 2"
+      },
+      "referralCode": {
+        "referral-code-cannot-be-empty": "Реферальный код не может быть пустым",
+        "referral-code-cannot-exceed-15-characters": "Реферальный код не может превышать 15 символов",
+        "referral-code-already-exists": "Реферальный код уже существует",
+        "referral-code-available": "Реферальный код доступен",
+        "my-referral-code": "Мой реферальный код",
+        "refer-a-new-user-to-get-50-points": "Приведите нового пользователя и получите 50 очков",
+        "set-my-code": "Установить мой код",
+        "set-my-referral-code": "Установить мой реферальный код",
+        "once-set-this-referral-code-is-permanent-and-cannot-change": "После установки реферальный код будет постоянным и не может быть изменён.",
+        "max-15-characters-use-numbers-and-letters-only": "Максимум 15 символов, используйте только цифры и буквы.",
+        "confirm": "Подтвердить",
+        "verifyAddressModal": {
+          "verify-address": "Подтвердить адрес",
+          "please-sign-this-text-message-to-verify-that-you-are-the-owner-of-this-address": "Пожалуйста, подпишите это текстовое сообщение, чтобы подтвердить, что вы владелец этого адреса",
+          "cancel": "Отмена",
+          "sign": "Подписать"
+        }
+      },
+      "code-set-successfully": "Реферальный код успешно установлен",
+      "initialPointsClaimEnded": "Заявка на начальные очки завершена",
+      "firstRoundEnded": "🎉 Первый раунд очков Rabby завершён",
+      "secondRoundEnded": "🎉 Второй раунд Rabby Points завершился"
+    },
+    "customTestnet": {
+      "title": "Пользовательская сеть",
+      "desc": "Rabby не может проверить безопасность пользовательских сетей. Пожалуйста, добавляйте только доверенные сети.",
+      "add": "Добавить пользовательскую сеть",
+      "empty": "Нет пользовательских сетей",
+      "currency": "Валюта",
+      "id": "ID",
+      "CustomTestnetForm": {
+        "id": "Chain ID",
+        "name": "Название сети",
+        "rpcUrl": "URL RPC",
+        "idRequired": "Введите Chain ID",
+        "nameRequired": "Введите название сети",
+        "rpcUrlRequired": "Введите URL RPC",
+        "nativeTokenSymbol": "Символ валюты",
+        "nativeTokenSymbolRequired": "Введите символ валюты",
+        "blockExplorerUrl": "URL обозревателя блоков (необязательно)"
+      },
+      "AddFromChainList": {
+        "title": "Быстрое добавление из Chainlist",
+        "search": "Поиск по названию сети или ID",
+        "empty": "Сети не найдены",
+        "tips": {
+          "added": "Вы уже добавили эту сеть",
+          "supported": "Сеть уже интегрирована в кошелек Rabby"
+        }
+      },
+      "signTx": {
+        "title": "Данные транзакции"
+      },
+      "ConfirmModifyRpcModal": {
+        "desc": "Эта сеть уже интегрирована в Rabby. Хотите добавить новый RPC URL?"
+      }
+    },
+    "addChain": {
+      "title": "Добавить пользовательскую сеть в Rabby",
+      "desc": "Rabby не может проверить безопасность пользовательских сетей. Пожалуйста, добавляйте только доверенные сети."
+    },
+    "sign": {
+      "transactionSpeed": "Скорость транзакции"
+    },
+    "bridge": {
+      "showMore": {
+        "source": "Мостовой источник",
+        "title": "Показать больше"
+      },
+      "settingModal": {
+        "confirmModal": {
+          "i-understand-and-accept-it": "Я понимаю и принимаю это",
+          "title": "Включить торговлю с этим Aggregator",
+          "tip2": "2. Rabby не несет ответственности за любые риски, возникающие из контракта этого агрегатора.",
+          "tip1": "После включения вы сможете взаимодействовать напрямую с контрактом через этот агрегатор."
+        },
+        "confirm": "Подтвердить",
+        "title": "Включите Bridge Aggregators для торговли",
+        "SupportedBridge": "Поддерживаемый мост:"
+      },
+      "tokenPairDrawer": {
+        "balance": "Баланс",
+        "tokenPair": "Токен-пара",
+        "title": "Выберите из поддерживаемой пары токенов",
+        "noData": "Нет поддерживаемой пары токенов"
+      },
+      "title": "Мост",
+      "To": "К",
+      "Balance": "Баланс:",
+      "Completed": "Завершено",
+      "no-quote": "Без котировки",
+      "Select": "Выбрать",
+      "history": "История Bridge",
+      "completedTip": "Транзакция на блокчейне, декодирование данных для создания записи",
+      "bridgeTo": "Мост к",
+      "detail-tx": "Детали",
+      "From": "От",
+      "the-following-bridge-route-are-found": "Найден следующий маршрут",
+      "Pending": "В ожидании",
+      "unlimited-allowance": "Неограниченное разрешение",
+      "actual": "Фактический:",
+      "insufficient-balance": "Недостаточно средств",
+      "BridgeTokenPair": "Мост Token Pair",
+      "no-transaction-records": "Нет записей о транзакциях",
+      "Amount": "Количество",
+      "tokenPairPlaceholder": "Выберите пару токенов",
+      "gas-x-price": "Цена Gas: {{price}} Gwei.",
+      "getRoutes": "Получить маршруты",
+      "gas-fee": "GasFee: {{gasUsed}}",
+      "pendingTip": "Транзакция отправлена. Если транзакция долго находится в состоянии ожидания, вы можете попробовать очистить ожидание в настройках.",
+      "select-chain": "Выберите Chain",
+      "estimate": "Оценка:",
+      "slippage-adjusted-refresh-quote": "Проскальзывание скорректировано. Обновить маршрут.",
+      "no-quote-found": "Котировка не найдена. Пожалуйста, попробуйте другие пары токенов.",
+      "enable-it": "Включить это",
+      "no-route-found": "Маршрут не найден",
+      "est-receiving": "Примерное получение:",
+      "rabby-fee": "Комиссия Rabby",
+      "price-expired-refresh-route": "Цена устарела. Обновите маршрут.",
+      "via-bridge": "через {{bridge}}",
+      "approve-and-bridge": "Утвердить и Мост",
+      "loss-tips": "Вы теряете {{usd}}. Попробуйте другую сумму.",
+      "need-to-approve-token-before-bridge": "Необходимо одобрить токен перед мостом",
+      "duration": "{{duration}} мин.",
+      "recommendFromToken": "Мост с <1></1> для доступной котировки",
+      "max-tips": "Это значение вычисляется путем вычитания стоимости газа для bridge.",
+      "bridge-via-x": "Мост на {{name}}",
+      "aggregator-not-enabled": "Этот агрегатор не включен для торговли вами.",
+      "price-impact": "Влияние на цену",
+      "bridge-cost": "Стоимость Bridge",
+      "est-payment": "Предполагаемый платеж:",
+      "approve-x-symbol": "Утвердить {{symbol}}",
+      "est-difference": "Оцениваемая разница:",
+      "estimated-value": "≈ {{value}}",
+      "best": "Лучший"
+    },
+    "ecology": {
+      "sonic": {
+        "home": {
+          "airdropBtn": "Заработайте очки",
+          "arcadeBtn": "Играть сейчас",
+          "earnTitle": "Зарабатывайте",
+          "airdropDesc": "~200 миллионов S пользователям на Opera и Sonic.",
+          "earnBtn": "Скоро будет доступно",
+          "airdrop": "Airdrop",
+          "earnDesc": "Держите ваш $S",
+          "socialsTitle": "Присоединяйтесь",
+          "migrateBtn": "Скоро будет доступно",
+          "migrateTitle": "Миграция",
+          "migrateDesc": "→",
+          "arcadeDesc": "Играйте в бесплатные игры, чтобы заработать очки для S airdrop."
+        },
+        "points": {
+          "sonicPoints": "Sonic Points",
+          "pointsDashboardBtn": "Начните зарабатывать баллы",
+          "errorTitle": "Невозможно загрузить баллы",
+          "sonicArcadeBtn": "Начать играть",
+          "today": "Сегодня",
+          "referralCode": "Реферальный код",
+          "pointsDashboard": "Панель управления Points",
+          "retry": "Повторить попытку",
+          "referralCodeCopied": "Реферальный код скопирован",
+          "errorDesc": "Произошла ошибка при загрузке ваших очков. Пожалуйста, попробуйте еще раз.",
+          "getReferralCode": "Получить реферальный код",
+          "sonicArcade": "Sonic Arcade",
+          "shareOn": "Поделиться на"
+        }
+      },
+      "dbk": {
+        "home": {
+          "mintNFTBtn": "Чеканка",
+          "bridge": "Мост к DBK Chain",
+          "bridgeBtn": "Мост",
+          "mintNFTDesc": "Будьте свидетелем DBK Chain",
+          "mintNFT": "Чеканка DBK Genesis NFT",
+          "bridgePoweredBy": "Работает на OP Superchain"
+        },
+        "bridge": {
+          "tabs": {
+            "withdraw": "Вывести средства",
+            "deposit": "Депозит"
+          },
+          "info": {
+            "toAddress": "К адресу",
+            "gasFee": "Gas fee",
+            "completeTime": "Время завершения",
+            "receiveOn": "Получить на {{chainName}}"
+          },
+          "error": {
+            "notEnoughBalance": "Недостаточно средств"
+          },
+          "ActivityPopup": {
+            "status": {
+              "waitingToProve": "Опубликован корень состояния",
+              "readyToProve": "Готовы доказать",
+              "withdraw": "Вывод средств",
+              "deposit": "Депозит",
+              "claimed": "Заявлено",
+              "proved": "Подтверждено",
+              "readyToClaim": "Готовы к заявке",
+              "challengePeriod": "Период оспаривания",
+              "rootPublished": "Состояние корневого элемента опубликовано"
+            },
+            "withdraw": "Вывод средств",
+            "deposit": "Депозит",
+            "empty": "Ещё нет активности",
+            "title": "Активности",
+            "proveBtn": "Доказать",
+            "claimBtn": "Запросить"
+          },
+          "WithdrawConfirmPopup": {
+            "step3": "Запросить на Ethereum",
+            "question2": "Я понимаю, что после инициирования вывода он не может быть ускорен или отменен",
+            "step2": "Докажите на Ethereum",
+            "btn": "Вывод средств",
+            "question1": "Я понимаю, что потребуется ~7 дней, чтобы мои средства стали доступными для получения на Ethereum после подтверждения вывода",
+            "step1": "Начать вывод средств",
+            "question3": "Я понимаю, что сетевые комиссии являются приблизительными и могут измениться",
+            "title": "Снятие средств с DBK Chain занимает ~7 дней",
+            "tips": "Снятие средств включает в себя 3-шаговый процесс, требующий 1 транзакции в DBK Chain и 2 транзакций в Ethereum."
+          },
+          "labelTo": "К",
+          "labelFrom": "От"
+        },
+        "minNFT": {
+          "title": "DBK Genesis",
+          "minted": "Выпущено",
+          "mintBtn": "Чеканить",
+          "myBalance": "Мой баланс"
+        }
+      }
+    },
+    "miniSignFooterBar": {
+      "status": {
+        "txSigned": "Подписано. Создание транзакции",
+        "txSending": "Отправка запроса на подпись",
+        "txSendings": "Отправка запроса на подпись ({{current}}/{{total}})",
+        "txCreated": "Транзакция создана"
+      },
+      "signWithLedger": "Подписать с помощью Ledger"
+    },
+    "gasAccount": {
+      "history": {
+        "noHistory": "Нет истории"
+      },
+      "loginInTip": {
+        "gotIt": "Понял",
+        "title": "Депозит USDC / USDT",
+        "login": "Войти в GasAccount",
+        "desc": "Оплачивайте Gas комиссии на всех цепочках"
+      },
+      "loginConfirmModal": {
+        "title": "Войти с текущим адресом",
+        "desc": "После подтверждения вы можете внести депозит только на этот адрес"
+      },
+      "logoutConfirmModal": {
+        "logout": "Выйти",
+        "title": "Выйти из текущего GasAccount",
+        "desc": "Выход из системы отключает GasAccount. Вы можете восстановить свой GasAccount, войдя с этим адресом."
+      },
+      "depositPopup": {
+        "invalidAmount": "Должно быть меньше 500",
+        "selectToken": "Выберите токен для депозита",
+        "amount": "Сумма",
+        "title": "Депозит",
+        "token": "Токен",
+        "desc": "Сделайте депозит на счет Rabby's DeBank L2 без дополнительных комиссий — выводите средства в любое время."
+      },
+      "withdrawPopup": {
+        "noEnoughValuetBalance": "Баланс Vault недостаточен. Переключите сеть или попробуйте позже.",
+        "riskMessageFromChain": "Из-за контроля рисков лимит снятия зависит от общей суммы, внесенной с этой цепочки.",
+        "riskMessageFromAddress": "Из-за контроля риска, лимит снятия зависит от общей суммы, которая была внесена на этот адрес.",
+        "selectRecipientAddress": "Выберите адрес получателя",
+        "selectDestinationChain": "Выберите целевую сеть",
+        "noEnoughGas": "Сумма слишком мала, чтобы покрыть gas fees",
+        "destinationChain": "Целевая сеть",
+        "selectAddr": "Выбрать адрес",
+        "title": "Вывод средств",
+        "noEligibleAddr": "Нет подходящего адреса для вывода средств",
+        "withdrawalLimit": "Лимит на снятие средств",
+        "amount": "Количество",
+        "selectChain": "Выбрать Chain",
+        "to": "К",
+        "deductGasFees": "Полученная сумма будет вычтена за газовые сборы",
+        "noEligibleChain": "Нет подходящей цепочки для вывода средств",
+        "desc": "Вы можете снять баланс вашего GasAccount на ваш кошелек DeBank L2. Войдите в свой DeBank L2 Wallet, чтобы перевести средства на поддерживаемый блокчейн по мере необходимости.",
+        "recipientAddress": "Адрес получателя"
+      },
+      "withdrawConfirmModal": {
+        "button": "Просмотр в DeBank",
+        "title": "Переведено на ваш DeBank L2 кошелек"
+      },
+      "GasAccountDepositTipPopup": {
+        "gotIt": "Понятно",
+        "title": "Открыть GasAccount и внести депозит"
+      },
+      "switchLoginAddressBeforeDeposit": {
+        "desc": "Пожалуйста, переключитесь на ваш адрес для входа.",
+        "title": "Переключите адрес перед пополнением"
+      },
+      "withdraw": "Вывести средства",
+      "logout": "Выйти из текущего GasAccount",
+      "title": "GasAccount",
+      "deposit": "Депозит",
+      "gasExceed": "Баланс GasAccount не может превышать $1000",
+      "noBalance": "Нет баланса",
+      "risk": "Ваш текущий адрес был определен как рискованный, поэтому эта функция недоступна.",
+      "safeAddressDepositTips": "Мультиподписи не поддерживаются для депозитов."
+    },
+    "safeMessageQueue": {
+      "loading": "Загрузка сообщений",
+      "noData": "Нет сообщений"
+    },
+    "newUserImport": {
+      "guide": {
+        "title": "Добро пожаловать в Rabby Wallet",
+        "importAddress": "У меня уже есть адрес",
+        "createNewAddress": "Создать новый адрес",
+        "desc": "Кошелек, меняющий правила игры для Ethereum и всех EVM цепей"
+      },
+      "createNewAddress": {
+        "desc": "Прежде чем начать, пожалуйста, ознакомьтесь и помните о следующих советах по безопасности.",
+        "title": "Создать новую Seed-фразу",
+        "tip3": "Если я удалю Rabby, не сохранив seed phrase, Rabby не сможет восстановить её для меня.",
+        "tip1": "Если я потеряю или поделюсь своим seed phrase, мои активы будут потеряны навсегда.",
+        "tip2": "Сид-фраза хранится только на моем компьютере, и Rabby не имеет к ней доступа.",
+        "showSeedPhrase": "Показать Seed Phrase"
+      },
+      "importList": {
+        "title": "Выберите метод импорта"
+      },
+      "importPrivateKey": {
+        "title": "Импортировать Private Key",
+        "pasteCleared": "Вставлено и буфер обмена очищен"
+      },
+      "PasswordCard": {
+        "form": {
+          "password": {
+            "label": "Пароль",
+            "placeholder": "Минимум 8 символов",
+            "min": "Пароль должен содержать не менее 8 символов",
+            "required": "Пожалуйста, введите пароль"
+          },
+          "confirmPassword": {
+            "notMatch": "Пароли не совпадают",
+            "placeholder": "Пароль",
+            "required": "Пожалуйста, подтвердите пароль",
+            "label": "Подтвердите пароль"
+          }
+        },
+        "title": "Установить пароль",
+        "agree": "Я соглашаюсь с <1/> <2>Terms of Use</2> и <4>Privacy Policy</4>",
+        "desc": "Он будет использоваться для разблокировки кошелька и шифрования данных"
+      },
+      "successful": {
+        "addMoreAddr": "Добавить больше адресов из этой Seed Phrase",
+        "start": "Начать",
+        "import": "Импортировано успешно",
+        "addMoreFrom": "Добавить больше адресов из {{name}}",
+        "create": "Создано успешно"
+      },
+      "readyToUse": {
+        "pin": "Закрепить Rabby Wallet",
+        "desc": "Закрепите Rabby Wallet на панели инструментов для удобного доступа.",
+        "title": "Rabby Wallet готов к использованию",
+        "extensionTip": "Нажмите <1/>, а затем <3/>"
+      },
+      "importSeedPhrase": {
+        "title": "Импортировать Seed Phrase"
+      },
+      "importOneKey": {
+        "title": "OneKey",
+        "tip3": "3. Разблокируйте ваше устройство",
+        "connect": "Подключите OneKey",
+        "tip1": "1. Установите <1>OneKey Bridge<1/>",
+        "tip2": "2. Подключите ваше устройство OneKey"
+      },
+      "importTrezor": {
+        "title": "Trezor",
+        "tip1": "1. Подключите ваше устройство Trezor",
+        "tip2": "2. Разблокируйте ваше устройство",
+        "connect": "Подключить Trezor"
+      },
+      "ImportGridPlus": {
+        "tip1": "1. Откройте ваше устройство GridPlus",
+        "title": "GridPlus",
+        "tip2": "2. Подключитесь через Lattice Connector",
+        "connect": "Подключить GridPlus"
+      },
+      "importLedger": {
+        "tip2": "Введите PIN-код для разблокировки.",
+        "connect": "Подключить Ledger",
+        "title": "Ledger",
+        "tip1": "Подключите ваше устройство Ledger.",
+        "tip3": "Откройте приложение Ethereum."
+      },
+      "importBitBox02": {
+        "tip2": "2. Подключите ваш BitBox02",
+        "tip3": "3. Разблокируйте ваше устройство",
+        "title": "BitBox02",
+        "tip1": "1. Установите <1>BitBoxBridge<1/>",
+        "connect": "Подключите BitBox02"
+      },
+      "importKeystone": {
+        "qrcode": {
+          "desc": "Отсканируйте QR-код на аппаратном кошельке Keystone"
+        },
+        "usb": {
+          "tip1": "Подключите ваше устройство Keystone",
+          "tip2": "Введите ваш пароль для разблокировки",
+          "tip3": "Одобрите подключение к вашему компьютеру",
+          "connect": "Подключить Keystone",
+          "desc": "Убедитесь, что ваш Keystone 3 Pro находится на домашней странице"
+        }
+      },
+      "importSafe": {
+        "error": {
+          "invalid": "Недействительный адрес",
+          "required": "Пожалуйста, введите адрес"
+        },
+        "placeholder": "Введите безопасный адрес",
+        "loading": "Поиск в развернутой цепочке этого адреса",
+        "title": "Добавить Safe адрес"
+      }
+    },
+    "metamaskModeDapps": {
+      "title": "Режим MetaMask",
+      "desc": "Режим MetaMask включен для следующих Dapps. Вы можете подключить Rabby, выбрав опцию MetaMask."
+    },
+    "forgotPassword": {
+      "home": {
+        "title": "Забыли пароль",
+        "button": "Начать процесс сброса",
+        "buttonNoData": "Установить пароль",
+        "descriptionNoData": "Rabby Wallet не хранит ваш пароль и не может помочь вам его восстановить. Установите новый пароль, если вы его забыли.",
+        "description": "Rabby Wallet не сохраняет ваш пароль и не может помочь его восстановить. Сбросьте ваш кошелек, чтобы создать новый."
+      },
+      "reset": {
+        "alert": {
+          "seed": "Seed Phrase",
+          "privateKey": "Приватный ключ",
+          "title": "Данные будут удалены и не подлежат восстановлению:"
+        },
+        "tip": {
+          "whitelist": "Whitelist Settings",
+          "safe": "Импортированные Safe кошельки",
+          "title": "Данные будут сохранены:",
+          "watch": "Контакты и только для просмотра адреса",
+          "hardware": "Импортированные аппаратные кошельки",
+          "records": "Записи о подписях"
+        },
+        "title": "Сброс Rabby Wallet",
+        "confirm": "Введите <1>RESET</1> в поле для подтверждения и продолжения",
+        "button": "Подтвердите сброс"
+      },
+      "tip": {
+        "buttonNoData": "Добавить адрес",
+        "button": "Установить пароль",
+        "description": "Создайте новый пароль, чтобы продолжить",
+        "title": "Rabby Wallet сброс завершен",
+        "descriptionNoData": "Добавьте свой адрес, чтобы начать"
+      },
+      "success": {
+        "button": "Готово",
+        "title": "Пароль успешно установлен",
+        "description": "Вы готовы использовать Rabby Wallet"
+      }
+    }
+  },
+  "component": {
+    "AccountSearchInput": {
+      "noMatchAddress": "Адрес не найден",
+      "AddressItem": {
+        "whitelistedAddressTip": "Адрес в белом списке"
+      }
+    },
+    "AccountSelectDrawer": {
+      "btn": {
+        "cancel": "Отмена",
+        "proceed": "Продолжить"
+      }
+    },
+    "AddressList": {
+      "AddressItem": {
+        "addressTypeTip": "Импортировано типом {{type}}"
+      }
+    },
+    "AuthenticationModal": {
+      "passwordError": "неверный пароль",
+      "passwordRequired": "Пожалуйста, введите пароль",
+      "passwordPlaceholder": "Введите пароль для подтверждения"
+    },
+    "ConnectStatus": {
+      "connecting": "Подключение...",
+      "connect": "Подключить",
+      "gridPlusConnected": "GridPlus подключен",
+      "gridPlusNotConnected": "GridPlus не подключен",
+      "ledgerNotConnected": "Ledger не подключен",
+      "ledgerConnected": "Ledger подключен",
+      "keystoneConnected": "Keystone подключен",
+      "keystoneNotConnected": "Keystone не подключен",
+      "imKeyrNotConnected": "imKey is not connected",
+      "imKeyConnected": "imKey is connected"
+    },
+    "Contact": {
+      "AddressItem": {
+        "notWhitelisted": "Этот адрес не в белом списке",
+        "whitelistedTip": "Адрес в белом списке"
+      },
+      "EditModal": {
+        "title": "Редактировать заметку адреса"
+      },
+      "EditWhitelist": {
+        "backModalTitle": "Отменить изменения",
+        "backModalContent": "Внесенные вами изменения не будут сохранены",
+        "title": "Редактировать белый список",
+        "tip": "Выберите адрес, который вы хотите добавить в белый список, и сохраните.",
+        "save": "Сохранить в белый список ({{count}})"
+      },
+      "ListModal": {
+        "title": "Выбрать адрес",
+        "whitelistEnabled": "Белый список включен. Вы можете отправлять активы только на адрес, указанный в белом списке, или вы можете отключить его в \"Настройках\"",
+        "whitelistDisabled": "Белый список отключен. Вы можете отправлять активы на любой адрес",
+        "editWhitelist": "Редактировать Белый список",
+        "whitelistUpdated": "Белый список обновлен",
+        "authModal": {
+          "title": "Сохранить в Белый список"
+        }
+      }
+    },
+    "LoadingOverlay": {
+      "loadingData": "Данные загружаются..."
+    },
+    "MultiSelectAddressList": {
+      "imported": "Импортировано"
+    },
+    "NFTNumberInput": {
+      "erc1155Tips": "Ваш баланс составляет {{amount}}",
+      "erc721Tips": "Одновременно можно отправить только один NFT ERC 721"
+    },
+    "TiledSelect": {
+      "errMsg": "Порядок секретной фразы неверен, пожалуйста, проверьте"
+    },
+    "Uploader": {
+      "placeholder": "Выберите файл JSON"
+    },
+    "WalletConnectBridgeModal": {
+      "title": "URL сервера моста",
+      "requiredMsg": "Пожалуйста, введите хост сервера моста",
+      "invalidMsg": "Пожалуйста, проверьте ваш хост",
+      "restore": "Восстановить исходную настройку"
+    },
+    "PillsSwitch": {
+      "NetSwitchTabs": {
+        "mainnet": "Встроенные сети",
+        "testnet": "Добавленные сети"
+      }
+    },
+    "ChainSelectorModal": {
+      "searchPlaceholder": "Поиск сети",
+      "noChains": "Нет сети",
+      "addTestnet": "Добавить свою сеть"
+    },
+    "TokenSelector": {
+      "listTableHead": {
+        "assetAmount": {
+          "title": "АКТИВ / КОЛИЧЕСТВО"
+        },
+        "price": {
+          "title": "ЦЕНА"
+        },
+        "usdValue": {
+          "title": "СТОИМОСТЬ В USD"
+        }
+      },
+      "searchInput": {
+        "placeholder": "Поиск по имени / адресу"
+      },
+      "header": {
+        "title": "Выберите токен"
+      },
+      "noTokens": "Нет токенов",
+      "noMatch": "Нет совпадений",
+      "noMatchSuggestion": "Попробуйте найти адрес контракта на {{ chainName }}",
+      "bridge": {
+        "value": "Значение",
+        "token": "Тoken",
+        "liquidity": "Ликвидность",
+        "liquidityTips": "Чем выше исторический объём торгов, тем выше вероятность успешного завершения моста.",
+        "high": "Высокий",
+        "low": "Низкий"
+      },
+      "common": "Общее",
+      "hot": "Горячий",
+      "recent": "Недавние"
+    },
+    "ModalPreviewNFTItem": {
+      "FieldLabel": {
+        "Collection": "Коллекция",
+        "Chain": "Сеть",
+        "PurschaseDate": "Дата покупки",
+        "LastPrice": "Последняя цена"
+      }
+    },
+    "signPermissionCheckModal": {
+      "title": "Вы разрешаете этому Dapp подписывать только на тестовых сетях",
+      "reconnect": "Переподключить Dapp"
+    },
+    "testnetCheckModal": {
+      "title": "Пожалуйста, включите \"Включить тестовые сети\" в разделе \"Еще\" перед подписью на тестовых сетях"
+    },
+    "EcologyNavBar": {
+      "providedBy": "Предоставлено {{chainName}}"
+    },
+    "EcologyNoticeModal": {
+      "desc": "Следующие услуги будут предоставлены напрямую партнером по экосистеме третьей стороны. Rabby Wallet не несет ответственности за безопасность этих услуг.",
+      "notRemind": "Больше не напоминать мне",
+      "title": "Уведомление"
+    },
+    "ReserveGasPopup": {
+      "doNotReserve": "Не резервировать Gas",
+      "instant": "Мгновенный",
+      "title": "Резервный Gas",
+      "fast": "Быстро",
+      "normal": "Нормальный"
+    },
+    "OpenExternalWebsiteModal": {
+      "button": "Продолжить",
+      "title": "Вы покидаете Rabby Wallet",
+      "content": "Вы собираетесь посетить внешний веб-сайт. Rabby Wallet не несет ответственности за содержание или безопасность этого сайта."
+    }
+  },
+  "global": {
+    "appName": "Кошелек Rabby",
+    "appDescription": "Кошелек, меняющий игру для Ethereum и всех EVM-цепей",
+    "copied": "Скопировано",
+    "confirm": "Подтвердить",
+    "next": "Далее",
+    "back": "Назад",
+    "ok": "ОК",
+    "refresh": "Обновить",
+    "failed": "Не удалось",
+    "scamTx": "Мошенническая транзакция",
+    "gas": "Газ",
+    "unknownNFT": "Неизвестный NFT",
+    "copyAddress": "Скопировать адрес",
+    "watchModeAddress": "Адрес в Режиме Наблюдения",
+    "assets": "активы",
+    "Confirm": "Подтвердить",
+    "Cancel": "Отменить",
+    "Clear": "Очистить",
+    "Save": "Сохранить",
+    "confirmButton": "Подтвердить",
+    "cancelButton": "Отменить",
+    "backButton": "Назад",
+    "proceedButton": "Продолжить",
+    "editButton": "Изменить",
+    "addButton": "Добавить",
+    "closeButton": "Закрыть",
+    "Deleted": "Удалено",
+    "Loading": "Загрузка",
+    "nonce": "nonce",
+    "Balance": "Баланс",
+    "Done": "Готово",
+    "Nonce": "Nonce",
+    "tryAgain": "Попробовать снова",
+    "notSupportTesntnet": "Эта своя сеть поддерживается"
+  },
+  "background": {
+    "error": {
+      "noCurrentAccount": "Нет текущего аккаунта",
+      "invalidChainId": "Недействительный идентификатор сети",
+      "notFindChain": "Не удается найти сеть {{chain}}",
+      "unknownAbi": "неизвестный контракт abi",
+      "invalidAddress": "Недействительный адрес",
+      "notFoundGnosisKeyring": "Не найден Gnosis Keyring",
+      "notFoundTxGnosisKeyring": "Не найдена транзакция в Gnosis Keyring",
+      "addKeyring404": "не удалось добавить Keyring, Keyring не определен",
+      "emptyAccount": "текущий аккаунт пуст",
+      "generateCacheAliasNames": "[GenerateCacheAliasNames]: требуется хотя бы один адрес",
+      "invalidPrivateKey": "недействительный приватный ключ",
+      "invalidJson": "недействительный входной файл",
+      "invalidMnemonic": "Секретная фраза недействительна, пожалуйста, проверьте!",
+      "notFoundKeyringByAddress": "Не удается найти ключевое кольцо по адресу",
+      "txPushFailed": "Не удалось отправить транзакцию",
+      "unlock": "сначала нужно разблокировать кошелек",
+      "duplicateAccount": "Аккаунт, который вы пытаетесь импортировать, дублируется",
+      "canNotUnlock": "Невозможно разблокировать без предыдущего хранилища"
+    },
+    "transactionWatcher": {
+      "submitted": "Транзакция отправлена",
+      "more": "нажмите, чтобы просмотреть больше информации",
+      "txCompleteMoreContent": "{{chain}} #{{nonce}} завершена. Кликните для деталей.",
+      "txFailedMoreContent": "{{chain}} #{{nonce}} не удалась. Кликните для деталей.",
+      "completed": "Транзакция завершена",
+      "failed": "Транзакция не удалась"
+    },
+    "alias": {
+      "HdKeyring": "Секретная фраза",
+      "simpleKeyring": "Приватный ключ",
+      "watchAddressKeyring": "Контакт"
+    }
+  },
+  "constant": {
+    "KEYRING_TYPE_TEXT": {
+      "HdKeyring": "Создано с помощью секретной фразы",
+      "SimpleKeyring": "Импортировано с помощью приватного ключа",
+      "WatchAddressKeyring": "Контакт"
+    },
+    "IMPORTED_HD_KEYRING": "Импортировано с помощью секретной фразы",
+    "SIGN_PERMISSION_OPTIONS": {
+      "MAINNET_AND_TESTNET": "Mainnet & Testnet",
+      "TESTNET": "Только Testnets"
+    },
+    "IMPORTED_HD_KEYRING_NEED_PASSPHRASE": "Импортировано по сид фразе (С паролем)"
+  }
+}

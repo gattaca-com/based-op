@@ -1,17 +1,19 @@
 [package]
-name = "bop-rpc"
-version.workspace = true
 edition.workspace = true
+name = "bop-rpc"
 rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
-bop-common.workspace = true
 alloy-primitives.workspace = true
-op-alloy-rpc-types-engine.workspace = true
 alloy-rpc-types.workspace = true
+bop-common.workspace = true
+jsonrpsee.workspace = true
+op-alloy-consensus.workspace = true
 op-alloy-rpc-types.workspace = true
+op-alloy-rpc-types-engine.workspace = true
+reqwest.workspace = true
+reth-optimism-primitives.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-reth-optimism-primitives.workspace = true
-
-jsonrpsee.workspace = true

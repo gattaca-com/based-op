@@ -23,3 +23,8 @@ target/
 /based/base_sepolia/
 
 .DS_Store
+genesis
+data
+
+assets
+data2

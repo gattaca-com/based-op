@@ -31,9 +31,6 @@ struct Args {
     rpc_url: Url,
 }
 
-// start = 21127040
-// end = 21127055
-
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     let args = Args::parse();
@@ -41,7 +38,7 @@ async fn main() -> eyre::Result<()> {
     // Initialize DB
     let db = init_database(&args.db_path, 0, 0, BASE_SEPOLIA.clone())?;
 
-    // Initialize HTTP client with reasonable timeouts
+    // Initialize HTTP client
     let provider = ProviderBuilder::new().network().on_http(args.rpc_url);
 
     // Fetch and wait for all blocks

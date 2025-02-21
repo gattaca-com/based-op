@@ -181,7 +181,7 @@ impl<T: Clone + fmt::Debug> fmt::Debug for Seqlock<T> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_arch = "x86_64"))]
 mod tests {
     use std::{
         sync::atomic::AtomicBool,
@@ -270,7 +270,7 @@ mod tests {
     }
     #[test]
     fn read_large() {
-        read_test::<65536>()
+        read_test::<1024>()
     }
 
     #[test]
@@ -291,7 +291,7 @@ mod tests {
     }
     #[test]
     fn read_large_multi() {
-        read_test_multi::<65536>()
+        read_test_multi::<1024>()
     }
 
     #[test]

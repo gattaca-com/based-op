@@ -34,7 +34,12 @@ DEFAULT_PROPOSER_IMAGES = {
 }
 
 DEFAULT_SIDECAR_IMAGES = {
-    "rollup-boost": "bop-mux",
+    "rollup-boost": "flashbots/rollup-boost:latest",
+    "based-portal": "",
+}
+
+DEFAULT_GATEWAY_IMAGES = {
+    "gateway": "",
 }
 
 DEFAULT_ADDITIONAL_SERVICES = []
@@ -194,10 +199,14 @@ def input_parser(plan, input_args):
                     game_type=result["proposer_params"]["game_type"],
                     proposal_interval=result["proposer_params"]["proposal_interval"],
                 ),
+                mev_type=result["mev_type"],
                 mev_params=struct(
                     rollup_boost_image=result["mev_params"]["rollup_boost_image"],
+                    based_portal_image=result["mev_params"]["based_portal_image"],
+                    gateway_image=result["mev_params"]["gateway_image"],
                     builder_host=result["mev_params"]["builder_host"],
                     builder_port=result["mev_params"]["builder_port"],
+                    portal_extra_params=result["mev_params"]["portal_extra_params"],
                 ),
                 additional_services=result["additional_services"],
             )
@@ -268,6 +277,8 @@ def parse_network_params(plan, input_args):
 
         proposer_params = default_proposer_params()
         proposer_params.update(chain.get("proposer_params", {}))
+
+        mev_type = chain.get("mev_type", None)
 
         mev_params = default_mev_params()
         mev_params.update(chain.get("mev_params", {}))
@@ -346,6 +357,7 @@ def parse_network_params(plan, input_args):
             "batcher_params": batcher_params,
             "challenger_params": challenger_params,
             "proposer_params": proposer_params,
+            "mev_type": mev_type,
             "mev_params": mev_params,
             "additional_services": chain.get(
                 "additional_services", DEFAULT_ADDITIONAL_SERVICES
@@ -426,8 +438,11 @@ def default_supervisor_params():
 def default_mev_params():
     return {
         "rollup_boost_image": "",
+        "based_portal_image": "",
+        "gateway_image": "",
         "builder_host": "",
         "builder_port": "",
+        "portal_extra_params": [],
     }
 
 
@@ -511,6 +526,7 @@ def default_participant():
         "cl_max_cpu": 0,
         "cl_min_mem": 0,
         "cl_max_mem": 0,
+        "gateway_image": "",
         "el_builder_type": "op-geth",
         "el_builder_image": "",
         "el_builder_log_level": "",

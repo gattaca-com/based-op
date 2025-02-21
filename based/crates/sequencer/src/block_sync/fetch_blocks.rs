@@ -13,11 +13,6 @@ use tracing::{info, warn};
 
 use super::AlloyProvider;
 
-#[allow(unused)]
-pub(crate) const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
-#[allow(unused)]
-pub(crate) const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.publicnode.com";
-
 /// Fetches a range of blocks sends them through the channel.
 ///
 /// The fetching is done in batches, as soon as one batch is received fully, it is ordered sequentially by block number
@@ -32,8 +27,6 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
     block_sender: &SendersSpine<Db>,
     provider: &AlloyProvider,
 ) {
-    info!(start = curr_block, end = end_block, "fetching blocks");
-
     let futures = (curr_block..=end_block).map(|i| fetch_block(i, provider));
 
     let blocks: Vec<BlockWithSenders<OpBlock>> = join_all(futures).await;
@@ -42,33 +35,30 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
         block_sender.send_forever(block);
     }
 
-    info!("fetching and sending blocks done. Last fetched block: {}", curr_block - 1);
+    info!(start = curr_block, last = end_block, "fetched blocks");
 }
 
 pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockSyncMessage {
-    let mut backoff_ms = 10;
+    const BACKOFF_MAX: Duration = Duration::from_secs(1);
+    const BACKOFF_STEP: Duration = Duration::from_millis(10);
+
+    let mut backoff = BACKOFF_STEP;
+
     loop {
         match client.get_block_by_number(block_number.into(), true.into()).await {
             Ok(Some(block)) => return convert_block(block),
+
             Ok(None) => {
-                warn!(
-                    retry_after=?backoff_ms,
-                    block=%block_number,
-                    "block not found"
-                );
+                warn!(?backoff, block_number, "block not found");
             }
+
             Err(err) => {
-                warn!(
-                    ?err,
-                    retry_after=?backoff_ms,
-                    block=%block_number,
-                    "RPC error while fetching block"
-                );
+                warn!(?err, ?backoff, block_number, "failed fetching");
             }
         }
 
-        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-        backoff_ms = std::cmp::min(backoff_ms * 2, 1000);
+        tokio::time::sleep(backoff).await;
+        backoff = std::cmp::min(backoff * 2, BACKOFF_MAX);
     }
 }
 
@@ -106,12 +96,21 @@ pub fn convert_block(block: RpcBlock<op_alloy_rpc_types::Transaction>) -> BlockW
 }
 
 #[cfg(test)]
+pub const TEST_BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
+
+#[cfg(test)]
+pub const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.publicnode.com";
+
+#[cfg(test)]
 mod tests {
     use alloy_primitives::b256;
     use alloy_provider::ProviderBuilder;
+    use bop_common::communication::Spine;
+    use bop_db::AlloyDB;
 
     use super::*;
 
+    #[ignore = "Requires RPC call"]
     #[tokio::test]
     async fn test_single_block_fetch() {
         let provider = ProviderBuilder::new().network().on_http(TEST_BASE_RPC_URL.parse().unwrap());
@@ -124,42 +123,45 @@ mod tests {
         assert!(block.body.transactions.first().unwrap().is_deposit());
     }
 
-    // #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    // async fn test_batch_fetch_ordering() {
-    //     let start_block = 25738473;
-    //     let end_block = 25738483;
+    #[ignore = "Requires RPC call"]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_batch_fetch_ordering() {
+        let start_block = 25738473;
+        let end_block = 25738483;
 
-    //     let spine = Spine::default();
+        let spine: Spine<AlloyDB> = Spine::default();
+        let mut connections = spine.to_connections("test");
+        let senders_clone = connections.senders().clone();
 
-    //     tokio::spawn(async_fetch_blocks_and_send_sequentially(
-    //         start_block,
-    //         end_block,
-    //         TEST_BASE_RPC_URL.parse().unwrap(),
-    //         sender.into,
-    //         None,
-    //     ));
+        let provider = ProviderBuilder::new().network().on_http(TEST_BASE_RPC_URL.parse().unwrap());
+        let handle = tokio::spawn(async move {
+            async_fetch_blocks_and_send_sequentially(start_block, end_block, &senders_clone, &provider).await;
+        });
 
-    //     let mut prev_block_num = start_block - 1;
-    //     let mut blocks_received = 0;
+        let mut prev_block_num = start_block - 1;
+        let mut blocks_received = 0;
 
-    //     while let Ok(block_result) = receiver.recv() {
-    //         let block = block_result.data().as_ref().unwrap();
-    //         blocks_received += 1;
+        loop {
+            connections.receive(|block: BlockWithSenders<OpBlock>, _| {
+                blocks_received += 1;
 
-    //         assert!(block.header.number > prev_block_num, "Blocks must be in ascending order");
-    //         prev_block_num = block.header.number;
+                assert!(block.header.number > prev_block_num, "Blocks must be in ascending order");
+                prev_block_num = block.header.number;
+            });
 
-    //         if blocks_received == (end_block - start_block + 1) as usize {
-    //             break;
-    //         }
-    //     }
+            if blocks_received == (end_block - start_block + 1) as usize {
+                break;
+            }
+        }
 
-    //     assert_eq!(
-    //         blocks_received,
-    //         (end_block - start_block + 1) as usize,
-    //         "Should receive exactly {} blocks",
-    //         end_block - start_block + 1
-    //     );
-    //     assert_eq!(prev_block_num, end_block, "Last block should be end_block");
-    // }
+        assert_eq!(
+            blocks_received,
+            (end_block - start_block + 1) as usize,
+            "Should receive exactly {} blocks",
+            end_block - start_block + 1
+        );
+        assert_eq!(prev_block_num, end_block, "Last block should be end_block");
+
+        handle.abort();
+    }
 }

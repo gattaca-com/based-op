@@ -239,3 +239,16 @@ func (n *basedAPI) SealFrag(ctx context.Context, signedSeal eth.SignedSeal) (str
 
 	return "OK", nil
 }
+
+func (n *basedAPI) Env(ctx context.Context, env eth.SignedEnv) (string, error) {
+	recordDur := n.metrics.RecordRPCServerRequest("based_env")
+	defer recordDur()
+
+	n.log.Info("Env RPC request received", "env", env.Env)
+
+	if err := n.p2p.GossipOut().PublishEnv(ctx, n.p2p.Host().ID(), &env); err != nil {
+		return "", fmt.Errorf("failed to publish new env: %w", err)
+	}
+
+	return "OK", nil
+}

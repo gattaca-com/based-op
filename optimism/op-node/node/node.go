@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/conductor"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/driver"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/engine"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/event"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sequencing"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
@@ -63,6 +64,8 @@ type OpNode struct {
 	p2pSigner p2p.Signer            // p2p gossip application messages will be signed with this signer
 	tracer    Tracer                // tracer to get events for testing/debugging
 	runCfg    *RuntimeConfig        // runtime configurables
+
+	preconfChannels engine.PreconfChannels
 
 	safeDB closableSafeDB
 
@@ -155,6 +158,7 @@ func (n *OpNode) init(ctx context.Context, cfg *Config) error {
 	if err := n.initMetricsServer(cfg); err != nil {
 		return fmt.Errorf("failed to init the metrics server: %w", err)
 	}
+	n.preconfChannels = engine.StartPreconf(ctx, n.l2Source)
 	n.metrics.RecordInfo(n.appVersion)
 	n.metrics.RecordUp()
 	if err := n.initPProf(cfg); err != nil {
@@ -612,6 +616,7 @@ func (n *OpNode) PublishNewFrag(ctx context.Context, from peer.ID, frag *eth.Sig
 }
 
 func (n *OpNode) PublishSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedSeal) error {
+
 	n.tracer.OnPublishSealFrag(ctx, from, seal)
 
 	// publish to p2p, if we are running p2p at all
@@ -623,6 +628,22 @@ func (n *OpNode) PublishSealFrag(ctx context.Context, from peer.ID, seal *eth.Si
 		return n.p2pNode.GossipOut().PublishSealFrag(ctx, from, seal)
 	}
 	// if p2p is not enabled then we just don't publish the seal
+	return nil
+}
+
+func (n *OpNode) PublishEnv(ctx context.Context, from peer.ID, env *eth.SignedEnv) error {
+
+	n.tracer.OnPublishEnv(ctx, from, env)
+
+	// publish to p2p, if we are running p2p at all
+	if n.p2pEnabled() {
+		if n.p2pSigner == nil {
+			return fmt.Errorf("node has no p2p signer, env", env, "cannot be published")
+		}
+		n.log.Info("Publishing env on p2p", "env", env)
+		return n.p2pNode.GossipOut().PublishEnv(ctx, from, env)
+	}
+	// if p2p is not enabled then we just don't publish the env
 	return nil
 }
 
@@ -656,17 +677,8 @@ func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNe
 	// }
 
 	n.tracer.OnNewFrag(ctx, from, frag)
-
 	n.log.Info("Received new fragment", "frag", frag)
-
-	// Pass on the event to the L2 Engine
-	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
-	defer cancel()
-
-	if err := n.l2Driver.OnNewFrag(ctx, frag); err != nil {
-		n.log.Warn("failed to notify engine driver of new fragment", frag, "err", err)
-	}
-
+	n.preconfChannels.SendFrag(frag)
 	return nil
 }
 
@@ -678,17 +690,21 @@ func (n *OpNode) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedS
 	// }
 
 	n.tracer.OnSealFrag(ctx, from, seal)
-
 	n.log.Info("Received new seal", "seal", seal)
+	n.preconfChannels.SendSeal(seal)
+	return nil
+}
 
-	// Pass on the event to the L2 Engine
-	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
-	defer cancel()
+func (n *OpNode) OnEnv(ctx context.Context, from peer.ID, env *eth.SignedEnv) error {
+	// FIXME: Uncomment this
+	// // ignore if it's from ourselves
+	// if n.p2pEnabled() && from == n.p2pNode.Host().ID() {
+	// 	return nil
+	// }
 
-	if err := n.l2Driver.OnSealFrag(ctx, seal); err != nil {
-		n.log.Warn("failed to notify engine driver of new seal", seal, "err", err)
-	}
-
+	n.tracer.OnEnv(ctx, from, env)
+	n.log.Info("Received new env", "env", env)
+	n.preconfChannels.SendEnv(env)
 	return nil
 }
 

@@ -658,6 +658,10 @@ func (api *BlockChainAPI) ChainId() *hexutil.Big {
 
 // BlockNumber returns the block number of the chain head.
 func (api *BlockChainAPI) BlockNumber() hexutil.Uint64 {
+	if unsealed := api.b.GetUnsealedBlock(); unsealed != nil {
+		return hexutil.Uint64(unsealed.Env.Number)
+	}
+
 	header, _ := api.b.HeaderByNumber(context.Background(), rpc.LatestBlockNumber) // latest header should always be available
 	return hexutil.Uint64(header.Number.Uint64())
 }
@@ -686,9 +690,11 @@ func (api *BlockChainAPI) GetBalance(ctx context.Context, address common.Address
 
 	state, _, err := api.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
+		log.Error("Failed to get state", "err", err)
 		return nil, err
 	}
 	b := state.GetBalance(address).ToBig()
+
 	return (*hexutil.Big)(b), state.Error()
 }
 
@@ -1041,7 +1047,7 @@ func (api *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rp
 
 	result := make([]map[string]interface{}, len(receipts))
 	for i, receipt := range receipts {
-		result[i] = marshalReceipt(receipt, block.Hash(), block.NumberU64(), signer, txs[i], i, api.b.ChainConfig())
+		result[i] = marshalReceipt(receipt, block.Hash(), block.NumberU64(), signer, txs[i], i, new(big.Int), api.b.ChainConfig())
 	}
 
 	return result, nil
@@ -1932,29 +1938,32 @@ func (api *TransactionAPI) GetRawTransactionByBlockHashAndIndex(ctx context.Cont
 // GetTransactionCount returns the number of transactions the given address has sent for the given block number
 func (api *TransactionAPI) GetTransactionCount(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Uint64, error) {
 	// Ask transaction pool for the nonce which includes pending transactions
-	if blockNr, ok := blockNrOrHash.Number(); ok && blockNr == rpc.PendingBlockNumber {
+	blockNr, ok := blockNrOrHash.Number()
+	if ok && blockNr == rpc.PendingBlockNumber {
 		nonce, err := api.b.GetPoolNonce(ctx, address)
 		if err != nil {
 			return nil, err
 		}
 		return (*hexutil.Uint64)(&nonce), nil
 	}
-	// Resolve block number and use its state to ask for the nonce
-	header, err := headerByNumberOrHash(ctx, api.b, blockNrOrHash)
-	if err != nil {
-		return nil, err
-	}
+	if !ok || blockNr != rpc.LatestBlockNumber {
+		// Resolve block number and use its state to ask for the nonce
+		header, err := headerByNumberOrHash(ctx, api.b, blockNrOrHash)
+		if err != nil {
+			return nil, err
+		}
 
-	if api.b.ChainConfig().IsOptimismPreBedrock(header.Number) {
-		if api.b.HistoricalRPCService() != nil {
-			var res hexutil.Uint64
-			err := api.b.HistoricalRPCService().CallContext(ctx, &res, "eth_getTransactionCount", address, blockNrOrHash)
-			if err != nil {
-				return nil, fmt.Errorf("historical backend error: %w", err)
+		if api.b.ChainConfig().IsOptimismPreBedrock(header.Number) {
+			if api.b.HistoricalRPCService() != nil {
+				var res hexutil.Uint64
+				err := api.b.HistoricalRPCService().CallContext(ctx, &res, "eth_getTransactionCount", address, blockNrOrHash)
+				if err != nil {
+					return nil, fmt.Errorf("historical backend error: %w", err)
+				}
+				return &res, nil
+			} else {
+				return nil, rpc.ErrNoHistoricalFallback
 			}
-			return &res, nil
-		} else {
-			return nil, rpc.ErrNoHistoricalFallback
 		}
 	}
 
@@ -2012,6 +2021,17 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash commo
 		return nil, NewTxIndexingError() // transaction is not fully indexed
 	}
 	if !found {
+		// Transaction may be in the current unsealed block
+		ub := api.b.GetUnsealedBlock()
+		if ub != nil {
+			for i, receipt := range ub.Receipts {
+				if receipt.TxHash.Cmp(hash) == 0 {
+					signer := types.MakeSigner(api.b.ChainConfig(), new(big.Int).SetUint64(ub.Env.Number), ub.Env.Timestamp)
+					log.Info("Sending receipt from Unsealed block", "txHash", hash)
+					return marshalReceipt(receipt, ub.Hash, ub.Env.Number, signer, ub.Transactions()[i], i, new(big.Int).SetUint64(ub.Env.Basefee), api.b.ChainConfig()), nil
+				}
+			}
+		}
 		return nil, nil // transaction is not existent or reachable
 	}
 	header, err := api.b.HeaderByHash(ctx, blockHash)
@@ -2029,13 +2049,17 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash commo
 
 	// Derive the sender.
 	signer := types.MakeSigner(api.b.ChainConfig(), header.Number, header.Time)
-	return marshalReceipt(receipt, blockHash, blockNumber, signer, tx, int(index), api.b.ChainConfig()), nil
+	return marshalReceipt(receipt, blockHash, blockNumber, signer, tx, int(index), new(big.Int), api.b.ChainConfig()), nil
 }
 
 // marshalReceipt marshals a transaction receipt into a JSON object.
-func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber uint64, signer types.Signer, tx *types.Transaction, txIndex int, chainConfig *params.ChainConfig) map[string]interface{} {
+func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber uint64, signer types.Signer, tx *types.Transaction, txIndex int, baseFee *big.Int, chainConfig *params.ChainConfig) map[string]interface{} {
 	from, _ := types.Sender(signer, tx)
 
+	effectiveGasPrice := receipt.EffectiveGasPrice
+	if effectiveGasPrice == nil {
+		effectiveGasPrice = tx.EffectiveGasPrice(baseFee)
+	}
 	fields := map[string]interface{}{
 		"blockHash":         blockHash,
 		"blockNumber":       hexutil.Uint64(blockNumber),
@@ -2049,7 +2073,7 @@ func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber u
 		"logs":              receipt.Logs,
 		"logsBloom":         receipt.Bloom,
 		"type":              hexutil.Uint(tx.Type()),
-		"effectiveGasPrice": (*hexutil.Big)(receipt.EffectiveGasPrice),
+		"effectiveGasPrice": (*hexutil.Big)(effectiveGasPrice),
 	}
 
 	if chainConfig.Optimism != nil && !tx.IsDepositTx() {

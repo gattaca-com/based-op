@@ -200,6 +200,15 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 			number = rpc.LatestBlockNumber // fall back to latest state
 		}
 	}
+
+	// Latest state is the current open unselaed block
+	if number == rpc.LatestBlockNumber {
+		stateDb := b.eth.BlockChain().CurrentUnsealedBlockState()
+		if stateDb != nil {
+			return stateDb, b.eth.BlockChain().CurrentUnsealedBlock().TempHeader(), nil
+		}
+	}
+
 	// Otherwise resolve the block number and return its state
 	header, err := b.HeaderByNumber(ctx, number)
 	if err != nil {
@@ -466,4 +475,8 @@ func (b *EthAPIBackend) HistoricalRPCService() *rpc.Client {
 
 func (b *EthAPIBackend) Genesis() *types.Block {
 	return b.eth.blockchain.Genesis()
+}
+
+func (b *EthAPIBackend) GetUnsealedBlock() *types.UnsealedBlock {
+	return b.eth.blockchain.CurrentUnsealedBlock()
 }

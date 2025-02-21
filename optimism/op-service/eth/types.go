@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
 )
@@ -229,19 +230,62 @@ type (
 
 type SignedNewFrag struct {
 	Signature Bytes65 `json:"signature"`
-	Frag      NewFrag `json:"frag"`
+	Frag      NewFrag `json:"message"`
 }
 
 type NewFrag struct {
-	BlockNumber uint64   `json:"blockNumber" ssz-size:"8"`
-	Seq         uint64   `json:"seq" ssz-size:"8"`
-	IsLast      bool     `json:"isLast" ssz-size:"1"`
-	Txs         [][]byte `json:"txs" ssz-max:"1048576,1073741824"`
+	BlockNumber uint64   `ssz-size:"8"`
+	Seq         uint64   `ssz-size:"8"`
+	IsLast      bool     `ssz-size:"1"`
+	Txs         [][]byte `ssz-max:"1048576,1073741824"`
+}
+
+func (f *NewFrag) UnmarshalJSON(data []byte) error {
+	var frag struct {
+		BlockNumber uint64          `json:"blockNumber"`
+		Seq         uint64          `json:"seq"`
+		IsLast      bool            `json:"isLast"`
+		Txs         []hexutil.Bytes `json:"txs"`
+	}
+
+	if err := json.Unmarshal(data, &frag); err != nil {
+		log.Error("failed to unmarshal NewFrag", "error", err)
+		return err
+	}
+
+	f.BlockNumber = frag.BlockNumber
+	f.Seq = frag.Seq
+	f.IsLast = frag.IsLast
+	f.Txs = make([][]byte, len(frag.Txs))
+	for i, tx := range frag.Txs {
+		f.Txs[i] = tx
+	}
+
+	return nil
+}
+
+func (f *NewFrag) MarshalJSON() ([]byte, error) {
+	txs := make([]hexutil.Bytes, len(f.Txs))
+	for i, tx := range f.Txs {
+		txs[i] = tx
+	}
+
+	return json.Marshal(struct {
+		BlockNumber uint64          `json:"blockNumber"`
+		Seq         uint64          `json:"seq"`
+		IsLast      bool            `json:"isLast"`
+		Txs         []hexutil.Bytes `json:"txs"`
+	}{
+		BlockNumber: f.BlockNumber,
+		Seq:         f.Seq,
+		IsLast:      f.IsLast,
+		Txs:         txs,
+	})
 }
 
 type SignedSeal struct {
 	Signature Bytes65 `json:"signature"`
-	Seal      Seal    `json:"seal"`
+	Seal      Seal    `json:"message"`
 }
 
 // Total frags in the block + block header fields
@@ -255,6 +299,83 @@ type Seal struct {
 	ReceiptsRoot     Bytes32 `json:"receiptsRoot" ssz-size:"32"`
 	StateRoot        Bytes32 `json:"stateRoot" ssz-size:"32"`
 	BlockHash        Bytes32 `json:"blockHash" ssz-size:"32"`
+}
+
+type SignedEnv struct {
+	Signature Bytes65 `json:"signature"`
+	Env       Env     `json:"message"`
+}
+
+// Initial message to set the block environment for the current block
+type Env struct {
+	Number                uint64         `ssz-size:"8"`
+	Beneficiary           common.Address `ssz-size:"20"`
+	Timestamp             uint64         `ssz-size:"8"`
+	GasLimit              uint64         `ssz-size:"8"`
+	Basefee               uint64         `ssz-size:"8"`
+	Difficulty            *big.Int       `ssz-size:"32"`
+	Prevrandao            common.Hash    `ssz-size:"32"`
+	ParentHash            common.Hash    `ssz-size:"32"`
+	ParentBeaconBlockRoot common.Hash    `ssz-size:"32"`
+	ExtraData             []byte         `ssz-max:"4294967296"`
+}
+
+func (e *Env) UnmarshalJSON(data []byte) error {
+	var env struct {
+		Number                uint64         `json:"number"`
+		Beneficiary           common.Address `json:"beneficiary"`
+		Timestamp             uint64         `json:"timestamp"`
+		GasLimit              uint64         `json:"gasLimit"`
+		Basefee               uint64         `json:"basefee"`
+		Difficulty            *hexutil.Big   `json:"difficulty"`
+		Prevrandao            common.Hash    `json:"prevrandao"`
+		ParentHash            common.Hash    `json:"parentHash"`
+		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
+		ExtraData             hexutil.Bytes  `json:"extraData"`
+	}
+
+	if err := json.Unmarshal(data, &env); err != nil {
+		return err
+	}
+
+	e.Number = env.Number
+	e.Beneficiary = env.Beneficiary
+	e.Timestamp = env.Timestamp
+	e.GasLimit = env.GasLimit
+	e.Basefee = env.Basefee
+	e.Difficulty = env.Difficulty.ToInt()
+	e.Prevrandao = env.Prevrandao
+	e.ParentHash = env.ParentHash
+	e.ParentBeaconBlockRoot = env.ParentBeaconBlockRoot
+	e.ExtraData = env.ExtraData
+
+	return nil
+}
+
+func (e *Env) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Number                uint64         `json:"number"`
+		Beneficiary           common.Address `json:"beneficiary"`
+		Timestamp             uint64         `json:"timestamp"`
+		GasLimit              uint64         `json:"gasLimit"`
+		Basefee               uint64         `json:"basefee"`
+		Difficulty            *hexutil.Big   `json:"difficulty"`
+		Prevrandao            common.Hash    `json:"prevrandao"`
+		ParentHash            common.Hash    `json:"parentHash"`
+		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
+		ExtraData             hexutil.Bytes  `json:"extraData"`
+	}{
+		Number:                e.Number,
+		Beneficiary:           e.Beneficiary,
+		Timestamp:             e.Timestamp,
+		GasLimit:              e.GasLimit,
+		Basefee:               e.Basefee,
+		Difficulty:            (*hexutil.Big)(e.Difficulty),
+		Prevrandao:            e.Prevrandao,
+		ParentHash:            e.ParentHash,
+		ParentBeaconBlockRoot: e.ParentBeaconBlockRoot,
+		ExtraData:             e.ExtraData,
+	})
 }
 
 type ExecutionPayloadEnvelope struct {
@@ -675,4 +796,5 @@ const (
 
 	NewFragV0  EngineAPIMethod = "engine_newFragV0"
 	SealFragV0 EngineAPIMethod = "engine_sealFragV0"
+	EnvV0      EngineAPIMethod = "engine_envV0"
 )

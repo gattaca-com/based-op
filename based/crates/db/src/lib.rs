@@ -1,12 +1,13 @@
 use std::{
     fmt::{Debug, Formatter},
     sync::Arc,
-    time::Instant,
 };
 
+use bop_common::time::BlockSyncTimers;
 use parking_lot::RwLock;
 use reth_db::{
-    cursor::DbCursorRO,
+    cursor::{DbCursorRO, DbCursorRW, DbDupCursorRO},
+    models::BlockNumberAddress,
     tables,
     transaction::{DbTx, DbTxMut},
     Bytecodes, CanonicalHeaders, DatabaseEnv,
@@ -14,12 +15,12 @@ use reth_db::{
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
-use reth_primitives::BlockWithSenders;
+use reth_primitives::{BlockWithSenders, StorageEntry};
 use reth_provider::{
     providers::ConsistentDbView, BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory,
     StateWriter, TrieWriter,
 };
-use reth_storage_api::HashedPostStateProvider;
+use reth_storage_api::{DBProvider, HashedPostStateProvider};
 use reth_trie::{StateRoot, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
@@ -81,6 +82,14 @@ impl SequencerDB {
     pub fn reset_provider(&self) {
         *self.provider.write() = None;
     }
+
+    /// Puts a canonical header into the database and commits the changes.
+    pub fn write_canonical_header(&self, number: u64, hash: B256) -> Result<(), Error> {
+        let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
+        rw_provider.tx_ref().put::<tables::CanonicalHeaders>(number, hash).unwrap();
+        rw_provider.commit()?;
+        Ok(())
+    }
 }
 
 impl Debug for SequencerDB {
@@ -111,23 +120,6 @@ impl DatabaseRead for SequencerDB {
 }
 
 impl DatabaseWrite for SequencerDB {
-    /// Commit a new block to the database.
-    fn commit_block(
-        &self,
-        block: &BlockWithSenders<OpBlock>,
-        block_execution_output: BlockExecutionOutput<OpReceipt>,
-    ) -> Result<(), Error> {
-        // Calculate state root and get trie updates.
-        let (state_root, trie_updates) = self.calculate_state_root(&block_execution_output.state)?;
-
-        if state_root != block.block.header.state_root {
-            tracing::error!("State root mismatch: {state_root}, block: {:?}", block.block.header);
-            return Err(Error::StateRootError(block.block.header.number));
-        }
-
-        self.commit_block_unchecked(block, block_execution_output, trie_updates)
-    }
-
     /// Commit a new block to the database without performing state root check. This should only be
     /// used if the state root calculation has already been performed upstream.
     fn commit_block_unchecked(
@@ -135,54 +127,106 @@ impl DatabaseWrite for SequencerDB {
         block: &BlockWithSenders<OpBlock>,
         block_execution_output: BlockExecutionOutput<OpReceipt>,
         trie_updates: TrieUpdates,
+        timers: &mut BlockSyncTimers,
     ) -> Result<(), Error> {
         let provider = self.factory.provider().map_err(Error::ProviderError)?;
         let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
 
-        let start = Instant::now();
+        timers.caches.time(|| self.caches.update(&block_execution_output.state));
 
         // Update the read caches.
-        self.caches.update(&block_execution_output.state);
-        let after_caches_update = Instant::now();
 
-        let (plain_state, reverts) = block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
-
-        // Write state reverts
-        rw_provider.write_state_reverts(reverts, block.block.header.number)?;
-        let after_state_reverts = Instant::now();
-        // Write plain state
-        rw_provider.write_state_changes(plain_state)?;
-        let after_state_changes = Instant::now();
+        timers.state_changes.time(|| {
+            let (plain_state, reverts) =
+                block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
+            // Write state reverts
+            rw_provider.write_state_reverts(reverts, block.block.header.number)?;
+            // Write plain state
+            rw_provider.write_state_changes(plain_state)
+        })?;
 
         // Write state trie updates
-        let latest_state = LatestStateProviderRef::new(&provider);
-        let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
-        rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
-        rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)?;
-        let after_trie_updates = Instant::now();
+        timers.trie_updates.time(|| {
+            let latest_state = LatestStateProviderRef::new(&provider);
+            let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
+            rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
+            rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)
+        })?;
+        timers.header_write.time(|| {
+            // Write to header table
+            rw_provider
+                .tx_ref()
+                .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
+                .unwrap();
+        });
 
-        // Write to header table
-        rw_provider
-            .tx_ref()
-            .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
-            .unwrap();
-        let after_header_write = Instant::now();
-
-        rw_provider.commit()?;
-        let after_commit = Instant::now();
+        timers.db_commit.time(|| rw_provider.commit())?;
 
         self.reset_provider();
 
-        tracing::info!(
-            "Commit block took: {:?} (caches: {:?}, state_reverts: {:?}, state_changes: {:?}, trie_updates: {:?}, header_write: {:?}, commit: {:?})",
-            start.elapsed(),
-            after_caches_update.duration_since(start),
-            after_state_reverts.duration_since(after_caches_update),
-            after_state_changes.duration_since(after_state_reverts),
-            after_trie_updates.duration_since(after_state_changes),
-            after_header_write.duration_since(after_trie_updates),
-            after_commit.duration_since(after_header_write),
-        );
+        Ok(())
+    }
+
+    /// Removes the last block of state from the database.
+    fn roll_back_head(&self) -> Result<(), Error> {
+        let rw_provider = self.factory.provider_rw().map_err(Error::ProviderError)?;
+
+        let head_block_number = self.head_block_number()?;
+        let range = head_block_number..=head_block_number;
+        let storage_range = BlockNumberAddress::range(range.clone());
+
+        // Trie
+        rw_provider.unwind_trie_state_range(range.clone())?;
+
+        // Flat state
+        let storage_changeset = rw_provider.take::<tables::StorageChangeSets>(storage_range.clone())?;
+        let account_changeset = rw_provider.take::<tables::AccountChangeSets>(range)?;
+
+        let mut plain_accounts_cursor = rw_provider.tx_ref().cursor_write::<tables::PlainAccountState>()?;
+        let mut plain_storage_cursor = rw_provider.tx_ref().cursor_dup_write::<tables::PlainStorageState>()?;
+
+        let (state, _) = rw_provider.populate_bundle_state(
+            account_changeset,
+            storage_changeset,
+            &mut plain_accounts_cursor,
+            &mut plain_storage_cursor,
+        )?;
+
+        // iterate over local plain state remove all account and all storages.
+        for (address, (old_account, new_account, storage)) in &state {
+            // revert account if needed.
+            if old_account != new_account {
+                let existing_entry = plain_accounts_cursor.seek_exact(*address)?;
+                if let Some(account) = old_account {
+                    plain_accounts_cursor.upsert(*address, *account)?;
+                } else if existing_entry.is_some() {
+                    plain_accounts_cursor.delete_current()?;
+                }
+            }
+
+            // revert storages
+            for (storage_key, (old_storage_value, _new_storage_value)) in storage {
+                let storage_entry = StorageEntry { key: *storage_key, value: *old_storage_value };
+                // delete previous value
+                if plain_storage_cursor
+                    .seek_by_key_subkey(*address, *storage_key)?
+                    .filter(|s| s.key == *storage_key)
+                    .is_some()
+                {
+                    plain_storage_cursor.delete_current()?
+                }
+
+                // insert value if needed
+                if !old_storage_value.is_zero() {
+                    plain_storage_cursor.upsert(*address, storage_entry)?;
+                }
+            }
+        }
+
+        rw_provider.tx_ref().delete::<tables::CanonicalHeaders>(head_block_number, None).unwrap();
+
+        rw_provider.commit()?;
+        self.reset_provider();
 
         Ok(())
     }
@@ -206,7 +250,8 @@ impl DatabaseRef for SequencerDB {
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
         let hash = self.provider()?.tx_ref().get::<CanonicalHeaders>(number).map_err(Error::ReadTransactionError)?;
-        Ok(hash.unwrap_or_default())
+        let hash = hash.ok_or(Error::BlockNotFound(number))?;
+        Ok(hash)
     }
 }
 

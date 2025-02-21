@@ -34,7 +34,7 @@ impl ECDSASigner {
     }
 
     pub fn try_from_hex(hex: &str) -> Result<Self, SignerError> {
-        let bytes = hex::decode(hex.trim_start_matches("0x"))?;
+        let bytes = hex::decode(hex)?;
         Self::try_from_secret(&bytes)
     }
 

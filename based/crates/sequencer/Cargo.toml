@@ -1,70 +1,52 @@
 [package]
-name = "bop-sequencer"
-version.workspace = true
-rust-version.workspace = true
 edition.workspace = true
+name = "bop-sequencer"
 repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
-bop-common.workspace = true
-bop-pool.workspace = true
-bop-db.workspace = true
-
-# alloy
-alloy-provider.workspace = true
 alloy-consensus.workspace = true
-alloy-primitives.workspace = true
 alloy-eips.workspace = true
+alloy-primitives.workspace = true
+alloy-provider.workspace = true
+alloy-rpc-types.workspace = true
 alloy-transport-http.workspace = true
-
-# op alloy
+bop-common.workspace = true
+bop-db.workspace = true
+bop-pool.workspace = true
+clap.workspace = true
+crossbeam-channel.workspace = true
+eyre.workspace = true
+futures.workspace = true
 op-alloy-consensus.workspace = true
 op-alloy-network.workspace = true
 op-alloy-rpc-types.workspace = true
-
-# reth
-reth-evm.workspace = true
-reth-primitives.workspace = true
-reth-primitives-traits.workspace = true
+op-alloy-rpc-types-engine.workspace = true
+reqwest.workspace = true
+reth-chainspec.workspace = true
 reth-consensus.workspace = true
 reth-db.workspace = true
-reth-chainspec.workspace = true
-reth-trie-common.workspace = true
-
-# reth op
-reth-optimism-evm.workspace = true
+reth-evm.workspace = true
 reth-optimism-chainspec.workspace = true
-reth-optimism-primitives.workspace = true
 reth-optimism-consensus.workspace = true
+reth-optimism-evm.workspace = true
 reth-optimism-forks.workspace = true
-
-# revm
-revm-primitives.workspace = true
+reth-optimism-primitives.workspace = true
+reth-primitives.workspace = true
+reth-primitives-traits.workspace = true
+reth-trie-common.workspace = true
 revm.workspace = true
-
-alloy-rpc-types.workspace = true
-op-alloy-rpc-types-engine.workspace = true
-
-# async
-tokio.workspace = true
-futures.workspace = true
-
-tracing.workspace = true
-
-# networking
-reqwest.workspace = true
-crossbeam-channel.workspace = true
-
-# misc
-thiserror.workspace = true
-clap.workspace = true
-eyre.workspace = true
-
+revm-primitives.workspace = true
 strum_macros.workspace = true
-
-[dev-dependencies]
-bop-simulator.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
 
 [[bin]]
 name = "bulk-insert-headers"
 path = "bin/bulk_insert_headers.rs"
+
+[features]
+shmem = ["bop-common/shmem"]
+default = []

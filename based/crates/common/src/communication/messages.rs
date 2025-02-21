@@ -3,24 +3,23 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::{BlockHeader, Header};
+use alloy_consensus::BlockHeader;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
-    ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadAttributes,
-    PayloadError, PayloadId, PayloadStatus,
+    ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, PayloadAttributes, PayloadError,
+    PayloadId,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
-use reth_optimism_primitives::OpBlock;
+use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpBlock};
 use reth_primitives::BlockWithSenders;
-use revm::db::BundleState;
-use revm_primitives::{Address, U256};
+use revm_primitives::{Address, Env, SpecId, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use thiserror::Error;
-use tokio::sync::oneshot::{self, Receiver};
+use tokio::sync::oneshot::{self};
 
 use crate::{
     db::{DBFrag, DBSorting},
@@ -163,29 +162,16 @@ impl<T> From<InternalMessage<T>> for Nanos {
 /// Supported Engine API RPC methods
 #[derive(Debug, AsRefStr)]
 pub enum EngineApi {
-    ForkChoiceUpdatedV3 {
-        fork_choice_state: ForkchoiceState,
-        payload_attributes: Option<Box<OpPayloadAttributes>>,
-        res_tx: oneshot::Sender<ForkchoiceUpdated>,
-    },
-    NewPayloadV3 {
-        payload: ExecutionPayloadV3,
-        versioned_hashes: Vec<B256>,
-        parent_beacon_block_root: B256,
-        res_tx: oneshot::Sender<PayloadStatus>,
-    },
-    GetPayloadV3 {
-        payload_id: PayloadId,
-        res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
-    },
+    ForkChoiceUpdatedV3 { fork_choice_state: ForkchoiceState, payload_attributes: Option<Box<OpPayloadAttributes>> },
+    NewPayloadV3 { payload: ExecutionPayloadV3, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
+    GetPayloadV3 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV3> },
 }
 impl EngineApi {
     pub fn messages_from_block(
         block: &BlockSyncMessage,
         txs_in_attributes: bool,
         no_tx_pool: Option<bool>,
-    ) -> (Receiver<PayloadStatus>, EngineApi, Receiver<ForkchoiceUpdated>, EngineApi, EngineApi) {
-        let (new_payload_tx, new_payload_rx) = oneshot::channel();
+    ) -> (EngineApi, EngineApi, EngineApi) {
         let block_hash = block.hash_slow();
         let transactions = block
             .body
@@ -239,9 +225,7 @@ impl EngineApi {
             parent_beacon_block_root: block
                 .parent_beacon_block_root()
                 .expect("parent beacon root should always be set"),
-            res_tx: new_payload_tx,
         };
-        let (fcu_tx, _fcu_rx) = oneshot::channel();
 
         let fcu_1 = EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: ForkchoiceState {
@@ -250,9 +234,7 @@ impl EngineApi {
                 finalized_block_hash: Default::default(),
             },
             payload_attributes: None,
-            res_tx: fcu_tx,
         };
-        let (fcu_tx, fcu_rx) = oneshot::channel();
         let fcu = EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state: ForkchoiceState {
                 head_block_hash: block_hash,
@@ -260,9 +242,8 @@ impl EngineApi {
                 finalized_block_hash: Default::default(),
             },
             payload_attributes: op_payload_attributes,
-            res_tx: fcu_tx,
         };
-        (new_payload_rx, new_payload, fcu_rx, fcu_1, fcu)
+        (new_payload, fcu_1, fcu)
     }
 }
 
@@ -290,6 +271,9 @@ pub enum RpcError {
 
     #[error("db error: {0}")]
     Db(#[from] crate::db::Error),
+
+    #[error("no return")]
+    NoReturn,
 }
 
 impl From<RpcError> for RpcErrorObject<'static> {
@@ -300,7 +284,8 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::ChannelClosed(_) |
             RpcError::Jsonrpsee(_) |
             RpcError::TokioJoin(_) |
-            RpcError::Db(_) => internal_error(),
+            RpcError::Db(_) |
+            RpcError::NoReturn => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
@@ -317,11 +302,19 @@ fn internal_error() -> RpcErrorObject<'static> {
 #[derive(Clone, Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SequencerToSimulator<Db> {
-    /// Simulate Tx on top of a partially built frag
-    SimulateTx(Arc<Transaction>, Arc<DBSorting<Db>>),
+    /// Simulate Tx
+    SimulateTx(Arc<Transaction>, DBSorting<Db>),
     /// Simulate Tx Top of frag
     //TODO: Db could be set on frag commit once we broadcast msgs to sims
     SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
+}
+impl<Db> SequencerToSimulator<Db> {
+    pub fn sim_info(&self) -> (Address, u64, u64) {
+        match self {
+            SequencerToSimulator::SimulateTx(t, db) => (t.sender(), t.nonce(), db.state_id()),
+            SequencerToSimulator::SimulateTxTof(t, db) => (t.sender(), t.nonce(), db.state_id()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -329,12 +322,13 @@ pub struct SimulatorToSequencer {
     /// Sender address and nonce
     pub sender_info: (Address, u64),
     pub state_id: u64,
+    pub simtime: Duration,
     pub msg: SimulatorToSequencerMsg,
 }
 
 impl SimulatorToSequencer {
-    pub fn new(sender_info: (Address, u64), state_id: u64, msg: SimulatorToSequencerMsg) -> Self {
-        Self { sender_info, state_id, msg }
+    pub fn new(sender_info: (Address, u64), state_id: u64, simtime: Duration, msg: SimulatorToSequencerMsg) -> Self {
+        Self { sender_info, state_id, simtime, msg }
     }
 
     pub fn sender(&self) -> &Address {
@@ -348,21 +342,6 @@ impl SimulatorToSequencer {
 
 pub type SimulationResult<T> = Result<T, SimulationError>;
 
-#[derive(Clone, Debug)]
-pub struct TopOfBlockResult {
-    pub state: BundleState,
-    pub forced_inclusion_txs: Vec<SimulatedTx>,
-}
-impl TopOfBlockResult {
-    pub fn gas_used(&self) -> u64 {
-        self.forced_inclusion_txs.iter().map(|t| t.gas_used()).sum()
-    }
-
-    pub fn payment(&self) -> U256 {
-        self.forced_inclusion_txs.iter().map(|t| t.payment).sum()
-    }
-}
-
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SimulatorToSequencerMsg {
@@ -370,8 +349,6 @@ pub enum SimulatorToSequencerMsg {
     Tx(SimulationResult<SimulatedTx>),
     /// Simulation on top of a fragment. Used by the transaction pool.
     TxPoolTopOfFrag(SimulationResult<SimulatedTx>),
-    /// Top of block sims are done, we can start sequencing
-    TopOfBlock(TopOfBlockResult),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]
@@ -381,6 +358,8 @@ pub enum SimulationError {
     EvmError(String),
     #[error("Order pays nothing")]
     ZeroPayment,
+    #[error("Order reverts and is not allowed to revert")]
+    RevertWithDisallowedRevert,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, AsRefStr)]
@@ -407,13 +386,19 @@ pub enum BlockFetch {
     FromTo(u64, u64),
 }
 
+impl BlockFetch {
+    pub fn fetch_to(&self) -> u64 {
+        match self {
+            BlockFetch::FromTo(_, to) => *to,
+        }
+    }
+}
+
 /// Represents the parameters required to configure the next block.
 #[derive(Clone, Debug)]
-pub struct EvmBlockParams<Db: 'static> {
-    pub parent_header: Header,
-    pub attributes: NextBlockAttributes,
-    /// New frag db
-    pub db: DBFrag<Db>,
+pub struct EvmBlockParams {
+    pub spec_id: SpecId,
+    pub env: Box<Env>,
 }
 
 #[derive(Clone)]

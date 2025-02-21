@@ -489,6 +489,8 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 		d.onNewFragProcess(x)
 	case SealFragProcessEvent:
 		d.onSealFragProcess(x)
+	case EnvProcessEvent:
+		d.onEnvProcess(x)
 	default:
 		return false
 	}

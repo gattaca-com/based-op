@@ -22,15 +22,21 @@ hildr = import_module("./cl/hildr/hildr_launcher.star")
 
 # MEV
 rollup_boost = import_module("./mev/rollup-boost/rollup_boost_launcher.star")
+based_portal = import_module("./mev/based-portal/based_portal_launcher.star")
 op_geth_builder = import_module("./el/op-geth/op_geth_builder_launcher.star")
 op_reth_builder = import_module("./el/op-reth/op_reth_builder_launcher.star")
 op_node_builder = import_module("./cl/op-node/op_node_builder_launcher.star")
+gateway = import_module("./mev/gateway/gateway_launcher.star")
+
+ROLLUP_BOOST_MEV_TYPE = "rollup-boost"
+BASED_PORTAL_MEV_TYPE = "based-portal"
 
 
 def launch(
     plan,
     jwt_file,
     network_params,
+    mev_type,
     mev_params,
     deployment_output,
     participants,
@@ -114,6 +120,18 @@ def launch(
         },
     }
 
+    gateway_launchers = {
+        "gateway": {
+            "launcher": gateway.new_gateway_launcher(
+                deployment_output,
+                jwt_file,
+                network_params.network,
+                network_params.network_id,
+            ),
+            "launch_method": gateway.launch,
+        },
+    }
+
     cl_launchers = {
         "op-node": {
             "launcher": op_node.new_op_node_launcher(
@@ -139,7 +157,7 @@ def launch(
     }
 
     sidecar_launchers = {
-        "rollup-boost": {
+        ROLLUP_BOOST_MEV_TYPE: {
             "launcher": rollup_boost.new_rollup_boost_launcher(
                 deployment_output,
                 jwt_file,
@@ -147,19 +165,30 @@ def launch(
                 network_params.network_id,
             ),
             "launch_method": rollup_boost.launch,
-        }
+        },
+        BASED_PORTAL_MEV_TYPE: {
+            "launcher": based_portal.new_based_portal_launcher(
+                deployment_output,
+                jwt_file,
+                network_params.network,
+                network_params.network_id,
+            ),
+            "launch_method": based_portal.launch,
+        },
     }
 
     all_cl_contexts = []
     all_el_contexts = []
     sequencer_enabled = True
-    rollup_boost_enabled = "rollup-boost" in additional_services
+    rollup_boost_enabled = mev_type == ROLLUP_BOOST_MEV_TYPE
+    based_portal_enabled = mev_type == BASED_PORTAL_MEV_TYPE
 
     for index, participant in enumerate(participants):
         cl_type = participant.cl_type
         el_type = participant.el_type
         cl_builder_type = participant.cl_builder_type
         el_builder_type = participant.el_builder_type
+        gateway_type = "gateway"
 
         node_selectors = ethereum_package_input_parser.get_client_node_selectors(
             participant.node_selectors,
@@ -184,6 +213,13 @@ def launch(
             fail(
                 "Unsupported launcher '{0}', need one of '{1}'".format(
                     cl_type, ",".join(cl_launchers.keys())
+                )
+            )
+
+        if gateway_type not in gateway_launchers:
+            fail(
+                "Unsupported launcher '{0}', need one of '{1}'".format(
+                    gateway_type, ",".join(gateway_launchers.keys())
                 )
             )
 
@@ -221,9 +257,18 @@ def launch(
             cl_builder_launchers[cl_builder_type]["launch_method"],
         )
 
+        gateway_launcher, gateway_launch_method = (
+            gateway_launchers[gateway_type]["launcher"],
+            gateway_launchers[gateway_type]["launch_method"],
+        )
+
         sidecar_launcher, sidecar_launch_method = (
-            sidecar_launchers["rollup-boost"]["launcher"],
-            sidecar_launchers["rollup-boost"]["launch_method"],
+            (
+                sidecar_launchers[mev_type]["launcher"],
+                sidecar_launchers[mev_type]["launch_method"],
+            )
+            if mev_type
+            else (None, None)
         )
 
         # Zero-pad the index using the calculated zfill value
@@ -240,11 +285,14 @@ def launch(
         el_builder_service_name = "op-el-builder-{0}-{1}-{2}-{3}".format(
             index_str, el_builder_type, cl_builder_type, l2_services_suffix
         )
+        gateway_service_name = "gateway-{0}-{1}-{2}".format(
+            index_str, gateway_type, l2_services_suffix
+        )
         cl_builder_service_name = "op-cl-builder-{0}-{1}-{2}-{3}".format(
             index_str, cl_builder_type, el_builder_type, l2_services_suffix
         )
-        sidecar_service_name = "op-rollup-boost-{0}-{1}".format(
-            index_str, l2_services_suffix
+        sidecar_service_name = "op-{0}-{1}-{2}".format(
+            mev_type, index_str, l2_services_suffix
         )
 
         sequencer_context = all_el_contexts[0] if len(all_el_contexts) > 0 else None
@@ -269,53 +317,111 @@ def launch(
                 observability_helper, el_context.client_name, "execution", metrics_info
             )
 
-        if rollup_boost_enabled and sequencer_enabled:
-            plan.print("Starting rollup boost")
+        if sequencer_enabled:
+            if rollup_boost_enabled:
+                plan.print("Starting rollup boost")
 
-            if mev_params.builder_host == "" or mev_params.builder_port == "":
-                el_builder_context = el_builder_launch_method(
+                if mev_params.builder_host == "" or mev_params.builder_port == "":
+                    el_builder_context = el_builder_launch_method(
+                        plan,
+                        el_builder_launcher,
+                        el_builder_service_name,
+                        participant,
+                        global_log_level,
+                        persistent,
+                        el_tolerations,
+                        node_selectors,
+                        all_el_contexts,
+                        sequencer_enabled,
+                        sequencer_context,
+                        observability_helper,
+                        interop_params,
+                    )
+                else:
+                    el_builder_context = struct(
+                        ip_addr=mev_params.builder_host,
+                        engine_rpc_port_num=mev_params.builder_port,
+                        rpc_port_num=mev_params.builder_port,
+                        rpc_http_url="http://{0}:{1}".format(
+                            mev_params.builder_host, mev_params.builder_port
+                        ),
+                        client_name="external-builder",
+                    )
+
+                rollup_boost_image = (
+                    mev_params.rollup_boost_image
+                    if mev_params.rollup_boost_image != ""
+                    else input_parser.DEFAULT_SIDECAR_IMAGES["rollup-boost"]
+                )
+
+                sidecar_context = sidecar_launch_method(
                     plan,
-                    el_builder_launcher,
-                    el_builder_service_name,
-                    participant,
-                    global_log_level,
-                    persistent,
-                    el_tolerations,
-                    node_selectors,
+                    sidecar_launcher,
+                    sidecar_service_name,
+                    rollup_boost_image,
                     all_el_contexts,
-                    sequencer_enabled,
-                    sequencer_context,
-                    observability_helper,
-                    interop_params,
-                )
-            else:
-                el_builder_context = struct(
-                    ip_addr=mev_params.builder_host,
-                    engine_rpc_port_num=mev_params.builder_port,
-                    rpc_port_num=mev_params.builder_port,
-                    rpc_http_url="http://{0}:{1}".format(
-                        mev_params.builder_host, mev_params.builder_port
-                    ),
-                    client_name="external-builder",
+                    el_context,
+                    el_builder_context,
                 )
 
-            rollup_boost_image = (
-                mev_params.rollup_boost_image
-                if mev_params.rollup_boost_image != ""
-                else input_parser.DEFAULT_SIDECAR_IMAGES["rollup-boost"]
-            )
+                all_el_contexts.append(el_builder_context)
+            elif based_portal_enabled:
+                plan.print("Starting based gateway")
 
-            sidecar_context = sidecar_launch_method(
-                plan,
-                sidecar_launcher,
-                sidecar_service_name,
-                rollup_boost_image,
-                all_el_contexts,
-                el_context,
-                el_builder_context,
-            )
+                gateway_image = (
+                    mev_params.gateway_image
+                    if mev_params.gateway_image != ""
+                    else input_parser.DEFAULT_GATEWAY_IMAGES[gateway_type]
+                )
 
-            all_el_contexts.append(el_builder_context)
+                if mev_params.builder_host == "" or mev_params.builder_port == "":
+                    el_builder_context = gateway_launch_method(
+                        plan,
+                        gateway_launcher,
+                        gateway_service_name,
+                        gateway_image,
+                        node_selectors,
+                        all_el_contexts,
+                        el_context,
+                        observability_helper
+                    )
+                else:
+                    el_builder_context = struct(
+                        ip_addr=mev_params.builder_host,
+                        engine_rpc_port_num=mev_params.builder_port,
+                        rpc_port_num=mev_params.builder_port,
+                        rpc_http_url="http://{0}:{1}".format(
+                            mev_params.builder_host, mev_params.builder_port
+                        ),
+                        client_name="external-gateway",
+                    )
+
+                plan.print("Starting based portal")
+
+                based_portal_image = (
+                    mev_params.based_portal_image
+                    if mev_params.based_portal_image != ""
+                    else input_parser.DEFAULT_SIDECAR_IMAGES["based-portal"]
+                )
+
+                sidecar_context = sidecar_launch_method(
+                    plan,
+                    sidecar_launcher,
+                    sidecar_service_name,
+                    based_portal_image,
+                    all_el_contexts,
+                    el_context,
+                    el_builder_context,
+                    mev_params.portal_extra_params,
+                )
+
+                # use sidecar RPC in place of the sequencer RPC to broadcast txs
+                # (this will be removed at some point)
+                all_el_contexts.append(sidecar_context)
+                all_el_contexts.append(el_builder_context)
+            elif mev_type:
+                fail("UNSUPPORTED MEV TYPE: {0}".format(mev_type))
+
         else:
             sidecar_context = None
 
@@ -329,7 +435,7 @@ def launch(
             cl_tolerations,
             node_selectors,
             sidecar_context
-            if rollup_boost_enabled and sequencer_enabled
+            if (rollup_boost_enabled or based_portal_enabled) and sequencer_enabled
             else el_context,
             all_cl_contexts,
             l1_config_env_vars,
@@ -373,5 +479,4 @@ def launch(
             )
             all_cl_contexts.append(cl_builder_context)
 
-    plan.print("Successfully added {0} EL/CL participants".format(num_participants))
     return all_el_contexts, all_cl_contexts

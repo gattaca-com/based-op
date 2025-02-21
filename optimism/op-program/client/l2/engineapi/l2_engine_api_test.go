@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -166,6 +167,30 @@ func TestSealFragV0(t *testing.T) {
 		}}
 
 	res, err := engineAPI.SealFragV0(context.Background(), seal)
+
+	require.EqualValues(t, engine.VALID, res)
+	require.NoError(t, err)
+}
+
+func TestEnvV0(t *testing.T) {
+	logger, _ := testlog.CaptureLogger(t, log.LvlInfo)
+
+	backend := newStubBackend(t)
+	engineAPI := NewL2EngineAPI(logger, backend, nil)
+
+	env := &eth.SignedEnv{
+		Signature: eth.Bytes65{},
+		Env: eth.Env{
+			Number:      1,
+			Beneficiary: common.HexToAddress("0x0102030405060708091011121314151617181920"),
+			Timestamp:   2,
+			GasLimit:    3,
+			Basefee:     4,
+			Difficulty:  (*hexutil.Big)(new(big.Int).SetUint64(123123123123123)),
+			Prevrandao:  common.HexToHash("0x0102030405060708091011121314151617181920212223242526272829303132"),
+		}}
+
+	res, err := engineAPI.EnvV0(context.Background(), env)
 
 	require.EqualValues(t, engine.VALID, res)
 	require.NoError(t, err)

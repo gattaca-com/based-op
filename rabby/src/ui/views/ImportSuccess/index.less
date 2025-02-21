@@ -1,0 +1,71 @@
+.success-import {
+  overflow-y: auto;
+
+  .address-info {
+    height: 100%;
+  }
+
+  .address-viewer-text.subtitle {
+    font-size: 12px;
+    color: var(--r-neutral-body, #3e495e);
+  }
+
+  .brand-name {
+    font-size: 16px;
+    color: #13141a;
+    margin-bottom: 10px;
+    height: 40px;
+    align-items: center;
+    font-weight: 500;
+  }
+
+  .address-info .ant-input {
+    height: 40px;
+    background: var(--r-neutral-card-2, #f2f4f7);
+    color: var(--r-neutral-title-1, #192945);
+    border-radius: 2px;
+    border: none;
+    font-weight: inherit;
+    font-size: inherit;
+    padding-left: 6px;
+    padding-right: 6px;
+    width: 260px;
+  }
+
+  .chain-list-container {
+    margin-top: 20px;
+    .desc {
+      text-align: left;
+      font-weight: 400;
+      font-size: 13px;
+      line-height: 15px;
+      color: var(--r-neutral-body, #3e495e);
+      margin-bottom: 12px;
+    }
+    .chain-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px 12px;
+
+      &-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        font-weight: 500;
+        font-size: 13px;
+        line-height: 15px;
+        color: var(--r-neutral-title-1, #192945);
+
+        .chain-logo {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+        }
+      }
+    }
+  }
+}
+.success-import::-webkit-scrollbar {
+  display: none;
+}

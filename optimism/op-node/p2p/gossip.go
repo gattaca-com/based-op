@@ -86,10 +86,14 @@ func sealFragV0(cfg *rollup.Config) string {
 	return fmt.Sprintf("/optimism/%s/0/seals", cfg.L2ChainID.String())
 }
 
+func envV0(cfg *rollup.Config) string {
+	return fmt.Sprintf("/optimism/%s/0/envs", cfg.L2ChainID.String())
+}
+
 // BuildSubscriptionFilter builds a simple subscription filter,
 // to help protect against peers spamming useless subscriptions.
 func BuildSubscriptionFilter(cfg *rollup.Config) pubsub.SubscriptionFilter {
-	return pubsub.NewAllowlistSubscriptionFilter(blocksTopicV1(cfg), blocksTopicV2(cfg), blocksTopicV3(cfg), newFragV0(cfg), sealFragV0(cfg)) // add more topics here in the future, if any.
+	return pubsub.NewAllowlistSubscriptionFilter(blocksTopicV1(cfg), blocksTopicV2(cfg), blocksTopicV3(cfg), newFragV0(cfg), sealFragV0(cfg), envV0(cfg)) // add more topics here in the future, if any.
 }
 
 var msgBufPool = sync.Pool{New: func() any {
@@ -270,6 +274,12 @@ const (
 	SealFragV0 SealFragVersion = iota
 )
 
+type EnvVersion int
+
+const (
+	EnvV0 EnvVersion = iota
+)
+
 func BuildNewFragValidator(log log.Logger, runCfg GossipRuntimeConfig, newFragVersion NewFragVersion) pubsub.ValidatorEx {
 	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
 		var signedFrag eth.SignedNewFrag
@@ -307,7 +317,7 @@ func BuildSealFragValidator(log log.Logger, runCfg GossipRuntimeConfig, sealFrag
 
 		data := message.GetData()
 		if err := signedSeal.UnmarshalSSZ(uint32(len(data)), bytes.NewReader(data)); err != nil {
-			log.Warn("invalid signedFrag payload", "err", err, "peer", id)
+			log.Warn("invalid signedSeal payload", "err", err, "peer", id)
 			return pubsub.ValidationReject
 		}
 
@@ -330,6 +340,33 @@ func verifySealSignature(log log.Logger, runCfg GossipRuntimeConfig, id peer.ID,
 	}
 
 	return verifySignature(log, id, signedSeal.Signature[:], root[:], expected)
+}
+
+func BuildEnvValidator(log log.Logger, runCfg GossipRuntimeConfig, envVersion EnvVersion) pubsub.ValidatorEx {
+	return func(ctx context.Context, id peer.ID, message *pubsub.Message) pubsub.ValidationResult {
+		var signedEnv eth.SignedEnv
+
+		data := message.GetData()
+		if err := signedEnv.UnmarshalSSZ(uint32(len(data)), bytes.NewReader(data)); err != nil {
+			log.Warn("invalid signedEnv payload", "err", err, "peer", id)
+			return pubsub.ValidationReject
+		}
+
+		message.ValidatorData = &signedEnv
+		return pubsub.ValidationAccept
+	}
+}
+
+func verifyEnvSignature(log log.Logger, runCfg GossipRuntimeConfig, id peer.ID, signedEnv eth.SignedEnv) pubsub.ValidationResult {
+	root := signedEnv.Env.Root()
+
+	expected := runCfg.P2PSequencerAddress()
+	if expected == (common.Address{}) {
+		log.Warn("no configured p2p sequencer address, ignoring gossiped env", "peer", id)
+		return pubsub.ValidationIgnore
+	}
+
+	return verifySignature(log, id, signedEnv.Signature[:], root[:], expected)
 }
 
 func BuildBlocksValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, blockVersion eth.BlockVersion) pubsub.ValidatorEx {
@@ -535,6 +572,7 @@ type GossipIn interface {
 	OnUnsafeL2Payload(ctx context.Context, from peer.ID, msg *eth.ExecutionPayloadEnvelope) error
 	OnNewFrag(ctx context.Context, from peer.ID, msg *eth.SignedNewFrag) error
 	OnSealFrag(ctx context.Context, from peer.ID, msg *eth.SignedSeal) error
+	OnEnv(ctx context.Context, from peer.ID, msg *eth.SignedEnv) error
 }
 
 type GossipTopicInfo interface {
@@ -544,6 +582,7 @@ type GossipTopicInfo interface {
 	BlocksTopicV3Peers() []peer.ID
 	NewFragTopicV0Peers() []peer.ID
 	SealFragTopicV0Peers() []peer.ID
+	EnvTopicV0Peers() []peer.ID
 }
 
 type GossipOut interface {
@@ -551,6 +590,7 @@ type GossipOut interface {
 	PublishL2Payload(ctx context.Context, msg *eth.ExecutionPayloadEnvelope, signer Signer) error
 	PublishNewFrag(ctx context.Context, from peer.ID, signedFrag *eth.SignedNewFrag) error
 	PublishSealFrag(ctx context.Context, from peer.ID, signedSeal *eth.SignedSeal) error
+	PublishEnv(ctx context.Context, from peer.ID, env *eth.SignedEnv) error
 	Close() error
 }
 
@@ -569,6 +609,15 @@ type sealFragTopic struct {
 	// sealFragV0 events handler, to be cancelled before closing the sealFragV0 topic.
 	events *pubsub.TopicEventHandler
 	// sealFragV0 subscriptions, to be cancelled before closing sealFragV0 topic.
+	sub *pubsub.Subscription
+}
+
+type envTopic struct {
+	// envV0 topic, main handle on envV0 gossip
+	topic *pubsub.Topic
+	// envV0 events handler, to be cancelled before closing the envV0 topic.
+	events *pubsub.TopicEventHandler
+	// envV0 subscriptions, to be cancelled before closing envV0 topic.
 	sub *pubsub.Subscription
 }
 
@@ -599,6 +648,12 @@ func (nst *sealFragTopic) Close() error {
 	return nst.topic.Close()
 }
 
+func (et *envTopic) Close() error {
+	et.events.Cancel()
+	et.sub.Cancel()
+	return et.topic.Close()
+}
+
 type publisher struct {
 	log log.Logger
 	cfg *rollup.Config
@@ -614,6 +669,7 @@ type publisher struct {
 
 	newFragV0  *newFragTopic
 	sealFragV0 *sealFragTopic
+	envV0      *envTopic
 
 	runCfg GossipRuntimeConfig
 }
@@ -657,6 +713,10 @@ func (p *publisher) NewFragTopicV0Peers() []peer.ID {
 
 func (p *publisher) SealFragTopicV0Peers() []peer.ID {
 	return p.sealFragV0.topic.ListPeers()
+}
+
+func (p *publisher) EnvTopicV0Peers() []peer.ID {
+	return p.envV0.topic.ListPeers()
 }
 
 func (p *publisher) PublishL2Payload(ctx context.Context, envelope *eth.ExecutionPayloadEnvelope, signer Signer) error {
@@ -714,6 +774,13 @@ func (p *publisher) PublishSealFrag(ctx context.Context, from peer.ID, signedSea
 	return p.sealFragV0.topic.Publish(ctx, buf.Bytes())
 }
 
+func (p *publisher) PublishEnv(ctx context.Context, from peer.ID, signedEnv *eth.SignedEnv) error {
+	buf := new(bytes.Buffer)
+	signedEnv.MarshalSSZ(buf)
+
+	return p.envV0.topic.Publish(ctx, buf.Bytes())
+}
+
 func (p *publisher) Close() error {
 	p.p2pCancel()
 	e1 := p.blocksV1.Close()
@@ -764,6 +831,14 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 		return nil, fmt.Errorf("failed to setup sealFragV0 p2p: %w", err)
 	}
 
+	envV0Logger := log.New("topic", "envV0")
+	envV0Validator := guardGossipValidator(log, logValidationResult(self, "validated envV0", envV0Logger, BuildEnvValidator(envV0Logger, runCfg, EnvV0)))
+	envV0, err := newEnvTopic(p2pCtx, envV0(cfg), ps, envV0Logger, gossipIn, envV0Validator)
+	if err != nil {
+		p2pCancel()
+		return nil, fmt.Errorf("failed to setup envV0 p2p: %w", err)
+	}
+
 	return &publisher{
 		log:        log,
 		cfg:        cfg,
@@ -773,6 +848,7 @@ func JoinGossip(self peer.ID, ps *pubsub.PubSub, log log.Logger, cfg *rollup.Con
 		blocksV3:   blocksV3,
 		newFragV0:  newFragV0,
 		sealFragV0: sealFragV0,
+		envV0:      envV0,
 		runCfg:     runCfg,
 	}, nil
 }
@@ -853,6 +929,44 @@ func sealFragFragTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, l
 	}, nil
 }
 
+func newEnvTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log log.Logger, gossipIn GossipIn, validator pubsub.ValidatorEx) (*envTopic, error) {
+	err := ps.RegisterTopicValidator(topicId,
+		validator,
+		pubsub.WithValidatorTimeout(3*time.Second),
+		pubsub.WithValidatorConcurrency(4))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to register gossip topic: %w", err)
+	}
+
+	envsTopic, err := ps.Join(topicId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to join gossip topic: %w", err)
+	}
+
+	envTopicEvents, err := envsTopic.EventHandler()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new env gossip topic handler: %w", err)
+	}
+
+	go LogTopicEvents(ctx, log, envTopicEvents)
+
+	subscription, err := envsTopic.Subscribe()
+	if err != nil {
+		err = errors.Join(err, envsTopic.Close())
+		return nil, fmt.Errorf("failed to subscribe to new env gossip topic: %w", err)
+	}
+
+	subscriber := MakeSubscriber(log, EnvHandler(gossipIn.OnEnv))
+	go subscriber(ctx, subscription)
+
+	return &envTopic{
+		topic:  envsTopic,
+		events: envTopicEvents,
+		sub:    subscription,
+	}, nil
+}
+
 func newBlockTopic(ctx context.Context, topicId string, ps *pubsub.PubSub, log log.Logger, gossipIn GossipIn, validator pubsub.ValidatorEx) (*blockTopic, error) {
 	err := ps.RegisterTopicValidator(topicId,
 		validator,
@@ -911,6 +1025,16 @@ func SealFragHandler(onSealFrag func(ctx context.Context, from peer.ID, msg *eth
 			return fmt.Errorf("expected topic validator to parse and validate data into seal, but got %T", msg)
 		}
 		return onSealFrag(ctx, from, seal)
+	}
+}
+
+func EnvHandler(onEnv func(ctx context.Context, from peer.ID, msg *eth.SignedEnv) error) MessageHandler {
+	return func(ctx context.Context, from peer.ID, msg any) error {
+		env, ok := msg.(*eth.SignedEnv)
+		if !ok {
+			return fmt.Errorf("expected topic validator to parse and validate data into env, but got %T", msg)
+		}
+		return onEnv(ctx, from, env)
 	}
 }
 
