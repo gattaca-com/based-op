@@ -5,8 +5,8 @@ use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_cli::chainspec::OpChainSpecParser;
-use tracing::level_filters::LevelFilter;
 use strum_macros::EnumString;
+use tracing::level_filters::LevelFilter;
 
 #[derive(Clone, Debug, EnumString)]
 pub enum MockMode {

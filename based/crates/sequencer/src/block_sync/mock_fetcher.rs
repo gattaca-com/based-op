@@ -94,7 +94,7 @@ impl Deref for TestAccount {
 #[derive(Debug, Clone)]
 pub struct SpamData {
     accounts: Vec<TestAccount>,
-    funded: bool
+    funded: bool,
 }
 impl Default for SpamData {
     fn default() -> Self {
@@ -438,7 +438,6 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
             self.provider.get_block_number().await.expect("failed to fetch last block, is the RPC url correct?")
         });
         self.next_block = (self.next_block + 1).min(self.sync_until);
-
 
         let Mode::Benchmark(BenchmarkData { txs, fcu, attributes, .. }) = &mut self.mode else {
             return;
