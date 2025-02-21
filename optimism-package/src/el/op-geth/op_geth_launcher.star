@@ -172,7 +172,9 @@ def get_config(
 
     subcommand_strs = []
 
-    extip = participant.el_extra_env_vars.get("ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER)
+    # configure environment variables
+    env_vars = dict(participant.el_extra_env_vars)
+    extip = env_vars.get("ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER)
 
     cmd = [
         "geth",
@@ -230,10 +232,6 @@ def get_config(
         )
 
         subcommand_strs.append(init_datadir_cmd_str)
-
-    # configure environment variables
-
-    env_vars = dict(participant.el_extra_env_vars)
 
     # apply customizations
 

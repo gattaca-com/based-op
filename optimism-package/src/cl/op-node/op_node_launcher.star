@@ -166,7 +166,9 @@ def get_beacon_config(
         el_context.engine_rpc_port_num,
     )
 
-    advertise_ip = participant.cl_extra_env_vars.get("ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER)
+    # configure environment variables
+    env_vars = dict(participant.cl_extra_env_vars)
+    advertise_ip = env_vars.get("ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER)
 
     cmd = [
         "op-node",
@@ -210,9 +212,7 @@ def get_beacon_config(
             ],
         )
 
-    # configure environment variables
-
-    env_vars = dict(participant.cl_extra_env_vars)
+    
 
     # apply customizations
 
