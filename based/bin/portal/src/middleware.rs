@@ -1,6 +1,6 @@
 use futures::{future::BoxFuture, FutureExt};
 use jsonrpsee::{
-    core::{client::ClientT, traits::ToRpcParams, TEN_MB_SIZE_BYTES},
+    core::{client::ClientT, traits::ToRpcParams},
     server::middleware::rpc::RpcServiceT,
     types::{
         error::{INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
@@ -65,7 +65,7 @@ where
                 match r {
                     Ok(r) => {
                         let payload = ResponsePayload::success(r);
-                        MethodResponse::response(req.id, payload.into(), TEN_MB_SIZE_BYTES as usize)
+                        MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
                     }
                     Err(err) => {
                         error!(?err, "error forwarding request to fallback");

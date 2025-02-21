@@ -363,8 +363,8 @@ where
                     ctx.commit_block(&block);
                     ctx.shared_state.reset();
                     info!("committing to db");
+                    return WaitingForForkChoiceWithAttributes;
                 }
-
                 WaitingForNewPayload
             }
             s => s,

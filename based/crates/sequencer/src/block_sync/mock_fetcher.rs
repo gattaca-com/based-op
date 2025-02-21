@@ -132,7 +132,7 @@ pub struct MockFetcher<Db> {
     next_block: u64,
     sync_until: u64,
     provider: AlloyProvider,
-    _db: DBFrag<Db>,
+    db: DBFrag<Db>,
     main: TestAccount,
 }
 impl<Db: DatabaseRead> MockFetcher<Db> {
@@ -151,7 +151,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
 
         let main = if matches!(mode, Mode::Spammer(_)) { TestAccount::main(&db) } else { TestAccount::random() };
 
-        Self { mode, executor, next_block, sync_until, provider, _db: db, main }
+        Self { mode, executor, next_block, sync_until, provider, db, main }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
@@ -178,7 +178,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             chain_id: 2151908,
             nonce: from.nonce,
             gas_limit: 21000,
-            max_fee_per_gas: 10_000_000_000,
+            max_fee_per_gas: 100_000_000_000,
             max_priority_fee_per_gas: 1,
             to: TxKind::Call(to),
             value,
@@ -204,7 +204,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
         // let mut pending = VecDeque::new();
 
         for t in accounts {
-            Self::send_tx(connections, &mut self.main, t.address, Some(U256::from(1_000_000_000_000_000_000usize)));
+            Self::send_tx(connections, &mut self.main, t.address, Some(U256::from(10_000_000_000_000_000_000usize)));
             Duration::from_micros(400).sleep();
         }
 
@@ -381,16 +381,19 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             return;
         }
         if let Mode::Spammer(SpamData { accounts, .. }) = &mut self.mode {
+            let curt = Instant::now();
+            let fragdur = Duration::from_millis(200);
             // let mut pending = VecDeque::new();
-            while n < 2500 {
+            while n < 8000 && curt.elapsed() < fragdur  {
                 let to = accounts.choose(&mut rng).unwrap().address;
                 let a1 = accounts.choose_mut(&mut rng).unwrap();
+                a1.nonce  = self.db.get_nonce(a1.address).unwrap();
                 Self::send_tx(connections, a1, to, None);
                 n += 1;
                 // pending.push_back((Instant::now(), );
             }
+            fragdur.saturating_sub(curt.elapsed()).sleep();
         }
-        Duration::from_millis(200).sleep();
         // if self.next_block >= self.sync_until {
         //     let from_account = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
         //     let signing_wallet = ECDSASigner::try_from_secret(

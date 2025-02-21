@@ -677,7 +677,7 @@ func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNe
 	// }
 
 	n.tracer.OnNewFrag(ctx, from, frag)
-	n.log.Info("Received new fragment", "frag", frag)
+	n.log.Info("Received new fragment", "frag", frag.Frag.BlockNumber, frag.Frag.Seq)
 	n.preconfChannels.SendFrag(frag)
 	return nil
 }

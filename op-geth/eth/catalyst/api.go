@@ -1339,7 +1339,7 @@ func getBody(block *types.Block) *engine.ExecutionPayloadBody {
 }
 
 func (api *ConsensusAPI) NewFragV0(frag engine.SignedNewFrag) (string, error) {
-	log.Info("new frag received", "forBlock", frag.Frag.BlockNumber, "current", api.eth.BlockChain().CurrentBlock().Number, "frag", frag.Frag)
+	log.Info("new frag received", "forBlock", frag.Frag.BlockNumber, "current", api.eth.BlockChain().CurrentBlock().Number)
 
 	api.unsealedBlockLock.Lock()
 	res, err := api.newFragV0(frag)
