@@ -166,6 +166,10 @@ def get_beacon_config(
         el_context.engine_rpc_port_num,
     )
 
+    # configure environment variables
+    env_vars = dict(participant.cl_extra_env_vars)
+    advertise_ip = env_vars.get("ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER)
+
     cmd = [
         "op-node",
         "--l2={0}".format(EXECUTION_ENGINE_ENDPOINT),
@@ -182,8 +186,7 @@ def get_beacon_config(
         "--l1={0}".format(l1_config_env_vars["L1_RPC_URL"]),
         "--l1.rpckind={0}".format(l1_config_env_vars["L1_RPC_KIND"]),
         "--l1.beacon={0}".format(l1_config_env_vars["CL_RPC_URL"]),
-        "--p2p.advertise.ip="
-        + ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER,
+        "--p2p.advertise.ip=" + advertise_ip,
         "--p2p.advertise.tcp={0}".format(BEACON_DISCOVERY_PORT_NUM),
         "--p2p.advertise.udp={0}".format(BEACON_DISCOVERY_PORT_NUM),
         "--p2p.listen.ip=0.0.0.0",
@@ -209,9 +212,7 @@ def get_beacon_config(
             ],
         )
 
-    # configure environment variables
-
-    env_vars = dict(participant.cl_extra_env_vars)
+    
 
     # apply customizations
 
@@ -275,7 +276,6 @@ def get_beacon_config(
         "ports": ports,
         "cmd": cmd,
         "files": files,
-        "private_ip_address_placeholder": ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER,
         "env_vars": env_vars,
         "labels": ethereum_package_shared_utils.label_maker(
             client=constants.CL_TYPE.op_node,
@@ -294,6 +294,9 @@ def get_beacon_config(
         "tolerations": tolerations,
         "node_selectors": node_selectors,
     }
+
+    if advertise_ip == ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER:
+        config_args["private_ip_address_placeholder"] = ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER
 
     # configure resources
 

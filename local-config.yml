@@ -1,0 +1,37 @@
+optimism_package:
+  chains:
+    - participants:
+        # Vanilla Stack (OP-Node, OP-EL) for the Sequencer
+        - el_type: op-reth
+          cl_type: op-node
+          cl_image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.10.3
+        # # Follower Node Stack (BOP-Node, BOP-EL)
+        - el_type: op-geth
+          el_image: based_op_geth
+          el_extra_env_vars: {
+            ADVERTISE_EXTERNAL: ""
+          }
+          cl_type: op-node
+          cl_image: based_op_node
+          cl_extra_params:
+            - --rpc.enable-based
+          cl_extra_env_vars: {
+            ADVERTISE_EXTERNAL: ""
+          }
+      batcher_params:
+        image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.0
+      mev_type: based-portal
+      mev_params:
+        based_portal_image: based_portal_local
+        builder_host: "host.docker.internal"
+        builder_port: "9997"
+        portal_extra_params:
+          - --gateway.update_url=http://172.17.0.1:9099/gateways.example.json
+      additional_services:
+        - blockscout
+
+ethereum_package:
+  participants:
+    - el_type: geth
+      # This is fixed because v1.15.0 (latest) introduces breaking changes
+      el_image: ethereum/client-go:v1.14.13

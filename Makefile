@@ -76,6 +76,9 @@ run-maxgas: ## 🚀 Run
 run-multiple: ## 🚀 Run
 	kurtosis run optimism-package --args-file config_multiple_gateways.yml --enclave based-op && $(MAKE) dump
 
+run-local: ## 🚀 Run
+	kurtosis run optimism-package --args-file local-config.yml --enclave based-op && $(MAKE) dump
+
 restart-no-gateway: clean build-no-gateway run ## rip rebuild run
 
 run-follower: build-op-node build-op-geth ## 🚀 Run a single follower node with RPC enabled.
