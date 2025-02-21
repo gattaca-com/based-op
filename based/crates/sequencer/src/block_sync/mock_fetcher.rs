@@ -384,10 +384,10 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             let curt = Instant::now();
             let fragdur = Duration::from_millis(200);
             // let mut pending = VecDeque::new();
-            while n < 8000 && curt.elapsed() < fragdur  {
+            while n < 8000 && curt.elapsed() < fragdur {
                 let to = accounts.choose(&mut rng).unwrap().address;
                 let a1 = accounts.choose_mut(&mut rng).unwrap();
-                a1.nonce  = self.db.get_nonce(a1.address).unwrap();
+                a1.nonce = self.db.get_nonce(a1.address).unwrap();
                 Self::send_tx(connections, a1, to, None);
                 n += 1;
                 // pending.push_back((Instant::now(), );
