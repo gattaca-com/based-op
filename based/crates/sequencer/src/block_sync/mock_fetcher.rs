@@ -382,7 +382,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
         }
         if let Mode::Spammer(SpamData { accounts, .. }) = &mut self.mode {
             // let mut pending = VecDeque::new();
-            while n < 3000 {
+            while n < 2500 {
                 let to = accounts.choose(&mut rng).unwrap().address;
                 let a1 = accounts.choose_mut(&mut rng).unwrap();
                 Self::send_tx(connections, a1, to, None);
