@@ -37,7 +37,18 @@ const sidebars: SidebarsConfig = {
         'architecture/timekeeper',
       ],
     },
-    'get-started',
+    {
+      type: 'category',
+      label: 'Getting Started',
+      link: {
+        type: 'generated-index',
+      },
+      collapsed: false,
+      items: [
+        'getting_started/get-started',
+        'getting_started/connecting-a-wallet',
+      ],
+    },
   ],
 };
 
