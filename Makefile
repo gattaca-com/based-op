@@ -78,8 +78,9 @@ run-multiple: ## 🚀 Run
 
 restart-no-gateway: clean build-no-gateway run ## rip rebuild run
 
-run-follower: ## 🚀 Run a single follower node with RPC enabled.
-	kurtosis run optimism-package --args-file config-geth-cluster.yml --enclave based-op
+run-follower: build-op-node build-op-geth ## 🚀 Run a single follower node with RPC enabled.
+	cd follower-node && \
+		docker compose up -d
 
 logs: ## 📜 Show logs
 	kurtosis service logs -f based-op $(SERVICE)
