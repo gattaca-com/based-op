@@ -115,6 +115,7 @@ op-geth-logs:
 clean: ## 🧹 Clean
 	rm -rf ./genesis ./data
 	docker compose -f follower-node/compose.yml down
+	docker volume rm follower-node_geth_data follower-node_node_data follower-node_jwt
 	kurtosis enclave rm based-op --force
 
 restart: clean run ## 🔄 Restart
