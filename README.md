@@ -126,6 +126,15 @@ ethereum_package:
 
 ```
 
+### Running a follower node for an existing network
+
+Edit the `follower-node/.env` file with your needs. The default values are set to connect to Gattaca's devnet. Put your IP or domain in `SELF_HOSTNAME` to enable P2P communication with other follower nodes.
+Then, run:
+
+```
+make run-follower
+```
+
 ## Wallets
 
 Wallets commonly use a high polling interval for the transaction receipt. To be able to see the preconfirmation speed, we modify Rabby to speed up that interval. You can test it compiling it:
