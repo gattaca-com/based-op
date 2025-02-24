@@ -26,7 +26,7 @@ func NewPreconfChannels() PreconfChannels {
 func (c *PreconfChannels) SendEnv(e *eth.SignedEnv)      { c.EnvCh <- e }
 func (c *PreconfChannels) SendFrag(f *eth.SignedNewFrag) { c.NewFragCh <- f }
 func (c *PreconfChannels) SendSeal(s *eth.SignedSeal)    { c.SealCh <- s }
-func (c *PreconfChannels) SendL2Block(s *eth.L2BlockRef) { c.l2BlockCh <- s }
+func (c *PreconfChannels) SendL2Block(b *eth.L2BlockRef) { c.l2BlockCh <- b }
 
 type FragIndex struct {
 	BlockNumber uint64
