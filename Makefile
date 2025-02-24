@@ -113,7 +113,9 @@ op-geth-logs:
 	$(MAKE) logs SERVICE=op-el-2-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
-	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data
+	rm -rf ./genesis ./data
+	docker compose -f follower-node/compose.yml down
+	kurtosis enclave rm based-op --force
 
 restart: clean run ## 🔄 Restart
 
