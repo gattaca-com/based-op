@@ -1,4 +1,4 @@
-# Get Started
+# Develop
 
 ## Prerequisites
 
@@ -35,7 +35,3 @@ make portal-logs             // Based portal logs
 make op-node-logs            // OP node logs
 make op-reth-logs            // OP reth logs
 ```
-
-## Join our devnet
-
-If you want to run a follower node for an existing network, just edit the values in `follower-node/.env` with you custom configuration and run `make run-follower`. Default values are set for connecting to Gattaca's devnet.
