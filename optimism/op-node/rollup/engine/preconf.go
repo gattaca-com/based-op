@@ -18,13 +18,6 @@ func (o *Option[T]) Set(value T) {
 	o.set = true
 }
 
-// Performs side effects using f if the value is set in the option.
-func (o *Option[T]) DoIfSome(f func(T)) {
-	if o.set {
-		f(o.value)
-	}
-}
-
 // Checks if the value is set.
 func (o *Option[T]) IsSet() bool {
 	return o.set
@@ -93,6 +86,7 @@ type PreconfState struct {
 	lastL2BlockSent Option[uint64]
 	// Contains the latest block for which all frags where sent.
 	lastBlockWithAllFrags Option[uint64]
+	lastBlockPruned       uint64
 
 	pendingEnvs  map[uint64]eth.SignedEnv
 	pendingFrags map[FragIndex]eth.SignedNewFrag
@@ -113,8 +107,9 @@ func NewPreconfState(ctx context.Context, e ExecEngine) PreconfState {
 		lastSealSent:          None[uint64](),
 		lastL2BlockSent:       None[uint64](),
 
-		ctx: ctx,
-		e:   e,
+		lastBlockPruned: 0,
+		ctx:             ctx,
+		e:               e,
 	}
 }
 
@@ -132,9 +127,6 @@ func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 		s.lastEnvSent.Set(env.Number)
 		s.e.Env(s.ctx, sEnv)
 
-		// A new env being sent means the chain is making progress. We should prune old state.
-		s.prune()
-
 		// When an env is sent we should check if we have the first frag of the block and put it.
 		nextIndex := FragIndex{BlockNumber: env.Number, Sequence: 0}
 		nextFrag, ok := s.pendingFrags[nextIndex]
@@ -145,6 +137,7 @@ func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 	} else {
 		s.pendingEnvs[env.Number] = *sEnv
 	}
+	s.prune(env.Number)
 }
 
 // Checks if the frag is the first of the block and the env is present,
@@ -176,6 +169,8 @@ func (s *PreconfState) putFrag(sFrag *eth.SignedNewFrag) {
 	} else {
 		s.pendingFrags[idx] = *sFrag
 	}
+
+	s.prune(frag.BlockNumber)
 }
 
 // Checks if the last frag of the block is sent.
@@ -193,6 +188,8 @@ func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
 	} else {
 		s.pendingSeals[seal.BlockNumber] = *sSeal
 	}
+
+	s.prune(seal.BlockNumber)
 }
 
 // Checks if there's envs blocked because of gaps and sends them over.
@@ -203,32 +200,40 @@ func (s *PreconfState) putL2Block(block *eth.L2BlockRef) {
 		delete(s.pendingEnvs, block.Number)
 		s.putEnv(&nextEnv)
 	}
+
+	s.prune(block.Number)
 }
 
+// The amount of blocks we don't prune back from the current block.
 const PruneWindow = 10
 
-func (s *PreconfState) prune() {
-	s.lastEnvSent.DoIfSome(func(lastEnvSent uint64) {
-		latestBlock := lastEnvSent - PruneWindow
+func (s *PreconfState) prune(currentBlock uint64) {
+	// We only prune if there's at least a full window of events to prune.
+	if currentBlock-s.lastBlockPruned < 2*PruneWindow {
+		return
+	}
 
-		for key := range s.pendingEnvs {
-			if key < latestBlock {
-				delete(s.pendingEnvs, key)
-			}
-		}
+	latestBlock := currentBlock - PruneWindow
 
-		for key := range s.pendingSeals {
-			if key < latestBlock {
-				delete(s.pendingSeals, key)
-			}
+	for key := range s.pendingEnvs {
+		if key < latestBlock {
+			delete(s.pendingEnvs, key)
 		}
+	}
 
-		for key := range s.pendingFrags {
-			if key.BlockNumber < latestBlock {
-				delete(s.pendingFrags, key)
-			}
+	for key := range s.pendingSeals {
+		if key < latestBlock {
+			delete(s.pendingSeals, key)
 		}
-	})
+	}
+
+	for key := range s.pendingFrags {
+		if key.BlockNumber < latestBlock {
+			delete(s.pendingFrags, key)
+		}
+	}
+
+	s.lastBlockPruned = latestBlock
 }
 
 // Listens for env, frag and seal events and updates the local state.
