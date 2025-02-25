@@ -6,6 +6,33 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
+// Generic Option type
+type Option[T comparable] struct {
+	value T
+	set   bool
+}
+
+// Sets a value to the option and marks it as set.
+func (o *Option[T]) Set(value T) {
+	o.value = value
+	o.set = true
+}
+
+// Checks if the value is set.
+func (o *Option[T]) IsSet() bool {
+	return o.set
+}
+
+// Checks if the value is set and equal to the one passed.
+func (o Option[T]) IsEqual(v T) bool {
+	return o.IsSet() && o.value == v
+}
+
+// Returns an optional with set = false and the default value.
+func None[T comparable]() Option[T] {
+	return Option[T]{set: false}
+}
+
 // Entrypoint to the PreconfHandler.
 type PreconfChannels struct {
 	EnvCh     chan *eth.SignedEnv
@@ -49,32 +76,38 @@ func (fi FragIndex) next() FragIndex {
 // events to the engine api. The events that are not ready yet will be held
 // until they are.
 type PreconfState struct {
-	JustStarted  bool
+	// Block number of the last Env sent to the engine api.
+	lastEnvSent Option[uint64]
+	// Block number + sequence number of the last frag sent to the engine api.
+	lastFragSent Option[FragIndex]
+	// Block number of the last seal sent to the engine api.
+	lastSealSent Option[uint64]
+	// Block number of the last safe L2 block known to this state.
+	lastL2BlockSent Option[uint64]
+	// Contains the latest block for which all frags where sent.
+	lastBlockWithAllFrags Option[uint64]
+
 	pendingEnvs  map[uint64]eth.SignedEnv
-	sentEnvs     map[uint64]bool
-	lastFragSent map[uint64]bool
 	pendingFrags map[FragIndex]eth.SignedNewFrag
-	sentFrags    map[FragIndex]bool
 	pendingSeals map[uint64]eth.SignedSeal
-	sentSeals    map[uint64]bool
-	sentL2Blocks map[uint64]bool
 	ctx          context.Context
 	e            ExecEngine
 }
 
 func NewPreconfState(ctx context.Context, e ExecEngine) PreconfState {
 	return PreconfState{
-		JustStarted:  true,
 		pendingEnvs:  make(map[uint64]eth.SignedEnv),
-		sentEnvs:     make(map[uint64]bool),
-		lastFragSent: make(map[uint64]bool),
 		pendingFrags: make(map[FragIndex]eth.SignedNewFrag),
-		sentFrags:    make(map[FragIndex]bool),
 		pendingSeals: make(map[uint64]eth.SignedSeal),
-		sentSeals:    make(map[uint64]bool),
-		sentL2Blocks: make(map[uint64]bool),
-		ctx:          ctx,
-		e:            e,
+
+		lastBlockWithAllFrags: None[uint64](),
+		lastEnvSent:           None[uint64](),
+		lastFragSent:          None[FragIndex](),
+		lastSealSent:          None[uint64](),
+		lastL2BlockSent:       None[uint64](),
+
+		ctx: ctx,
+		e:   e,
 	}
 }
 
@@ -88,9 +121,8 @@ func StartPreconf(ctx context.Context, e ExecEngine) PreconfChannels {
 // Checks if the state is new or if the previous block is sealed.
 func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 	env := sEnv.Env
-	if s.JustStarted || s.sentSeals[env.Number-1] || s.sentL2Blocks[env.Number] {
-		s.sentEnvs[env.Number] = true
-		s.JustStarted = false
+	if !s.lastSealSent.IsSet() || s.lastSealSent.IsEqual(env.Number-1) || s.lastL2BlockSent.IsEqual(env.Number) {
+		s.lastEnvSent.Set(env.Number)
 		s.e.Env(s.ctx, sEnv)
 
 		// When an env is sent we should check if we have the first frag of the block and put it.
@@ -110,15 +142,15 @@ func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 func (s *PreconfState) putFrag(sFrag *eth.SignedNewFrag) {
 	frag := sFrag.Frag
 	idx := index(frag)
-	isFirst := frag.Seq == 0 && s.sentEnvs[frag.BlockNumber]
-	previousSent := s.sentFrags[idx.prev()]
+	isFirst := frag.Seq == 0 && s.lastEnvSent.IsEqual(frag.BlockNumber)
+	previousSent := s.lastFragSent.IsEqual(idx.prev())
 	if isFirst || previousSent {
-		s.sentFrags[idx] = true
+		s.lastFragSent.Set(idx)
 		s.e.NewFrag(s.ctx, sFrag)
 
 		// When a frag is sent we should check if the next is present or if the seal is present
 		if frag.IsLast {
-			s.lastFragSent[idx.BlockNumber] = true
+			s.lastBlockWithAllFrags.Set(idx.BlockNumber)
 			nextSeal, ok := s.pendingSeals[idx.BlockNumber]
 			if ok {
 				delete(s.pendingSeals, idx.BlockNumber)
@@ -139,8 +171,8 @@ func (s *PreconfState) putFrag(sFrag *eth.SignedNewFrag) {
 // Checks if the last frag of the block is sent.
 func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
 	seal := sSeal.Seal
-	if s.lastFragSent[seal.BlockNumber] {
-		s.sentSeals[seal.BlockNumber] = true
+	if s.lastBlockWithAllFrags.IsEqual(seal.BlockNumber) {
+		s.lastSealSent.Set(seal.BlockNumber)
 		s.e.SealFrag(s.ctx, sSeal)
 		// When we put a seal we should check if the env of the next is present.
 		nextEnv, ok := s.pendingEnvs[seal.BlockNumber+1]
@@ -155,7 +187,7 @@ func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
 
 // Checks if there's envs blocked because of gaps and sends them over.
 func (s *PreconfState) putL2Block(block *eth.L2BlockRef) {
-	s.sentL2Blocks[block.Number] = true
+	s.lastL2BlockSent.Set(block.Number)
 	nextEnv, ok := s.pendingEnvs[block.Number]
 	if ok {
 		delete(s.pendingEnvs, block.Number)
