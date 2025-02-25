@@ -18,6 +18,13 @@ func (o *Option[T]) Set(value T) {
 	o.set = true
 }
 
+// Performs side effects using f if the value is set in the option.
+func (o *Option[T]) DoIfSome(f func(T)) {
+	if o.set {
+		f(o.value)
+	}
+}
+
 // Checks if the value is set.
 func (o *Option[T]) IsSet() bool {
 	return o.set
@@ -125,6 +132,9 @@ func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 		s.lastEnvSent.Set(env.Number)
 		s.e.Env(s.ctx, sEnv)
 
+		// A new env being sent means the chain is making progress. We should prune old state.
+		s.prune()
+
 		// When an env is sent we should check if we have the first frag of the block and put it.
 		nextIndex := FragIndex{BlockNumber: env.Number, Sequence: 0}
 		nextFrag, ok := s.pendingFrags[nextIndex]
@@ -193,6 +203,32 @@ func (s *PreconfState) putL2Block(block *eth.L2BlockRef) {
 		delete(s.pendingEnvs, block.Number)
 		s.putEnv(&nextEnv)
 	}
+}
+
+const PruneWindow = 10
+
+func (s *PreconfState) prune() {
+	s.lastEnvSent.DoIfSome(func(lastEnvSent uint64) {
+		latestBlock := lastEnvSent - PruneWindow
+
+		for key := range s.pendingEnvs {
+			if key < latestBlock {
+				delete(s.pendingEnvs, key)
+			}
+		}
+
+		for key := range s.pendingSeals {
+			if key < latestBlock {
+				delete(s.pendingSeals, key)
+			}
+		}
+
+		for key := range s.pendingFrags {
+			if key.BlockNumber < latestBlock {
+				delete(s.pendingFrags, key)
+			}
+		}
+	})
 }
 
 // Listens for env, frag and seal events and updates the local state.
