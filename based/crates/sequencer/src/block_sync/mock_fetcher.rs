@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use alloy_consensus::{BlockHeader, TxEip1559};
 use alloy_eips::eip2718::Encodable2718;
@@ -10,6 +10,7 @@ use bop_common::{
         messages::{self, BlockFetch, BlockSyncMessage, EngineApi},
         SpineConnections,
     },
+    config::MockMode,
     db::{DBFrag, DatabaseRead},
     signing::ECDSASigner,
     time::{utils::vsync_busy, Duration, Instant},
@@ -18,8 +19,9 @@ use bop_common::{
 use futures::future::join_all;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
+use rand::seq::{IndexedMutRandom, IndexedRandom};
 use reqwest::Url;
-use revm_primitives::{address, b256, TxKind, U256};
+use revm_primitives::{b256, Address, TxKind, B256, U256};
 use tokio::{runtime::Runtime, sync::oneshot};
 use tracing::{info, warn};
 
@@ -55,6 +57,51 @@ impl Default for BenchmarkData {
     }
 }
 
+#[derive(Clone, Debug)]
+struct TestAccount {
+    nonce: u64,
+    balance: U256,
+    signer: ECDSASigner,
+}
+impl TestAccount {
+    pub fn random() -> Self {
+        let signer = ECDSASigner::try_from_secret(B256::random().as_slice()).unwrap();
+        Self { nonce: 0, balance: U256::ZERO, signer }
+    }
+
+    pub fn main<Db: DatabaseRead>(db: &DBFrag<Db>) -> Self {
+        let signer = ECDSASigner::try_from_secret(
+            b256!("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80").as_ref(),
+        )
+        .unwrap();
+        let nonce = db.get_nonce(signer.address).expect("couldn't get nonce");
+        let balance = db.get_balance(signer.address).expect("couldn't get balance");
+        Self { nonce, balance, signer }
+    }
+
+    fn generate_random(n_accounts: usize) -> Vec<Self> {
+        (0..n_accounts).map(|_| Self::random()).collect()
+    }
+}
+impl Deref for TestAccount {
+    type Target = ECDSASigner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.signer
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SpamData {
+    accounts: Vec<TestAccount>,
+    funded: bool,
+}
+impl Default for SpamData {
+    fn default() -> Self {
+        Self { accounts: TestAccount::generate_random(10000), funded: false }
+    }
+}
+
 /// Different modes to run the Mocker with
 ///
 /// Verification: Performs sequential block sync, creating `EngineApi` messages, and Txs corresponding to each block.
@@ -75,7 +122,7 @@ pub enum Mode {
     #[default]
     Verification,
     Benchmark(BenchmarkData),
-    Spammer,
+    Spammer(SpamData),
 }
 
 #[derive(Debug)]
@@ -86,20 +133,29 @@ pub struct MockFetcher<Db> {
     sync_until: u64,
     provider: AlloyProvider,
     db: DBFrag<Db>,
+    main: TestAccount,
 }
-impl<Db> MockFetcher<Db> {
-    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64, db: DBFrag<Db>, mode: Mode) -> Self {
+impl<Db: DatabaseRead> MockFetcher<Db> {
+    pub fn new(rpc_url: Url, next_block: u64, sync_until: u64, db: DBFrag<Db>, mode: MockMode) -> Self {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
             .build()
             .expect("couldn't build local tokio runtime");
         let provider = ProviderBuilder::new().network().on_http(rpc_url);
-        Self { mode, executor, next_block, sync_until, provider, db }
+        let mode = match mode {
+            MockMode::Benchmark => Mode::Benchmark(BenchmarkData::default()),
+            MockMode::Spammer => Mode::Spammer(SpamData::default()),
+            MockMode::Verification => Mode::Verification,
+        };
+
+        let main = if matches!(mode, Mode::Spammer(_)) { TestAccount::main(&db) } else { TestAccount::random() };
+
+        Self { mode, executor, next_block, sync_until, provider, db, main }
     }
 
     pub fn handle_fetch(&mut self, msg: BlockFetch) {
-        if !matches!(self.mode, Mode::Spammer) {
+        if !matches!(self.mode, Mode::Spammer(_)) {
             return;
         }
         match msg {
@@ -109,6 +165,62 @@ impl<Db> MockFetcher<Db> {
                 self.sync_until = finish.max(self.sync_until);
             }
         }
+    }
+
+    fn send_tx(
+        connections: &mut SpineConnections<Db>,
+        from: &mut TestAccount,
+        to: Address,
+        value: Option<U256>,
+    ) -> B256 {
+        let value = value.unwrap_or(U256::from_limbs([1, 0, 0, 0]));
+        let tx = TxEip1559 {
+            chain_id: 2151908,
+            nonce: from.nonce,
+            gas_limit: 21000,
+            max_fee_per_gas: 100_000_000_000,
+            max_priority_fee_per_gas: 1,
+            to: TxKind::Call(to),
+            value,
+            ..Default::default()
+        };
+
+        from.balance -= value;
+        from.nonce += 1;
+
+        let signed_tx = from.sign_tx(tx).unwrap();
+        let tx = OpTxEnvelope::Eip1559(signed_tx);
+        let hash = tx.tx_hash();
+        let envelope = tx.encoded_2718().into();
+        let tx = Arc::new(Transaction::new(tx, from.address, envelope));
+        connections.send(tx);
+        hash
+    }
+
+    fn fund_accounts(&mut self, connections: &mut SpineConnections<Db>) {
+        let Mode::Spammer(SpamData { accounts, funded }) = &mut self.mode else {
+            return;
+        };
+        // let mut pending = VecDeque::new();
+
+        for t in accounts {
+            Self::send_tx(connections, &mut self.main, t.address, Some(U256::from(10_000_000_000_000_000_000usize)));
+            Duration::from_micros(400).sleep();
+        }
+
+        *funded = true;
+        // let mut tot = Duration::ZERO;
+        // let mut n = 0usize;
+        // while let Some((id, tstamp)) = pending.pop_front() {
+        //     loop {
+        //         if let Some(_) = client.get_receipt(id) {
+        //             tot += tstamp.elapsed();
+        //             n += 1;
+        //             break;
+        //         }
+        //     }
+        // }
+        // println!("received {n} receipt after on avg {}", tot / n);
     }
 
     fn run_verification_body(&mut self, connections: &mut SpineConnections<Db>) {
@@ -181,7 +293,7 @@ impl<Db> MockFetcher<Db> {
                     debug_assert!(false, "state_root doesn't match");
                 };
 
-                println!("ACTUAL BLOCK:");
+                // println!("ACTUAL BLOCK:");
             }
 
             assert_eq!(
@@ -262,51 +374,60 @@ impl<Db> MockFetcher<Db> {
 }
 impl<Db: DatabaseRead> MockFetcher<Db> {
     fn run_spam_body(&mut self, connections: &mut SpineConnections<Db>) {
-        while connections.receive(|msg, _| {
-            self.handle_fetch(msg);
-        }) {}
-        if self.next_block >= self.sync_until {
-            let from_account = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-            let signing_wallet = ECDSASigner::try_from_secret(
-                b256!("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80").as_ref(),
-            )
-            .unwrap();
-            let mut nonce = self.db.get_nonce(from_account).unwrap();
-            let value = U256::from_limbs([1, 0, 0, 0]);
-            let chain_id = 2151908;
-            let to_account = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-            let max_gas_units = 21000;
-            let max_fee_per_gas = 1_258_615_255_000;
-            let max_priority_fee_per_gas = 1_000;
-            for _ in 0..1000 {
-                let tx = TxEip1559 {
-                    chain_id,
-                    nonce,
-                    gas_limit: max_gas_units,
-                    max_fee_per_gas,
-                    max_priority_fee_per_gas,
-                    to: TxKind::Call(to_account),
-                    value,
-                    ..Default::default()
-                };
-                let signed_tx = signing_wallet.sign_tx(tx).unwrap();
-                let tx = OpTxEnvelope::Eip1559(signed_tx);
-                let envelope = tx.encoded_2718().into();
-                let tx = Arc::new(Transaction::new(tx, from_account, envelope));
-
-                connections.send(tx);
-                nonce += 1;
-            }
+        let mut rng = rand::rng();
+        let mut n = 0;
+        if let Mode::Spammer(SpamData { funded: false, .. }) = self.mode {
+            self.fund_accounts(connections);
             return;
         }
-        let stop = (self.next_block + 50).min(self.sync_until);
-        self.executor.block_on(async_fetch_blocks_and_send_sequentially(
-            self.next_block,
-            stop,
-            connections.senders(),
-            &self.provider,
-        ));
-        self.next_block = self.sync_until.min(stop + 1);
+        if let Mode::Spammer(SpamData { accounts, .. }) = &mut self.mode {
+            let curt = Instant::now();
+            let fragdur = Duration::from_millis(200);
+            // let mut pending = VecDeque::new();
+            while n < 8000 && curt.elapsed() < fragdur {
+                let to = accounts.choose(&mut rng).unwrap().address;
+                let a1 = accounts.choose_mut(&mut rng).unwrap();
+                a1.nonce = self.db.get_nonce(a1.address).unwrap();
+                Self::send_tx(connections, a1, to, None);
+                n += 1;
+                // pending.push_back((Instant::now(), );
+            }
+            fragdur.saturating_sub(curt.elapsed()).sleep();
+        }
+        // if self.next_block >= self.sync_until {
+        //     let from_account = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+        //     let signing_wallet = ECDSASigner::try_from_secret(
+        //         b256!("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80").as_ref(),
+        //     )
+        //     .unwrap();
+        //     let mut nonce = self.db.get_nonce(from_account).unwrap();
+        //     let value = U256::from_limbs([1, 0, 0, 0]);
+        //     let chain_id = 2151908;
+        //     let to_account = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+        //     let max_gas_units = 21000;
+        //     let max_fee_per_gas = 1_258_615_255_000;
+        //     let max_priority_fee_per_gas = 1_000;
+        //     for _ in 0..1000 {
+        //         let tx = TxEip1559 {
+        //             chain_id,
+        //             nonce,
+        //             gas_limit: max_gas_units,
+        //             max_fee_per_gas,
+        //             max_priority_fee_per_gas,
+        //             to: TxKind::Call(to_account),
+        //             value,
+        //             ..Default::default()
+        //         };
+        //         let signed_tx = signing_wallet.sign_tx(tx).unwrap();
+        //         let tx = OpTxEnvelope::Eip1559(signed_tx);
+        //         let envelope = tx.encoded_2718().into();
+        //         let tx = Arc::new(Transaction::new(tx, from_account, envelope));
+
+        //         connections.send(tx);
+        //         nonce += 1;
+        //     }
+        //     return;
+        // }
     }
 }
 
@@ -349,14 +470,33 @@ impl<Db: DatabaseRead> Actor<Db> for MockFetcher<Db> {
     }
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
-        match &mut self.mode {
-            Mode::Verification => self.run_verification_body(connections),
-            Mode::Benchmark(_) => {
-                self.run_benchmark_body(connections);
-            }
-            Mode::Spammer => {
-                self.run_spam_body(connections);
+        if matches!(self.mode, Mode::Benchmark(_)) {
+            self.run_benchmark_body(connections);
+            return;
+        }
+        if self.next_block < self.sync_until {
+            let stop = (self.next_block + 50).min(self.sync_until);
+            self.executor.block_on(async_fetch_blocks_and_send_sequentially(
+                self.next_block,
+                stop,
+                connections.senders(),
+                &self.provider,
+            ));
+            self.next_block = stop + 1;
+        } else {
+            match &mut self.mode {
+                Mode::Verification => self.run_verification_body(connections),
+                Mode::Benchmark(_) => {
+                    unreachable!();
+                }
+                Mode::Spammer(_) => {
+                    self.run_spam_body(connections);
+                }
             }
         }
+
+        while connections.receive(|msg, _| {
+            self.handle_fetch(msg);
+        }) {}
     }
 }
