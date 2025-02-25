@@ -263,24 +263,26 @@ func (ev CrossUpdateRequestEvent) String() string {
 type EngDeriver struct {
 	metrics Metrics
 
-	log     log.Logger
-	cfg     *rollup.Config
-	ec      *EngineController
-	ctx     context.Context
-	emitter event.Emitter
+	log             log.Logger
+	cfg             *rollup.Config
+	ec              *EngineController
+	ctx             context.Context
+	emitter         event.Emitter
+	preconfChannels PreconfChannels
 }
 
 var _ event.Deriver = (*EngDeriver)(nil)
 
 func NewEngDeriver(log log.Logger, ctx context.Context, cfg *rollup.Config,
-	metrics Metrics, ec *EngineController,
+	metrics Metrics, ec *EngineController, preconfChannels PreconfChannels,
 ) *EngDeriver {
 	return &EngDeriver{
-		log:     log,
-		cfg:     cfg,
-		ec:      ec,
-		ctx:     ctx,
-		metrics: metrics,
+		log:             log,
+		cfg:             cfg,
+		ec:              ec,
+		ctx:             ctx,
+		metrics:         metrics,
+		preconfChannels: preconfChannels,
 	}
 }
 
@@ -429,6 +431,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 			d.emitter.Emit(PromoteSafeEvent(x))
 		}
 	case PromoteSafeEvent:
+		d.preconfChannels.SendL2Block(&x.Ref)
 		d.log.Debug("Updating safe", "safe", x.Ref, "unsafe", d.ec.UnsafeL2Head())
 		d.ec.SetSafeHead(x.Ref)
 		// Finalizer can pick up this safe cross-block now
