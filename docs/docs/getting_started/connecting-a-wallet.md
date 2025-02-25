@@ -35,7 +35,7 @@ To manually add the network, follow these steps:
     - Network Name: `Based-OP`
     - RPC URL: `https://rpc-based.gattaca.com`
     - Currency Symbol: `ETH`
-    - Block Explorer URL: `https://blockscout.com/poa/xdai`
+    - Block Explorer URL: `https://explorer-based.gattaca.com/`
 
 ![4](../../static/img/wallet_tutorial/step_4.png)
 
