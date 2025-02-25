@@ -223,6 +223,15 @@ impl<S: TrackedSenders, R> Connections<S, R> {
         let _ = self.senders.send_timeout(data, Duration::from_millis(10));
     }
 
+    #[inline]
+    pub fn send_forever<T>(&mut self, data: T)
+    where
+        S: HasSender<T>,
+    {
+        self.senders.set_ingestion_t(IngestionTime::now());
+        self.senders.send_forever(data);
+    }
+
     pub fn set_ingestion_t(&mut self, ingestion_t: IngestionTime) {
         self.senders.set_ingestion_t(ingestion_t);
     }

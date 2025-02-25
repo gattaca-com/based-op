@@ -5,7 +5,15 @@ use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_cli::chainspec::OpChainSpecParser;
+use strum_macros::EnumString;
 use tracing::level_filters::LevelFilter;
+
+#[derive(Clone, Debug, EnumString)]
+pub enum MockMode {
+    Benchmark,
+    Spammer,
+    Verification,
+}
 
 #[derive(Parser, Debug)]
 #[command(version, about, name = "gateway")]
@@ -45,9 +53,9 @@ pub struct GatewayArgs {
     /// Maximum number of cached storages
     #[arg(long = "db.max_cached_storages", default_value_t = 100_000)]
     pub max_cached_storages: u64,
-    /// Test mode
-    #[arg(long = "test")]
-    pub test: bool,
+    /// Mock mode
+    #[arg(long = "mock")]
+    pub mock: Option<MockMode>,
     /// Enable DEBUG logging
     #[arg(long = "debug")]
     pub debug: bool,

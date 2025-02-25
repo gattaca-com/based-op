@@ -64,6 +64,7 @@ shared_memory.workspace = true
 signal-hook.workspace = true
 ssz_types.workspace = true
 strum_macros.workspace = true
+strum.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
