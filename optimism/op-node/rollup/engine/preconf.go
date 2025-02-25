@@ -11,6 +11,7 @@ type PreconfChannels struct {
 	EnvCh     chan *eth.SignedEnv
 	NewFragCh chan *eth.SignedNewFrag
 	SealCh    chan *eth.SignedSeal
+	l2BlockCh chan *eth.L2BlockRef
 }
 
 func NewPreconfChannels() PreconfChannels {
@@ -18,12 +19,14 @@ func NewPreconfChannels() PreconfChannels {
 		EnvCh:     make(chan *eth.SignedEnv),
 		NewFragCh: make(chan *eth.SignedNewFrag),
 		SealCh:    make(chan *eth.SignedSeal),
+		l2BlockCh: make(chan *eth.L2BlockRef),
 	}
 }
 
 func (c *PreconfChannels) SendEnv(e *eth.SignedEnv)      { c.EnvCh <- e }
 func (c *PreconfChannels) SendFrag(f *eth.SignedNewFrag) { c.NewFragCh <- f }
 func (c *PreconfChannels) SendSeal(s *eth.SignedSeal)    { c.SealCh <- s }
+func (c *PreconfChannels) SendL2Block(b *eth.L2BlockRef) { c.l2BlockCh <- b }
 
 type FragIndex struct {
 	BlockNumber uint64
@@ -54,6 +57,7 @@ type PreconfState struct {
 	sentFrags    map[FragIndex]bool
 	pendingSeals map[uint64]eth.SignedSeal
 	sentSeals    map[uint64]bool
+	sentL2Blocks map[uint64]bool
 	ctx          context.Context
 	e            ExecEngine
 }
@@ -68,6 +72,7 @@ func NewPreconfState(ctx context.Context, e ExecEngine) PreconfState {
 		sentFrags:    make(map[FragIndex]bool),
 		pendingSeals: make(map[uint64]eth.SignedSeal),
 		sentSeals:    make(map[uint64]bool),
+		sentL2Blocks: make(map[uint64]bool),
 		ctx:          ctx,
 		e:            e,
 	}
@@ -83,7 +88,7 @@ func StartPreconf(ctx context.Context, e ExecEngine) PreconfChannels {
 // Checks if the state is new or if the previous block is sealed.
 func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 	env := sEnv.Env
-	if s.JustStarted || s.sentSeals[env.Number-1] {
+	if s.JustStarted || s.sentSeals[env.Number-1] || s.sentL2Blocks[env.Number] {
 		s.sentEnvs[env.Number] = true
 		s.JustStarted = false
 		s.e.Env(s.ctx, sEnv)
@@ -148,6 +153,16 @@ func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
 	}
 }
 
+// Checks if there's envs blocked because of gaps and sends them over.
+func (s *PreconfState) putL2Block(block *eth.L2BlockRef) {
+	s.sentL2Blocks[block.Number] = true
+	nextEnv, ok := s.pendingEnvs[block.Number]
+	if ok {
+		delete(s.pendingEnvs, block.Number)
+		s.putEnv(&nextEnv)
+	}
+}
+
 // Listens for env, frag and seal events and updates the local state.
 // If the events are ready, they are sent to the engine api. If not, they are
 // saved in the local state as pending until they are.
@@ -162,6 +177,8 @@ func preconfHandler(ctx context.Context, c PreconfChannels, e ExecEngine) {
 			state.putFrag(frag)
 		case seal := <-c.SealCh:
 			state.putSeal(seal)
+		case l2Block := <-c.l2BlockCh:
+			state.putL2Block(l2Block)
 		}
 	}
 }

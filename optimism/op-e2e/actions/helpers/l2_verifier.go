@@ -157,7 +157,8 @@ func NewL2Verifier(t Testing, log log.Logger, l1 derive.L1Fetcher,
 		Drain:          executor.Drain,
 	}, opts)
 
-	sys.Register("engine", engine.NewEngDeriver(log, ctx, cfg, metrics, ec), opts)
+	channels := engine.StartPreconf(ctx, eng)
+	sys.Register("engine", engine.NewEngDeriver(log, ctx, cfg, metrics, ec, channels), opts)
 
 	rollupNode := &L2Verifier{
 		eventSys:          sys,
