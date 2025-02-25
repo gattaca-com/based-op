@@ -158,7 +158,6 @@ func (n *OpNode) init(ctx context.Context, cfg *Config) error {
 	if err := n.initMetricsServer(cfg); err != nil {
 		return fmt.Errorf("failed to init the metrics server: %w", err)
 	}
-	n.preconfChannels = engine.StartPreconf(ctx, n.l2Source)
 	n.metrics.RecordInfo(n.appVersion)
 	n.metrics.RecordUp()
 	if err := n.initPProf(cfg); err != nil {
@@ -399,6 +398,8 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config) error {
 		return err
 	}
 
+	n.preconfChannels = engine.StartPreconf(ctx, n.l2Source)
+
 	if cfg.Rollup.InteropTime != nil {
 		cl, err := cfg.Supervisor.SupervisorClient(ctx, n.log)
 		if err != nil {
@@ -429,7 +430,7 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config) error {
 		n.safeDB = safedb.Disabled
 	}
 	n.l2Driver = driver.NewDriver(n.eventSys, n.eventDrain, &cfg.Driver, &cfg.Rollup, n.l2Source, n.l1Source,
-		n.supervisor, n.beacon, n, n, n.log, n.metrics, cfg.ConfigPersistence, n.safeDB, &cfg.Sync, sequencerConductor, altDA)
+		n.supervisor, n.beacon, n, n, n.log, n.metrics, cfg.ConfigPersistence, n.safeDB, &cfg.Sync, sequencerConductor, altDA, n.preconfChannels)
 	return nil
 }
 

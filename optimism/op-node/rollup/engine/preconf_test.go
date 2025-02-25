@@ -307,3 +307,73 @@ func TestEverythingOutOfOrderAllAtOnce(t *testing.T) {
 		t.Fatalf("The first seal was not sent to the engine api")
 	}
 }
+
+func TestPreconfGapSavedByL2Block(t *testing.T) {
+	var m MockEngine
+	state := NewPreconfState(context.Background(), &m)
+
+	// Data for the first block
+	e := env()
+	f := frag()
+	f2 := f
+	f2.Frag.Seq = 1
+	f2.Frag.IsLast = true
+	s := seal()
+
+	// Data for the third block, this test case assumes the second is missing.
+	e3 := e
+	e3.Env.Number += 2
+	f3 := f
+	f3.Frag.BlockNumber += 2
+	f3.Frag.IsLast = true
+	s3 := s
+	s3.Seal.BlockNumber += 2
+
+	state.putEnv(&e)
+	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The first env was not sent to the engine api.")
+	}
+
+	state.putFrag(&f)
+	if !cmp.Equal(m.SeenNewFrags[0], f) {
+		t.Fatalf("The first frag was not pushed correctly")
+	}
+	state.putFrag(&f2)
+	if !cmp.Equal(m.SeenNewFrags[1], f2) {
+		t.Fatalf("The second frag was not pushed correctly")
+	}
+	state.putSeal(&s)
+	if !cmp.Equal(m.SeenSeals[0], s) {
+		t.Fatalf("The first seal was not pushed correctly")
+	}
+
+	// Now when we receive the third block it should not be pushed.
+	state.putEnv(&e3)
+	if !cmp.Equal(len(m.SeenEnvs), 1, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The env for the third block shouldn't have been sent")
+	}
+	state.putFrag(&f3)
+	if !cmp.Equal(len(m.SeenNewFrags), 2) {
+		t.Fatalf("The frag for the third block shouldn't have been sent")
+	}
+	state.putSeal(&s3)
+	if !cmp.Equal(len(m.SeenSeals), 1) {
+		t.Fatalf("The seal for the third block shouldn't have been sent")
+	}
+
+	// Now we send an l2 block ref and everything from the third block should unblock.
+
+	b := eth.L2BlockRef{
+		Number: 3,
+	}
+	state.putL2Block(&b)
+	if !cmp.Equal(m.SeenEnvs[1], e3, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The env for the third block was not pushed correctly")
+	}
+	if !cmp.Equal(m.SeenNewFrags[2], f3) {
+		t.Fatalf("The frag for the third block was not pushed correctly")
+	}
+	if !cmp.Equal(m.SeenSeals[1], s3) {
+		t.Fatalf("The seal for the third block was not pushed correctly")
+	}
+}
