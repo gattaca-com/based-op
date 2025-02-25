@@ -45,8 +45,8 @@ const sidebars: SidebarsConfig = {
       },
       collapsed: false,
       items: [
-        'getting_started/get-started',
-        'getting_started/connecting-a-wallet',
+        'getting_started/develop',
+        'getting_started/try-out',
       ],
     },
   ],
