@@ -126,6 +126,7 @@ func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 	if !s.lastSealSent.IsSet() || s.lastSealSent.IsEqual(env.Number-1) || s.lastL2BlockSent.IsEqual(env.Number) {
 		s.lastEnvSent.Set(env.Number)
 		s.e.Env(s.ctx, sEnv)
+		s.prune(env.Number)
 
 		// When an env is sent we should check if we have the first frag of the block and put it.
 		nextIndex := FragIndex{BlockNumber: env.Number, Sequence: 0}
@@ -134,10 +135,9 @@ func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 			delete(s.pendingFrags, nextIndex)
 			s.putFrag(&nextFrag)
 		}
-	} else {
+	} else if env.Number >= s.lastBlockPruned {
 		s.pendingEnvs[env.Number] = *sEnv
 	}
-	s.prune(env.Number)
 }
 
 // Checks if the frag is the first of the block and the env is present,
@@ -166,11 +166,9 @@ func (s *PreconfState) putFrag(sFrag *eth.SignedNewFrag) {
 				s.putFrag(&nextFrag)
 			}
 		}
-	} else {
+	} else if idx.BlockNumber >= s.lastBlockPruned {
 		s.pendingFrags[idx] = *sFrag
 	}
-
-	s.prune(frag.BlockNumber)
 }
 
 // Checks if the last frag of the block is sent.
@@ -185,11 +183,9 @@ func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
 			delete(s.pendingEnvs, seal.BlockNumber+1)
 			s.putEnv(&nextEnv)
 		}
-	} else {
+	} else if seal.BlockNumber >= s.lastBlockPruned {
 		s.pendingSeals[seal.BlockNumber] = *sSeal
 	}
-
-	s.prune(seal.BlockNumber)
 }
 
 // Checks if there's envs blocked because of gaps and sends them over.
@@ -205,15 +201,15 @@ func (s *PreconfState) putL2Block(block *eth.L2BlockRef) {
 }
 
 // The amount of blocks we don't prune back from the current block.
-const PruneWindow = 10
+const PruneSafeWindow = 2
 
 func (s *PreconfState) prune(currentBlock uint64) {
 	// We only prune if there's at least a full window of events to prune.
-	if currentBlock-s.lastBlockPruned < 2*PruneWindow {
+	if currentBlock-s.lastBlockPruned < 2*PruneSafeWindow {
 		return
 	}
 
-	latestBlock := currentBlock - PruneWindow
+	latestBlock := currentBlock - PruneSafeWindow
 
 	for key := range s.pendingEnvs {
 		if key < latestBlock {

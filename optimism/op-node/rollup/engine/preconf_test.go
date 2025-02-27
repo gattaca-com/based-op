@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -180,9 +181,7 @@ func TestFragSealOutOfOrder(t *testing.T) {
 	f := frag()
 
 	state.putFrag(&f)
-	if !cmp.Equal(len(m.SeenNewFrags), 0) {
-		t.Fatalf("The first frag was pushed even if it shouldn't have been")
-	}
+	assertEmpty(t, m.SeenNewFrags, "The first frag was pushed even if it shouldn't have been")
 
 	state.putEnv(&e)
 	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
@@ -212,9 +211,7 @@ func TestFragsOutOfOrder(t *testing.T) {
 	}
 
 	state.putFrag(&f2)
-	if !cmp.Equal(len(m.SeenNewFrags), 0) {
-		t.Fatalf("The second frag was pushed even if it shouldn't have been")
-	}
+	assertEmpty(t, m.SeenNewFrags, "The second frag was pushed even if it shouldn't have been")
 
 	state.putFrag(&f)
 	if !cmp.Equal(m.SeenNewFrags[0], f) {
@@ -249,9 +246,7 @@ func TestSealBeforeLastFrag(t *testing.T) {
 	}
 
 	state.putSeal(&s)
-	if !cmp.Equal(len(m.SeenSeals), 0) {
-		t.Fatalf("The seal was pushed even if the last frag wasn't")
-	}
+	assertEmpty(t, m.SeenSeals, "The seal was pushed even if the last frag wasn't")
 
 	state.putFrag(&f2)
 	if !cmp.Equal(m.SeenNewFrags[1], f2) {
@@ -279,17 +274,11 @@ func TestEverythingOutOfOrderAllAtOnce(t *testing.T) {
 	s := seal()
 
 	state.putFrag(&f)
-	if !cmp.Equal(len(m.SeenNewFrags), 0) {
-		t.Fatalf("The first frag was pushed without an env")
-	}
+	assertEmpty(t, m.SeenNewFrags, "The first frag was pushed without an env")
 	state.putFrag(&f2)
-	if !cmp.Equal(len(m.SeenNewFrags), 0) {
-		t.Fatalf("The second frag was pushed without an env")
-	}
+	assertEmpty(t, m.SeenNewFrags, "The second frag was pushed without an env")
 	state.putSeal(&s)
-	if !cmp.Equal(len(m.SeenSeals), 0) {
-		t.Fatalf("The block was sealed without an env")
-	}
+	assertEmpty(t, m.SeenSeals, "The block was sealed without an env")
 
 	state.putEnv(&e)
 	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
@@ -349,17 +338,11 @@ func TestPreconfGapSavedByL2Block(t *testing.T) {
 
 	// Now when we receive the third block it should not be pushed.
 	state.putEnv(&e3)
-	if !cmp.Equal(len(m.SeenEnvs), 1, cmp.AllowUnexported(big.Int{})) {
-		t.Fatalf("The env for the third block shouldn't have been sent")
-	}
+	assertSize(t, m.SeenEnvs, 1, "The env for the third block shouldn't have been sent")
 	state.putFrag(&f3)
-	if !cmp.Equal(len(m.SeenNewFrags), 2) {
-		t.Fatalf("The frag for the third block shouldn't have been sent")
-	}
+	assertSize(t, m.SeenNewFrags, 2, "The frag for the third block shouldn't have been sent")
 	state.putSeal(&s3)
-	if !cmp.Equal(len(m.SeenSeals), 1) {
-		t.Fatalf("The seal for the third block shouldn't have been sent")
-	}
+	assertSize(t, m.SeenSeals, 1, "The seal for the third block shouldn't have been sent")
 
 	// Now we send an l2 block ref and everything from the third block should unblock.
 
@@ -375,5 +358,68 @@ func TestPreconfGapSavedByL2Block(t *testing.T) {
 	}
 	if !cmp.Equal(m.SeenSeals[1], s3) {
 		t.Fatalf("The seal for the third block was not pushed correctly")
+	}
+}
+
+func TestOldStuffIsPrunedAndNotSent(t *testing.T) {
+	var m MockEngine
+	state := NewPreconfState(context.Background(), &m)
+
+	// Data for the first block
+	e := env()
+	f := frag()
+	f2 := f
+	f2.Frag.Seq += 1
+	s := seal()
+
+	// Put everything but the first frag for the first block. That means that only the env will
+	// actually be sent.
+	state.putEnv(&e)
+	if !cmp.Equal(m.SeenEnvs[0], e, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The first env should have been sent")
+	}
+	state.putFrag(&f2)
+	assertEmpty(t, m.SeenNewFrags, "The second frag shouldn't have been pushed without the first frag")
+	state.putSeal(&s)
+	assertEmpty(t, m.SeenSeals, "The first seal shouldn't have been pushed without the first frag")
+
+	// Send a valid env for block 4, as the pruning would be for all < 2.
+	e2 := e
+	e2.Env.Number = 4
+	state.putEnv(&e2)
+	if !cmp.Equal(m.SeenEnvs[1], e2, cmp.AllowUnexported(big.Int{})) {
+		t.Fatalf("The env for block 22 should have been sent correctly")
+	}
+
+	// Now we'll send the missing frag for the first block. Without pruning it would send the
+	// second frag and the seal, but they should be pruned because they are too old.
+
+	state.putFrag(&f)
+	assertEmpty(t, m.SeenNewFrags, "Neither ther first nor the second frag should have been pushed. They should be pruned.")
+	assertEmpty(t, m.SeenSeals, "The first seal shouldn't have been pushed. It's pruned.")
+
+	// Note: This section is white box testing. It may fail if the implementation changes!
+	_, present := state.pendingFrags[index(f.Frag)]
+	if present {
+		t.Fatal("The first frag should be pruned")
+	}
+
+	_, present = state.pendingFrags[index(f2.Frag)]
+	if present {
+		t.Fatal("The second frag should be pruned")
+	}
+
+	_, present = state.pendingSeals[s.Seal.BlockNumber]
+	if present {
+		t.Fatal("The first seal should be pruned")
+	}
+}
+
+func assertEmpty[T any](t *testing.T, v []T, message string) { assertSize(t, v, 0, message) }
+
+func assertSize[T any](t *testing.T, v []T, size int, message string) {
+	if !cmp.Equal(len(v), size) {
+		fmt.Println(v)
+		t.Fatal(message)
 	}
 }
