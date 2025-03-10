@@ -16,7 +16,7 @@ impl Gossiper {
             .build()
             .expect("couldn't build http client");
 
-        let signer = signer.unwrap_or_else(|| ECDSASigner::random());
+        let signer = signer.unwrap_or_else(ECDSASigner::random);
 
         Self { target_rpc, client, signer }
     }
