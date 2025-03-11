@@ -5,6 +5,7 @@ use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_cli::chainspec::OpChainSpecParser;
+use revm_primitives::B256;
 use strum_macros::EnumString;
 use tracing::level_filters::LevelFilter;
 
@@ -38,6 +39,9 @@ pub struct GatewayArgs {
     /// Url to the root peer gossip node
     #[arg(long = "gossip.root_peer_url")]
     pub gossip_root_peer_url: Option<Url>,
+    /// Gossip to sign frag messages
+    #[arg(long = "gossip.signer_private_key")]
+    pub gossip_signer_private_key: Option<B256>,
     /// Duration of a frag in ms
     #[arg(long = "sequencer.frag_duration_ms", default_value_t = 200)]
     pub frag_duration_ms: u64,

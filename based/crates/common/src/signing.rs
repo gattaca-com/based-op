@@ -24,13 +24,17 @@ pub struct ECDSASigner {
 }
 
 impl ECDSASigner {
-    pub fn try_from_secret(secret: &[u8]) -> Result<Self, SignerError> {
-        let secret: B256 =
-            secret.try_into().map_err(|_| SignerError::SignerError("Failed to convert secret to B256".to_string()))?;
+    pub fn new(secret: B256) -> Result<Self, SignerError> {
         let secret = PrivateKeySigner::from_bytes(&secret).map_err(alloy_signer::Error::Ecdsa)?;
         let address = secret.address();
 
         Ok(Self { address, secret })
+    }
+
+    pub fn try_from_secret(secret: &[u8]) -> Result<Self, SignerError> {
+        let secret: B256 =
+            secret.try_into().map_err(|_| SignerError::SignerError("Failed to convert secret to B256".to_string()))?;
+        Self::new(secret)
     }
 
     pub fn try_from_hex(hex: &str) -> Result<Self, SignerError> {
