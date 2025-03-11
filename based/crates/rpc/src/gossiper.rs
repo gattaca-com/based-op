@@ -10,13 +10,13 @@ pub struct Gossiper {
 }
 
 impl Gossiper {
-    pub fn new(target_rpc: Option<Url>) -> Self {
+    pub fn new(target_rpc: Option<Url>, signer: Option<ECDSASigner>) -> Self {
         let client = ClientBuilder::new()
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .expect("couldn't build http client");
 
-        let signer = ECDSASigner::random();
+        let signer = signer.unwrap_or_else(ECDSASigner::random);
 
         Self { target_rpc, client, signer }
     }
