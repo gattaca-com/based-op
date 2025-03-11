@@ -16,7 +16,7 @@ use alloy_rpc_types::{
 use bop_common::{
     api::{EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpRpcBlock, CAPABILITIES},
     communication::messages::{RpcError, RpcResult},
-    utils::{utcnow_sec, uuid, wait_for_signal},
+    utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::async_trait,
@@ -54,8 +54,9 @@ pub struct PortalServer {
     next_gateway_index: Arc<AtomicUsize>,
     next_gateway: Arc<Mutex<Gateway>>,
     gateway_clients: Arc<RwLock<Vec<Gateway>>>,
-    last_updated_sec: Arc<AtomicU64>,
-    gateway_update_sec: u64,
+    last_current_block: Arc<AtomicU64>,
+    last_updated_block: Arc<AtomicU64>,
+    gateway_update_blocks: u64,
 }
 
 async fn refresh_gateway_clients(url: Url, gateway_jwt: JwtSecret, timeout: Duration) -> eyre::Result<Vec<Gateway>> {
@@ -119,8 +120,9 @@ impl PortalServer {
             gateway_clients,
             next_gateway,
             next_gateway_index,
-            last_updated_sec: Arc::new(AtomicU64::new(utcnow_sec())),
-            gateway_update_sec: args.gateway_update_interval_sec,
+            last_current_block: Arc::new(AtomicU64::new(0)),
+            last_updated_block: Arc::new(AtomicU64::new(0)),
+            gateway_update_blocks: args.gateway_update_blocks,
         })
     }
 
@@ -162,13 +164,13 @@ impl PortalServer {
     }
 
     fn refresh_next(&self) -> Gateway {
-        let now = utcnow_sec();
-        let last_updated_sec = self.last_updated_sec.load(Ordering::Relaxed);
+        let current_block = self.last_current_block.load(Ordering::Relaxed);
+        let last_updated_block = self.last_updated_block.load(Ordering::Relaxed);
         let mut lock = self.next_gateway.lock();
 
-        if now.saturating_sub(last_updated_sec) > self.gateway_update_sec {
+        if current_block.saturating_sub(last_updated_block) > self.gateway_update_blocks {
             let next_index = self.next_gateway_index.fetch_add(1, Ordering::Relaxed);
-            self.last_updated_sec.store(now, Ordering::Relaxed);
+            self.last_updated_block.store(current_block, Ordering::Relaxed);
             let clients = self.gateway_clients.read();
             *lock = clients[next_index % clients.len()].clone();
         }
@@ -446,6 +448,9 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
+
+        // set highest block number to be used in the next gateway election in fork_choice_updated_v3
+        self.last_current_block.fetch_max(block_number, Ordering::Relaxed);
 
         // send to all gateways
         for gateway in self.gateways() {
