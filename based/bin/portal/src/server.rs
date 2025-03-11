@@ -16,7 +16,7 @@ use alloy_rpc_types::{
 use bop_common::{
     api::{EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpRpcBlock, CAPABILITIES},
     communication::messages::{RpcError, RpcResult},
-    utils::{utcnow_sec, uuid, wait_for_signal},
+    utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::async_trait,
@@ -28,7 +28,7 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use parking_lot::{Mutex, RwLock};
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
-use tracing::{debug, error, info, Instrument, Level};
+use tracing::{debug, error, info, trace, Instrument, Level};
 
 use crate::{cli::PortalArgs, middleware::ProxyService};
 
@@ -54,8 +54,9 @@ pub struct PortalServer {
     next_gateway_index: Arc<AtomicUsize>,
     next_gateway: Arc<Mutex<Gateway>>,
     gateway_clients: Arc<RwLock<Vec<Gateway>>>,
-    last_updated_sec: Arc<AtomicU64>,
-    gateway_update_sec: u64,
+    last_current_block: Arc<AtomicU64>,
+    last_updated_block: Arc<AtomicU64>,
+    gateway_update_blocks: u64,
 }
 
 async fn refresh_gateway_clients(url: Url, gateway_jwt: JwtSecret, timeout: Duration) -> eyre::Result<Vec<Gateway>> {
@@ -119,8 +120,9 @@ impl PortalServer {
             gateway_clients,
             next_gateway,
             next_gateway_index,
-            last_updated_sec: Arc::new(AtomicU64::new(utcnow_sec())),
-            gateway_update_sec: args.gateway_update_interval_sec,
+            last_current_block: Arc::new(AtomicU64::new(0)),
+            last_updated_block: Arc::new(AtomicU64::new(0)),
+            gateway_update_blocks: args.gateway_update_blocks,
         })
     }
 
@@ -132,7 +134,12 @@ impl PortalServer {
             ProxyService::new(CAPABILITIES, s, fallback_eth_client.clone(), fallback_client.clone())
         });
 
-        let server = ServerBuilder::default().set_rpc_middleware(rpc_middleware).build(addr).await?;
+        let server = ServerBuilder::default()
+            .max_request_body_size(u32::MAX)
+            .max_response_body_size(u32::MAX)
+            .set_rpc_middleware(rpc_middleware)
+            .build(addr)
+            .await?;
 
         let mut module = EngineApiServer::into_rpc(self.clone());
         module.merge(EthApiServer::into_rpc(self)).expect("failed to merge modules");
@@ -157,13 +164,13 @@ impl PortalServer {
     }
 
     fn refresh_next(&self) -> Gateway {
-        let now = utcnow_sec();
-        let last_updated_sec = self.last_updated_sec.load(Ordering::Relaxed);
+        let current_block = self.last_current_block.load(Ordering::Relaxed);
+        let last_updated_block = self.last_updated_block.load(Ordering::Relaxed);
         let mut lock = self.next_gateway.lock();
 
-        if now.saturating_sub(last_updated_sec) > self.gateway_update_sec {
+        if current_block.saturating_sub(last_updated_block) > self.gateway_update_blocks {
             let next_index = self.next_gateway_index.fetch_add(1, Ordering::Relaxed);
-            self.last_updated_sec.store(now, Ordering::Relaxed);
+            self.last_updated_block.store(current_block, Ordering::Relaxed);
             let clients = self.gateway_clients.read();
             *lock = clients[next_index % clients.len()].clone();
         }
@@ -173,6 +180,23 @@ impl PortalServer {
 
     fn gateways(&self) -> Vec<Gateway> {
         self.gateway_clients.read().clone()
+    }
+
+    async fn send_fcu(
+        fork_choice_state: ForkchoiceState,
+        payload_attributes: Option<OpPayloadAttributes>,
+        gateway: Gateway,
+    ) {
+        match gateway.client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await {
+            Ok(res) => {
+                if res.is_valid() {
+                    trace!(?gateway, ?res, "gateway response");
+                } else {
+                    trace!(?gateway, ?res, "Error: gateway response");
+                }
+            }
+            Err(err) => trace!(%err, "Error: failed gateway"),
+        }
     }
 }
 
@@ -373,7 +397,7 @@ impl EthApiServer for PortalServer {
 
 #[async_trait]
 impl EngineApiServer for PortalServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
     async fn fork_choice_updated_v3(
         &self,
         fork_choice_state: ForkchoiceState,
@@ -393,40 +417,12 @@ impl EngineApiServer for PortalServer {
             // pick only one gateway for this block
             let gateway = self.refresh_next();
             let payload_attributes = payload_attributes.clone();
-            tokio::spawn(
-                async move {
-                    match gateway.client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await {
-                        Ok(res) => {
-                            if res.is_valid() {
-                                debug!(?gateway, ?res, "gateway response");
-                            } else {
-                                error!(?gateway, ?res, "gateway response");
-                            }
-                        }
-                        Err(err) => error!(?gateway, %err, "failed gateway"),
-                    }
-                }
-                .in_current_span(),
-            );
+            tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span());
         } else {
             // send to all gateways
             for gateway in self.gateways() {
                 let payload_attributes = payload_attributes.clone();
-                tokio::spawn(
-                    async move {
-                        match gateway.client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await {
-                            Ok(res) => {
-                                if res.is_valid() {
-                                    debug!(?gateway, ?res, "gateway response");
-                                } else {
-                                    error!(?gateway, ?res, "gateway response");
-                                }
-                            }
-                            Err(err) => error!(%err, "failed gateway"),
-                        }
-                    }
-                    .in_current_span(),
-                );
+                tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span());
             }
         }
 
@@ -435,7 +431,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
     async fn new_payload_v3(
         &self,
         payload: ExecutionPayloadV3,
@@ -452,6 +448,9 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
+
+        // set highest block number to be used in the next gateway election in fork_choice_updated_v3
+        self.last_current_block.fetch_max(block_number, Ordering::Relaxed);
 
         // send to all gateways
         for gateway in self.gateways() {
@@ -479,7 +478,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         debug!(%payload_id, "new request");
 
@@ -512,7 +511,7 @@ impl EngineApiServer for PortalServer {
                         .inspect_err(|err| error!(%err, "failed fallback validation"))?;
 
                     if payload_status.is_valid() {
-                        debug!(?gateway, ?gateway_payload, ?payload_status, "gateway response");
+                        trace!(?gateway, ?gateway_payload, ?payload_status, "gateway response");
                         Ok(gateway_payload)
                     } else {
                         error!(?gateway, ?gateway_payload, ?payload_status, "gateway response");
@@ -536,7 +535,11 @@ impl EngineApiServer for PortalServer {
 }
 
 fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
-    let client = HttpClientBuilder::default().request_timeout(timeout).build(url)?;
+    let client = HttpClientBuilder::default()
+        .max_request_size(u32::MAX)
+        .max_response_size(u32::MAX)
+        .request_timeout(timeout)
+        .build(url)?;
     Ok(client)
 }
 
@@ -544,7 +547,12 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
     let secret_layer = AuthClientLayer::new(jwt);
     let middleware = tower::ServiceBuilder::default().layer(secret_layer);
 
-    let client = HttpClientBuilder::default().set_http_middleware(middleware).request_timeout(timeout).build(url)?;
+    let client = HttpClientBuilder::default()
+        .max_request_size(u32::MAX)
+        .max_response_size(u32::MAX)
+        .set_http_middleware(middleware)
+        .request_timeout(timeout)
+        .build(url)?;
 
     Ok(client)
 }

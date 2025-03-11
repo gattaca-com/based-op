@@ -118,6 +118,7 @@ def get_config(
         "--db.datadir=" + EXECUTION_DATA_DIRPATH_ON_CLIENT_CONTAINER,
         "--rpc.fallback_url=" + sequencer_context.rpc_http_url,
         "--rpc.port={0}".format(RPC_PORT_NUM),
+        "--gossip.signer_private_key=" + "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758",
         "--gossip.root_peer_url=" + "http://op-cl-2-op-node-op-geth-op-kurtosis:8547",  # TODO
         "--debug",
     ]

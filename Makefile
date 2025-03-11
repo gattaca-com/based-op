@@ -1,7 +1,8 @@
 .PHONY: deps run clean restart help \
 		build build-portal build-op-node build-op-geth \
 		logs op-node-logs op-geth-logs \
-		test-frag test-seal
+		test-frag test-seal \
+		docs
 
 .DEFAULT_GOAL := help
 
@@ -23,6 +24,12 @@ PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurto
 
 help: ## 📚 Show help for each of the Makefile recipes
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+docs: ## 📚 Build local docs
+	cd docs && \
+	npm i && \
+	npm run build && \
+	npm run start
 
 deps: ## 🚀 Install all dependencies
 	# Kurtosis
@@ -78,8 +85,9 @@ run-multiple: ## 🚀 Run
 
 restart-no-gateway: clean build-no-gateway run ## rip rebuild run
 
-run-follower: ## 🚀 Run a single follower node with RPC enabled.
-	kurtosis run optimism-package --args-file config-geth-cluster.yml --enclave based-op
+run-follower: build-op-node build-op-geth ## 🚀 Run a single follower node with RPC enabled.
+	cd follower-node && \
+		docker compose up -d
 
 logs: ## 📜 Show logs
 	kurtosis service logs -f based-op $(SERVICE)
@@ -112,7 +120,10 @@ op-geth-logs:
 	$(MAKE) logs SERVICE=op-el-2-op-geth-op-node-op-kurtosis
 
 clean: ## 🧹 Clean
-	rm -rf ./genesis && kurtosis enclave rm  based-op --force && rm -rf ./data
+	rm -rf ./genesis ./data
+	docker compose -f follower-node/compose.yml down
+	docker volume rm -f follower-node_geth_data follower-node_node_data follower-node_jwt
+	kurtosis enclave rm based-op --force
 
 restart: clean run ## 🔄 Restart
 
@@ -201,3 +212,22 @@ follower-node-proxy:
 
 spam: ## 🚀 Run the gateway
 	PORTAL_PORT=$(PORTAL_PORT) BOP_EL_PORT=$(BOP_EL_PORT) cargo test --manifest-path ./based/Cargo.toml --release -- tx_spammer --ignored --nocapture
+
+gateway-spam:
+	cargo run --manifest-path ./based/Cargo.toml --profile=release --bin bop-gateway --features shmem -- \
+	--db.datadir $(datadir) \
+	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
+	--chain ./genesis/genesis-2151908.json \
+	--rpc.port $(port) \
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
+	--mock Spammer \
+	--sequencer.commit_sealed_frags_to_db
+
+gateway-bench:
+	cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway --features shmem -- \
+	--db.datadir $(datadir) \
+	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
+	--chain ./genesis/genesis-2151908.json \
+	--rpc.port $(port) \
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
+	--mock Benchmark 

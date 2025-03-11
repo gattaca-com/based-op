@@ -5,16 +5,14 @@ use bop_common::{
     communication::Spine,
     config::GatewayArgs,
     shared::SharedState,
+    signing::ECDSASigner,
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{init_database, DatabaseRead};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
-    block_sync::{
-        block_fetcher::BlockFetcher,
-        mock_fetcher::{MockFetcher, Mode},
-    },
+    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
     Sequencer, SequencerConfig, Simulator,
 };
 use clap::Parser;
@@ -88,13 +86,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         });
 
         let fragdb_clone = shared_state.as_ref().clone();
-        if args.test {
+        if let Some(mode) = args.mock {
             s.spawn(|| {
-                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone, Mode::Spammer)
-                    .run(
-                        spine.to_connections("BlockFetch"),
-                        ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
-                    );
+                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone, mode)
+                    .run(spine.to_connections("BlockFetch"), ActorConfig::default());
             });
         } else {
             s.spawn(|| {
@@ -105,8 +100,9 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             });
         }
         let root_peer_url = args.gossip_root_peer_url.clone();
+        let gossip_signer_private_key = args.gossip_signer_private_key.map(|key| ECDSASigner::new(key).unwrap());
         s.spawn(|| {
-            Gossiper::new(root_peer_url).run(
+            Gossiper::new(root_peer_url, gossip_signer_private_key).run(
                 spine.to_connections("Gossiper"),
                 ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
             );

@@ -43,7 +43,12 @@ impl RpcServer {
     pub async fn run(self, addr: SocketAddr) {
         info!(%addr, "starting RPC server");
 
-        let server = ServerBuilder::default().build(addr).await.expect("failed to create eth RPC server");
+        let server = ServerBuilder::default()
+            .max_request_body_size(u32::MAX)
+            .max_response_body_size(u32::MAX)
+            .build(addr)
+            .await
+            .expect("failed to create eth RPC server");
         let mut module = MinimalEthApiServer::into_rpc(self.clone());
         module.merge(EngineApiServer::into_rpc(self)).expect("failed to merge modules");
 

@@ -5,7 +5,16 @@ use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_cli::chainspec::OpChainSpecParser;
+use revm_primitives::B256;
+use strum_macros::EnumString;
 use tracing::level_filters::LevelFilter;
+
+#[derive(Clone, Debug, EnumString)]
+pub enum MockMode {
+    Benchmark,
+    Spammer,
+    Verification,
+}
 
 #[derive(Parser, Debug)]
 #[command(version, about, name = "gateway")]
@@ -30,6 +39,9 @@ pub struct GatewayArgs {
     /// Url to the root peer gossip node
     #[arg(long = "gossip.root_peer_url")]
     pub gossip_root_peer_url: Option<Url>,
+    /// Gossip to sign frag messages
+    #[arg(long = "gossip.signer_private_key")]
+    pub gossip_signer_private_key: Option<B256>,
     /// Duration of a frag in ms
     #[arg(long = "sequencer.frag_duration_ms", default_value_t = 200)]
     pub frag_duration_ms: u64,
@@ -45,9 +57,9 @@ pub struct GatewayArgs {
     /// Maximum number of cached storages
     #[arg(long = "db.max_cached_storages", default_value_t = 100_000)]
     pub max_cached_storages: u64,
-    /// Test mode
-    #[arg(long = "test")]
-    pub test: bool,
+    /// Mock mode
+    #[arg(long = "mock")]
+    pub mock: Option<MockMode>,
     /// Enable DEBUG logging
     #[arg(long = "debug")]
     pub debug: bool,
