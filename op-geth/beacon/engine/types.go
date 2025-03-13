@@ -433,7 +433,7 @@ func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, erro
 		TxHash:           types.DeriveSha(types.Transactions(ub.Transactions()), trie.NewStackTrie(nil)),
 		ReceiptHash:      types.DeriveSha(ub.Receipts, trie.NewStackTrie(nil)),
 		Bloom:            types.CreateBloom(ub.Receipts),
-		Difficulty:       ub.Env.Difficulty,
+		Difficulty:       ub.Env.Difficulty.ToBig(),
 		Number:           new(big.Int).SetUint64(ub.Env.Number),
 		GasLimit:         ub.Env.GasLimit,
 		GasUsed:          ub.CumulativeGasUsed,
