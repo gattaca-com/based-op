@@ -18,6 +18,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -41,6 +42,10 @@ type NodeP2P struct {
 	store       store.ExtendedPeerstore        // peerstore of host, with extra bindings for scoring and banning
 	appScorer   ApplicationScorer
 	log         log.Logger
+
+	// TODO: Add a list of gateways.
+	currentGateway common.Address // current gateway
+
 	// the below components are all optional, and may be nil. They require the host to not be nil.
 	dv5Local *enode.LocalNode // p2p discovery identity
 	dv5Udp   *discover.UDPv5  // p2p discovery service
@@ -57,6 +62,7 @@ func NewNodeP2P(
 	rollupCfg *rollup.Config,
 	log log.Logger,
 	setup SetupP2P,
+	initialGateway common.Address,
 	gossipIn GossipIn,
 	l2Chain L2Chain,
 	runCfg GossipRuntimeConfig,
@@ -70,7 +76,7 @@ func NewNodeP2P(
 		return nil, errors.New("SetupP2P.Disabled is true")
 	}
 	var n NodeP2P
-	if err := n.init(resourcesCtx, rollupCfg, log, setup, gossipIn, l2Chain, runCfg, metrics, elSyncEnabled); err != nil {
+	if err := n.init(resourcesCtx, rollupCfg, log, setup, initialGateway, gossipIn, l2Chain, runCfg, metrics, elSyncEnabled); err != nil {
 		closeErr := n.Close()
 		if closeErr != nil {
 			log.Error("failed to close p2p after starting with err", "closeErr", closeErr, "err", err)
@@ -90,6 +96,7 @@ func (n *NodeP2P) init(
 	rollupCfg *rollup.Config,
 	log log.Logger,
 	setup SetupP2P,
+	initialGateway common.Address,
 	gossipIn GossipIn,
 	l2Chain L2Chain,
 	runCfg GossipRuntimeConfig,
@@ -187,6 +194,9 @@ func (n *NodeP2P) init(
 		n.peerMonitor.Start()
 	}
 	n.appScorer.start()
+
+	n.currentGateway = initialGateway
+
 	return nil
 }
 
@@ -228,6 +238,12 @@ func (n *NodeP2P) ConnectionGater() gating.BlockingConnectionGater {
 
 func (n *NodeP2P) ConnectionManager() connmgr.ConnManager {
 	return n.connMgr
+}
+
+// TODO: add round robin logic for getting the current gateway.
+// Right now, the initial gateway is the only gateway.
+func (n *NodeP2P) CurrentGateway() common.Address {
+	return n.currentGateway
 }
 
 func (n *NodeP2P) Peers() []peer.ID {

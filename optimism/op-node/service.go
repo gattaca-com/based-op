@@ -108,6 +108,7 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		Pprof:                       oppprof.ReadCLIConfig(ctx),
 		P2P:                         p2pConfig,
 		P2PSigner:                   p2pSignerSetup,
+		P2PGatewayAddress:           *p2pGatewayAddress,
 		L1EpochPollInterval:         ctx.Duration(flags.L1EpochPollIntervalFlag.Name),
 		RuntimeConfigReloadInterval: ctx.Duration(flags.RuntimeConfigReloadIntervalFlag.Name),
 		ConfigPersistence:           configPersistence,
