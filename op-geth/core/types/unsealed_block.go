@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/holiman/uint256"
 )
 
 type UnsealedBlock struct {
@@ -75,15 +76,15 @@ func (ub *UnsealedBlock) ByteTransactions() [][]byte {
 }
 
 func (ub *UnsealedBlock) TempHeader() *Header {
-	return &Header {
-		ParentHash:            ub.Env.ParentHash,
-		ParentBeaconRoot:      &ub.Env.ParentBeaconBlockRoot,
-		Number:                new(big.Int).SetUint64(ub.Env.Number),
-		Time:                  ub.Env.Timestamp,
-		Extra:                 ub.Env.ExtraData,
-		GasLimit:              ub.Env.GasLimit,
-		BaseFee:               new(big.Int).SetUint64(ub.Env.Basefee),
-		Difficulty:            ub.Env.Difficulty,
+	return &Header{
+		ParentHash:       ub.Env.ParentHash,
+		ParentBeaconRoot: &ub.Env.ParentBeaconBlockRoot,
+		Number:           new(big.Int).SetUint64(ub.Env.Number),
+		Time:             ub.Env.Timestamp,
+		Extra:            ub.Env.ExtraData,
+		GasLimit:         ub.Env.GasLimit,
+		BaseFee:          new(big.Int).SetUint64(ub.Env.Basefee),
+		Difficulty:       ub.Env.Difficulty.ToBig(),
 	}
 }
 
@@ -154,29 +155,29 @@ func (f *Frag) MarshalJSON() ([]byte, error) {
 
 type Env struct {
 	Number                uint64
+	ParentHash            common.Hash
 	Beneficiary           common.Address
 	Timestamp             uint64
 	GasLimit              uint64
 	Basefee               uint64
-	Difficulty            *big.Int
+	Difficulty            *uint256.Int
 	Prevrandao            common.Hash
-	ParentHash            common.Hash
-	ParentBeaconBlockRoot common.Hash
 	ExtraData             []byte
+	ParentBeaconBlockRoot common.Hash
 }
 
 func (e *Env) UnmarshalJSON(data []byte) error {
 	var env struct {
 		Number                uint64         `json:"number"`
+		ParentHash            common.Hash    `json:"parentHash"`
 		Beneficiary           common.Address `json:"beneficiary"`
 		Timestamp             uint64         `json:"timestamp"`
 		GasLimit              uint64         `json:"gasLimit"`
 		Basefee               uint64         `json:"basefee"`
-		Difficulty            *hexutil.Big   `json:"difficulty"`
+		Difficulty            *hexutil.U256  `json:"difficulty"`
 		Prevrandao            common.Hash    `json:"prevrandao"`
-		ParentHash            common.Hash    `json:"parentHash"`
-		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
 		ExtraData             hexutil.Bytes  `json:"extraData"`
+		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
 	}
 
 	if err := json.Unmarshal(data, &env); err != nil {
@@ -188,7 +189,7 @@ func (e *Env) UnmarshalJSON(data []byte) error {
 	e.Timestamp = env.Timestamp
 	e.GasLimit = env.GasLimit
 	e.Basefee = env.Basefee
-	e.Difficulty = env.Difficulty.ToInt()
+	e.Difficulty = (*uint256.Int)(env.Difficulty)
 	e.Prevrandao = env.Prevrandao
 	e.ParentHash = env.ParentHash
 	e.ParentBeaconBlockRoot = env.ParentBeaconBlockRoot
@@ -204,7 +205,7 @@ func (e *Env) MarshalJSON() ([]byte, error) {
 		Timestamp             uint64         `json:"timestamp"`
 		GasLimit              uint64         `json:"gasLimit"`
 		Basefee               uint64         `json:"basefee"`
-		Difficulty            *hexutil.Big   `json:"difficulty"`
+		Difficulty            *hexutil.U256  `json:"difficulty"`
 		Prevrandao            common.Hash    `json:"prevrandao"`
 		ParentHash            common.Hash    `json:"parentHash"`
 		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
@@ -215,7 +216,7 @@ func (e *Env) MarshalJSON() ([]byte, error) {
 		Timestamp:             e.Timestamp,
 		GasLimit:              e.GasLimit,
 		Basefee:               e.Basefee,
-		Difficulty:            (*hexutil.Big)(e.Difficulty),
+		Difficulty:            (*hexutil.U256)(e.Difficulty),
 		Prevrandao:            e.Prevrandao,
 		ParentHash:            e.ParentHash,
 		ParentBeaconBlockRoot: e.ParentBeaconBlockRoot,

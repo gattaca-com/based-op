@@ -616,18 +616,18 @@ func TestMarshalUnmarshalSignedSeal(t *testing.T) {
 
 func TestMarshalUnmarshalSignedEnv(t *testing.T) {
 	e := SignedEnv{
-		Signature: Bytes65{0x01, 0x42, 0x65, 0x07, 0x01, 0x42, 0x65, 0x07, 0x01, 0x42, 0x65, 0x07},
+		Signature: Bytes65{0x6a, 0x5f, 0x84, 0xdb, 0xf9, 0x72, 0x26, 0x62, 0x07, 0xfb, 0xe1, 0x42, 0xfe, 0x48, 0x42, 0xfc, 0x80, 0x4c, 0xc7, 0xca, 0xcc, 0xa2, 0x8b, 0x60, 0x4e, 0xb0, 0xae, 0x21, 0x56, 0x63, 0xa8, 0x27, 0x64, 0x76, 0x23, 0xa9, 0x06, 0x4c, 0x73, 0xa4, 0x3e, 0x20, 0x09, 0x6a, 0x58, 0xfb, 0x0b, 0x31, 0xeb, 0xa3, 0x8f, 0x1d, 0x51, 0xf3, 0x2b, 0x35, 0x49, 0xeb, 0xc7, 0x8b, 0xb5, 0x37, 0x8c, 0x0d, 0x1c},
 		Env: Env{
-			Number:                1,
-			Beneficiary:           decodeB20("1234567890123456789012345678901234567890"),
-			Timestamp:             2,
-			GasLimit:              3,
-			Basefee:               4,
-			Difficulty:            big.NewInt(5),
-			Prevrandao:            common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
-			ParentHash:            common.BytesToHash(decodeOrPanic("69c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db")),
-			ParentBeaconBlockRoot: common.BytesToHash(decodeOrPanic("c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db69")),
-			ExtraData:             []byte{0x01, 0x02, 0x03},
+			Number:                97,
+			Beneficiary:           decodeB20("4200000000000000000000000000000000000011"),
+			Timestamp:             1741894329,
+			GasLimit:              60000000,
+			Basefee:               679116901,
+			Difficulty:            common.U2560,
+			Prevrandao:            common.BytesToHash(decodeOrPanic("75ed449926e893872b74e7c73e207710b042d04d055b6234728b009f2bc70635")),
+			ParentHash:            common.BytesToHash(decodeOrPanic("1fcb07f5b2c4783244ae53fa10362d931e81cdde3ee6c63992df5a3e7ffe8e88")),
+			ParentBeaconBlockRoot: common.BytesToHash(decodeOrPanic("44188e8e70142a7897d952a999f784a546b80e83078c864f7d9fbaba32f0a5b2")),
+			ExtraData:             []byte{0x00, 0x00, 0x00, 0x00, 0xfa, 0x00, 0x00, 0x00, 0x06},
 		},
 	}
 
@@ -707,7 +707,7 @@ func TestEnvRoot(t *testing.T) {
 		Timestamp:             2,
 		GasLimit:              3,
 		Basefee:               4,
-		Difficulty:            big.NewInt(5),
+		Difficulty:            uint256.NewInt(5),
 		Prevrandao:            common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
 		ParentHash:            common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
 		ParentBeaconBlockRoot: common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
@@ -715,6 +715,28 @@ func TestEnvRoot(t *testing.T) {
 	}
 
 	expected := decodeB32("fa09df7670737568ba783dfd934e19b06e6681e367a866a5647449bd4e5ca324")
+	root := e.Root()
+
+	if expected != root {
+		t.Fatalf("Expected root %s, found %s", expected.String(), root.String())
+	}
+}
+
+func TestEnvRoot2(t *testing.T) {
+	e := Env{
+		Number:                97,
+		ParentHash:            common.BytesToHash(decodeOrPanic("1fcb07f5b2c4783244ae53fa10362d931e81cdde3ee6c63992df5a3e7ffe8e88")),
+		Beneficiary:           decodeB20("4200000000000000000000000000000000000011"),
+		Timestamp:             1741894329,
+		GasLimit:              60000000,
+		Basefee:               679116901,
+		Difficulty:            common.U2560,
+		Prevrandao:            common.BytesToHash(decodeOrPanic("75ed449926e893872b74e7c73e207710b042d04d055b6234728b009f2bc70635")),
+		ExtraData:             []byte{0x00, 0x00, 0x00, 0x00, 0xfa, 0x00, 0x00, 0x00, 0x06},
+		ParentBeaconBlockRoot: common.BytesToHash(decodeOrPanic("44188e8e70142a7897d952a999f784a546b80e83078c864f7d9fbaba32f0a5b2")),
+	}
+
+	expected := decodeB32("779172e004a01f01249038ed576516345ee9ce46a5e678b61945f33eff7448bb")
 	root := e.Root()
 
 	if expected != root {
