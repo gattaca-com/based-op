@@ -204,6 +204,7 @@ func verifySignature(log log.Logger, signatureBytes []byte, messageBytes []byte,
 		log.Warn("invalid signature length", "signature", signatureBytes)
 		return pubsub.ValidationReject
 	}
+
 	if signatureBytes[64] == 27 || signatureBytes[64] == 28 {
 		signatureBytes[64] -= 27
 	}
@@ -214,9 +215,9 @@ func verifySignature(log log.Logger, signatureBytes []byte, messageBytes []byte,
 		return pubsub.ValidationReject
 	}
 
-	addr := crypto.PubkeyToAddress(*pub)
-	if addr != expectedSigner {
-		log.Warn("unexpected signer", "addr", addr, "expected", expectedSigner)
+	msgSigner := crypto.PubkeyToAddress(*pub)
+	if msgSigner != expectedSigner {
+		log.Warn("unexpected signer", "addr", msgSigner, "expected", expectedSigner)
 		return pubsub.ValidationReject
 	}
 
