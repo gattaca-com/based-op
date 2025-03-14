@@ -82,6 +82,12 @@ func (r *RuntimeConfig) P2PSequencerAddress() common.Address {
 	return r.p2pBlockSignerAddr
 }
 
+func (r *RuntimeConfig) CurrentGateway() common.Address {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return common.HexToAddress("0x14eff6e0bcc07363ee55d30d0a0e86386be1ca54")
+}
+
 func (r *RuntimeConfig) RequiredProtocolVersion() params.ProtocolVersion {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
