@@ -60,6 +60,7 @@ type RuntimeConfig struct {
 // runtimeConfigData is a flat bundle of configurable data, easy and light to copy around.
 type runtimeConfigData struct {
 	p2pBlockSignerAddr common.Address
+	p2pGatewayAddr     common.Address
 
 	// superchain protocol version signals
 	recommended params.ProtocolVersion
@@ -68,11 +69,14 @@ type runtimeConfigData struct {
 
 var _ p2p.GossipRuntimeConfig = (*RuntimeConfig)(nil)
 
-func NewRuntimeConfig(log log.Logger, l1Client RuntimeCfgL1Source, rollupCfg *rollup.Config) *RuntimeConfig {
+func NewRuntimeConfig(log log.Logger, l1Client RuntimeCfgL1Source, rollupCfg *rollup.Config, initialGatewayAddress common.Address) *RuntimeConfig {
 	return &RuntimeConfig{
 		log:       log,
 		l1Client:  l1Client,
 		rollupCfg: rollupCfg,
+		runtimeConfigData: runtimeConfigData{
+			p2pGatewayAddr: initialGatewayAddress,
+		},
 	}
 }
 
@@ -80,6 +84,12 @@ func (r *RuntimeConfig) P2PSequencerAddress() common.Address {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.p2pBlockSignerAddr
+}
+
+func (r *RuntimeConfig) CurrentGateway() common.Address {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.p2pGatewayAddr
 }
 
 func (r *RuntimeConfig) RequiredProtocolVersion() params.ProtocolVersion {
@@ -120,6 +130,8 @@ func (r *RuntimeConfig) Load(ctx context.Context, l1Ref eth.L1BlockRef) error {
 	defer r.mu.Unlock()
 	r.l1Ref = l1Ref
 	r.p2pBlockSignerAddr = common.BytesToAddress(p2pSignerVal[:])
+	// TODO: Update gateway address based on the lookahead.
+	// r.p2pGatewayAddr =
 	r.required = requiredProtVersion
 	r.recommended = recommendedProtoVersion
 	r.log.Info("loaded new runtime config values!", "p2p_seq_address", r.p2pBlockSignerAddr)
