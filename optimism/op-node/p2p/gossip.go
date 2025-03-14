@@ -59,6 +59,7 @@ type GossipSetupConfigurables interface {
 
 type GossipRuntimeConfig interface {
 	P2PSequencerAddress() common.Address
+	CurrentGateway() common.Address
 }
 
 //go:generate mockery --name GossipMetricer
@@ -290,6 +291,14 @@ func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRunt
 			return pubsub.ValidationReject
 		}
 
+		msg := signedFrag.Frag.Root()
+
+		expectedSigner := runCfg.CurrentGateway()
+
+		if result := verifyGatewaySignature(log, signedFrag.Signature[:], msg[:], expectedSigner); result != pubsub.ValidationAccept {
+			return result
+		}
+
 		message.ValidatorData = &signedFrag
 		return pubsub.ValidationAccept
 	}
@@ -303,6 +312,14 @@ func BuildSealFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRun
 		if err := signedSeal.UnmarshalSSZ(uint32(len(data)), bytes.NewReader(data)); err != nil {
 			log.Warn("invalid signedSeal payload", "err", err, "peer", id)
 			return pubsub.ValidationReject
+		}
+
+		msg := signedSeal.Seal.Root()
+
+		expectedSigner := runCfg.CurrentGateway()
+
+		if result := verifyGatewaySignature(log, signedSeal.Signature[:], msg[:], expectedSigner); result != pubsub.ValidationAccept {
+			return result
 		}
 
 		message.ValidatorData = &signedSeal
@@ -320,9 +337,44 @@ func BuildEnvValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeC
 			return pubsub.ValidationReject
 		}
 
+		msg := signedEnv.Env.Root()
+
+		expectedSigner := runCfg.CurrentGateway()
+
+		if result := verifyGatewaySignature(log, signedEnv.Signature[:], msg[:], expectedSigner); result != pubsub.ValidationAccept {
+			return result
+		}
+
 		message.ValidatorData = &signedEnv
 		return pubsub.ValidationAccept
 	}
+}
+
+func verifyGatewaySignature(log log.Logger, signatureBytes []byte, messageBytes []byte, expectedSigner common.Address) pubsub.ValidationResult {
+	if len(signatureBytes) != 65 {
+		log.Warn("invalid signature length", "signature", signatureBytes)
+		return pubsub.ValidationReject
+	}
+
+	if signatureBytes[64] == 27 || signatureBytes[64] == 28 {
+		signatureBytes[64] -= 27
+	}
+
+	pub, err := crypto.SigToPub(messageBytes, signatureBytes)
+	if err != nil {
+		log.Warn("invalid signature", "err", err)
+		return pubsub.ValidationReject
+	}
+
+	msgSigner := crypto.PubkeyToAddress(*pub)
+	if msgSigner != expectedSigner {
+		log.Warn("unexpected signer", "addr", msgSigner, "expected", expectedSigner)
+		return pubsub.ValidationReject
+	}
+
+	log.Info("gateway signature is valid for P2P message", "addr", msgSigner)
+
+	return pubsub.ValidationAccept
 }
 
 func BuildBlocksValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeConfig, blockVersion eth.BlockVersion) pubsub.ValidatorEx {
