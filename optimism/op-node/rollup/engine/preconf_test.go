@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/google/go-cmp/cmp"
+	"github.com/holiman/uint256"
 )
 
 type MockEngine struct {
@@ -65,7 +66,7 @@ func env() eth.SignedEnv {
 			Timestamp:             2,
 			GasLimit:              3,
 			Basefee:               4,
-			Difficulty:            big.NewInt(5),
+			Difficulty:            uint256.NewInt(5),
 			Prevrandao:            common.BytesToHash(decodeOrPanic("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758")),
 			ParentHash:            common.BytesToHash(decodeOrPanic("69c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db")),
 			ParentBeaconBlockRoot: common.BytesToHash(decodeOrPanic("c96d9de761cfc75fe9792b6166c758e75fae0065403d4091f3d6549c4219db69")),

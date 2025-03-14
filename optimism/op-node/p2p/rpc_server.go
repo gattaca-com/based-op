@@ -20,6 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 
+	"github.com/ethereum/go-ethereum/common"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -54,6 +55,8 @@ type Node interface {
 	ConnectionGater() gating.BlockingConnectionGater
 	// ConnectionManager returns the connection manager, to protect peers with, may be nil
 	ConnectionManager() connmgr.ConnManager
+	// CurrentGateway returns the current gateway address.
+	CurrentGateway() common.Address
 }
 
 type APIBackend struct {

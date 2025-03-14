@@ -172,6 +172,26 @@ mod tests {
     }
 
     #[test]
+    fn test_env_v0_2() {
+        let env = EnvV0 {
+            number: 97,
+            parent_hash: b256!("1fcb07f5b2c4783244ae53fa10362d931e81cdde3ee6c63992df5a3e7ffe8e88"),
+            beneficiary: address!("4200000000000000000000000000000000000011"),
+            timestamp: 1741894329,
+            gas_limit: 60000000,
+            basefee: 679116901,
+            difficulty: U256::ZERO,
+            prevrandao: b256!("75ed449926e893872b74e7c73e207710b042d04d055b6234728b009f2bc70635"),
+            extra_data: ExtraData::from(vec![0x00, 0x00, 0x00, 0x00, 0xfa, 0x00, 0x00, 0x00, 0x06]),
+            parent_beacon_block_root: b256!("44188e8e70142a7897d952a999f784a546b80e83078c864f7d9fbaba32f0a5b2"),
+        };
+
+        let message = VersionedMessage::from(env);
+        let hash = message.tree_hash_root();
+        assert_eq!(hash, b256!("779172e004a01f01249038ed576516345ee9ce46a5e678b61945f33eff7448bb"));
+    }
+
+    #[test]
     fn test_frag_v0() {
         let tx = Transaction::from(vec![1, 2, 3]);
         let txs = Transactions::from(vec![tx]);

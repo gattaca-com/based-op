@@ -192,7 +192,7 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		TxHash:           [32]byte{},
 		ReceiptHash:      [32]byte{},
 		Bloom:            [256]byte{},
-		Difficulty:       currentUnsealedBlock.Env.Difficulty,
+		Difficulty:       currentUnsealedBlock.Env.Difficulty.ToBig(),
 		Number:           new(big.Int).SetUint64(frag.BlockNumber),
 		GasLimit:         currentUnsealedBlock.Env.GasLimit,
 		GasUsed:          currentUnsealedBlock.CumulativeGasUsed,

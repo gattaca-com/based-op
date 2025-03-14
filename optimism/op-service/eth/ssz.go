@@ -579,10 +579,10 @@ func (f *NewFrag) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineSliceOfDynamicBytesContent(codec, &f.Txs, MaxTxAmount, MaxTxsSize)
 }
 
-const MaxExtraDataSize = 4_294_967_296
+const MaxExtraDataSize = 256
 
 func (e *Env) SizeSSZ(siz *ssz.Sizer, fixed bool) uint32 {
-	fixedSize := uint32(8 + 20 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 4)
+	fixedSize := uint32(8 + 32 + 20 + 8 + 8 + 8 + 32 + 32 + 32 + 4)
 	if fixed {
 		return fixedSize
 	}
@@ -591,16 +591,16 @@ func (e *Env) SizeSSZ(siz *ssz.Sizer, fixed bool) uint32 {
 
 func (e *Env) DefineSSZ(codec *ssz.Codec) {
 	ssz.DefineUint64(codec, &e.Number)
+	ssz.DefineStaticBytes(codec, &e.ParentHash)
 	ssz.DefineStaticBytes(codec, &e.Beneficiary)
 	ssz.DefineUint64(codec, &e.Timestamp)
 	ssz.DefineUint64(codec, &e.GasLimit)
 	ssz.DefineUint64(codec, &e.Basefee)
-	ssz.DefineUint256BigInt(codec, &e.Difficulty)
+	ssz.DefineUint256(codec, &e.Difficulty)
 	ssz.DefineStaticBytes(codec, &e.Prevrandao)
-	ssz.DefineStaticBytes(codec, &e.ParentHash)
-	ssz.DefineStaticBytes(codec, &e.ParentBeaconBlockRoot)
 	ssz.DefineDynamicBytesOffset(codec, &e.ExtraData, MaxExtraDataSize)
 	ssz.DefineDynamicBytesContent(codec, &e.ExtraData, MaxExtraDataSize)
+	ssz.DefineStaticBytes(codec, &e.ParentBeaconBlockRoot)
 }
 
 func (f *NewFrag) Root() Bytes32 {
