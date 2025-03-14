@@ -309,29 +309,29 @@ type SignedEnv struct {
 // Initial message to set the block environment for the current block
 type Env struct {
 	Number                uint64         `ssz-size:"8"`
+	ParentHash            common.Hash    `ssz-size:"32"`
 	Beneficiary           common.Address `ssz-size:"20"`
 	Timestamp             uint64         `ssz-size:"8"`
 	GasLimit              uint64         `ssz-size:"8"`
 	Basefee               uint64         `ssz-size:"8"`
-	Difficulty            *big.Int       `ssz-size:"32"`
+	Difficulty            *uint256.Int   `ssz-size:"32"`
 	Prevrandao            common.Hash    `ssz-size:"32"`
-	ParentHash            common.Hash    `ssz-size:"32"`
+	ExtraData             []byte         `ssz-max:"256"`
 	ParentBeaconBlockRoot common.Hash    `ssz-size:"32"`
-	ExtraData             []byte         `ssz-max:"4294967296"`
 }
 
 func (e *Env) UnmarshalJSON(data []byte) error {
 	var env struct {
 		Number                uint64         `json:"number"`
+		ParentHash            common.Hash    `json:"parentHash"`
 		Beneficiary           common.Address `json:"beneficiary"`
 		Timestamp             uint64         `json:"timestamp"`
 		GasLimit              uint64         `json:"gasLimit"`
 		Basefee               uint64         `json:"basefee"`
-		Difficulty            *hexutil.Big   `json:"difficulty"`
+		Difficulty            *hexutil.U256  `json:"difficulty"`
 		Prevrandao            common.Hash    `json:"prevrandao"`
-		ParentHash            common.Hash    `json:"parentHash"`
-		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
 		ExtraData             hexutil.Bytes  `json:"extraData"`
+		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
 	}
 
 	if err := json.Unmarshal(data, &env); err != nil {
@@ -343,7 +343,7 @@ func (e *Env) UnmarshalJSON(data []byte) error {
 	e.Timestamp = env.Timestamp
 	e.GasLimit = env.GasLimit
 	e.Basefee = env.Basefee
-	e.Difficulty = env.Difficulty.ToInt()
+	e.Difficulty = (*uint256.Int)(env.Difficulty)
 	e.Prevrandao = env.Prevrandao
 	e.ParentHash = env.ParentHash
 	e.ParentBeaconBlockRoot = env.ParentBeaconBlockRoot
@@ -359,7 +359,7 @@ func (e *Env) MarshalJSON() ([]byte, error) {
 		Timestamp             uint64         `json:"timestamp"`
 		GasLimit              uint64         `json:"gasLimit"`
 		Basefee               uint64         `json:"basefee"`
-		Difficulty            *hexutil.Big   `json:"difficulty"`
+		Difficulty            *hexutil.U256  `json:"difficulty"`
 		Prevrandao            common.Hash    `json:"prevrandao"`
 		ParentHash            common.Hash    `json:"parentHash"`
 		ParentBeaconBlockRoot common.Hash    `json:"parentBeaconBlockRoot"`
@@ -370,7 +370,7 @@ func (e *Env) MarshalJSON() ([]byte, error) {
 		Timestamp:             e.Timestamp,
 		GasLimit:              e.GasLimit,
 		Basefee:               e.Basefee,
-		Difficulty:            (*hexutil.Big)(e.Difficulty),
+		Difficulty:            (*hexutil.U256)(e.Difficulty),
 		Prevrandao:            e.Prevrandao,
 		ParentHash:            e.ParentHash,
 		ParentBeaconBlockRoot: e.ParentBeaconBlockRoot,

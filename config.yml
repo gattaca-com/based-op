@@ -15,6 +15,8 @@ optimism_package:
           cl_image: based_op_node
           cl_extra_params:
             - --rpc.enable-based
+            - --p2p.gateway-address # This is the initial Gateway
+            - 0x14eff6e0bcc07363ee55d30d0a0e86386be1ca54
       batcher_params:
         image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.0
       mev_type: based-portal
