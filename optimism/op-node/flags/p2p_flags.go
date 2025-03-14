@@ -55,6 +55,7 @@ var (
 	SyncReqRespName         = "p2p.sync.req-resp"
 	SyncOnlyReqToStaticName = "p2p.sync.onlyreqtostatic"
 	P2PPingName             = "p2p.ping"
+	GatewayName             = "p2p.gateway-address"
 )
 
 func deprecatedP2PFlags(envPrefix string) []cli.Flag {
@@ -409,6 +410,14 @@ func P2PFlags(envPrefix string) []cli.Flag {
 			Hidden:   true, // hidden, only here to disable in case of bugs.
 			Required: false,
 			EnvVars:  p2pEnv(envPrefix, "PING"),
+		},
+		&cli.StringFlag{
+			Name:     GatewayName,
+			Usage:    "Hex-encoded address for verifying p2p application messages from the Gateway.",
+			Required: false,
+			Value:    "",
+			EnvVars:  p2pEnv(envPrefix, "GATEWAY_ADDRESS"),
+			Category: P2PCategory,
 		},
 	}
 }
