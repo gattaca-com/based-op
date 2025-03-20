@@ -2,7 +2,6 @@ use bop_common::signing::ECDSASigner;
 use revm_primitives::{Address, B256};
 
 /// Use this bin to generate all private keys and addresses for a standard op deployment
-///
 fn generate_key_address() -> (B256, Address) {
     let key = B256::random();
     let signer =
@@ -25,7 +24,7 @@ fn main() {
     let (key_unsafe_block_signer, address_unsafe_block_signer) = generate_key_address();
     let (key_challenger, address_challenger) = generate_key_address();
     println!(
-"# for .envrc
+        "# for .envrc
 
 ## GS_ADMIN
 export GS_ADMIN_PRIVATE_KEY={key_admin}
