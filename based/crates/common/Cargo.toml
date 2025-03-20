@@ -80,3 +80,10 @@ serde_json.workspace = true
 [features]
 shmem = []
 default = []
+
+with-create-keys = []
+
+[[bin]]
+name = "create-keys"
+path = "bin/create_keys.rs"
+required-features = ["with-create-keys"]
