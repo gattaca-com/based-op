@@ -6,12 +6,11 @@ use std::{
 };
 
 use alloy_primitives::Address;
-use bop_common::utils::init_tracing;
 use bop_common::{
     api::{EthApiClient, RegistryApiServer},
     communication::messages::{RpcError, RpcResult},
     config::LoggingConfig,
-    utils::wait_for_signal,
+    utils::{init_tracing, wait_for_signal},
 };
 use clap::Parser;
 use jsonrpsee::{core::async_trait, http_client::HttpClientBuilder, server::ServerBuilder};
@@ -154,9 +153,9 @@ impl RegistryApiServer for RegistryServer {
     async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(Url, Address)> {
         let n_gateways = self.gateway_clients.read().len();
         let target_block = (u64::try_from(self.portal_eth_client.block_number().await?)
-            .map_err(|_| RpcError::Internal)?
-            + n_blocks_into_the_future)
-            / self.gateway_update_blocks;
+            .map_err(|_| RpcError::Internal)? +
+            n_blocks_into_the_future) /
+            self.gateway_update_blocks;
 
         Ok(self.gateway_clients.read()[target_block as usize % n_gateways].clone())
     }
