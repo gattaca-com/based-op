@@ -7,6 +7,7 @@ use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use reqwest::Url;
 
 use crate::communication::messages::RpcResult;
 
@@ -103,4 +104,19 @@ pub trait MinimalEthApi {
     /// Sends signed transaction, returning its hash
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
+}
+
+#[rpc(client, server, namespace = "registry")]
+pub trait RegistryApi {
+    /// Used by the op-node to set which blocks are considered canonical.
+    ///
+    /// If payload attributes is set then block production for next block should start and a
+    /// `PayloadId` is returned to be called in `get_payload`
+    #[method(name = "futureGateway")]
+    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(Url, Address)>;
+
+    #[method(name = "currentGateway")]
+    async fn current_gateway(&self) -> RpcResult<(Url, Address)> {
+        self.get_future_gateway(0).await
+    }
 }
