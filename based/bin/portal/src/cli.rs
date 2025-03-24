@@ -38,21 +38,9 @@ pub struct PortalArgs {
     #[arg(long = "fallback.jwt_path", conflicts_with = "fallback_jwt")]
     pub fallback_jwt_path: Option<PathBuf>,
 
-    /// The URL to the gateway EngineAPI
-    #[arg(long = "gateway.url")]
-    pub gateway_url: Url,
-
     /// Timeout for gateway requests in milliseconds
     #[arg(long = "gateway.timeout_ms", default_value_t = 1_000)]
     pub gateway_timeout_ms: u64,
-
-    /// The JWT token to use for the fallback
-    #[arg(long = "gateway.jwt", conflicts_with = "gateway_jwt_path")]
-    pub gateway_jwt: Option<JwtSecret>,
-
-    /// Path to the JWT token file to use for the gateway
-    #[arg(long = "gateway.jwt_path", conflicts_with = "gateway_jwt")]
-    pub gateway_jwt_path: Option<PathBuf>,
 
     /// Enable debug logging
     #[arg(long)]
@@ -62,13 +50,11 @@ pub struct PortalArgs {
     #[arg(long)]
     pub trace: bool,
 
-    /// TEMP: Fetch every 30s from this url a list of gateway urls
-    #[arg(long = "gateway.update_url")]
-    pub gateway_update_url: Option<Url>,
+    #[arg(long = "registry.url", default_value = "http://localhost:8081")]
+    pub registry_url: Url,
 
-    /// Each gateway gets selected for this number of consecutive L2 blocks
-    #[arg(long = "gateway.update_interval_blocks", default_value_t = 30)]
-    pub gateway_update_blocks: u64,
+    #[arg(long = "registry.timeout_ms", default_value_t = 1_000)]
+    pub registry_timeout_ms: u64,
 }
 
 impl PortalArgs {
@@ -80,17 +66,6 @@ impl PortalArgs {
             Ok(jwt)
         } else {
             bail!("either --fallback.jwt or --fallback.jwt_path must be provided");
-        }
-    }
-
-    pub fn gateway_jwt(&self) -> eyre::Result<JwtSecret> {
-        if let Some(jwt) = self.gateway_jwt {
-            Ok(jwt)
-        } else if let Some(path) = self.gateway_jwt_path.as_ref() {
-            let jwt = JwtSecret::from_file(path)?;
-            Ok(jwt)
-        } else {
-            bail!("either --gateway.jwt or --gateway.jwt_path must be provided");
         }
     }
 }
