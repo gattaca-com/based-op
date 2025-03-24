@@ -108,15 +108,17 @@ pub trait MinimalEthApi {
 
 #[rpc(client, server, namespace = "registry")]
 pub trait RegistryApi {
-    /// Used by the op-node to set which blocks are considered canonical.
-    ///
-    /// If payload attributes is set then block production for next block should start and a
-    /// `PayloadId` is returned to be called in `get_payload`
+    /// Returns the future blocknumber and corresponding gateway url and address
     #[method(name = "futureGateway")]
-    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(Url, Address)>;
+    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address, B256)>;
 
+    /// Returns the current blocknumber and corresponding gateway url and address
     #[method(name = "currentGateway")]
-    async fn current_gateway(&self) -> RpcResult<(Url, Address)> {
+    async fn current_gateway(&self) -> RpcResult<(u64, Url, Address, B256)> {
         self.get_future_gateway(0).await
     }
+
+    /// Returns the current blocknumber and corresponding gateway url and address
+    #[method(name = "registeredGateways")]
+    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>>;
 }

@@ -5,12 +5,13 @@ use std::{
     time::Duration,
 };
 
-use alloy_primitives::Address;
+use alloy_primitives::{Address, B256};
+use bop_common::utils::init_tracing;
 use bop_common::{
     api::{EthApiClient, RegistryApiServer},
     communication::messages::{RpcError, RpcResult},
     config::LoggingConfig,
-    utils::{init_tracing, wait_for_signal},
+    utils::wait_for_signal,
 };
 use clap::Parser;
 use jsonrpsee::{core::async_trait, http_client::HttpClientBuilder, server::ServerBuilder};
@@ -36,12 +37,12 @@ pub struct RegistryArgs {
     pub registry_path: std::path::PathBuf,
 
     /// The url of the portal
-    #[arg(long = "portal.url")]
-    pub portal_url: Url,
+    #[arg(long = "eth_client.url")]
+    pub eth_client_url: Url,
 
     /// Timeout when trying to contact the portal
-    #[arg(long = "portal.timeout_ms")]
-    pub portal_timeout: u64,
+    #[arg(long = "eth_client.timeout_ms")]
+    pub eth_client_timeout: u64,
 
     /// Enable debug logging
     #[arg(long)]
@@ -82,20 +83,20 @@ enum RegistryError {
 }
 type Result<T> = std::result::Result<T, RegistryError>;
 
-fn refresh_gateway_clients(path: impl AsRef<Path>) -> Result<Vec<(Url, Address)>> {
+fn refresh_gateway_clients(path: impl AsRef<Path>) -> Result<Vec<(Url, Address, B256)>> {
     Ok(serde_json::from_reader(std::fs::File::open(path.as_ref())?)?)
 }
 
 #[derive(Clone)]
 pub struct RegistryServer {
-    portal_eth_client: RpcClient,
-    gateway_clients: Arc<RwLock<Vec<(Url, Address)>>>,
+    eth_client: RpcClient,
+    gateway_clients: Arc<RwLock<Vec<(Url, Address, B256)>>>,
     gateway_update_blocks: u64,
 }
 
 impl RegistryServer {
     pub fn new(args: RegistryArgs) -> eyre::Result<Self> {
-        let portal_eth_client = create_client(args.portal_url, Duration::from_millis(args.portal_timeout))?;
+        let portal_eth_client = create_client(args.eth_client_url, Duration::from_millis(args.eth_client_timeout))?;
 
         let gateway_clients = Arc::new(RwLock::new(refresh_gateway_clients(&args.registry_path).unwrap_or_default()));
         let gateway_clients_cloned = gateway_clients.clone();
@@ -119,7 +120,7 @@ impl RegistryServer {
             std::thread::sleep(Duration::from_millis(200));
         }
 
-        Ok(Self { portal_eth_client, gateway_clients, gateway_update_blocks: args.gateway_update_blocks })
+        Ok(Self { eth_client: portal_eth_client, gateway_clients, gateway_update_blocks: args.gateway_update_blocks })
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
@@ -150,14 +151,17 @@ impl RegistryServer {
 /// receiving user facing calls so we need to find another way to do this
 #[async_trait]
 impl RegistryApiServer for RegistryServer {
-    async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(Url, Address)> {
+    async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
         let n_gateways = self.gateway_clients.read().len();
-        let target_block = (u64::try_from(self.portal_eth_client.block_number().await?)
-            .map_err(|_| RpcError::Internal)? +
-            n_blocks_into_the_future) /
-            self.gateway_update_blocks;
+        let target_block = (u64::try_from(self.eth_client.block_number().await?).map_err(|_| RpcError::Internal)?
+            + n_blocks_into_the_future)
+            / self.gateway_update_blocks;
+        let (url, address, jwt_in_b256) = self.gateway_clients.read()[target_block as usize % n_gateways].clone();
+        Ok((target_block, url, address, jwt_in_b256))
+    }
 
-        Ok(self.gateway_clients.read()[target_block as usize % n_gateways].clone())
+    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
+        Ok(self.gateway_clients.read().clone())
     }
 }
 
@@ -178,6 +182,6 @@ async fn main() -> eyre::Result<()> {
     let addr = SocketAddr::new(IpAddr::V4(args.registry_host), args.registry_port);
     let server = RegistryServer::new(args.clone())?;
 
-    info!(%addr,  portal_eth_url = %args.portal_url, "starting Based Registry");
+    info!(%addr,  eth_client_url = %args.eth_client_url, "starting Based Registry");
     server.run(addr).await
 }
