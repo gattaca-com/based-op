@@ -128,6 +128,7 @@ impl PortalServer {
 
     pub async fn refresh(&self) -> eyre::Result<()> {
         let (_, gateway_url, _, jwt_as_b256) = self.registry_client.current_gateway().await?;
+        tracing::info!("updating gateway to {gateway_url:?}");
 
         *self.current_gateway.lock() =
             create_gateway_client(gateway_url, unsafe { std::mem::transmute(jwt_as_b256) }, self.gateway_timeout)?;
