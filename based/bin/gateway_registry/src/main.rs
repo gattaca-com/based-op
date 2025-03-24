@@ -6,12 +6,11 @@ use std::{
 };
 
 use alloy_primitives::{Address, B256};
-use bop_common::utils::init_tracing;
 use bop_common::{
     api::{EthApiClient, RegistryApiServer},
     communication::messages::{RpcError, RpcResult},
     config::LoggingConfig,
-    utils::wait_for_signal,
+    utils::{init_tracing, wait_for_signal},
 };
 use clap::Parser;
 use jsonrpsee::{core::async_trait, http_client::HttpClientBuilder, server::ServerBuilder};
@@ -154,8 +153,8 @@ impl RegistryApiServer for RegistryServer {
     async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
         let gateways = self.gateway_clients.read();
         let n_gateways = gateways.len();
-        let target_block = u64::try_from(self.eth_client.block_number().await?).map_err(|_| RpcError::Internal)?
-            + n_blocks_into_the_future;
+        let target_block = u64::try_from(self.eth_client.block_number().await?).map_err(|_| RpcError::Internal)? +
+            n_blocks_into_the_future;
         let id = (target_block / self.gateway_update_blocks) as usize;
         let (url, address, jwt_in_b256) = gateways[id % n_gateways].clone();
         Ok((target_block, url, address, jwt_in_b256))
