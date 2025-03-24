@@ -7,6 +7,7 @@ use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use reqwest::Url;
 
 use crate::communication::messages::RpcResult;
 
@@ -103,4 +104,21 @@ pub trait MinimalEthApi {
     /// Sends signed transaction, returning its hash
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
+}
+
+#[rpc(client, server, namespace = "registry")]
+pub trait RegistryApi {
+    /// Returns the future blocknumber and corresponding gateway url and address
+    #[method(name = "futureGateway")]
+    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address, B256)>;
+
+    /// Returns the current blocknumber and corresponding gateway url and address
+    #[method(name = "currentGateway")]
+    async fn current_gateway(&self) -> RpcResult<(u64, Url, Address, B256)> {
+        self.get_future_gateway(0).await
+    }
+
+    /// Returns the current blocknumber and corresponding gateway url and address
+    #[method(name = "registeredGateways")]
+    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>>;
 }

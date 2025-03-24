@@ -252,6 +252,10 @@ where
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
+        let head_bh = ctx.db.head_block_hash().expect("couldn't get db");
+        if head_bh != fork_choice_state.head_block_hash {
+            return self;
+        };
 
         match self {
             // Waiting for new payload should not happen, but while testing
