@@ -31,7 +31,9 @@ RPC_PORT_NUM = 8545
 EXECUTION_MIN_CPU = 100
 EXECUTION_MIN_MEMORY = 256
 
-GATEWAY_SIGNER_PRIVATE_KEY = "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"
+GATEWAY_SIGNER_PRIVATE_KEY = (
+    "0xe75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"
+)
 GATEWAY_SIGNER_ADDRESS = "0x14eff6e0bcc07363ee55d30d0a0e86386be1ca54"
 GATEWAY_JWT = "0xe15fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"
 
@@ -123,7 +125,8 @@ def get_config(
         "--rpc.fallback_url=" + sequencer_context.rpc_http_url,
         "--rpc.port={0}".format(RPC_PORT_NUM),
         "--gossip.signer_private_key=" + GATEWAY_SIGNER_PRIVATE_KEY,
-        "--gossip.root_peer_url=" + "http://op-cl-2-op-node-op-geth-op-kurtosis:8547",  # TODO
+        "--gossip.root_peer_url="
+        + "http://op-cl-2-op-node-op-geth-op-kurtosis:8547",  # TODO
         "--debug",
     ]
 

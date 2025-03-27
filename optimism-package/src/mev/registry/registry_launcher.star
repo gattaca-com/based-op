@@ -10,9 +10,7 @@ el_admin_node_info = import_module(
 constants = import_module(
     "github.com/ethpandaops/ethereum-package/src/package_io/constants.star"
 )
-gateway_launcher = import_module(
-    "../gateway/gateway_launcher.star"
-)
+gateway_launcher = import_module("../gateway/gateway_launcher.star")
 
 RPC_PORT_NUM = 8081
 RPC_PORT_ID = "rpc"
@@ -42,8 +40,8 @@ def launch(
     service_name,
     image,
     existing_el_clients,
-    sequencer_context, # fallback op geth
-    builder_context, # gateway
+    sequencer_context,  # fallback op geth
+    builder_context,  # gateway
 ):
     network_name = shared_utils.get_network_name(launcher.network)
 
@@ -89,7 +87,6 @@ def get_config(
     sequencer_context,
     builder_context,
 ):
-
     BUILDER_EXECUTION_ENGINE_ENDPOINT = "http://{0}:{1}".format(
         builder_context.ip_addr,
         builder_context.engine_rpc_port_num,
@@ -103,7 +100,9 @@ def get_config(
     used_ports = get_used_ports()
 
     template_data = new_config_template_data(
-        BUILDER_EXECUTION_ENGINE_ENDPOINT, gateway_launcher.GATEWAY_SIGNER_ADDRESS, gateway_launcher.GATEWAY_JWT
+        BUILDER_EXECUTION_ENGINE_ENDPOINT,
+        gateway_launcher.GATEWAY_SIGNER_ADDRESS,
+        gateway_launcher.GATEWAY_JWT,
     )
 
     registry_template = read_file(REGISTRY_DIRPATH)
@@ -157,6 +156,7 @@ def new_registry_launcher(
         network=network,
         network_id=network_id,
     )
+
 
 def new_config_template_data(url, address, jwt):
     return {

@@ -88,8 +88,6 @@ def get_config(
     builder_context,
     portal_extra_params,
 ):
-
-
     L2_EXECUTION_ENGINE_ENDPOINT = "http://{0}:{1}".format(
         sequencer_context.ip_addr,
         sequencer_context.engine_rpc_port_num,

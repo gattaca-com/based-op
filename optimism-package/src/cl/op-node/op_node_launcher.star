@@ -168,7 +168,9 @@ def get_beacon_config(
 
     # configure environment variables
     env_vars = dict(participant.cl_extra_env_vars)
-    advertise_ip = env_vars.get("ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER)
+    advertise_ip = env_vars.get(
+        "ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER
+    )
 
     cmd = [
         "op-node",
@@ -294,7 +296,9 @@ def get_beacon_config(
     }
 
     if advertise_ip == ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER:
-        config_args["private_ip_address_placeholder"] = ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER
+        config_args[
+            "private_ip_address_placeholder"
+        ] = ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER
 
     # configure resources
 

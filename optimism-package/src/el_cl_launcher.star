@@ -244,7 +244,6 @@ def launch(
                 )
             )
 
-
         if el_builder_type not in el_builder_launchers:
             fail(
                 "Unsupported launcher '{0}', need one of '{1}'".format(
@@ -321,9 +320,7 @@ def launch(
         sidecar_service_name = "op-{0}-{1}-{2}".format(
             mev_type, index_str, l2_services_suffix
         )
-        registry_service_name = "registry-{0}-{1}".format(
-            index_str, l2_services_suffix
-        )
+        registry_service_name = "registry-{0}-{1}".format(index_str, l2_services_suffix)
 
         sequencer_context = all_el_contexts[0] if len(all_el_contexts) > 0 else None
         el_context = el_launch_method(
@@ -413,7 +410,7 @@ def launch(
                         node_selectors,
                         all_el_contexts,
                         el_context,
-                        observability_helper
+                        observability_helper,
                     )
                 else:
                     el_builder_context = struct(
