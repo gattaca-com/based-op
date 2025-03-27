@@ -48,11 +48,14 @@ deps: ## 🚀 Install all dependencies
 		docker pull --platform=linux/amd64 ghcr.io/blockscout/smart-contract-verifier:v1.9.0; \
 	fi
 
-build: build-portal build-gateway build-op-node build-op-geth ## 🏗️ Build
+build: build-portal build-gateway build-op-node build-op-geth build-registry ## 🏗️ Build
 
 build-no-gateway: build-portal build-op-node build-op-geth ## 🏗️ Build without gateway
 build-portal: ## 🏗️ Build based portal from based directory
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
+
+build-registry: ## 🏗️ Build based registry from based directory
+	docker build -t based_registry_local -f ./based/registry.Dockerfile --build-context reth=./reth ./based
 
 build-gateway: ## 🏗️ Build based gateway from based directory
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based

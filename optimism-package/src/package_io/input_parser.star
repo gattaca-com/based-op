@@ -42,6 +42,10 @@ DEFAULT_GATEWAY_IMAGES = {
     "gateway": "",
 }
 
+DEFAULT_REGISTRY_IMAGES = {
+    "registry": "",
+}
+
 DEFAULT_ADDITIONAL_SERVICES = []
 
 
@@ -207,6 +211,7 @@ def input_parser(plan, input_args):
                     builder_host=result["mev_params"]["builder_host"],
                     builder_port=result["mev_params"]["builder_port"],
                     portal_extra_params=result["mev_params"]["portal_extra_params"],
+                    registry_image=result["mev_params"]["registry_image"],
                 ),
                 additional_services=result["additional_services"],
             )
@@ -443,6 +448,7 @@ def default_mev_params():
         "builder_host": "",
         "builder_port": "",
         "portal_extra_params": [],
+        "registry_image": "",
     }
 
 

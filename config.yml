@@ -23,6 +23,7 @@ optimism_package:
       mev_params:
         based_portal_image: based_portal_local
         gateway_image: based_gateway_local
+        registry_image: based_registry_local
         # Uncomment for local development, with the gateway starting out of the enclave via make dump gateway
         # builder_host: "host.docker.internal"
         # builder_port: "9997"

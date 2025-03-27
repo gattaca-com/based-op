@@ -1,0 +1,5 @@
+[
+{{- range .Gateways }}
+["{{ .URL }}", "{{ .Address }}", "{{ .JWT }}"]
+{{- end }}
+]
