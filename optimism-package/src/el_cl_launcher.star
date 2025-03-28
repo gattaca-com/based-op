@@ -27,6 +27,7 @@ op_geth_builder = import_module("./el/op-geth/op_geth_builder_launcher.star")
 op_reth_builder = import_module("./el/op-reth/op_reth_builder_launcher.star")
 op_node_builder = import_module("./cl/op-node/op_node_builder_launcher.star")
 gateway = import_module("./mev/gateway/gateway_launcher.star")
+registry = import_module("./mev/registry/registry_launcher.star")
 
 ROLLUP_BOOST_MEV_TYPE = "rollup-boost"
 BASED_PORTAL_MEV_TYPE = "based-portal"
@@ -132,6 +133,18 @@ def launch(
         },
     }
 
+    registry_launchers = {
+        "registry": {
+            "launcher": registry.new_registry_launcher(
+                deployment_output,
+                jwt_file,
+                network_params.network,
+                network_params.network_id,
+            ),
+            "launch_method": registry.launch,
+        },
+    }
+
     cl_launchers = {
         "op-node": {
             "launcher": op_node.new_op_node_launcher(
@@ -189,6 +202,7 @@ def launch(
         cl_builder_type = participant.cl_builder_type
         el_builder_type = participant.el_builder_type
         gateway_type = "gateway"
+        registry_type = "registry"
 
         node_selectors = ethereum_package_input_parser.get_client_node_selectors(
             participant.node_selectors,
@@ -220,6 +234,13 @@ def launch(
             fail(
                 "Unsupported launcher '{0}', need one of '{1}'".format(
                     gateway_type, ",".join(gateway_launchers.keys())
+                )
+            )
+
+        if registry_type not in registry_launchers:
+            fail(
+                "Unsupported launcher '{0}', need one of '{1}'".format(
+                    registry_type, ",".join(registry_launchers.keys())
                 )
             )
 
@@ -262,6 +283,11 @@ def launch(
             gateway_launchers[gateway_type]["launch_method"],
         )
 
+        registry_launcher, registry_launch_method = (
+            registry_launchers[registry_type]["launcher"],
+            registry_launchers[registry_type]["launch_method"],
+        )
+
         sidecar_launcher, sidecar_launch_method = (
             (
                 sidecar_launchers[mev_type]["launcher"],
@@ -294,6 +320,7 @@ def launch(
         sidecar_service_name = "op-{0}-{1}-{2}".format(
             mev_type, index_str, l2_services_suffix
         )
+        registry_service_name = "registry-{0}-{1}".format(index_str, l2_services_suffix)
 
         sequencer_context = all_el_contexts[0] if len(all_el_contexts) > 0 else None
         el_context = el_launch_method(
@@ -383,7 +410,7 @@ def launch(
                         node_selectors,
                         all_el_contexts,
                         el_context,
-                        observability_helper
+                        observability_helper,
                     )
                 else:
                     el_builder_context = struct(
@@ -395,6 +422,24 @@ def launch(
                         ),
                         client_name="external-gateway",
                     )
+
+                plan.print("Starting based registry")
+
+                registry_image = (
+                    mev_params.registry_image
+                    if mev_params.registry_image != ""
+                    else input_parser.DEFAULT_REGISTRY_IMAGES["registry"]
+                )
+
+                registry_context = registry_launch_method(
+                    plan,
+                    registry_launcher,
+                    registry_service_name,
+                    registry_image,
+                    all_el_contexts,
+                    el_context,
+                    el_builder_context,
+                )
 
                 plan.print("Starting based portal")
 
@@ -411,6 +456,7 @@ def launch(
                     based_portal_image,
                     all_el_contexts,
                     el_context,
+                    registry_context,
                     el_builder_context,
                     mev_params.portal_extra_params,
                 )
