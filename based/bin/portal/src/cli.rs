@@ -50,7 +50,7 @@ pub struct PortalArgs {
     #[arg(long)]
     pub trace: bool,
 
-    #[arg(long = "registry.url", default_value = "http://localhost:8081")]
+    #[arg(long = "registry.url")]
     pub registry_url: Url,
 
     #[arg(long = "registry.timeout_ms", default_value_t = 1_000)]

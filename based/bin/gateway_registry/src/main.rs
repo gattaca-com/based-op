@@ -40,7 +40,7 @@ pub struct RegistryArgs {
     pub eth_client_url: Url,
 
     /// Timeout when trying to contact the portal
-    #[arg(long = "eth_client.timeout_ms")]
+    #[arg(long = "eth_client.timeout_ms", default_value_t = 1_000)]
     pub eth_client_timeout: u64,
 
     /// Enable debug logging
@@ -89,6 +89,7 @@ fn refresh_gateway_clients(path: impl AsRef<Path>) -> Result<Vec<(Url, Address, 
 #[derive(Clone)]
 pub struct RegistryServer {
     eth_client: RpcClient,
+    // url, address, jwt secret
     gateway_clients: Arc<RwLock<Vec<(Url, Address, B256)>>>,
     gateway_update_blocks: u64,
 }
@@ -150,13 +151,14 @@ impl RegistryServer {
 /// receiving user facing calls so we need to find another way to do this
 #[async_trait]
 impl RegistryApiServer for RegistryServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::INFO))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
+        info!(n_blocks_into_the_future, "serving future gateway");
         let gateways = self.gateway_clients.read();
         let n_gateways = gateways.len();
         let target_block = u64::try_from(self.eth_client.block_number().await? + U256::from_limbs([1, 0, 0, 0]))
-            .map_err(|_| RpcError::Internal)? +
-            n_blocks_into_the_future;
+            .map_err(|_| RpcError::Internal)?
+            + n_blocks_into_the_future;
         let id = (target_block / self.gateway_update_blocks) as usize;
         let (url, address, jwt_in_b256) = gateways[id % n_gateways].clone();
         Ok((target_block, url, address, jwt_in_b256))

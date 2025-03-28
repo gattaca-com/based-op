@@ -174,7 +174,9 @@ def get_config(
 
     # configure environment variables
     env_vars = dict(participant.el_extra_env_vars)
-    extip = env_vars.get("ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER)
+    extip = env_vars.get(
+        "ADVERTISE_EXTERNAL", ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER
+    )
 
     cmd = [
         "geth",
@@ -232,7 +234,6 @@ def get_config(
         )
 
         subcommand_strs.append(init_datadir_cmd_str)
-
 
     # apply customizations
 
@@ -292,7 +293,9 @@ def get_config(
     }
 
     if extip == ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER:
-        config_args["private_ip_address_placeholder"] = ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER
+        config_args[
+            "private_ip_address_placeholder"
+        ] = ethereum_package_constants.PRIVATE_IP_ADDRESS_PLACEHOLDER
 
     # configure resources
 
