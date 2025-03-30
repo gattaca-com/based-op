@@ -61,8 +61,8 @@ impl<Db: DatabaseRead> Actor<Db> for BlockFetcher {
             self.next_block = stop + 1;
         }
 
-        connections.receive(|msg, _| {
+        while connections.receive(|msg, _| {
             self.handle_fetch(msg);
-        });
+        }) {}
     }
 }
