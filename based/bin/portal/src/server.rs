@@ -65,7 +65,10 @@ impl PortalServer {
             create_auth_client(args.fallback_url, fallback_jwt, Duration::from_millis(args.fallback_timeout_ms))?;
         let registry_client = create_client(args.registry_url, Duration::from_millis(args.registry_timeout_ms))?;
 
-        let (_, gateway_url, _, jwt_as_b256) = registry_client.current_gateway().await?;
+        let (_, gateway_url, _, jwt_as_b256) = registry_client
+            .current_gateway()
+            .await
+            .unwrap_or_else(|_| (0, Url::parse("http://default.net").unwrap(), Address::ZERO, B256::ZERO));
 
         let gateway_timeout = Duration::from_millis(args.gateway_timeout_ms);
 
@@ -76,7 +79,7 @@ impl PortalServer {
         )?));
 
         let mut gateways = vec![];
-        for (gateway_url, _, jwt_as_b256) in registry_client.registered_gateways().await? {
+        for (gateway_url, _, jwt_as_b256) in registry_client.registered_gateways().await.unwrap_or_else(|_| vec![]) {
             gateways.push(create_gateway_client(
                 gateway_url,
                 unsafe { std::mem::transmute(jwt_as_b256) },
@@ -105,8 +108,14 @@ impl PortalServer {
             .await?;
 
         let mut module = EngineApiServer::into_rpc(self.clone());
-        module.merge(EthApiServer::into_rpc(self)).expect("failed to merge modules");
+        module.merge(EthApiServer::into_rpc(self.clone())).expect("failed to merge modules");
 
+        tokio::spawn(async move {
+            loop {
+                let _ = self.refresh().await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        });
         let server_handle = server.start(module);
 
         tokio::select! {
@@ -122,13 +131,29 @@ impl PortalServer {
         Ok(())
     }
 
+    fn gateways_initialized(&self) -> bool {
+        self.gateways.read().len() != 0
+    }
+
     fn gateways(&self) -> Vec<Gateway> {
         self.gateways.read().clone()
     }
 
     pub async fn refresh(&self) -> eyre::Result<()> {
         let (_, gateway_url, _, jwt_as_b256) = self.registry_client.current_gateway().await?;
-        debug!(%gateway_url, "updating gateway");
+        tracing::debug!("updating gateway to {gateway_url:?}");
+        if !self.gateways_initialized() {
+            tracing::debug!("registry was down until now, initializing gateways");
+            let mut gateways = vec![];
+            for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
+                gateways.push(create_gateway_client(
+                    gateway_url,
+                    unsafe { std::mem::transmute(jwt_as_b256) },
+                    self.gateway_timeout,
+                )?)
+            }
+            *self.gateways.write() = gateways;
+        }
 
         *self.current_gateway.lock() =
             create_gateway_client(gateway_url, unsafe { std::mem::transmute(jwt_as_b256) }, self.gateway_timeout)?;
@@ -366,6 +391,12 @@ impl EngineApiServer for PortalServer {
             debug!(%parent_block_hash, "new request (no attributes)");
         }
 
+        let response =
+            self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
+        if !self.gateways_initialized() {
+            return Ok(response);
+        }
+
         if payload_attributes.is_some() {
             // pick only one gateway for this block
             let mut curt = Instant::now();
@@ -377,7 +408,6 @@ impl EngineApiServer for PortalServer {
                 }
             }
 
-            let payload_attributes = payload_attributes.clone();
             tokio::spawn(
                 Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
                     .in_current_span(),
@@ -389,8 +419,6 @@ impl EngineApiServer for PortalServer {
                 tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span());
             }
         }
-
-        let response = self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await?;
 
         Ok(response)
     }

@@ -65,7 +65,7 @@ impl BlockSync {
         }
 
         // Check if we committed a different block with the same number and rewind the database if so.
-        if block_number <= db_head {
+        if block_number != 0 && block_number <= db_head {
             let new_block_hash = block.header.hash_slow();
 
             // Check if the block has already been committed.
@@ -80,9 +80,8 @@ impl BlockSync {
                 db.roll_back_head()?;
             }
         }
-
         let db_head_hash = db.head_block_hash().expect("failed to get head block hash");
-        if db_head_hash != block.header.parent_hash {
+        if block_number != 0 && db_head_hash != block.header.parent_hash {
             warn!(
                 "reorg detected. new block parent doesn't match db head. Block number: {}. Block parent hash: {:?}, db_head_hash: {:?}",
                 block.header.number,
@@ -93,8 +92,9 @@ impl BlockSync {
             // Roll back head and request missing blocks.
             db.roll_back_head()?;
             self.insert_pending_block(block);
+            tracing::debug!("asking for blocks from {} to {}", db.head_block_number().unwrap(), block.header.number);
 
-            return Ok(Some((db.head_block_number().unwrap() + 1, block.header.number)));
+            return Ok(Some((db.head_block_number().unwrap(), block.header.number)));
         }
 
         self.execute_and_maybe_commit(block, db, commit_block)?;
