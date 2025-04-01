@@ -16,4 +16,6 @@ reqwest.workspace = true
 reth-optimism-primitives.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+tower.workspace = true
 tracing.workspace = true
+reth-rpc-layer.workspace = true
