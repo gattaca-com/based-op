@@ -6,7 +6,7 @@ description: Unlocking external block production
 
 The based portal is a sequencer sidecar that enables seamless integration of based components with the existing stacks. It sits between the sequencer OP node and the EL, intercepting the [Engine API](https://specs.optimism.io/protocol/exec-engine.html) calls and multiplexing them to gateways.
 
-The portal is based on an original design called [Rollup Boost](https://github.com/flashbots/rollup-boost), with added support for multiple gateways. Currently the schedule is static and gatewyas are picked in a round-robin fashion for sequencing for a set number of L2 blocks. Eventually, the schedule will be computed from an on-chain lookahead.
+The portal is based on an original design called [Rollup Boost](https://github.com/flashbots/rollup-boost), with added support for multiple gateways. Currently the schedule is static and gateways are picked in a round-robin fashion for sequencing for a set number of L2 blocks. Eventually, the schedule will be computed from an on-chain lookahead.
 
 ## Flows
 Depending on the call, the portal will multiplex to one or multiple gateways, as well as always forwarding to the fallback EL for redundancy and verification: 
