@@ -74,7 +74,7 @@ impl PortalServer {
 
         let current_gateway = Arc::new(Mutex::new(create_gateway_client(
             gateway_url,
-            unsafe { std::mem::transmute(jwt_as_b256) },
+            unsafe { std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256) },
             gateway_timeout,
         )?));
 
@@ -82,7 +82,9 @@ impl PortalServer {
         for (gateway_url, _, jwt_as_b256) in registry_client.registered_gateways().await.unwrap_or_else(|_| vec![]) {
             gateways.push(create_gateway_client(
                 gateway_url,
-                unsafe { std::mem::transmute(jwt_as_b256) },
+                unsafe {
+                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
+                },
                 gateway_timeout,
             )?)
         }
@@ -148,15 +150,20 @@ impl PortalServer {
             for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
                 gateways.push(create_gateway_client(
                     gateway_url,
-                    unsafe { std::mem::transmute(jwt_as_b256) },
+                    unsafe {
+                        std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
+                    },
                     self.gateway_timeout,
                 )?)
             }
             *self.gateways.write() = gateways;
         }
 
-        *self.current_gateway.lock() =
-            create_gateway_client(gateway_url, unsafe { std::mem::transmute(jwt_as_b256) }, self.gateway_timeout)?;
+        *self.current_gateway.lock() = create_gateway_client(
+            gateway_url,
+            unsafe { std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256) },
+            self.gateway_timeout,
+        )?;
         Ok(())
     }
 
@@ -400,7 +407,7 @@ impl EngineApiServer for PortalServer {
         if payload_attributes.is_some() {
             // pick only one gateway for this block
             let mut curt = Instant::now();
-            while let Err(_) = self.refresh().await {
+            while self.refresh().await.is_err() {
                 tokio::time::sleep(Duration::from_millis(10)).await;
                 if curt.elapsed() > Duration::from_secs(1) {
                     tracing::error!("couldn't get next gateway from registry. Retrying...");

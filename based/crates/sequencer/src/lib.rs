@@ -355,7 +355,7 @@ where
                 let s = senders.send_timeout(VersionedMessage::from(seal), Duration::from_millis(10));
                 debug_assert!(s.is_ok(), "couldn't send seal for 10 millis");
                 let s = res.send(block.clone());
-                if cfg!(debug_assertions) && !s.is_ok() {
+                if cfg!(debug_assertions) && s.is_err() {
                     tracing::error!("trying to send block to rpc: connection already severed");
                 }
                 ctx.timers.seal_block.stop();
