@@ -64,6 +64,8 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		return nil, fmt.Errorf("failed to load p2p config: %w", err)
 	}
 
+	registryEndpoint := NewRegistryEndpointConfig(ctx)
+
 	l1Endpoint := NewL1EndpointConfig(ctx)
 
 	l2Endpoint, err := NewL2EndpointConfig(ctx, log)
@@ -89,6 +91,7 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	conductorRPCEndpoint := ctx.String(flags.ConductorRpcFlag.Name)
 	cfg := &node.Config{
 		L1:         l1Endpoint,
+		Registry:   registryEndpoint,
 		L2:         l2Endpoint,
 		Rollup:     *rollupConfig,
 		Driver:     *driverConfig,
@@ -161,6 +164,16 @@ func NewL1EndpointConfig(ctx *cli.Context) *node.L1EndpointConfig {
 		L1NodeAddr:       ctx.String(flags.L1NodeAddr.Name),
 		L1TrustRPC:       ctx.Bool(flags.L1TrustRPC.Name),
 		L1RPCKind:        sources.RPCProviderKind(strings.ToLower(ctx.String(flags.L1RPCProviderKind.Name))),
+		RateLimit:        ctx.Float64(flags.L1RPCRateLimit.Name),
+		BatchSize:        ctx.Int(flags.L1RPCMaxBatchSize.Name),
+		HttpPollInterval: ctx.Duration(flags.L1HTTPPollInterval.Name),
+		MaxConcurrency:   ctx.Int(flags.L1RPCMaxConcurrency.Name),
+	}
+}
+
+func NewRegistryEndpointConfig(ctx *cli.Context) *node.RegistryEndpointConfig {
+	return &node.RegistryEndpointConfig{
+		RegistryNodeAddr: ctx.String(flags.RegistryNodeAddr.Name),
 		RateLimit:        ctx.Float64(flags.L1RPCRateLimit.Name),
 		BatchSize:        ctx.Int(flags.L1RPCMaxBatchSize.Name),
 		HttpPollInterval: ctx.Duration(flags.L1HTTPPollInterval.Name),

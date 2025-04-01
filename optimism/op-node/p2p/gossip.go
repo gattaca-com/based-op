@@ -59,7 +59,7 @@ type GossipSetupConfigurables interface {
 
 type GossipRuntimeConfig interface {
 	P2PSequencerAddress() common.Address
-	CurrentGateway() common.Address
+	CurrentGateway(ctx context.Context) (common.Address, error)
 }
 
 //go:generate mockery --name GossipMetricer
@@ -293,7 +293,11 @@ func BuildNewFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRunt
 
 		msg := signedFrag.Frag.Root()
 
-		expectedSigner := runCfg.CurrentGateway()
+		expectedSigner, err := runCfg.CurrentGateway(ctx)
+		if err != nil {
+			log.Warn("unknown current gateway", "err", err)
+			return pubsub.ValidationReject
+		}
 
 		if result := verifyGatewaySignature(log, signedFrag.Signature[:], msg[:], expectedSigner); result != pubsub.ValidationAccept {
 			return result
@@ -316,7 +320,11 @@ func BuildSealFragValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRun
 
 		msg := signedSeal.Seal.Root()
 
-		expectedSigner := runCfg.CurrentGateway()
+		expectedSigner, err := runCfg.CurrentGateway(ctx)
+		if err != nil {
+			log.Warn("unknown current gateway", "err", err)
+			return pubsub.ValidationReject
+		}
 
 		if result := verifyGatewaySignature(log, signedSeal.Signature[:], msg[:], expectedSigner); result != pubsub.ValidationAccept {
 			return result
@@ -339,7 +347,11 @@ func BuildEnvValidator(log log.Logger, cfg *rollup.Config, runCfg GossipRuntimeC
 
 		msg := signedEnv.Env.Root()
 
-		expectedSigner := runCfg.CurrentGateway()
+		expectedSigner, err := runCfg.CurrentGateway(ctx)
+		if err != nil {
+			log.Warn("unknown current gateway", "err", err)
+			return pubsub.ValidationReject
+		}
 
 		if result := verifyGatewaySignature(log, signedEnv.Signature[:], msg[:], expectedSigner); result != pubsub.ValidationAccept {
 			return result

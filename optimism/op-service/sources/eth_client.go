@@ -386,6 +386,18 @@ func (s *EthClient) ReadStorageAt(ctx context.Context, address common.Address, s
 	return common.BytesToHash(value.Bytes()), nil
 }
 
+func (s *EthClient) CurrentGateway(ctx context.Context) (common.Address, error) {
+	var out []any
+	err := s.client.CallContext(ctx, &out, "registry_currentGateway", nil)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	// The registry contract returns a tuple with the gateway address as the third element.
+	address := common.HexToAddress(fmt.Sprintf("%v", out[2]))
+	return address, nil
+}
+
 func (s *EthClient) Close() {
 	s.client.Close()
 }

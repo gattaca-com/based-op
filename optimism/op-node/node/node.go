@@ -57,15 +57,16 @@ type OpNode struct {
 	eventSys   event.System
 	eventDrain event.Drainer
 
-	l1Source          *sources.L1Client     // L1 Client to fetch data from
-	l2Driver          *driver.Driver        // L2 Engine to Sync
-	l2Source          *sources.EngineClient // L2 Execution Engine RPC bindings
-	server            *rpcServer            // RPC server hosting the rollup-node API
-	p2pNode           *p2p.NodeP2P          // P2P node functionality
-	p2pSigner         p2p.Signer            // p2p gossip application messages will be signed with this signer
-	p2pGatewayAddress common.Address        // Gateway address for P2P
-	tracer            Tracer                // tracer to get events for testing/debugging
-	runCfg            *RuntimeConfig        // runtime configurables
+	l1Source          *sources.L1Client       // L1 Client to fetch data from
+	registrySource    *sources.RegistryClient // Registry Client to fetch gateway address
+	l2Driver          *driver.Driver          // L2 Engine to Sync
+	l2Source          *sources.EngineClient   // L2 Execution Engine RPC bindings
+	server            *rpcServer              // RPC server hosting the rollup-node API
+	p2pNode           *p2p.NodeP2P            // P2P node functionality
+	p2pSigner         p2p.Signer              // p2p gossip application messages will be signed with this signer
+	p2pGatewayAddress common.Address          // Gateway address for P2P
+	tracer            Tracer                  // tracer to get events for testing/debugging
+	runCfg            *RuntimeConfig          // runtime configurables
 
 	preconfChannels engine.PreconfChannels
 
@@ -137,6 +138,9 @@ func (n *OpNode) init(ctx context.Context, cfg *Config) error {
 	n.initEventSystem()
 	if err := n.initL1(ctx, cfg); err != nil {
 		return fmt.Errorf("failed to init L1: %w", err)
+	}
+	if err := n.initRegistry(ctx, cfg); err != nil {
+		return fmt.Errorf("failed to init Registry: %w", err)
 	}
 	if err := n.initL1BeaconAPI(ctx, cfg); err != nil {
 		return err
@@ -228,9 +232,24 @@ func (n *OpNode) initL1(ctx context.Context, cfg *Config) error {
 	return nil
 }
 
+func (n *OpNode) initRegistry(ctx context.Context, cfg *Config) error {
+	registryNode, rpcCfg, err := cfg.Registry.Setup(ctx, n.log, &cfg.Rollup)
+	if err != nil {
+		return fmt.Errorf("failed to get Registry RPC client: %w", err)
+	}
+
+	n.registrySource, err = sources.NewRegistryClient(
+		client.NewInstrumentedRPC(registryNode, &n.metrics.RPCMetrics.RPCClientMetrics), n.log, n.metrics.RegistrySourceCache, rpcCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create Registry source: %w", err)
+	}
+
+	return nil
+}
+
 func (n *OpNode) initRuntimeConfig(ctx context.Context, cfg *Config) error {
 	// attempt to load runtime config, repeat N times
-	n.runCfg = NewRuntimeConfig(n.log, n.l1Source, &cfg.Rollup, cfg.P2PGatewayAddress)
+	n.runCfg = NewRuntimeConfig(n.log, n.l1Source, &cfg.Rollup, n.registrySource)
 
 	confDepth := cfg.Driver.VerifierConfDepth
 	reload := func(ctx context.Context) (eth.L1BlockRef, error) {
