@@ -157,8 +157,8 @@ impl RegistryApiServer for RegistryServer {
         let curblock = self.eth_client.block_number().await?;
         let gateways = self.gateway_clients.read();
         let n_gateways = gateways.len();
-        let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)?
-            + n_blocks_into_the_future;
+        let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)? +
+            n_blocks_into_the_future;
         let id = (target_block / self.gateway_update_blocks) as usize;
         let (url, address, jwt_in_b256) = gateways[id % n_gateways].clone();
         Ok((target_block, url, address, jwt_in_b256))
