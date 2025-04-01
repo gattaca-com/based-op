@@ -122,12 +122,13 @@ def get_config(
             + "/genesis-{0}.json".format(launcher.network_id)
         ),
         "--db.datadir=" + EXECUTION_DATA_DIRPATH_ON_CLIENT_CONTAINER,
-        "--rpc.fallback_url=" + sequencer_context.rpc_http_url,
+        "--eth_client.url=" + sequencer_context.rpc_http_url,
         "--rpc.port={0}".format(RPC_PORT_NUM),
         "--gossip.signer_private_key=" + GATEWAY_SIGNER_PRIVATE_KEY,
         "--gossip.root_peer_url="
         + "http://op-cl-2-op-node-op-geth-op-kurtosis:8547",  # TODO
         "--debug",
+        "--rpc.jwt=" + GATEWAY_JWT
     ]
 
     # configure files

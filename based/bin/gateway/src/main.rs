@@ -88,12 +88,12 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         let fragdb_clone = shared_state.as_ref().clone();
         if let Some(mode) = args.mock {
             s.spawn(|| {
-                MockFetcher::new(args.rpc_fallback_url, start_fetch, start_fetch + 100, fragdb_clone, mode)
+                MockFetcher::new(args.eth_client_url, start_fetch, start_fetch + 100, fragdb_clone, mode)
                     .run(spine.to_connections("BlockFetch"), ActorConfig::default());
             });
         } else {
             s.spawn(|| {
-                BlockFetcher::new(args.rpc_fallback_url, db_block).run(
+                BlockFetcher::new(args.eth_client_url, db_block).run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
                 );

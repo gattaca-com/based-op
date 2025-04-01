@@ -101,10 +101,11 @@ dump:
 gateway: ## 🚀 Run the gateway
 	cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway --features shmem -- \
 	--db.datadir $(datadir) \
-	--rpc.fallback_url http://127.0.0.1:$(OP_EL_PORT) \
+	--eth_client.url http://127.0.0.1:$(OP_EL_PORT) \
 	--chain ./genesis/genesis-2151908.json \
 	--rpc.port $(port) \
-	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT)
+	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
+	--rpc.jwt 0x1b11d6635cdf11d69f530dc0656ab8960735464d01fe1d4124107548896ba581
 
 
 batcher-logs:

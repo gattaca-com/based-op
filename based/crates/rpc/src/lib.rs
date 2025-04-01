@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use alloy_primitives::{Bytes, B256};
+use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
     api::{EngineApiServer, MinimalEthApiServer},
     communication::{
@@ -13,6 +14,7 @@ use bop_common::{
     transaction::Transaction,
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
+use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
 use tokio::runtime::Runtime;
 use tracing::{error, info, trace, Level};
 
@@ -21,7 +23,7 @@ pub mod gossiper;
 
 pub fn start_rpc<Db: DatabaseRead>(config: &GatewayArgs, spine: &Spine<Db>, rt: &Runtime) {
     let addr = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
-    let server = RpcServer::new(spine);
+    let server = RpcServer::new(spine, config.rpc_jwt);
     rt.spawn(server.run(addr));
 }
 
@@ -32,20 +34,28 @@ struct RpcServer {
     new_order_tx: Sender<Arc<Transaction>>,
     engine_timeout: Duration,
     engine_rpc_tx: Sender<EngineApi>,
+    jwt: JwtSecret,
 }
 
 impl RpcServer {
-    pub fn new<Db>(spine: &Spine<Db>) -> Self {
-        Self { new_order_tx: spine.into(), engine_rpc_tx: spine.into(), engine_timeout: Duration::from_secs(1) }
+    pub fn new<Db>(spine: &Spine<Db>, jwt: JwtSecret) -> Self {
+        Self { new_order_tx: spine.into(), engine_rpc_tx: spine.into(), engine_timeout: Duration::from_secs(1), jwt }
     }
 
     #[tracing::instrument(skip_all, name = "rpc")]
     pub async fn run(self, addr: SocketAddr) {
         info!(%addr, "starting RPC server");
+        let validator = JwtAuthValidator::new(self.jwt);
+        let auth_layer = AuthLayer::new(validator);
+        let service_builder = tower::ServiceBuilder::new()
+            // Proxy `GET /health` requests to internal `system_health` method.
+            .layer(auth_layer)
+            .timeout(std::time::Duration::from_secs(2));
 
         let server = ServerBuilder::default()
             .max_request_body_size(u32::MAX)
             .max_response_body_size(u32::MAX)
+            .set_http_middleware(service_builder)
             .build(addr)
             .await
             .expect("failed to create eth RPC server");
