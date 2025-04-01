@@ -1,5 +1,6 @@
 use std::{net::Ipv4Addr, path::PathBuf, sync::Arc};
 
+use alloy_rpc_types::engine::JwtSecret;
 use clap::Parser;
 use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
@@ -33,9 +34,11 @@ pub struct GatewayArgs {
     /// The port to run the engine_ and eth_ RPC
     #[arg(long = "rpc.port", default_value_t = 9090)]
     pub rpc_port: u16,
-    /// Url to a full node for syncing and eth_ fallback requests
-    #[arg(long = "rpc.fallback_url", default_value = "https://base-sepolia-rpc.publicnode.com")]
-    pub rpc_fallback_url: Url,
+    #[arg(long = "rpc.jwt")]
+    pub rpc_jwt: JwtSecret,
+    /// Url to an L2 eth api rpc
+    #[arg(long = "eth_client.url", default_value = "http://localhost:8545")]
+    pub eth_client_url: Url,
     /// Url to the root peer gossip node
     #[arg(long = "gossip.root_peer_url")]
     pub gossip_root_peer_url: Option<Url>,
