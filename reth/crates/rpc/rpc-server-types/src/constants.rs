@@ -65,6 +65,9 @@ pub mod gas_oracle {
     /// The default maximum number of blocks to use for the gas price oracle.
     pub const MAX_HEADER_HISTORY: u64 = 1024;
 
+    /// The default maximum number of allowed reward percentiles
+    pub const MAX_REWARD_PERCENTILE_COUNT: u64 = 100;
+
     /// Number of recent blocks to check for gas price
     pub const DEFAULT_GAS_PRICE_BLOCKS: u32 = 20;
 
@@ -80,8 +83,8 @@ pub mod gas_oracle {
 
     /// The default gas limit for `eth_call` and adjacent calls.
     ///
-    /// This is different from the default to regular 30M block gas limit `ETHEREUM_BLOCK_GAS_LIMIT`
-    /// to allow for more complex calls.
+    /// This is different from the default to regular 30M block gas limit
+    /// `ETHEREUM_BLOCK_GAS_LIMIT_30M` to allow for more complex calls.
     pub const RPC_DEFAULT_GAS_CAP: u64 = 50_000_000;
 
     /// Allowed error ratio for gas estimation

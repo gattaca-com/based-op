@@ -1,0 +1,49 @@
+procs:
+  vanilla-op-node:
+    shell: |
+      if [ "$(docker ps -q -f name=vanilla-op-node)" ]; then
+        echo "Container vanilla-op-node is already running."
+      elif [ "$(docker ps -a -q -f name=vanilla-op-node)" ]; then
+        echo "Container vanilla-op-node exists but is stopped. Restarting..."
+        docker start vanilla-op-node
+      else
+        echo "Container vanilla-op-node does not exist. Creating and starting container..."
+        docker run --network host --name vanilla-op-node \
+          -v ./assets/geth_jwt.txt:/jwt.txt \
+          -v ./assets/rollup.json:/rollup.json \
+          -v ./assets/genesis.json:/genesis.json \
+          us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2 op-node \
+          --l2=http://localhost:8080 \
+          --l2.jwt-secret=/jwt.txt \
+          --sequencer.enabled \
+          --sequencer.l1-confs=5 \
+          --verifier.l1-confs=4 \
+          --rollup.config=/rollup.json \
+          --rpc.addr=0.0.0.0 \
+          --p2p.disable \
+          --rpc.enable-admin \
+          --p2p.sequencer.key=$GS_SEQUENCER_PRIVATE_KEY \
+          --l1=http://34.194.193.217:8545 \
+          --l1.beacon=https://ethereum-sepolia-beacon-api.publicnode.com
+      fi
+  vanilla-op-geth:
+    shell: |
+      if [ "$(docker ps -q -f name=vanilla-op-geth)" ]; then
+        echo "Container vanilla-op-node is already running."
+      elif [ "$(docker ps -a -q -f name=vanilla-op-geth)" ]; then
+        echo \"Container vanilla-op-node exists but is stopped. Restarting...\"
+        docker start vanilla-op-geth
+      else
+        echo \"Container vanilla-op-node does not exist. Creating and starting container...\"
+        docker run --network host --name vanilla-op-geth -v ./assets/datadir_geth:/datadir -v ./assets/geth_jwt.txt:/jwt.txt us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101503.1 --datadir /datadir --http --http.corsdomain="*" --http.vhosts="*" --http.addr=0.0.0.0 --http.api=web3,debug,eth,txpool,net,engine --ws --ws.addr=0.0.0.0 --ws.port=8546 --ws.origins="*" --ws.api=debug,eth,txpool,net,engine --syncmode=full --gcmode=archive --nodiscover --maxpeers=0 --networkid=42069 --authrpc.vhosts="*" --authrpc.addr=0.0.0.0 --authrpc.port=8552 --authrpc.jwtsecret=./jwt.txt --rollup.disabletxpoolgossip=true
+      fi
+  portal:
+    shell: "cargo run --profile=release-with-debug --bin based-portal -- --fallback.eth_url http://localhost:8545 --fallback.url http://localhost:8552 --fallback.jwt_path ../assets/geth_jwt.txt"
+    cwd: "./based"
+    env:
+      RUST_LOG: debug
+  registry:
+    shell: "cargo run --profile=release-with-debug --bin gateway-registry -- --registry.path ./gateways.example.json --eth_client.url http://localhost:8545 --eth_client.timeout_ms 10"
+    cwd: "./based"
+    env:
+      RUST_LOG: debug

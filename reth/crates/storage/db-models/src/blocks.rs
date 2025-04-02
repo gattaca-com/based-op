@@ -1,8 +1,6 @@
-use std::ops::Range;
-
 use alloy_eips::eip4895::Withdrawals;
 use alloy_primitives::TxNumber;
-use reth_codecs::{add_arbitrary_tests, Compact};
+use core::ops::Range;
 use serde::{Deserialize, Serialize};
 
 /// Total number of transactions.
@@ -12,9 +10,10 @@ pub type NumTransactions = u64;
 ///
 /// It has the pointer to the transaction Number of the first
 /// transaction in the block and the total number of transactions.
-#[derive(Debug, Default, Eq, PartialEq, Clone, Copy, Serialize, Deserialize, Compact)]
+#[derive(Debug, Default, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
-#[add_arbitrary_tests(compact)]
+#[cfg_attr(any(test, feature = "reth-codec"), derive(reth_codecs::Compact))]
+#[cfg_attr(any(test, feature = "reth-codec"), reth_codecs::add_arbitrary_tests(compact))]
 pub struct StoredBlockBodyIndices {
     /// The number of the first transaction in this block
     ///
@@ -68,12 +67,46 @@ impl StoredBlockBodyIndices {
 }
 
 /// The storage representation of block withdrawals.
-#[derive(Debug, Default, Eq, PartialEq, Clone, Serialize, Deserialize, Compact)]
+#[derive(Debug, Default, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
-#[add_arbitrary_tests(compact)]
+#[cfg_attr(any(test, feature = "reth-codec"), derive(reth_codecs::Compact))]
+#[cfg_attr(any(test, feature = "reth-codec"), reth_codecs::add_arbitrary_tests(compact))]
 pub struct StoredBlockWithdrawals {
     /// The block withdrawals.
     pub withdrawals: Withdrawals,
+}
+
+/// A storage representation of block withdrawals that is static file friendly. An inner `None`
+/// represents a pre-merge block.
+#[derive(Debug, Default, Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
+#[cfg_attr(any(test, feature = "reth-codec"), reth_codecs::add_arbitrary_tests(compact))]
+pub struct StaticFileBlockWithdrawals {
+    /// The block withdrawals. A `None` value represents a pre-merge block.
+    pub withdrawals: Option<Withdrawals>,
+}
+
+#[cfg(feature = "reth-codec")]
+impl reth_codecs::Compact for StaticFileBlockWithdrawals {
+    fn to_compact<B>(&self, buf: &mut B) -> usize
+    where
+        B: bytes::BufMut + AsMut<[u8]>,
+    {
+        buf.put_u8(self.withdrawals.is_some() as u8);
+        if let Some(withdrawals) = &self.withdrawals {
+            return 1 + withdrawals.to_compact(buf);
+        }
+        1
+    }
+    fn from_compact(mut buf: &[u8], _: usize) -> (Self, &[u8]) {
+        use bytes::Buf;
+        if buf.get_u8() == 1 {
+            let (w, buf) = Withdrawals::from_compact(buf, buf.len());
+            (Self { withdrawals: Some(w) }, buf)
+        } else {
+            (Self { withdrawals: None }, buf)
+        }
+    }
 }
 
 #[cfg(test)]

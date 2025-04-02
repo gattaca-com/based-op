@@ -13,10 +13,7 @@ use rayon::ThreadPoolBuilder;
 use reth_chainspec::{Chain, EthChainSpec, EthereumHardforks};
 use reth_config::{config::EtlConfig, PruneConfig};
 use reth_consensus::noop::NoopConsensus;
-use reth_db_api::{
-    database::Database,
-    database_metrics::{DatabaseMetadata, DatabaseMetrics},
-};
+use reth_db_api::{database::Database, database_metrics::DatabaseMetrics};
 use reth_db_common::init::{init_genesis, InitStorageError};
 use reth_downloaders::{bodies::noop::NoopBodiesDownloader, headers::noop::NoopHeaderDownloader};
 use reth_engine_local::MiningMode;
@@ -80,9 +77,9 @@ impl LaunchContext {
         Self { task_executor, data_dir }
     }
 
-    /// Attaches a database to the launch context.
-    pub const fn with<DB>(self, database: DB) -> LaunchContextWith<DB> {
-        LaunchContextWith { inner: self, attachment: database }
+    /// Create launch context with attachment.
+    pub const fn with<T>(self, attachment: T) -> LaunchContextWith<T> {
+        LaunchContextWith { inner: self, attachment }
     }
 
     /// Loads the reth config with the configured `data_dir` and overrides settings according to the
@@ -226,7 +223,7 @@ impl<T> LaunchContextWith<T> {
 
 impl<ChainSpec> LaunchContextWith<WithConfigs<ChainSpec>> {
     /// Resolves the trusted peers and adds them to the toml config.
-    pub async fn with_resolved_peers(mut self) -> eyre::Result<Self> {
+    pub fn with_resolved_peers(mut self) -> eyre::Result<Self> {
         if !self.attachment.config.network.trusted_peers.is_empty() {
             info!(target: "reth::cli", "Adding trusted nodes");
 
@@ -572,7 +569,7 @@ impl<N, DB>
     >
 where
     N: NodeTypes,
-    DB: Database + DatabaseMetrics + DatabaseMetadata + Clone + Unpin + 'static,
+    DB: Database + DatabaseMetrics + Clone + Unpin + 'static,
 {
     /// Returns the configured `ProviderFactory`.
     const fn provider_factory(&self) -> &ProviderFactory<NodeTypesWithDBAdapter<N, DB>> {
@@ -898,7 +895,7 @@ where
                 Ok(match hook {
                     InvalidBlockHookType::Witness => Box::new(InvalidBlockWitnessHook::new(
                         self.blockchain_db().clone(),
-                        self.components().evm_config().clone(),
+                        self.components().block_executor().clone(),
                         output_directory,
                         healthy_node_rpc_client.clone(),
                     )),
@@ -994,12 +991,18 @@ impl<L, R> Attached<L, R> {
 
 /// Helper container type to bundle the initial [`NodeConfig`] and the loaded settings from the
 /// reth.toml config
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WithConfigs<ChainSpec> {
     /// The configured, usually derived from the CLI.
     pub config: NodeConfig<ChainSpec>,
     /// The loaded reth.toml config.
     pub toml_config: reth_config::Config,
+}
+
+impl<ChainSpec> Clone for WithConfigs<ChainSpec> {
+    fn clone(&self) -> Self {
+        Self { config: self.config.clone(), toml_config: self.toml_config.clone() }
+    }
 }
 
 /// Helper container type to bundle the [`ProviderFactory`] and the metrics

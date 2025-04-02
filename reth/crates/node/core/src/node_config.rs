@@ -2,7 +2,7 @@
 
 use crate::{
     args::{
-        DatabaseArgs, DatadirArgs, DebugArgs, DevArgs, NetworkArgs, PayloadBuilderArgs,
+        DatabaseArgs, DatadirArgs, DebugArgs, DevArgs, EngineArgs, NetworkArgs, PayloadBuilderArgs,
         PruningArgs, RpcServerArgs, TxPoolArgs,
     },
     dirs::{ChainPath, DataDirPath},
@@ -30,6 +30,14 @@ use std::{
     sync::Arc,
 };
 use tracing::*;
+
+pub use reth_engine_primitives::DEFAULT_MEMORY_BLOCK_BUFFER_TARGET;
+
+/// Triggers persistence when the number of canonical blocks in memory exceeds this threshold.
+pub const DEFAULT_PERSISTENCE_THRESHOLD: u64 = 2;
+
+/// Default size of cross-block cache in megabytes.
+pub const DEFAULT_CROSS_BLOCK_CACHE_SIZE_MB: u64 = 4 * 1024;
 
 /// This includes all necessary configuration to launch the node.
 /// The individual configuration options can be overwritten before launching the node.
@@ -133,6 +141,9 @@ pub struct NodeConfig<ChainSpec> {
 
     /// All pruning related arguments
     pub pruning: PruningArgs,
+
+    /// All engine related arguments
+    pub engine: EngineArgs,
 }
 
 impl NodeConfig<ChainSpec> {
@@ -161,6 +172,7 @@ impl<ChainSpec> NodeConfig<ChainSpec> {
             dev: DevArgs::default(),
             pruning: PruningArgs::default(),
             datadir: DatadirArgs::default(),
+            engine: EngineArgs::default(),
         }
     }
 
@@ -310,7 +322,9 @@ impl<ChainSpec> NodeConfig<ChainSpec> {
 
         let total_difficulty = provider
             .header_td_by_number(head)?
-            .expect("the total difficulty for the latest block is missing, database is corrupt");
+            // total difficulty is effectively deprecated, but still required in some places, e.g.
+            // p2p
+            .unwrap_or_default();
 
         let hash = provider
             .block_hash(head)?
@@ -449,6 +463,7 @@ impl<ChainSpec> NodeConfig<ChainSpec> {
             db: self.db,
             dev: self.dev,
             pruning: self.pruning,
+            engine: self.engine,
         }
     }
 }
@@ -475,6 +490,7 @@ impl<ChainSpec> Clone for NodeConfig<ChainSpec> {
             dev: self.dev,
             pruning: self.pruning.clone(),
             datadir: self.datadir.clone(),
+            engine: self.engine.clone(),
         }
     }
 }
