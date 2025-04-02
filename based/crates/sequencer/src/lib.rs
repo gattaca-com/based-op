@@ -261,14 +261,6 @@ where
             // Waiting for new payload should not happen, but while testing
             // we can basically keep sequencing based on the same db state
             WaitingForForkChoiceWithAttributes | WaitingForNewPayload => {
-                if matches!(self, WaitingForNewPayload) {
-                    //TODO: This should never happen in production but for benchmarking it allows us to keep simming on
-                    // top of the same block!
-                    ctx.tx_pool.clear();
-                    ctx.deposits.clear();
-                    ctx.shared_state.as_mut().reset();
-                }
-
                 match payload_attributes {
                     Some(attributes) => {
                         // Don't start sequencing until we have a parent hash.
