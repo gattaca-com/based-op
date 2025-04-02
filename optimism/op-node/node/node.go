@@ -244,6 +244,12 @@ func (n *OpNode) initRegistry(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("failed to create Registry source: %w", err)
 	}
 
+	// Initially fetch the current gateway + n gateways into the future
+	err = n.registrySource.FetchNextNGateways(ctx, 2, 3)
+	if err != nil {
+		return fmt.Errorf("failed to fetch initial gateways: %w", err)
+	}
+
 	return nil
 }
 
@@ -715,6 +721,17 @@ func (n *OpNode) OnSealFrag(ctx context.Context, from peer.ID, seal *eth.SignedS
 	n.tracer.OnSealFrag(ctx, from, seal)
 	n.log.Info("Received new seal", "seal", seal)
 	n.preconfChannels.SendSeal(seal)
+
+	// Start fetching future gateways
+	go func() {
+		fetchCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+
+		if err := n.registrySource.FetchNextNGateways(fetchCtx, 2, 3); err != nil {
+			n.log.Warn("registry fetch error", "err", err)
+		}
+	}()
+
 	return nil
 }
 

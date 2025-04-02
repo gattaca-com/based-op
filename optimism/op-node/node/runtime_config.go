@@ -33,7 +33,8 @@ type RuntimeCfgL1Source interface {
 }
 
 type RuntimeCfgRegistrySource interface {
-	CurrentGateway(ctx context.Context) (common.Address, error)
+	GatewayForBlock(ctx context.Context, blockNumber uint64) (common.Address, error)
+	FetchNextNGateways(ctx context.Context, n uint64, maxRetries uint64) error
 }
 
 type ReadonlyRuntimeConfig interface {
@@ -89,13 +90,17 @@ func (r *RuntimeConfig) P2PSequencerAddress() common.Address {
 	return r.p2pBlockSignerAddr
 }
 
-func (r *RuntimeConfig) CurrentGateway(ctx context.Context) (common.Address, error) {
-	addr, err := r.registryClient.CurrentGateway(ctx)
+func (r *RuntimeConfig) GatewayForBlock(ctx context.Context, blockNumber uint64) (common.Address, error) {
+	addr, err := r.registryClient.GatewayForBlock(ctx, blockNumber)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("failed to fetch current gateway: %w", err)
+		return common.Address{}, err
 	}
 
 	return addr, nil
+}
+
+func (r *RuntimeConfig) FetchNextNGateways(ctx context.Context, n uint64, maxRetries uint64) error {
+	return r.registryClient.FetchNextNGateways(ctx, n, maxRetries)
 }
 
 func (r *RuntimeConfig) RequiredProtocolVersion() params.ProtocolVersion {
