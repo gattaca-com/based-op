@@ -5,6 +5,7 @@ use crate::{
 };
 use alloy_primitives::{map::HashSet, B256};
 use reth_storage_errors::db::DatabaseError;
+use tracing::{instrument, trace};
 
 #[cfg(feature = "metrics")]
 use crate::metrics::WalkerMetrics;
@@ -95,28 +96,34 @@ impl<C> TrieWalker<C> {
         self.stack.last().is_some_and(|n| n.tree_flag())
     }
 
-    /// Returns the next unprocessed key in the trie.
-    pub fn next_unprocessed_key(&self) -> Option<B256> {
+    /// Returns the next unprocessed key in the trie along with its raw [`Nibbles`] representation.
+    #[instrument(level = "trace", skip(self), ret)]
+    pub fn next_unprocessed_key(&self) -> Option<(B256, Nibbles)> {
         self.key()
-            .and_then(|key| {
-                if self.can_skip_current_node {
-                    key.increment().map(|inc| inc.pack())
-                } else {
-                    Some(key.pack())
-                }
-            })
-            .map(|mut key| {
-                key.resize(32, 0);
-                B256::from_slice(key.as_slice())
+            .and_then(
+                |key| if self.can_skip_current_node { key.increment() } else { Some(key.clone()) },
+            )
+            .map(|key| {
+                let mut packed = key.pack();
+                packed.resize(32, 0);
+                (B256::from_slice(packed.as_slice()), key)
             })
     }
 
     /// Updates the skip node flag based on the walker's current state.
     fn update_skip_node(&mut self) {
+        let old = self.can_skip_current_node;
         self.can_skip_current_node = self
             .stack
             .last()
             .is_some_and(|node| !self.changes.contains(node.full_key()) && node.hash_flag());
+        trace!(
+            target: "trie::walker",
+            old,
+            new = self.can_skip_current_node,
+            last = ?self.stack.last(),
+            "updated skip node flag"
+        );
     }
 }
 
@@ -153,6 +160,11 @@ impl<C: TrieCursor> TrieWalker<C> {
     pub fn advance(&mut self) -> Result<(), DatabaseError> {
         if let Some(last) = self.stack.last() {
             if !self.can_skip_current_node && self.children_are_in_trie() {
+                trace!(
+                    target: "trie::walker",
+                    nibble = ?last.nibble(),
+                    "cannot skip current node and children are in the trie"
+                );
                 // If we can't skip the current node and the children are in the trie,
                 // either consume the next node or move to the next sibling.
                 match last.nibble() {
@@ -160,6 +172,7 @@ impl<C: TrieCursor> TrieWalker<C> {
                     _ => self.consume_node()?,
                 }
             } else {
+                trace!(target: "trie::walker", "can skip current node");
                 // If we can skip the current node, move to the next sibling.
                 self.move_to_next_sibling(false)?;
             }
@@ -184,6 +197,7 @@ impl<C: TrieCursor> TrieWalker<C> {
     }
 
     /// Consumes the next node in the trie, updating the stack.
+    #[instrument(level = "trace", skip(self), ret)]
     fn consume_node(&mut self) -> Result<(), DatabaseError> {
         let Some((key, node)) = self.node(false)? else {
             // If no next node is found, clear the stack.
@@ -229,6 +243,7 @@ impl<C: TrieCursor> TrieWalker<C> {
     }
 
     /// Moves to the next sibling node in the trie, updating the stack.
+    #[instrument(level = "trace", skip(self), ret)]
     fn move_to_next_sibling(
         &mut self,
         allow_root_to_child_nibble: bool,
@@ -251,10 +266,13 @@ impl<C: TrieCursor> TrieWalker<C> {
 
         // Find the next sibling with state.
         loop {
+            let nibble = subnode.nibble();
             if subnode.state_flag() {
+                trace!(target: "trie::walker", nibble, "found next sibling with state");
                 return Ok(())
             }
-            if subnode.nibble() == 0xf {
+            if nibble == 0xf {
+                trace!(target: "trie::walker", nibble, "checked all siblings");
                 break
             }
             subnode.inc_nibble();

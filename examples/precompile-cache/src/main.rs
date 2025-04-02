@@ -16,8 +16,7 @@ use reth::{
         },
         handler::{EthPrecompiles, PrecompileProvider},
         inspector::{Inspector, NoOpInspector},
-        interpreter::{interpreter::EthInterpreter, InterpreterResult},
-        precompile::PrecompileError,
+        interpreter::{interpreter::EthInterpreter, InputsImpl, InterpreterResult},
         primitives::hardfork::SpecId,
         MainBuilder, MainContext,
     },
@@ -36,7 +35,7 @@ use schnellru::{ByLength, LruMap};
 use std::{collections::HashMap, sync::Arc};
 
 /// Type alias for the LRU cache used within the [`PrecompileCache`].
-type PrecompileLRUCache = LruMap<(SpecId, Bytes, u64), Result<InterpreterResult, PrecompileError>>;
+type PrecompileLRUCache = LruMap<(SpecId, Bytes, u64), Result<InterpreterResult, String>>;
 
 type WrappedEthEvm<DB, I> = EthEvm<DB, I, WrappedPrecompile<EthPrecompiles>>;
 
@@ -106,7 +105,7 @@ impl<P> WrappedPrecompile<P> {
     /// Given a [`PrecompileProvider`] and cache for a specific precompiles, create a
     /// wrapper that can be used inside Evm.
     fn new(precompile: P, cache: Arc<RwLock<PrecompileCache>>) -> Self {
-        WrappedPrecompile { precompile, cache: cache.clone(), spec: SpecId::LATEST }
+        WrappedPrecompile { precompile, cache: cache.clone(), spec: SpecId::default() }
     }
 }
 
@@ -115,20 +114,22 @@ impl<CTX: ContextTr, P: PrecompileProvider<CTX, Output = InterpreterResult>> Pre
 {
     type Output = P::Output;
 
-    fn set_spec(&mut self, spec: <CTX::Cfg as Cfg>::Spec) {
+    fn set_spec(&mut self, spec: <CTX::Cfg as Cfg>::Spec) -> bool {
         self.precompile.set_spec(spec.clone());
         self.spec = spec.into();
+        true
     }
 
     fn run(
         &mut self,
         context: &mut CTX,
         address: &Address,
-        bytes: &Bytes,
+        inputs: &InputsImpl,
+        is_static: bool,
         gas_limit: u64,
-    ) -> Result<Option<Self::Output>, PrecompileError> {
+    ) -> Result<Option<Self::Output>, String> {
         let mut cache = self.cache.write();
-        let key = (self.spec, bytes.clone(), gas_limit);
+        let key = (self.spec, inputs.input.clone(), gas_limit);
 
         // get the result if it exists
         if let Some(precompiles) = cache.cache.get_mut(address) {
@@ -138,7 +139,7 @@ impl<CTX: ContextTr, P: PrecompileProvider<CTX, Output = InterpreterResult>> Pre
         }
 
         // call the precompile if cache miss
-        let output = self.precompile.run(context, address, bytes, gas_limit);
+        let output = self.precompile.run(context, address, inputs, is_static, gas_limit);
 
         if let Some(output) = output.clone().transpose() {
             // insert the result into the cache
@@ -152,12 +153,12 @@ impl<CTX: ContextTr, P: PrecompileProvider<CTX, Output = InterpreterResult>> Pre
         output
     }
 
-    fn contains(&self, address: &Address) -> bool {
-        self.precompile.contains(address)
-    }
-
     fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
         self.precompile.warm_addresses()
+    }
+
+    fn contains(&self, address: &Address) -> bool {
+        self.precompile.contains(address)
     }
 }
 
