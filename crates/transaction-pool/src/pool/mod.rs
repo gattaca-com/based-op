@@ -81,14 +81,15 @@ use crate::{
     CanonicalStateUpdate, EthPoolTransaction, PoolConfig, TransactionOrdering,
     TransactionValidator,
 };
+
 use alloy_primitives::{Address, TxHash, B256};
 use best::BestTransactions;
 use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use reth_eth_wire_types::HandleMempoolData;
 use reth_execution_types::ChangedAccount;
 
-use alloy_eips::eip4844::BlobTransactionSidecar;
-use reth_primitives::RecoveredTx;
+use alloy_eips::{eip4844::BlobTransactionSidecar, Typed2718};
+use reth_primitives_traits::Recovered;
 use rustc_hash::FxHashMap;
 use std::{collections::HashSet, fmt, sync::Arc, time::Instant};
 use tokio::sync::mpsc;
@@ -101,15 +102,13 @@ use crate::{
     traits::{GetPooledTransactionLimit, NewBlobSidecar, TransactionListenerKind},
     validate::ValidTransaction,
 };
-pub use best::{
-    BestPayloadTransactions, BestTransactionFilter, BestTransactionsWithPrioritizedSenders,
-};
+pub use best::{BestTransactionFilter, BestTransactionsWithPrioritizedSenders};
 pub use blob::{blob_tx_priority, fee_delta};
 pub use events::{FullTransactionEvent, TransactionEvent};
 pub use listener::{AllTransactionsEvents, TransactionEvents};
 pub use parked::{BasefeeOrd, ParkedOrd, ParkedPool, QueuedOrd};
 pub use pending::PendingPool;
-use reth_primitives_traits::{BlockBody, BlockHeader};
+use reth_primitives_traits::Block;
 
 mod best;
 mod blob;
@@ -316,7 +315,7 @@ where
     fn to_pooled_transaction(
         &self,
         transaction: Arc<ValidPoolTransaction<T::Transaction>>,
-    ) -> Option<RecoveredTx<<<V as TransactionValidator>::Transaction as PoolTransaction>::Pooled>>
+    ) -> Option<Recovered<<<V as TransactionValidator>::Transaction as PoolTransaction>::Pooled>>
     where
         <V as TransactionValidator>::Transaction: EthPoolTransaction,
     {
@@ -357,7 +356,7 @@ where
             };
 
             size += encoded_len;
-            elements.push(pooled.into_tx());
+            elements.push(pooled.into_inner());
 
             if limit.exceeds(size) {
                 break
@@ -371,7 +370,7 @@ where
     pub fn get_pooled_transaction_element(
         &self,
         tx_hash: TxHash,
-    ) -> Option<RecoveredTx<<<V as TransactionValidator>::Transaction as PoolTransaction>::Pooled>>
+    ) -> Option<Recovered<<<V as TransactionValidator>::Transaction as PoolTransaction>::Pooled>>
     where
         <V as TransactionValidator>::Transaction: EthPoolTransaction,
     {
@@ -379,10 +378,9 @@ where
     }
 
     /// Updates the entire pool after a new block was executed.
-    pub fn on_canonical_state_change<H, B>(&self, update: CanonicalStateUpdate<'_, H, B>)
+    pub fn on_canonical_state_change<B>(&self, update: CanonicalStateUpdate<'_, B>)
     where
-        H: BlockHeader,
-        B: BlockBody,
+        B: Block,
     {
         trace!(target: "txpool", ?update, "updating pool on canonical state change");
 
@@ -810,7 +808,7 @@ where
         sender: Address,
     ) -> Vec<Arc<ValidPoolTransaction<T::Transaction>>> {
         let sender_id = self.get_sender_id(sender);
-        self.get_pool_data().pending_txs_by_sender(sender_id)
+        self.get_pool_data().queued_txs_by_sender(sender_id)
     }
 
     /// Returns all pending transactions filtered by predicate
@@ -827,7 +825,7 @@ where
         sender: Address,
     ) -> Vec<Arc<ValidPoolTransaction<T::Transaction>>> {
         let sender_id = self.get_sender_id(sender);
-        self.get_pool_data().queued_txs_by_sender(sender_id)
+        self.get_pool_data().pending_txs_by_sender(sender_id)
     }
 
     /// Returns the highest transaction of the address
@@ -1269,11 +1267,36 @@ mod tests {
         BlockInfo, PoolConfig, SubPoolLimit, TransactionOrigin, TransactionValidationOutcome, U256,
     };
     use alloy_eips::eip4844::BlobTransactionSidecar;
-    use reth_primitives::kzg::Blob;
     use std::{fs, path::PathBuf};
 
     #[test]
     fn test_discard_blobs_on_blob_tx_eviction() {
+        let blobs = {
+            // Read the contents of the JSON file into a string.
+            let json_content = fs::read_to_string(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_data/blob1.json"),
+            )
+            .expect("Failed to read the blob data file");
+
+            // Parse the JSON contents into a serde_json::Value.
+            let json_value: serde_json::Value =
+                serde_json::from_str(&json_content).expect("Failed to deserialize JSON");
+
+            // Extract blob data from JSON and convert it to Blob.
+            vec![
+                // Extract the "data" field from the JSON and parse it as a string.
+                json_value
+                    .get("data")
+                    .unwrap()
+                    .as_str()
+                    .expect("Data is not a valid string")
+                    .to_string(),
+            ]
+        };
+
+        // Generate a BlobTransactionSidecar from the blobs.
+        let sidecar = BlobTransactionSidecar::try_from_blobs_hex(blobs).unwrap();
+
         // Define the maximum limit for blobs in the sub-pool.
         let blob_limit = SubPoolLimit::new(1000, usize::MAX);
 
@@ -1285,26 +1308,6 @@ mod tests {
         // Set the block info for the pool, including a pending blob fee.
         test_pool
             .set_block_info(BlockInfo { pending_blob_fee: Some(10_000_000), ..Default::default() });
-
-        // Read the contents of the JSON file into a string.
-        let json_content = fs::read_to_string(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_data/blob1.json"),
-        )
-        .expect("Failed to read the blob data file");
-
-        // Parse the JSON contents into a serde_json::Value.
-        let json_value: serde_json::Value =
-            serde_json::from_str(&json_content).expect("Failed to deserialize JSON");
-
-        // Extract blob data from JSON and convert it to Blob.
-        let blobs: Vec<Blob> = vec![Blob::from_hex(
-            // Extract the "data" field from the JSON and parse it as a string.
-            json_value.get("data").unwrap().as_str().expect("Data is not a valid string"),
-        )
-        .unwrap()];
-
-        // Generate a BlobTransactionSidecar from the blobs.
-        let sidecar = BlobTransactionSidecar::try_from_blobs(blobs).unwrap();
 
         // Create an in-memory blob store.
         let blob_store = InMemoryBlobStore::default();
