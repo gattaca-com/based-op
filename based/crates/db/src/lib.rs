@@ -3,22 +3,23 @@ use std::{
     sync::Arc,
 };
 
+use alloy_consensus::BlockHeader;
 use bop_common::time::BlockSyncTimers;
 use parking_lot::RwLock;
 use reth_db::{
+    Bytecodes, CanonicalHeaders, DatabaseEnv,
     cursor::{DbCursorRO, DbCursorRW, DbDupCursorRO},
     models::BlockNumberAddress,
     tables,
     transaction::{DbTx, DbTxMut},
-    Bytecodes, CanonicalHeaders, DatabaseEnv,
 };
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::{BlockWithSenders, StorageEntry};
 use reth_provider::{
-    providers::ConsistentDbView, BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory,
-    StateWriter, TrieWriter,
+    BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter,
+    providers::ConsistentDbView,
 };
 use reth_storage_api::{DBProvider, HashedPostStateProvider};
 use reth_trie::{StateRoot, TrieInput};
@@ -26,10 +27,10 @@ use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
 use reth_trie_parallel::root::ParallelStateRoot;
 use revm::{
-    db::{BundleState, OriginalValuesKnown},
     Database, DatabaseRef,
+    database::{BundleState, OriginalValuesKnown},
 };
-use revm_primitives::{AccountInfo, Address, Bytecode, B256, U256};
+use revm_primitives::{AccountInfo, Address, B256, Bytecode, U256};
 
 mod alloy_db;
 mod cache;
@@ -140,7 +141,7 @@ impl DatabaseWrite for SequencerDB {
             let (plain_state, reverts) =
                 block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
             // Write state reverts
-            rw_provider.write_state_reverts(reverts, block.block.header.number)?;
+            rw_provider.write_state_reverts(reverts, block.number())?;
             // Write plain state
             rw_provider.write_state_changes(plain_state)
         })?;
@@ -154,10 +155,7 @@ impl DatabaseWrite for SequencerDB {
         })?;
         timers.header_write.time(|| {
             // Write to header table
-            rw_provider
-                .tx_ref()
-                .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
-                .unwrap();
+            rw_provider.tx_ref().put::<tables::CanonicalHeaders>(block.number, block.hash_slow()).unwrap();
         });
 
         timers.db_commit.time(|| rw_provider.commit())?;
@@ -198,7 +196,7 @@ impl DatabaseWrite for SequencerDB {
             if old_account != new_account {
                 let existing_entry = plain_accounts_cursor.seek_exact(*address)?;
                 if let Some(account) = old_account {
-                    plain_accounts_cursor.upsert(*address, *account)?;
+                    plain_accounts_cursor.upsert(*address, account)?;
                 } else if existing_entry.is_some() {
                     plain_accounts_cursor.delete_current()?;
                 }
@@ -218,7 +216,7 @@ impl DatabaseWrite for SequencerDB {
 
                 // insert value if needed
                 if !old_storage_value.is_zero() {
-                    plain_storage_cursor.upsert(*address, storage_entry)?;
+                    plain_storage_cursor.upsert(*address, &storage_entry)?;
                 }
             }
         }

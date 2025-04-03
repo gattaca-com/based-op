@@ -23,7 +23,7 @@ use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
 use reth_provider::{BlockExecutionOutput, ProviderError};
 use reth_trie_common::updates::TrieUpdates;
-use revm::{db::BundleState, DatabaseCommit, DatabaseRef};
+use op_revm::{db::BundleState, DatabaseCommit, DatabaseRef};
 use revm_primitives::{db::Database, Account, AccountInfo, Bytecode, HashMap};
 use tokio::runtime::Runtime;
 

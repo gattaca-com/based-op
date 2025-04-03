@@ -737,7 +737,7 @@ where
             return Err(EngineApiError::TerminalTD {
                 execution: merge_terminal_td,
                 consensus: terminal_total_difficulty,
-            })
+            });
         }
 
         self.inner.beacon_consensus.transition_configuration_exchanged();
@@ -747,7 +747,7 @@ where
             return Ok(TransitionConfiguration {
                 terminal_total_difficulty: merge_terminal_td,
                 ..Default::default()
-            })
+            });
         }
 
         // Attempt to look up terminal block hash
@@ -826,9 +826,9 @@ where
                 // TODO: decide if we want this branch - the FCU INVALID response might be more
                 // useful than the payload attributes INVALID response
                 if fcu_res.is_invalid() {
-                    return Ok(fcu_res)
+                    return Ok(fcu_res);
                 }
-                return Err(err.into())
+                return Err(err.into());
             }
         }
 
@@ -845,7 +845,7 @@ where
         versioned_hashes: Vec<B256>,
     ) -> EngineApiResult<Vec<Option<BlobAndProofV1>>> {
         if versioned_hashes.len() > MAX_BLOB_LIMIT {
-            return Err(EngineApiError::BlobRequestTooLarge { len: versioned_hashes.len() })
+            return Err(EngineApiError::BlobRequestTooLarge { len: versioned_hashes.len() });
         }
 
         self.inner
@@ -1158,17 +1158,6 @@ where
         trace!(target: "rpc::engine", "Serving engine_getBlobsV2");
         Err(internal_rpc_err("unimplemented"))
     }
-}
-
-impl<Provider, EngineT, Pool, Validator, ChainSpec> IntoEngineApiRpcModule
-    for EngineApi<Provider, EngineT, Pool, Validator, ChainSpec>
-where
-    EngineT: EngineTypes,
-    Self: EngineApiServer<EngineT>,
-{
-    fn into_rpc_module(self) -> RpcModule<()> {
-        self.into_rpc().remove_context()
-    }
 
     async fn new_frag_v0(&self) -> RpcResult<()> {
         trace!(target: "rpc::engine", "Serving engine_newFragV0");
@@ -1183,6 +1172,31 @@ where
         dbg!("seal_frag_v0");
         Ok(())
     }
+}
+
+impl<Provider, EngineT, Pool, Validator, ChainSpec> IntoEngineApiRpcModule
+    for EngineApi<Provider, EngineT, Pool, Validator, ChainSpec>
+where
+    EngineT: EngineTypes,
+    Self: EngineApiServer<EngineT>,
+{
+    fn into_rpc_module(self) -> RpcModule<()> {
+        self.into_rpc().remove_context()
+    }
+
+    // async fn new_frag_v0(&self) -> RpcResult<()> {
+    //     trace!(target: "rpc::engine", "Serving engine_newFragV0");
+    //     // TODO: Implement engine_newFragV0 handling logic here
+    //     dbg!("new_frag_v0");
+    //     Ok(())
+    // }
+
+    // async fn seal_frag_v0(&self) -> RpcResult<()> {
+    //     trace!(target: "rpc::engine", "Serving engine_sealFragV0");
+    //     // TODO: Implement engine_sealFragV0 handling logic here
+    //     dbg!("seal_frag_v0");
+    //     Ok(())
+    // }
 }
 
 impl<Provider, PayloadT, Pool, Validator, ChainSpec> std::fmt::Debug
@@ -1362,8 +1376,8 @@ mod tests {
                 blocks
                     .iter()
                     .filter(|b| {
-                        !first_missing_range.contains(&b.number) &&
-                            !second_missing_range.contains(&b.number)
+                        !first_missing_range.contains(&b.number)
+                            && !second_missing_range.contains(&b.number)
                     })
                     .map(|b| (b.hash(), b.clone().into_block())),
             );
@@ -1392,8 +1406,8 @@ mod tests {
                 // ensure we still return trailing `None`s here because by-hash will not be aware
                 // of the missing block's number, and cannot compare it to the current best block
                 .map(|b| {
-                    if first_missing_range.contains(&b.number) ||
-                        second_missing_range.contains(&b.number)
+                    if first_missing_range.contains(&b.number)
+                        || second_missing_range.contains(&b.number)
                     {
                         None
                     } else {
@@ -1423,8 +1437,8 @@ mod tests {
                     .chain_spec
                     .fork(EthereumHardfork::Paris)
                     .ttd()
-                    .unwrap() +
-                    U256::from(1),
+                    .unwrap()
+                    + U256::from(1),
                 ..Default::default()
             };
 

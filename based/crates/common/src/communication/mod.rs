@@ -1,10 +1,9 @@
-use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
-
+use crate::typedefs::*;
 use messages::{
-    BlockFetch, BlockSyncMessage, EngineApi, EvmBlockParams, SequencerToExternal, SequencerToSimulator,
-    SimulatorToSequencer,
+    BlockFetch, EngineApi, EvmBlockParams, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer,
 };
 use shared_memory::ShmemError;
+use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
 use thiserror::Error;
 
 pub mod queue;

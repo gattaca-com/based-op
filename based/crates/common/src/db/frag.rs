@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
-use alloy_primitives::{map::HashMap, B256};
+use alloy_primitives::{B256, map::HashMap};
 use parking_lot::RwLock;
 use rand::RngCore;
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::{states::bundle_state::BundleRetention, BundleState};
-use revm_primitives::{
-    db::{Database, DatabaseCommit, DatabaseRef},
-    Account, AccountInfo, Address, Bytecode, U256,
-};
+use revm::database::{BundleState, states::bundle_state::BundleRetention};
+use revm::database_interface::{Database, DatabaseCommit, DatabaseRef};
+use revm::state::{Account, AccountInfo, Bytecode};
+use revm_primitives::{Address, U256};
 
 use super::{DatabaseRead, Error, State};
 use crate::transaction::SimulatedTx;

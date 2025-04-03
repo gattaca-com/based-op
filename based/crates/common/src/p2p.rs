@@ -1,7 +1,7 @@
-use alloy_primitives::{Address, Bytes, B256, U256};
-use revm_primitives::BlockEnv;
+use alloy_primitives::{Address, B256, Bytes, U256};
+use revm::context::BlockEnv;
 use serde::{Deserialize, Serialize};
-use ssz_types::{typenum, VariableList};
+use ssz_types::{VariableList, typenum};
 use strum_macros::AsRefStr;
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
@@ -59,12 +59,12 @@ pub struct EnvV0 {
 impl EnvV0 {
     pub fn new(env: &BlockEnv, parent_hash: B256, extra_data: &Bytes, parent_beacon_block_root: B256) -> Self {
         Self {
-            number: env.number.to(),
+            number: env.number,
             parent_hash,
-            beneficiary: env.coinbase,
-            timestamp: env.timestamp.to(),
-            gas_limit: env.gas_limit.to(),
-            basefee: env.basefee.to(),
+            beneficiary: env.beneficiary,
+            timestamp: env.timestamp,
+            gas_limit: env.gas_limit,
+            basefee: env.basefee,
             difficulty: env.difficulty,
             prevrandao: env.prevrandao.unwrap_or_default(),
             extra_data: ExtraData::from(extra_data.to_vec()),

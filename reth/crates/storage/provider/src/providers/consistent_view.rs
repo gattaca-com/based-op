@@ -1,8 +1,11 @@
 use crate::{BlockNumReader, DatabaseProviderFactory, HeaderProvider};
 use alloy_primitives::B256;
-use reth_storage_api::StateCommitmentProvider;
+use reth_errors::ProviderError;
+use reth_storage_api::{DBProvider, StateCommitmentProvider};
 pub use reth_storage_errors::provider::ConsistentViewError;
 use reth_storage_errors::provider::ProviderResult;
+use reth_trie::HashedPostState;
+use reth_trie_db::{DatabaseHashedPostState, StateCommitment};
 
 /// A consistent view over state in the database.
 ///

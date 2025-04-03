@@ -17,8 +17,6 @@ use alloy_primitives::{
     keccak256, Address, Bytes, PrimitiveSignature as Signature, TxHash, TxKind, Uint, B256,
 };
 use alloy_rlp::Header;
-use reth_primitives::sign_message;
-use revm_primitives::U256;
 use core::{
     hash::{Hash, Hasher},
     mem,
@@ -27,10 +25,13 @@ use core::{
 use derive_more::{AsRef, Deref};
 #[cfg(not(feature = "std"))]
 use once_cell::sync::OnceCell as OnceLock;
-use op_alloy_consensus::{DepositTransaction, OpPooledTransaction, OpTxEnvelope, OpTypedTransaction, TxDeposit};
+use op_alloy_consensus::{
+    DepositTransaction, OpPooledTransaction, OpTxEnvelope, OpTypedTransaction, TxDeposit,
+};
 use op_revm::transaction::deposit::DepositTransactionParts;
 #[cfg(any(test, feature = "reth-codec"))]
 use proptest as _;
+use reth_primitives::sign_message;
 use reth_primitives_traits::{
     crypto::secp256k1::{recover_signer, recover_signer_unchecked},
     sync::OnceLock,
@@ -38,6 +39,7 @@ use reth_primitives_traits::{
     InMemorySize, SignedTransaction,
 };
 use revm_context::TxEnv;
+use revm_primitives::U256;
 
 /// Signed transaction.
 #[cfg_attr(any(test, feature = "reth-codec"), reth_codecs::add_arbitrary_tests(rlp))]
@@ -55,17 +57,16 @@ pub struct OpTransactionSigned {
     transaction: OpTypedTransaction,
 }
 
-
 impl TransactionSenderInfo for OpTransactionSigned {
     #[inline]
     fn sender(&self) -> Address {
         self.recover_signer().unwrap()
     }
-    
+
     #[inline]
     fn nonce(&self) -> u64 {
         self.transaction.nonce()
-    }   
+    }
 }
 
 impl OpTransactionSigned {
@@ -105,15 +106,29 @@ impl OpTransactionSigned {
 
     /// Warning: the signature for a deposit transaction is always zero
     pub fn from_envelope(envelope: OpTxEnvelope) -> Self {
-        let signature = match &envelope {
-            OpTxEnvelope::Legacy(tx) => tx.signature().clone(),
-            OpTxEnvelope::Eip2930(tx) => tx.signature().clone(),
-            OpTxEnvelope::Eip1559(tx) => tx.signature().clone(),
-            OpTxEnvelope::Eip7702(tx) => tx.signature().clone(),
-            OpTxEnvelope::Deposit(_) => Signature::new(U256::ZERO, U256::ZERO, false),
+        let (t, signature, hash) = match envelope {
+            OpTxEnvelope::Legacy(tx) => {
+                let (t, signature, hash) = tx.into_parts();
+                (OpTypedTransaction::Legacy(t), signature, hash)
+            }
+            OpTxEnvelope::Eip2930(tx) => {
+                let (t, signature, hash) = tx.into_parts();
+                (OpTypedTransaction::Eip2930(t), signature, hash)
+            }
+            OpTxEnvelope::Eip1559(tx) => {
+                let (t, signature, hash) = tx.into_parts();
+                (OpTypedTransaction::Eip1559(t), signature, hash)
+            }
+            OpTxEnvelope::Eip7702(tx) => {
+                let (t, signature, hash) = tx.into_parts();
+                (OpTypedTransaction::Eip7702(t), signature, hash)
+            }
+            OpTxEnvelope::Deposit(_) => {
+                (envelope.into(), Signature::new(U256::ZERO, U256::ZERO, false), B256::ZERO)
+            }
             _ => unreachable!(),
         };
-        Self::new(envelope.into(), signature)
+        Self::new(t, signature, hash)
     }
     /// Splits the transaction into parts.
     pub fn into_parts(self) -> (OpTypedTransaction, Signature, B256) {
@@ -131,7 +146,7 @@ impl SignedTransaction for OpTransactionSigned {
         // Optimism's Deposit transaction does not have a signature. Directly return the
         // `from` address.
         if let OpTypedTransaction::Deposit(TxDeposit { from, .. }) = self.transaction {
-            return Ok(from)
+            return Ok(from);
         }
 
         let Self { transaction, signature, .. } = self;
@@ -143,7 +158,7 @@ impl SignedTransaction for OpTransactionSigned {
         // Optimism's Deposit transaction does not have a signature. Directly return the
         // `from` address.
         if let OpTypedTransaction::Deposit(TxDeposit { from, .. }) = &self.transaction {
-            return Ok(*from)
+            return Ok(*from);
         }
 
         let Self { transaction, signature, .. } = self;
@@ -584,9 +599,9 @@ impl Typed2718 for OpTransactionSigned {
 
 impl PartialEq for OpTransactionSigned {
     fn eq(&self, other: &Self) -> bool {
-        self.signature == other.signature &&
-            self.transaction == other.transaction &&
-            self.tx_hash() == other.tx_hash()
+        self.signature == other.signature
+            && self.transaction == other.transaction
+            && self.tx_hash() == other.tx_hash()
     }
 }
 

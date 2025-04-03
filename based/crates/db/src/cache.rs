@@ -7,7 +7,7 @@ use reth_db::{
     PlainAccountState, PlainStorageState,
 };
 use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx};
-use revm::db::BundleState;
+use op_revm::db::BundleState;
 use revm_primitives::AccountInfo;
 
 use crate::Error;
