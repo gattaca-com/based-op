@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/driver"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
 	"github.com/ethereum-optimism/optimism/op-service/oppprof"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -38,8 +37,6 @@ type Config struct {
 	RPC RPCConfig
 
 	P2P p2p.SetupP2P
-
-	P2PGatewayAddress common.Address
 
 	Metrics MetricsConfig
 
