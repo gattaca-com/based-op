@@ -29,6 +29,7 @@ op-alloy-consensus.workspace = true
 op-alloy-network.workspace = true
 op-alloy-rpc-types.workspace = true
 op-alloy-rpc-types-engine.workspace = true
+op-revm.workspace = true
 parking_lot.workspace = true
 paste.workspace = true
 quanta.workspace = true
@@ -63,8 +64,8 @@ serde_json.workspace = true
 shared_memory.workspace = true
 signal-hook.workspace = true
 ssz_types.workspace = true
-strum_macros.workspace = true
 strum.workspace = true
+strum_macros.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -78,5 +79,5 @@ uuid.workspace = true
 serde_json.workspace = true
 
 [features]
-shmem = []
 default = []
+shmem = []

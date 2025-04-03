@@ -4,23 +4,18 @@ use std::{
 };
 
 use alloy_primitives::{B256, map::HashMap};
+use crate::typedefs::*;
 use auto_impl::auto_impl;
-use reth_optimism_primitives::{OpBlock, OpReceipt};
-use reth_primitives::BlockWithSenders;
 use reth_provider::BlockExecutionOutput;
 use reth_storage_errors::provider::ProviderError;
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::{BundleState, CacheDB};
-use revm_primitives::{
-    Account, Address,
-    db::{Database, DatabaseRef},
-};
 
 pub mod error;
 pub use error::Error;
 pub mod frag;
 pub use frag::DBFrag;
 pub mod sorting;
+use revm::state::Account;
 pub use sorting::DBSorting;
 pub mod state;
 pub use state::State;
@@ -34,7 +29,7 @@ pub trait DatabaseWrite:
 {
     fn commit_block_unchecked(
         &self,
-        block: &BlockWithSenders<OpBlock>,
+        block: &BlockSyncMessage,
         block_execution_output: BlockExecutionOutput<OpReceipt>,
         trie_updates: TrieUpdates,
         timers: &mut BlockSyncTimers,

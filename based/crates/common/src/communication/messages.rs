@@ -3,13 +3,14 @@ use std::{
     sync::Arc,
 };
 
+use crate::typedefs::*;
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip2718::Encodable2718;
-use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, PayloadAttributes, PayloadError,
     PayloadId,
 };
+
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
@@ -174,10 +175,8 @@ impl EngineApi {
     ) -> (EngineApi, EngineApi, EngineApi) {
         let block_hash = block.hash_slow();
         let transactions = block
-            .body
-            .transactions
-            .iter()
-            .map(|t| {
+            .transactions_with_sender()
+            .map(|(_, t)| {
                 let mut buf = vec![];
                 t.encode_2718(&mut buf);
                 buf.into()
@@ -282,14 +281,13 @@ pub enum RpcError {
 impl From<RpcError> for RpcErrorObject<'static> {
     fn from(value: RpcError) -> Self {
         match value {
-            RpcError::Internal |
-            RpcError::Timeout(_) |
-            RpcError::ChannelClosed(_) |
-            RpcError::Jsonrpsee(_) |
-            RpcError::TokioJoin(_) |
-            RpcError::Db(_) |
-            RpcError::Io(_) |
-            RpcError::NoReturn => internal_error(),
+            RpcError::Internal
+            | RpcError::Timeout(_)
+            | RpcError::ChannelClosed(_)
+            | RpcError::Jsonrpsee(_)
+            | RpcError::TokioJoin(_)
+            | RpcError::Db(_)
+            | RpcError::NoReturn => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
@@ -383,8 +381,6 @@ pub enum BlockSyncError {
     SignerRecovery,
 }
 
-pub type BlockSyncMessage = BlockWithSenders<OpBlock>;
-
 #[derive(Clone, Debug, AsRefStr)]
 pub enum BlockFetch {
     FromTo(u64, u64),
@@ -402,7 +398,7 @@ impl BlockFetch {
 #[derive(Clone, Debug)]
 pub struct EvmBlockParams {
     pub spec_id: SpecId,
-    pub env: Box<Env>,
+    pub env: Box<BlockEnv>,
 }
 
 #[derive(Clone)]

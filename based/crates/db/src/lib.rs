@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use alloy_consensus::BlockHeader;
 use bop_common::time::BlockSyncTimers;
 use parking_lot::RwLock;
 use reth_db::{
@@ -27,7 +28,7 @@ use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
 use reth_trie_parallel::root::ParallelStateRoot;
 use revm::{
     Database, DatabaseRef,
-    db::{BundleState, OriginalValuesKnown},
+    database::{BundleState, OriginalValuesKnown},
 };
 use revm_primitives::{AccountInfo, Address, B256, Bytecode, U256};
 
@@ -140,7 +141,7 @@ impl DatabaseWrite for SequencerDB {
             let (plain_state, reverts) =
                 block_execution_output.state.to_plain_state_and_reverts(OriginalValuesKnown::Yes);
             // Write state reverts
-            rw_provider.write_state_reverts(reverts, block.block.header.number)?;
+            rw_provider.write_state_reverts(reverts, block.number())?;
             // Write plain state
             rw_provider.write_state_changes(plain_state)
         })?;
@@ -154,10 +155,7 @@ impl DatabaseWrite for SequencerDB {
         })?;
         timers.header_write.time(|| {
             // Write to header table
-            rw_provider
-                .tx_ref()
-                .put::<tables::CanonicalHeaders>(block.block.header.number, block.block.header.hash_slow())
-                .unwrap();
+            rw_provider.tx_ref().put::<tables::CanonicalHeaders>(block.number, block.hash_slow()).unwrap();
         });
 
         timers.db_commit.time(|| rw_provider.commit())?;
@@ -198,7 +196,7 @@ impl DatabaseWrite for SequencerDB {
             if old_account != new_account {
                 let existing_entry = plain_accounts_cursor.seek_exact(*address)?;
                 if let Some(account) = old_account {
-                    plain_accounts_cursor.upsert(*address, *account)?;
+                    plain_accounts_cursor.upsert(*address, account)?;
                 } else if existing_entry.is_some() {
                     plain_accounts_cursor.delete_current()?;
                 }
@@ -218,7 +216,7 @@ impl DatabaseWrite for SequencerDB {
 
                 // insert value if needed
                 if !old_storage_value.is_zero() {
-                    plain_storage_cursor.upsert(*address, storage_entry)?;
+                    plain_storage_cursor.upsert(*address, &storage_entry)?;
                 }
             }
         }

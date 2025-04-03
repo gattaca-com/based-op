@@ -16,18 +16,19 @@ use bop_common::{
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use reth_evm::{ConfigureEvm, execute::ProviderError};
+use op_revm::{OpContext, OpEvm};
+use reth_evm::{ConfigureEvm, EvmEnv, execute::ProviderError};
 use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::OpHardfork;
 use revm::{Database, DatabaseRef, Evm};
 use revm_primitives::{Address, U256};
 
 /// Simulator thread.
-pub struct Simulator<'a, Db: DatabaseRef> {
+pub struct Simulator<Db: DatabaseRef> {
     /// Top of frag evm.
-    evm_tof: Evm<'a, (), State<DBFrag<Db>>>,
+    evm_tof: OpEvm<OpContext<DBFrag<Db>>, ()>,
     /// Evm on top of partially built frag
-    pub evm_sorting: Evm<'a, (), State<DBSorting<Db>>>,
+    pub evm_sorting: OpEvm<OpContext<State<DBSorting<Db>>>, ()>,
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
     /// How to create an EVM.
@@ -35,17 +36,17 @@ pub struct Simulator<'a, Db: DatabaseRef> {
     id: usize,
 }
 
-impl<'a, Db: DatabaseRef + Clone> Simulator<'a, Db>
+impl<Db: DatabaseRef + Clone> Simulator<Db>
 where
     <Db as DatabaseRef>::Error: Into<ProviderError> + Debug + Display,
 {
-    pub fn new(db: DBFrag<Db>, evm_config: &'a OpEvmConfig, id: usize) -> Self {
+    pub fn new(db: DBFrag<Db>, evm_config: OpEvmConfig, id: usize) -> Self {
         // Initialise with default evms. These will be overridden before the first sim by
         // `set_evm_for_new_block`.
         let db_tof = State::new(db.clone());
-        let evm_tof: Evm<'_, (), _> = evm_config.evm(db_tof);
+        let evm_tof = evm_config.evm_with_env(db_tof, EvmEnv::default());
         let db_sorting = State::new(DBSorting::new(db));
-        let evm_sorting: Evm<'_, (), _> = evm_config.evm(db_sorting);
+        let evm_sorting = evm_config.evm_with_env(db_sorting, EvmEnv::default());
 
         Self { evm_sorting, evm_tof, evm_config: evm_config.clone(), id, regolith_active: true }
     }
@@ -54,7 +55,7 @@ where
     pub fn simulate_transaction<SimulateTxDb: DatabaseRef>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
-        evm: &mut Evm<'a, (), State<SimulateTxDb>>,
+        evm: &mut OpEvm<OptContext<SimulateTxDb>>,
         regolith_active: bool,
         allow_zero_payment: bool,
         allow_revert: bool,
@@ -70,7 +71,7 @@ where
     #[inline]
     pub fn update_evm_environments(&mut self, evm_block_params: EvmBlockParams) {
         let timestamp = u64::try_from(evm_block_params.env.block.timestamp).unwrap();
-        self.evm_tof.modify_spec_id(evm_block_params.spec_id);
+        self.evm_tof.0.modify_tx(|tx| {});
         self.evm_tof.context.evm.env = evm_block_params.env.clone();
 
         self.evm_sorting.modify_spec_id(evm_block_params.spec_id);
@@ -84,7 +85,7 @@ where
 /// Will not modify the db state after the simulation is complete.
 pub fn simulate_tx_inner<Db>(
     tx: Arc<Transaction>,
-    evm: &mut Evm<'_, (), Db>,
+    evm: &mut OpEvm<Db>,
     regolith_active: bool,
     allow_zero_payment: bool,
     allow_revert: bool,
@@ -127,7 +128,7 @@ fn balance_from_db(db: &mut impl Database, address: Address) -> U256 {
     db.basic(address).ok().flatten().map(|a| a.balance).unwrap_or_default()
 }
 
-impl<Db: DatabaseRef + Clone> Actor<Db> for Simulator<'_, Db>
+impl<Db: DatabaseRef + Clone> Actor<Db> for Simulator<Db>
 where
     Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
 {

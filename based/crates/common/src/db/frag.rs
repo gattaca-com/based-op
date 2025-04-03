@@ -4,11 +4,10 @@ use alloy_primitives::{B256, map::HashMap};
 use parking_lot::RwLock;
 use rand::RngCore;
 use reth_trie_common::updates::TrieUpdates;
-use revm::db::{BundleState, states::bundle_state::BundleRetention};
-use revm_primitives::{
-    Account, AccountInfo, Address, Bytecode, U256,
-    db::{Database, DatabaseCommit, DatabaseRef},
-};
+use revm::database::{BundleState, states::bundle_state::BundleRetention};
+use revm::database_interface::{Database, DatabaseCommit, DatabaseRef};
+use revm::state::{Account, AccountInfo, Bytecode};
+use revm_primitives::{Address, U256};
 
 use super::{DatabaseRead, Error, State};
 use crate::transaction::SimulatedTx;

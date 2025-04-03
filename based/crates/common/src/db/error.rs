@@ -30,8 +30,8 @@ pub enum Error {
 impl From<Error> for ProviderError {
     fn from(value: Error) -> Self {
         match value {
-            Error::DirNotReadable(path, _) => ProviderError::FsPathError(path),
-            Error::DirNotWritable(path, _) => ProviderError::FsPathError(path),
+            Error::DirNotReadable(_, e) => ProviderError::other(e),
+            Error::DirNotWritable(_, e) => ProviderError::other(e),
             Error::DatabaseInitialisationError(e) => ProviderError::Database(DatabaseError::Other(e)),
             Error::ProviderError(e) => e,
             Error::ReadTransactionError(e) => ProviderError::Database(e),
