@@ -1,11 +1,7 @@
 use std::sync::Arc;
 
-use alloy_primitives::B256;
+use crate::typedefs::*;
 use parking_lot::RwLock;
-use revm_primitives::{
-    AccountInfo, Address, Bytecode, EvmState, U256,
-    db::{Database, DatabaseRef},
-};
 
 use super::{DBFrag, State};
 

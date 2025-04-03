@@ -7,7 +7,8 @@ use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptE
 use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use reth_optimism_primitives::{OpReceipt, transaction::TransactionSenderInfo};
 use reth_primitives::ReceiptWithBloom;
-use revm_primitives::{Address, EvmState, ResultAndState};
+use revm::{context::result::ResultAndState, state::EvmState};
+use revm_primitives::Address;
 
 use crate::transaction::Transaction;
 
