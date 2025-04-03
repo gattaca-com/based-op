@@ -475,7 +475,7 @@ func (n *OpNode) initRPCServer(cfg *Config) error {
 		n.log.Info("Admin RPC enabled")
 	}
 	if cfg.RPC.EnableBased {
-		server.EnableBasedAPI(NewBasedAPI(n.p2pNode, n.log, n.metrics))
+		server.EnableBasedAPI(NewBasedAPI(n.p2pNode, n.registrySource, n.log, n.metrics))
 		n.log.Info("Based RPC enabled")
 	}
 	n.log.Info("Starting JSON-RPC server")
@@ -706,7 +706,7 @@ func (n *OpNode) OnNewFrag(ctx context.Context, from peer.ID, frag *eth.SignedNe
 	// }
 
 	n.tracer.OnNewFrag(ctx, from, frag)
-	n.log.Info("Received new fragment", "frag", frag.Frag.BlockNumber, frag.Frag.Seq)
+	n.log.Info("Received new fragment", "block", frag.Frag.BlockNumber, "frag", frag.Frag.Seq)
 	n.preconfChannels.SendFrag(frag)
 	return nil
 }
