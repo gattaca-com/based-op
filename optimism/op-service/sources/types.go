@@ -359,9 +359,9 @@ func RegistryResponseFromTuple(tuple []any) (*RegistryResponse, error) {
 		return nil, fmt.Errorf("expected 4 elements in tuple, got %d", len(tuple))
 	}
 
-	blockNum, ok := tuple[0].(uint64)
+	blockNum, ok := tuple[0].(float64)
 	if !ok {
-		return nil, fmt.Errorf("invalid block number type: expected uint64, got %T", tuple[0])
+		return nil, fmt.Errorf("invalid block number type: expected float64, got %T", tuple[0])
 	}
 
 	url, ok := tuple[1].(string)
@@ -369,20 +369,20 @@ func RegistryResponseFromTuple(tuple []any) (*RegistryResponse, error) {
 		return nil, fmt.Errorf("invalid url type: expected string, got %T", tuple[1])
 	}
 
-	gatewayAddress, ok := tuple[2].(common.Address)
+	gatewayAddress, ok := tuple[2].(string)
 	if !ok {
-		return nil, fmt.Errorf("invalid gateway address type: expected common.Address, got %T", tuple[2])
+		return nil, fmt.Errorf("invalid gateway address type: expected string, got %T", tuple[2])
 	}
 
-	jwtSecret, ok := tuple[3].(common.Hash)
+	jwtSecret, ok := tuple[3].(string)
 	if !ok {
-		return nil, fmt.Errorf("invalid jwt secret type: expected common.Hash, got %T", tuple[3])
+		return nil, fmt.Errorf("invalid jwt secret type: expected string, got %T", tuple[3])
 	}
 
 	return &RegistryResponse{
-		BlockNumber:    blockNum,
+		BlockNumber:    uint64(blockNum),
 		Url:            url,
-		GatewayAddress: gatewayAddress,
-		JwtSecret:      jwtSecret,
+		GatewayAddress: common.HexToAddress(gatewayAddress),
+		JwtSecret:      common.HexToHash(jwtSecret),
 	}, nil
 }
