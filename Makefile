@@ -20,6 +20,9 @@ BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-
 BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurtosis | grep 'rpc: 8541/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 
+# Some servers default to executing shell scripts below with /bin/sh, we set bash to make sure our bash syntax works
+SHELL := /bin/bash
+
 # Recipes
 
 help: ## 📚 Show help for each of the Makefile recipes
