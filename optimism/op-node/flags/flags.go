@@ -52,6 +52,13 @@ var (
 		EnvVars:  prefixEnvVars("L1_ETH_RPC"),
 		Category: RollupCategory,
 	}
+	RegistryNodeAddr = &cli.StringFlag{
+		Name:     "registry",
+		Usage:    "Address of Registry JSON-RPC endpoint to use (registry namespace required)",
+		Value:    "http://127.0.0.1:8081",
+		EnvVars:  prefixEnvVars("REGISTRY_RPC"),
+		Category: RollupCategory,
+	}
 	L2EngineAddr = &cli.StringFlag{
 		Name:     "l2",
 		Usage:    "Address of L2 Engine JSON-RPC endpoints to use (engine and eth namespace required)",
@@ -382,6 +389,7 @@ var (
 
 var requiredFlags = []cli.Flag{
 	L1NodeAddr,
+	RegistryNodeAddr,
 	L2EngineAddr,
 	L2EngineJWTSecret,
 }
