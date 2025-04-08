@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/metrics"
 	"github.com/ethereum-optimism/optimism/op-service/rpc"
+	"github.com/ethereum-optimism/optimism/op-service/sources"
 )
 
 type l2EthClient interface {
@@ -186,16 +187,18 @@ func (n *nodeAPI) Version(ctx context.Context) (string, error) {
 }
 
 type basedAPI struct {
-	p2p     p2p.Node
-	log     log.Logger
-	metrics metrics.RPCMetricer
+	p2p            p2p.Node
+	registrySource *sources.RegistryClient
+	log            log.Logger
+	metrics        metrics.RPCMetricer
 }
 
-func NewBasedAPI(node p2p.Node, log log.Logger, metrics metrics.RPCMetricer) *basedAPI {
+func NewBasedAPI(node p2p.Node, registrySource *sources.RegistryClient, log log.Logger, metrics metrics.RPCMetricer) *basedAPI {
 	return &basedAPI{
-		p2p:     node,
-		log:     log,
-		metrics: metrics,
+		p2p:            node,
+		registrySource: registrySource,
+		log:            log,
+		metrics:        metrics,
 	}
 }
 
@@ -217,7 +220,7 @@ func verifySignature(log log.Logger, signatureBytes []byte, messageBytes []byte,
 
 	msgSigner := crypto.PubkeyToAddress(*pub)
 	if msgSigner != expectedSigner {
-		log.Warn("unexpected signer", "addr", msgSigner, "expected", expectedSigner)
+		log.Warn("RPC unexpected signer", "addr", msgSigner, "expected", expectedSigner)
 		return pubsub.ValidationReject
 	}
 
@@ -232,7 +235,10 @@ func (n *basedAPI) NewFrag(ctx context.Context, signedFrag eth.SignedNewFrag) (s
 
 	root := signedFrag.Frag.Root()
 
-	expectedSigner := n.p2p.CurrentGateway()
+	expectedSigner, err := n.registrySource.GatewayForBlock(ctx, signedFrag.Frag.BlockNumber)
+	if err != nil {
+		return "ERROR", fmt.Errorf("failed to get expected signer: %w", err)
+	}
 
 	if validation := verifySignature(n.log, signedFrag.Signature[:], root[:], expectedSigner); validation != pubsub.ValidationAccept {
 		return "ERROR", fmt.Errorf("signature validation failed")
@@ -255,7 +261,10 @@ func (n *basedAPI) SealFrag(ctx context.Context, signedSeal eth.SignedSeal) (str
 
 	root := signedSeal.Seal.Root()
 
-	expectedSigner := n.p2p.CurrentGateway()
+	expectedSigner, err := n.registrySource.GatewayForBlock(ctx, signedSeal.Seal.BlockNumber)
+	if err != nil {
+		return "ERROR", fmt.Errorf("failed to get expected signer: %w", err)
+	}
 
 	if validation := verifySignature(n.log, signedSeal.Signature[:], root[:], expectedSigner); validation != pubsub.ValidationAccept {
 		return "ERROR", fmt.Errorf("signature validation failed")
@@ -278,7 +287,10 @@ func (n *basedAPI) Env(ctx context.Context, signedEnv eth.SignedEnv) (string, er
 
 	root := signedEnv.Env.Root()
 
-	expectedSigner := n.p2p.CurrentGateway()
+	expectedSigner, err := n.registrySource.GatewayForBlock(ctx, signedEnv.Env.Number)
+	if err != nil {
+		return "ERROR", fmt.Errorf("failed to get expected signer: %w", err)
+	}
 
 	if validation := verifySignature(n.log, signedEnv.Signature[:], root[:], expectedSigner); validation != pubsub.ValidationAccept {
 		return "ERROR", fmt.Errorf("signature validation failed")

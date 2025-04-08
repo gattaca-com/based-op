@@ -31,6 +31,11 @@ type L1EndpointSetup interface {
 	Check() error
 }
 
+type RegistryEndpointSetup interface {
+	Setup(ctx context.Context, log log.Logger, rollupCfg *rollup.Config) (cl client.RPC, rpcCfg *sources.EthClientConfig, err error)
+	Check() error
+}
+
 type L1BeaconEndpointSetup interface {
 	Setup(ctx context.Context, log log.Logger) (cl sources.BeaconClient, fb []sources.BlobSideCarsFetcher, err error)
 	// ShouldIgnoreBeaconCheck returns true if the Beacon-node version check should not halt startup.
@@ -154,6 +159,56 @@ func (cfg *L1EndpointConfig) Setup(ctx context.Context, log log.Logger, rollupCf
 	rpcCfg.MaxRequestsPerBatch = cfg.BatchSize
 	rpcCfg.MaxConcurrentRequests = cfg.MaxConcurrency
 	return l1Node, rpcCfg, nil
+}
+
+type RegistryEndpointConfig struct {
+	RegistryNodeAddr string // Address of Registry JSON-RPC endpoint to use (registry namespace required)
+
+	// RateLimit specifies a self-imposed rate-limit on Registry requests. 0 is no rate-limit.
+	RateLimit float64
+
+	// BatchSize specifies the maximum batch-size, which also applies as Registry rate-limit burst amount (if set).
+	BatchSize int
+
+	// MaxConcurrency specifies the maximum number of concurrent requests to the Registry RPC.
+	MaxConcurrency int
+
+	HttpPollInterval time.Duration
+}
+
+var _ RegistryEndpointSetup = (*RegistryEndpointConfig)(nil)
+
+func (cfg *RegistryEndpointConfig) Check() error {
+	if cfg.BatchSize < 1 || cfg.BatchSize > 500 {
+		return fmt.Errorf("batch size is invalid or unreasonable: %d", cfg.BatchSize)
+	}
+	if cfg.RateLimit < 0 {
+		return fmt.Errorf("rate limit cannot be negative")
+	}
+	if cfg.MaxConcurrency < 1 {
+		return fmt.Errorf("max concurrent requests cannot be less than 1, was %d", cfg.MaxConcurrency)
+	}
+	return nil
+}
+
+func (cfg *RegistryEndpointConfig) Setup(ctx context.Context, log log.Logger, rollupCfg *rollup.Config) (client.RPC, *sources.EthClientConfig, error) {
+	opts := []client.RPCOption{
+		client.WithHttpPollInterval(cfg.HttpPollInterval),
+		client.WithDialAttempts(10),
+	}
+	if cfg.RateLimit != 0 {
+		opts = append(opts, client.WithRateLimit(cfg.RateLimit, cfg.BatchSize))
+	}
+
+	registryNode, err := client.NewRPC(ctx, log, cfg.RegistryNodeAddr, opts...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to dial L1 address (%s): %w", cfg.RegistryNodeAddr, err)
+	}
+
+	rpcCfg := sources.RegistryClientDefaultConfig(rollupCfg, sources.RPCKindAny)
+	rpcCfg.MaxRequestsPerBatch = cfg.BatchSize
+	rpcCfg.MaxConcurrentRequests = cfg.MaxConcurrency
+	return registryNode, rpcCfg, nil
 }
 
 // PreparedL1Endpoint enables testing with an in-process pre-setup RPC connection to L1
