@@ -32,6 +32,11 @@ type RuntimeCfgL1Source interface {
 	ReadStorageAt(ctx context.Context, address common.Address, storageSlot common.Hash, blockHash common.Hash) (common.Hash, error)
 }
 
+type RuntimeCfgRegistrySource interface {
+	GatewayForBlock(ctx context.Context, blockNumber uint64) (common.Address, error)
+	FetchNextNGateways(ctx context.Context, n uint64, maxRetries uint64) error
+}
+
 type ReadonlyRuntimeConfig interface {
 	P2PSequencerAddress() common.Address
 	RequiredProtocolVersion() params.ProtocolVersion
@@ -47,8 +52,9 @@ type RuntimeConfig struct {
 
 	log log.Logger
 
-	l1Client  RuntimeCfgL1Source
-	rollupCfg *rollup.Config
+	l1Client       RuntimeCfgL1Source
+	registryClient RuntimeCfgRegistrySource
+	rollupCfg      *rollup.Config
 
 	// l1Ref is the current source of the data,
 	// if this is invalidated with a reorg the data will have to be reloaded.
@@ -60,7 +66,6 @@ type RuntimeConfig struct {
 // runtimeConfigData is a flat bundle of configurable data, easy and light to copy around.
 type runtimeConfigData struct {
 	p2pBlockSignerAddr common.Address
-	p2pGatewayAddr     common.Address
 
 	// superchain protocol version signals
 	recommended params.ProtocolVersion
@@ -69,14 +74,13 @@ type runtimeConfigData struct {
 
 var _ p2p.GossipRuntimeConfig = (*RuntimeConfig)(nil)
 
-func NewRuntimeConfig(log log.Logger, l1Client RuntimeCfgL1Source, rollupCfg *rollup.Config, initialGatewayAddress common.Address) *RuntimeConfig {
+func NewRuntimeConfig(log log.Logger, l1Client RuntimeCfgL1Source, rollupCfg *rollup.Config, registryClient RuntimeCfgRegistrySource) *RuntimeConfig {
 	return &RuntimeConfig{
-		log:       log,
-		l1Client:  l1Client,
-		rollupCfg: rollupCfg,
-		runtimeConfigData: runtimeConfigData{
-			p2pGatewayAddr: initialGatewayAddress,
-		},
+		log:               log,
+		l1Client:          l1Client,
+		rollupCfg:         rollupCfg,
+		registryClient:    registryClient,
+		runtimeConfigData: runtimeConfigData{},
 	}
 }
 
@@ -86,10 +90,17 @@ func (r *RuntimeConfig) P2PSequencerAddress() common.Address {
 	return r.p2pBlockSignerAddr
 }
 
-func (r *RuntimeConfig) CurrentGateway() common.Address {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.p2pGatewayAddr
+func (r *RuntimeConfig) GatewayForBlock(ctx context.Context, blockNumber uint64) (common.Address, error) {
+	addr, err := r.registryClient.GatewayForBlock(ctx, blockNumber)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	return addr, nil
+}
+
+func (r *RuntimeConfig) FetchNextNGateways(ctx context.Context, n uint64, maxRetries uint64) error {
+	return r.registryClient.FetchNextNGateways(ctx, n, maxRetries)
 }
 
 func (r *RuntimeConfig) RequiredProtocolVersion() params.ProtocolVersion {
@@ -130,8 +141,6 @@ func (r *RuntimeConfig) Load(ctx context.Context, l1Ref eth.L1BlockRef) error {
 	defer r.mu.Unlock()
 	r.l1Ref = l1Ref
 	r.p2pBlockSignerAddr = common.BytesToAddress(p2pSignerVal[:])
-	// TODO: Update gateway address based on the lookahead.
-	// r.p2pGatewayAddr =
 	r.required = requiredProtVersion
 	r.recommended = recommendedProtoVersion
 	r.log.Info("loaded new runtime config values!", "p2p_seq_address", r.p2pBlockSignerAddr)

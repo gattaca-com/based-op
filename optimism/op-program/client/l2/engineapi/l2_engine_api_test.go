@@ -9,7 +9,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -18,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/require"
 )
 
@@ -135,8 +135,7 @@ func TestNewFragV0(t *testing.T) {
 			BlockNumber: 10,
 			Seq:         0,
 			IsLast:      true,
-			Txs:         make([]eth.Data, 0),
-			Version:     0,
+			Txs:         make([][]byte, 0),
 		},
 	}
 
@@ -186,7 +185,7 @@ func TestEnvV0(t *testing.T) {
 			Timestamp:   2,
 			GasLimit:    3,
 			Basefee:     4,
-			Difficulty:  (*hexutil.Big)(new(big.Int).SetUint64(123123123123123)),
+			Difficulty:  new(uint256.Int).SetUint64(123123123123123),
 			Prevrandao:  common.HexToHash("0x0102030405060708091011121314151617181920212223242526272829303132"),
 		}}
 

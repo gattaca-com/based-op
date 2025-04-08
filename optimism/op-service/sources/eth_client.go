@@ -386,6 +386,28 @@ func (s *EthClient) ReadStorageAt(ctx context.Context, address common.Address, s
 	return common.BytesToHash(value.Bytes()), nil
 }
 
+func (s *EthClient) CurrentGateway(ctx context.Context) (*RegistryResponse, error) {
+	var out []any
+	err := s.client.CallContext(ctx, &out, "registry_currentGateway", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Try to parse the tuple into a RegistryResponse
+	return RegistryResponseFromTuple(out)
+}
+
+func (s *EthClient) FutureGateway(ctx context.Context, n_into_future uint64) (*RegistryResponse, error) {
+	var out []any
+	err := s.client.CallContext(ctx, &out, "registry_futureGateway", n_into_future)
+	if err != nil {
+		return nil, err
+	}
+
+	// Try to parse the tuple into a RegistryResponse
+	return RegistryResponseFromTuple(out)
+}
+
 func (s *EthClient) Close() {
 	s.client.Close()
 }

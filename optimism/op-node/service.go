@@ -54,15 +54,12 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		return nil, fmt.Errorf("failed to load p2p signer: %w", err)
 	}
 
-	p2pGatewayAddress := p2pcli.LoadGateway(ctx)
-	if p2pGatewayAddress == nil {
-		return nil, errors.New("gateway address is required")
-	}
-
 	p2pConfig, err := p2pcli.NewConfig(ctx, rollupConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load p2p config: %w", err)
 	}
+
+	registryEndpoint := NewRegistryEndpointConfig(ctx)
 
 	l1Endpoint := NewL1EndpointConfig(ctx)
 
@@ -89,6 +86,7 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	conductorRPCEndpoint := ctx.String(flags.ConductorRpcFlag.Name)
 	cfg := &node.Config{
 		L1:         l1Endpoint,
+		Registry:   registryEndpoint,
 		L2:         l2Endpoint,
 		Rollup:     *rollupConfig,
 		Driver:     *driverConfig,
@@ -108,7 +106,6 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		Pprof:                       oppprof.ReadCLIConfig(ctx),
 		P2P:                         p2pConfig,
 		P2PSigner:                   p2pSignerSetup,
-		P2PGatewayAddress:           *p2pGatewayAddress,
 		L1EpochPollInterval:         ctx.Duration(flags.L1EpochPollIntervalFlag.Name),
 		RuntimeConfigReloadInterval: ctx.Duration(flags.RuntimeConfigReloadIntervalFlag.Name),
 		ConfigPersistence:           configPersistence,
@@ -161,6 +158,16 @@ func NewL1EndpointConfig(ctx *cli.Context) *node.L1EndpointConfig {
 		L1NodeAddr:       ctx.String(flags.L1NodeAddr.Name),
 		L1TrustRPC:       ctx.Bool(flags.L1TrustRPC.Name),
 		L1RPCKind:        sources.RPCProviderKind(strings.ToLower(ctx.String(flags.L1RPCProviderKind.Name))),
+		RateLimit:        ctx.Float64(flags.L1RPCRateLimit.Name),
+		BatchSize:        ctx.Int(flags.L1RPCMaxBatchSize.Name),
+		HttpPollInterval: ctx.Duration(flags.L1HTTPPollInterval.Name),
+		MaxConcurrency:   ctx.Int(flags.L1RPCMaxConcurrency.Name),
+	}
+}
+
+func NewRegistryEndpointConfig(ctx *cli.Context) *node.RegistryEndpointConfig {
+	return &node.RegistryEndpointConfig{
+		RegistryNodeAddr: ctx.String(flags.RegistryNodeAddr.Name),
 		RateLimit:        ctx.Float64(flags.L1RPCRateLimit.Name),
 		BatchSize:        ctx.Int(flags.L1RPCMaxBatchSize.Name),
 		HttpPollInterval: ctx.Duration(flags.L1HTTPPollInterval.Name),
