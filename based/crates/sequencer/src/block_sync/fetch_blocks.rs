@@ -1,5 +1,4 @@
 use std::time::Duration;
-use tracing::{info, warn};
 
 use alloy_consensus::Block;
 use alloy_provider::Provider;
@@ -10,6 +9,7 @@ use futures::future::join_all;
 use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
+use tracing::{info, warn};
 
 use super::AlloyProvider;
 
@@ -74,7 +74,7 @@ pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockWith
 
 /// Converts an RPC block with OpTxEnvelope transactions to a consensus block with OpTransactionSigned
 pub fn convert_rpc_block(
-    block: RpcBlock<op_alloy_rpc_types::Transaction>
+    block: RpcBlock<op_alloy_rpc_types::Transaction>,
 ) -> Result<BlockWithSenders<OpBlock>, BlockSyncError> {
     // First convert the block to consensus format
     let consensus_block = block.into_consensus();
@@ -88,11 +88,10 @@ pub fn convert_rpc_block(
         .map(|tx| {
             let signed_tx = OpTransactionSigned::from_envelope(tx.inner.inner);
             recovery_buf.clear(); // Reuse buffer for next transaction
-            
-            let sender = signed_tx
-                .recover_signer_unchecked_with_buf(&mut recovery_buf)
-                .ok_or(BlockSyncError::SignerRecovery)?;
-                
+
+            let sender =
+                signed_tx.recover_signer_unchecked_with_buf(&mut recovery_buf).ok_or(BlockSyncError::SignerRecovery)?;
+
             Ok((signed_tx, sender))
         })
         .collect();

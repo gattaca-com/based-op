@@ -69,7 +69,8 @@ impl BlockSync {
             let new_block_hash = block.header.hash_slow();
 
             // Check if the block has already been committed.
-            let db_block_hash = db.block_hash_ref(block_number)
+            let db_block_hash = db
+                .block_hash_ref(block_number)
                 .map_err(|e| BlockSyncError::Database(bop_db::Error::ProviderError(e.into())))?;
             if db_block_hash == new_block_hash {
                 return Ok(None);
@@ -115,9 +116,7 @@ impl BlockSync {
             if pending_block.header.parent_hash != head_block_hash {
                 warn!(
                     "pending block parent hash mismatch. Block number: {}, Expected parent: {:?}, Got: {:?}",
-                    pending_block.header.number,
-                    head_block_hash,
-                    pending_block.header.parent_hash
+                    pending_block.header.number, head_block_hash, pending_block.header.parent_hash
                 );
                 debug_assert!(false, "pending block parent hash doesn't match db head hash");
 
@@ -176,12 +175,10 @@ impl BlockSync {
     where
         DB: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
-        let head_block_hash = db.head_block_hash()
+        let head_block_hash = db
+            .head_block_hash()
             .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::LatestBlock(e.into())))?;
-        debug_assert!(
-            block.header.parent_hash == head_block_hash,
-            "can only apply blocks sequentially"
-        );
+        debug_assert!(block.header.parent_hash == head_block_hash, "can only apply blocks sequentially");
         self.timers.execute_txs.start();
         // Apply the block.
         let mut executor = self.execution_factory.create_strategy(db.clone());
