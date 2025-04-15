@@ -158,12 +158,16 @@ impl PortalServer {
             }
             *self.gateways.write() = gateways;
         }
-
-        *self.current_gateway.lock() = create_gateway_client(
-            gateway_url,
-            unsafe { std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256) },
-            self.gateway_timeout,
-        )?;
+        let mut cur_gateway = self.current_gateway.lock();
+        if cur_gateway.id != gateway_url {
+            *cur_gateway = create_gateway_client(
+                gateway_url,
+                unsafe {
+                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
+                },
+                self.gateway_timeout,
+            )?;
+        }
         Ok(())
     }
 
