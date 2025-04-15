@@ -386,7 +386,7 @@ impl EthApiServer for PortalServer {
 
 #[async_trait]
 impl EngineApiServer for PortalServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn fork_choice_updated_v3(
         &self,
         fork_choice_state: ForkchoiceState,
@@ -415,7 +415,7 @@ impl EngineApiServer for PortalServer {
                     Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
                         .in_current_span(),
                 );
-            }else {
+            } else {
                 debug!("couldn't send fcu to next gateway");
             }
         } else {
@@ -429,7 +429,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn new_payload_v3(
         &self,
         payload: ExecutionPayloadV3,
@@ -473,7 +473,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         debug!(%payload_id, "new request");
 
