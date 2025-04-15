@@ -415,6 +415,8 @@ impl EngineApiServer for PortalServer {
                     Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
                         .in_current_span(),
                 );
+            }else {
+                debug!("couldn't send fcu to next gateway");
             }
         } else {
             // send to all gateways
