@@ -1,9 +1,4 @@
-use std::{
-    fmt,
-    net::SocketAddr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types::{
