@@ -410,19 +410,12 @@ impl EngineApiServer for PortalServer {
 
         if payload_attributes.is_some() {
             // pick only one gateway for this block
-            let mut curt = Instant::now();
-            while self.refresh().await.is_err() {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-                if curt.elapsed() > Duration::from_secs(1) {
-                    tracing::error!("couldn't get next gateway from registry. Retrying...");
-                    curt = Instant::now();
-                }
+            if self.refresh().await.is_ok() {
+                tokio::spawn(
+                    Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
+                        .in_current_span(),
+                );
             }
-
-            tokio::spawn(
-                Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
-                    .in_current_span(),
-            );
         } else {
             // send to all gateways
             for gateway in self.gateways() {
