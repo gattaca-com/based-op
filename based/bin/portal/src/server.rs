@@ -522,6 +522,9 @@ impl EngineApiServer for PortalServer {
         // ignore join errors
         let fallback = fallback?;
         let gateway = gateway?;
+        if gateway.is_err() && fallback.is_ok() {
+            debug!("Couldn't retrieve payload from gateway, serving fallback")
+        }
 
         let payload = gateway.or(fallback)?;
 
