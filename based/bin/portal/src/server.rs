@@ -133,9 +133,8 @@ impl PortalServer {
     }
 
     pub async fn refresh(&self) -> eyre::Result<()> {
-        let mut gateways = self.gateways.write();
-
         for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
+            let mut gateways = self.gateways.write();
             if !gateways.iter().any(|g| g.id == gateway_url) {
                 let Ok(client) = create_gateway_client(
                     gateway_url,
@@ -156,7 +155,7 @@ impl PortalServer {
             return Ok(());
         }
 
-        for g in gateways.iter() {
+        for g in self.gateways.read().iter() {
             if g.id == gateway_url {
                 tracing::debug!("updating gateway to {gateway_url:?}");
                 *current_gateway = g.clone();
