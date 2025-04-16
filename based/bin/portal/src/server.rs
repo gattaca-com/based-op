@@ -1,9 +1,4 @@
-use std::{
-    fmt,
-    net::SocketAddr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types::{
@@ -158,12 +153,16 @@ impl PortalServer {
             }
             *self.gateways.write() = gateways;
         }
-
-        *self.current_gateway.lock() = create_gateway_client(
-            gateway_url,
-            unsafe { std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256) },
-            self.gateway_timeout,
-        )?;
+        let mut cur_gateway = self.current_gateway.lock();
+        if cur_gateway.id != gateway_url {
+            *cur_gateway = create_gateway_client(
+                gateway_url,
+                unsafe {
+                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
+                },
+                self.gateway_timeout,
+            )?;
+        }
         Ok(())
     }
 
@@ -382,7 +381,7 @@ impl EthApiServer for PortalServer {
 
 #[async_trait]
 impl EngineApiServer for PortalServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn fork_choice_updated_v3(
         &self,
         fork_choice_state: ForkchoiceState,
@@ -406,19 +405,14 @@ impl EngineApiServer for PortalServer {
 
         if payload_attributes.is_some() {
             // pick only one gateway for this block
-            let mut curt = Instant::now();
-            while self.refresh().await.is_err() {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-                if curt.elapsed() > Duration::from_secs(1) {
-                    tracing::error!("couldn't get next gateway from registry. Retrying...");
-                    curt = Instant::now();
-                }
+            if self.refresh().await.is_ok() {
+                tokio::spawn(
+                    Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
+                        .in_current_span(),
+                );
+            } else {
+                debug!("couldn't send fcu to next gateway");
             }
-
-            tokio::spawn(
-                Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
-                    .in_current_span(),
-            );
         } else {
             // send to all gateways
             for gateway in self.gateways() {
@@ -430,7 +424,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn new_payload_v3(
         &self,
         payload: ExecutionPayloadV3,
@@ -474,7 +468,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         debug!(%payload_id, "new request");
 
@@ -523,6 +517,9 @@ impl EngineApiServer for PortalServer {
         // ignore join errors
         let fallback = fallback?;
         let gateway = gateway?;
+        if gateway.is_err() && fallback.is_ok() {
+            debug!("Couldn't retrieve payload from gateway, serving fallback")
+        }
 
         let payload = gateway.or(fallback)?;
 
