@@ -400,9 +400,6 @@ impl EngineApiServer for PortalServer {
 
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
-        if !self.gateways_initialized() {
-            return Ok(response);
-        }
 
         if payload_attributes.is_some() {
             // pick only one gateway for this block
