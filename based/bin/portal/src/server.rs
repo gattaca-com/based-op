@@ -128,41 +128,42 @@ impl PortalServer {
         Ok(())
     }
 
-    fn gateways_initialized(&self) -> bool {
-        self.gateways.read().len() != 0
-    }
-
     fn gateways(&self) -> Vec<Gateway> {
         self.gateways.read().clone()
     }
 
     pub async fn refresh(&self) -> eyre::Result<()> {
-        let (_, gateway_url, _, jwt_as_b256) = self.registry_client.current_gateway().await?;
-        tracing::debug!("updating gateway to {gateway_url:?}");
-        if !self.gateways_initialized() {
-            tracing::debug!("registry was down until now, initializing gateways");
-            let mut gateways = vec![];
-            for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
-                gateways.push(create_gateway_client(
+        let mut gateways = self.gateways.write();
+
+        for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
+            if !gateways.iter().any(|g| g.id == gateway_url) {
+                let Ok(client) = create_gateway_client(
                     gateway_url,
                     unsafe {
                         std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
                     },
                     self.gateway_timeout,
-                )?)
+                ) else {
+                    continue;
+                };
+                gateways.push(client);
             }
-            *self.gateways.write() = gateways;
         }
-        let mut cur_gateway = self.current_gateway.lock();
-        if cur_gateway.id != gateway_url {
-            *cur_gateway = create_gateway_client(
-                gateway_url,
-                unsafe {
-                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                },
-                self.gateway_timeout,
-            )?;
+
+        let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
+        let mut current_gateway = self.current_gateway.lock();
+        if current_gateway.id == gateway_url {
+            return Ok(());
         }
+
+        for g in gateways.iter() {
+            if g.id == gateway_url {
+                tracing::debug!("updating gateway to {gateway_url:?}");
+                *current_gateway = g.clone();
+                return Ok(());
+            }
+        }
+        error!("CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent");
         Ok(())
     }
 
