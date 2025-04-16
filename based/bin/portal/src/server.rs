@@ -407,7 +407,7 @@ impl EngineApiServer for PortalServer {
                 Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
                     .in_current_span(),
             );
-                    } else {
+        } else {
             // send to all gateways
             for gateway in self.gateways() {
                 let payload_attributes = payload_attributes.clone();
