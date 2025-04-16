@@ -403,15 +403,11 @@ impl EngineApiServer for PortalServer {
 
         if payload_attributes.is_some() {
             // pick only one gateway for this block
-            if self.refresh().await.is_ok() {
-                tokio::spawn(
-                    Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
-                        .in_current_span(),
-                );
-            } else {
-                debug!("couldn't send fcu to next gateway");
-            }
-        } else {
+            tokio::spawn(
+                Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
+                    .in_current_span(),
+            );
+                    } else {
             // send to all gateways
             for gateway in self.gateways() {
                 let payload_attributes = payload_attributes.clone();
