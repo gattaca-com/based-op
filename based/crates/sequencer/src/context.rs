@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
 
-use alloy_consensus::{Header, EMPTY_OMMER_ROOT_HASH};
+use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::merge::BEACON_NONCE;
 use alloy_rpc_types::engine::{
     BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
@@ -299,17 +299,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
-        (seal, OpExecutionPayloadEnvelopeV3 {
-            execution_payload: ExecutionPayloadV3 {
-                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                blob_gas_used: 0,
-                excess_blob_gas: 0,
+        (
+            seal,
+            OpExecutionPayloadEnvelopeV3 {
+                execution_payload: ExecutionPayloadV3 {
+                    payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                    blob_gas_used: 0,
+                    excess_blob_gas: 0,
+                },
+                block_value: frag_seq.payment.to(),
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
             },
-            block_value: frag_seq.payment.to(),
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-        })
+        )
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
@@ -318,7 +321,14 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// and clear the existing pool based on that
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
     pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
-        let blocks_to_fetch = self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
+        let blocks_to_fetch = match self.block_executor.commit_block(block, &self.db, true) {
+            Ok(blocks_to_fetch) => blocks_to_fetch,
+            Err(e) => {
+                tracing::error!("couldn't commit block: {e}");
+                let bn = block.number();
+                return Some((bn, bn));
+            }
+        };
 
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();
