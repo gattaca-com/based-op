@@ -77,20 +77,14 @@ where
     Db: DatabaseWrite + DatabaseRead,
 {
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
-        let block_sync_receive_duration = if matches!(self.state, SequencerState::Syncing { .. }) {
-            // we're syncing anyway
-            Duration::MAX
-        } else {
-            Duration::from_millis(10)
-        };
         // handle block sync
-        connections.receive_for(block_sync_receive_duration, |msg, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_block_sync(msg, &mut self.data, senders);
         });
 
         // handle new transaction
-        connections.receive(|msg, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             self.state.handle_new_tx(msg, &mut self.data, senders);
         });
 
@@ -101,7 +95,7 @@ where
         });
 
         // handle engine API messages from rpc
-        connections.receive(|msg: messages::EngineApi, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
         });
