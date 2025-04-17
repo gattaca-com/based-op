@@ -149,15 +149,14 @@ impl PortalServer {
         *self.gateways.write() = gateways;
 
         let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
-        let mut current_gateway = self.current_gateway.lock();
-        if current_gateway.id == gateway_url {
+        if self.current_gateway.lock().id == gateway_url {
             return Ok(());
         }
 
-        for g in self.gateways.read().iter() {
+        for g in self.gateways() {
             if g.id == gateway_url {
                 tracing::debug!("updating gateway to {gateway_url:?}");
-                *current_gateway = g.clone();
+                *self.current_gateway.lock() = g;
                 return Ok(());
             }
         }
