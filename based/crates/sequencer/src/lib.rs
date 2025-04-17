@@ -252,10 +252,13 @@ where
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
-        let head_bh = ctx.db.head_block_hash().expect("couldn't get db");
-        if head_bh != fork_choice_state.head_block_hash {
-            return self;
-        };
+        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
+        if fork_choice_state.head_block_hash != head_block_hash {
+            // We are on the wrong head. Switch to syncing and request the head block.
+            let head_block_number = ctx.db.head_block_number().expect("couldn't get db head block number");
+            ctx.shared_state.reset();
+            return Self::sync_until(head_block_number, head_block_number, senders);
+        }
 
         match self {
             // Waiting for new payload should not happen, but while testing
@@ -283,19 +286,7 @@ where
                         info!("start sorting with {} orders", first_frag.tof_snapshot.len());
                         SequencerState::Sorting(seq, first_frag)
                     }
-                    None => {
-                        // Check that we are at this head.
-                        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
-                        if fork_choice_state.head_block_hash != head_block_hash {
-                            // We are on the wrong head. Switch to syncing and request the head block.
-                            let head_block_number =
-                                ctx.db.head_block_number().expect("couldn't get db head block number");
-                            ctx.shared_state.reset();
-                            Self::sync_until(head_block_number, head_block_number, senders)
-                        } else {
-                            WaitingForForkChoiceWithAttributes
-                        }
-                    }
+                    None => self,
                 }
             }
 
