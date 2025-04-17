@@ -133,21 +133,20 @@ impl PortalServer {
     }
 
     pub async fn refresh(&self) -> eyre::Result<()> {
+        let mut gateways = vec![];
         for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
-            let mut gateways = self.gateways.write();
-            if !gateways.iter().any(|g| g.id == gateway_url) {
-                let Ok(client) = create_gateway_client(
-                    gateway_url,
-                    unsafe {
-                        std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                    },
-                    self.gateway_timeout,
-                ) else {
-                    continue;
-                };
-                gateways.push(client);
-            }
+            let Ok(client) = create_gateway_client(
+                gateway_url,
+                unsafe {
+                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
+                },
+                self.gateway_timeout,
+            ) else {
+                continue;
+            };
+            gateways.push(client);
         }
+        *self.gateways.write() = gateways;
 
         let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
         let mut current_gateway = self.current_gateway.lock();
@@ -181,6 +180,7 @@ impl PortalServer {
             }
             Err(err) => trace!(%err, "Error: failed gateway"),
         }
+        debug!(?gateway, "served fcu")
     }
 }
 
