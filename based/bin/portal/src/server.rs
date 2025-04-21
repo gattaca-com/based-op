@@ -401,15 +401,14 @@ impl EngineApiServer for PortalServer {
 
         if payload_attributes.is_some() {
             // pick only one gateway for this block
-            tokio::spawn(
-                Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
-                    .in_current_span(),
-            );
+            Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
+                .in_current_span()
+                .await;
         } else {
             // send to all gateways
             for gateway in self.gateways() {
                 let payload_attributes = payload_attributes.clone();
-                tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span());
+                Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span().await;
             }
         }
 
