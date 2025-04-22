@@ -18,7 +18,8 @@ use jsonrpsee::{
 };
 use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::Mutex;
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
 use tracing::{debug, error, info, trace, Instrument, Level};
@@ -167,14 +168,14 @@ impl PortalServer {
         *self.gateways.write() = gateways;
 
         let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
-        if self.current_gateway.lock().id == gateway_url {
+        if self.current_gateway.lock().await.id == gateway_url {
             return Ok(());
         }
 
         for g in self.gateways() {
             if g.id == gateway_url {
                 tracing::debug!("updating gateway to {gateway_url:?}");
-                *self.current_gateway.lock() = g;
+                *self.current_gateway.lock().await = g;
                 return Ok(());
             }
         }
@@ -234,7 +235,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.transaction_receipt(hash).await }
             }
             .in_current_span(),
@@ -263,7 +264,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.block_by_number(number, full).await }
             }
             .in_current_span(),
@@ -292,7 +293,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.block_by_hash(hash, full).await }
             }
             .in_current_span(),
@@ -321,7 +322,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.block_number().await }
             }
             .in_current_span(),
@@ -350,7 +351,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.transaction_count(address, block_number).await }
             }
             .in_current_span(),
@@ -379,7 +380,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.balance(address, block_number).await }
             }
             .in_current_span(),
@@ -428,10 +429,9 @@ impl EngineApiServer for PortalServer {
 
         if payload_attributes.is_some() {
             debug!("sending to current gateway");
+            let current_gateway = self.current_gateway.lock().await.clone();
             // pick only one gateway for this block
-            Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
-                .in_current_span()
-                .await;
+            Self::send_fcu(fork_choice_state, payload_attributes, current_gateway).in_current_span().await;
             debug!("done sending to current gateway");
         } else {
             // send to all gateways
@@ -512,7 +512,7 @@ impl EngineApiServer for PortalServer {
         let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV3, _>> = tokio::spawn(
             {
                 // only get payload from previously picked gateway
-                let gateway = self.current_gateway.lock().clone();
+                let gateway = self.current_gateway.lock().await.clone();
                 let fallback_client = self.fallback_client.clone();
 
                 async move {
