@@ -405,7 +405,9 @@ impl EngineApiServer for PortalServer {
         payload_attributes: Option<OpPayloadAttributes>,
     ) -> RpcResult<ForkchoiceUpdated> {
         let last_fcu_dt = self.last_fcu.read().elapsed();
-        *self.last_fcu.write() = Nanos::now();
+        if payload.is_some() {
+            *self.last_fcu.write() = Nanos::now();
+        }
         let parent_block_hash = fork_choice_state.head_block_hash;
 
         if let Some(payload_attributes) = payload_attributes.as_ref() {
@@ -419,7 +421,7 @@ impl EngineApiServer for PortalServer {
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
-        if last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
+        if payload.is_some() && last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
             return Ok(response);
         }
 
