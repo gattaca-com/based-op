@@ -422,14 +422,17 @@ impl EngineApiServer for PortalServer {
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
         if payload_attributes.is_some() && last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
+            debug!("we seem to be in state syncing so only sending to fallback");
             return Ok(response);
         }
 
         if payload_attributes.is_some() {
+            debug!("sending to current gateway");
             // pick only one gateway for this block
             Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
                 .in_current_span()
                 .await;
+            debug!("done sending to current gateway");
         } else {
             // send to all gateways
             for gateway in self.gateways() {
