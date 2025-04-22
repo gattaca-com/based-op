@@ -19,9 +19,9 @@ use jsonrpsee::{
 use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use parking_lot::RwLock;
-use tokio::sync::Mutex;
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info, trace, Instrument, Level};
 
 use crate::{cli::PortalArgs, middleware::ProxyService};
@@ -406,9 +406,7 @@ impl EngineApiServer for PortalServer {
         payload_attributes: Option<OpPayloadAttributes>,
     ) -> RpcResult<ForkchoiceUpdated> {
         let last_fcu_dt = self.last_fcu.read().elapsed();
-        if payload_attributes.is_some() {
-            *self.last_fcu.write() = Nanos::now();
-        }
+        *self.last_fcu.write() = Nanos::now();
         let parent_block_hash = fork_choice_state.head_block_hash;
 
         if let Some(payload_attributes) = payload_attributes.as_ref() {
@@ -422,17 +420,15 @@ impl EngineApiServer for PortalServer {
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
-        if payload_attributes.is_some() && last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
-            debug!("we seem to be in state syncing so only sending to fallback");
+        if last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
+            debug!("we seem to be in state syncing so only sending fcu to fallback");
             return Ok(response);
         }
 
         if payload_attributes.is_some() {
-            debug!("sending to current gateway");
             let current_gateway = self.current_gateway.lock().await.clone();
             // pick only one gateway for this block
             Self::send_fcu(fork_choice_state, payload_attributes, current_gateway).in_current_span().await;
-            debug!("done sending to current gateway");
         } else {
             // send to all gateways
             for gateway in self.gateways() {
