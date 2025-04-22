@@ -43,7 +43,7 @@ impl fmt::Debug for Gateway {
 
 /// If we get fcus faster than this threshold we assume that we are in sync mode and will
 /// not propagate anything to the gateways
-const SYNC_FCU_DT_THRESHOLD: Nanos = Nanos::from_millis(500);
+const SYNC_FCU_DT_THRESHOLD: Nanos = Nanos::from_millis(1500);
 
 #[derive(Clone)]
 pub struct PortalServer {
