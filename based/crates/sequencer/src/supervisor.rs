@@ -1,9 +1,10 @@
+use std::{sync::Arc, time::Duration};
+
 use alloy_consensus::Transaction as _;
 use bop_common::transaction::Transaction;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use kona_interop::{ExecutingDescriptor, SafetyLevel};
 use kona_rpc::{InteropTxValidator, InteropTxValidatorError};
-use std::{sync::Arc, time::Duration};
 use tracing::warn;
 
 use crate::config::SuperVisorConfig;
@@ -63,6 +64,7 @@ impl SupervisorValidator {
 
 impl InteropTxValidator for SupervisorValidator {
     type SupervisorClient = HttpClient;
+
     const DEFAULT_TIMEOUT: Duration = Duration::from_millis(100);
 
     fn supervisor_client(&self) -> &Self::SupervisorClient {

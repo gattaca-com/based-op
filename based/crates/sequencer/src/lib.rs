@@ -66,7 +66,7 @@ pub struct Sequencer<Db> {
 
 impl<Db: DatabaseRead> Sequencer<Db> {
     pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
-        let supervisor = config.supervisor.as_ref().map(|config| supervisor::SupervisorValidator::from(config));
+        let supervisor = config.supervisor.as_ref().map(supervisor::SupervisorValidator::from);
         Self {
             state: SequencerState::default(),
             data: SequencerContext::new(db, shared_state, config),
@@ -89,8 +89,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0
-                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0 &&
+                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
