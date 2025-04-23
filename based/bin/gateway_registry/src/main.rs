@@ -17,7 +17,7 @@ use jsonrpsee::{core::async_trait, http_client::HttpClientBuilder, server::Serve
 use parking_lot::RwLock;
 use reqwest::Url;
 use thiserror::Error;
-use tracing::{error, info, level_filters::LevelFilter, Level};
+use tracing::{Level, error, info, level_filters::LevelFilter};
 
 pub type RpcClient = jsonrpsee::http_client::HttpClient;
 #[derive(Parser, Debug, Clone)]

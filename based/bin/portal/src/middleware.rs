@@ -1,12 +1,12 @@
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
+    MethodResponse,
     core::{client::ClientT, traits::ToRpcParams},
     server::middleware::rpc::RpcServiceT,
     types::{
-        error::{INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
         ErrorObject, Params, Request, ResponsePayload,
+        error::{INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
     },
-    MethodResponse,
 };
 use serde_json::value::RawValue;
 use tracing::{debug, error};
@@ -95,13 +95,13 @@ impl ToRpcParams for WrapParams<'_> {
 mod tests {
     use std::{
         net::SocketAddr,
-        sync::{atomic::AtomicBool, Arc},
+        sync::{Arc, atomic::AtomicBool},
     };
 
     use jsonrpsee::{
+        RpcModule,
         http_client::{HttpClient, HttpClientBuilder},
         server::{RpcServiceBuilder, ServerBuilder},
-        RpcModule,
     };
     use reth_rpc_layer::{AuthClientLayer, JwtSecret};
 

@@ -35,7 +35,7 @@ fn rdtscp() -> u64 {
     {
         let mut c = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
         let o = unsafe { ::core::arch::x86_64::__rdtscp(&mut c) };
-        o | ((c & 0x0000F000) as u64) << 50
+        o | (((c & 0x0000F000) as u64) << 50)
     }
     #[cfg(all(target_arch = "aarch64", not(target_arch = "wasm32")))]
     {

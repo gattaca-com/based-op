@@ -12,8 +12,8 @@ use alloy_rpc_types::engine::{
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
-use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpBlock};
+use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
+use reth_optimism_primitives::{OpBlock, transaction::TransactionSenderInfo};
 use reth_primitives::BlockWithSenders;
 use revm_primitives::{Address, Env, SpecId, U256};
 use serde::{Deserialize, Serialize};

@@ -10,7 +10,7 @@ use std::{
 use shared_memory::ShmemConf;
 use tracing::error;
 
-use super::{seqlock::Seqlock, Error, ReadError};
+use super::{Error, ReadError, seqlock::Seqlock};
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
@@ -120,11 +120,7 @@ impl<T> InnerQueue<T> {
             }
             Err(ShmemError::LinkExists) => {
                 let v = Self::open_shared(&shmem_file)?;
-                if unsafe { (*v).header.len() } < len {
-                    Err(Error::TooSmall)
-                } else {
-                    Ok(v)
-                }
+                if unsafe { (*v).header.len() } < len { Err(Error::TooSmall) } else { Ok(v) }
             }
             Err(e) => Err(e.into()),
         }

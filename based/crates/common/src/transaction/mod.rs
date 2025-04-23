@@ -5,9 +5,9 @@ use std::{ops::Deref, sync::Arc};
 
 use alloy_consensus::{SignableTransaction, Transaction as TransactionTrait, TxEip1559};
 use alloy_eips::eip2718::{Decodable2718, Encodable2718};
-use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_primitives::{Address, B256, Bytes, U256};
 use op_alloy_consensus::{DepositTransaction, OpTxEnvelope};
-use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpTransactionSigned};
+use reth_optimism_primitives::{OpTransactionSigned, transaction::TransactionSenderInfo};
 use reth_primitives_traits::SignedTransaction;
 use revm_primitives::{OptimismFields, TxEnv, TxKind};
 pub use simulated::{SimulatedTx, SimulatedTxList};
@@ -69,7 +69,7 @@ impl Transaction {
     /// Returns true if the transaction is valid for a block with the given base fee.
     #[inline]
     pub fn valid_for_block(&self, base_fee: u64) -> bool {
-        self.gas_price_or_max_fee().map_or(true, |price| price > base_fee as u128)
+        self.gas_price_or_max_fee().is_none_or(|price| price > base_fee as u128)
     }
 
     #[inline]

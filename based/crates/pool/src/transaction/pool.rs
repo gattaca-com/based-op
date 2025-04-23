@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use alloy_consensus::Transaction as TransactionTrait;
 use alloy_primitives::Address;
 use bop_common::{
-    communication::{messages::SequencerToSimulator, SendersSpine, TrackedSenders},
+    communication::{SendersSpine, TrackedSenders, messages::SequencerToSimulator},
     db::{DBFrag, DatabaseRead},
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},

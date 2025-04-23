@@ -6,17 +6,17 @@ use std::{
 use bop_common::{
     actor::Actor,
     communication::{
+        SpineConnections, TrackedSenders,
         messages::{
             EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg,
         },
-        SpineConnections, TrackedSenders,
     },
     db::{DBFrag, DBSorting, DatabaseRead, State},
     time::{Duration, Instant},
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
-use reth_evm::{execute::ProviderError, ConfigureEvm};
+use reth_evm::{ConfigureEvm, execute::ProviderError};
 use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::OpHardfork;
 use revm::{Database, DatabaseRef, Evm};
