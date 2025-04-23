@@ -3,9 +3,9 @@ members = ["bin/*", "crates/*"]
 resolver = "2"
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 repository = "https://github.com/gattaca-com/based-op"
-rust-version = "1.83.0"
+rust-version = "1.85.0"
 version = "0.1.0"
 
 [profile.release-prod]

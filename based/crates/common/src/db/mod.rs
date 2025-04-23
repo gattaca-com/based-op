@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use alloy_primitives::{map::HashMap, B256};
+use alloy_primitives::{B256, map::HashMap};
 use auto_impl::auto_impl;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
@@ -12,8 +12,8 @@ use reth_storage_errors::provider::ProviderError;
 use reth_trie_common::updates::TrieUpdates;
 use revm::db::{BundleState, CacheDB};
 use revm_primitives::{
-    db::{Database, DatabaseRef},
     Account, Address,
+    db::{Database, DatabaseRef},
 };
 
 pub mod error;

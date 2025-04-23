@@ -5,7 +5,7 @@ use alloy_primitives::U256;
 use alloy_rpc_types::TransactionReceipt;
 use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};
 use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
-use reth_optimism_primitives::{transaction::TransactionSenderInfo, OpReceipt};
+use reth_optimism_primitives::{OpReceipt, transaction::TransactionSenderInfo};
 use reth_primitives::ReceiptWithBloom;
 use revm_primitives::{Address, EvmState, ResultAndState};
 
