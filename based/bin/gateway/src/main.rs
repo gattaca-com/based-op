@@ -9,11 +9,11 @@ use bop_common::{
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
-use bop_db::{init_database, DatabaseRead};
+use bop_db::{DatabaseRead, init_database};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
-    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
     Sequencer, SequencerConfig, Simulator,
+    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
 };
 use clap::Parser;
 use revm_primitives::B256;
@@ -22,7 +22,7 @@ use tracing::{error, info};
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
-        std::env::set_var("RUST_BACKTRACE", "1");
+        unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
     }
 
     let args = GatewayArgs::parse();

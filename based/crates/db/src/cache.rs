@@ -3,8 +3,8 @@ use std::sync::Arc;
 use alloy_primitives::{Address, B256, U256};
 use moka::sync::{Cache, CacheBuilder};
 use reth_db::{
-    mdbx::{tx::Tx, RO},
     PlainAccountState, PlainStorageState,
+    mdbx::{RO, tx::Tx},
 };
 use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx};
 use revm::db::BundleState;

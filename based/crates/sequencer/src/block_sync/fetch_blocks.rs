@@ -3,7 +3,7 @@ use std::time::Duration;
 use alloy_consensus::Block;
 use alloy_provider::Provider;
 use alloy_rpc_types::Block as RpcBlock;
-use bop_common::communication::{messages::BlockSyncError, SendersSpine, TrackedSenders};
+use bop_common::communication::{SendersSpine, TrackedSenders, messages::BlockSyncError};
 use bop_db::DatabaseRead;
 use futures::future::join_all;
 use reth_optimism_primitives::{OpBlock, OpTransactionSigned};

@@ -7,7 +7,7 @@ use bop_common::{
 use jsonrpsee::core::async_trait;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use tokio::sync::oneshot;
-use tracing::{trace, Level};
+use tracing::{Level, trace};
 
 use crate::RpcServer;
 

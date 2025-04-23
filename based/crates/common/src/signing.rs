@@ -2,7 +2,7 @@ use std::fmt;
 
 use alloy_consensus::{SignableTransaction, Signed};
 use alloy_network::TxSignerSync;
-use alloy_primitives::{hex, hex::FromHexError, Address, PrimitiveSignature, B256};
+use alloy_primitives::{Address, B256, PrimitiveSignature, hex, hex::FromHexError};
 use alloy_signer::SignerSync;
 use alloy_signer_local::PrivateKeySigner;
 use rand::RngCore;
