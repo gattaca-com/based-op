@@ -174,7 +174,6 @@ impl PortalServer {
 
         for g in self.gateways() {
             if g.id == gateway_url {
-                tracing::debug!("updating gateway to {gateway_url:?}");
                 *self.current_gateway.lock().await = g;
                 return Ok(());
             }
