@@ -34,6 +34,7 @@ pub mod config;
 mod context;
 pub mod simulator;
 pub(crate) mod sorting;
+mod supervisor;
 
 pub use config::SequencerConfig;
 use context::SequencerContext;
@@ -60,14 +61,17 @@ pub struct Sequencer<Db> {
     state: SequencerState<Db>,
     data: SequencerContext<Db>,
     heartbeat: Repeater,
+    supervisor: Option<supervisor::SupervisorValidator>,
 }
 
 impl<Db: DatabaseRead> Sequencer<Db> {
     pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
+        let supervisor = config.supervisor.as_ref().map(|config| supervisor::SupervisorValidator::from(config));
         Self {
             state: SequencerState::default(),
             data: SequencerContext::new(db, shared_state, config),
             heartbeat: Repeater::every(Duration::from_secs(2)),
+            supervisor,
         }
     }
 }
@@ -85,6 +89,12 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
+            if self.data.timestamp() != 0
+                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            {
+                return;
+            }
+
             self.state.handle_new_tx(msg, &mut self.data, senders);
         });
 
