@@ -6,18 +6,18 @@ use std::{
 
 use bop_common::{
     communication::{
-        messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg},
         SpineConnections,
+        messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
-    db::{state::ensure_create2_deployer, DBSorting},
+    db::{DBSorting, state::ensure_create2_deployer},
     time::{Duration, Instant},
     transaction::{SimulatedTx, Transaction},
 };
 use bop_db::DatabaseRead;
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
-    execute::{BlockExecutionError, ProviderError},
     ConfigureEvm,
+    execute::{BlockExecutionError, ProviderError},
 };
 use reth_optimism_evm::OpBlockExecutionError;
 use reth_optimism_primitives::transaction::TransactionSenderInfo;

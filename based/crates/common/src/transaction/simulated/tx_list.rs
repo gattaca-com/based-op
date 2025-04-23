@@ -3,7 +3,7 @@ use std::sync::Arc;
 use alloy_consensus::Transaction as AlloyTransactionTrait;
 use revm_primitives::{Address, B256, U256};
 
-use crate::transaction::{simulated::transaction::SimulatedTx, Transaction, TxList};
+use crate::transaction::{Transaction, TxList, simulated::transaction::SimulatedTx};
 
 /// Current contains the current active tx for this sender.
 /// i.e., current.nonce = state[address].nonce.
@@ -29,7 +29,7 @@ impl SimulatedTxList {
             }
 
             debug_assert!(
-                pending.peek_nonce().map_or(true, |nonce| current.nonce() == nonce + 1),
+                pending.peek_nonce().is_none_or(|nonce| current.nonce() == nonce + 1),
                 "pending tx list nonce must be consecutive from current"
             );
         }
@@ -87,11 +87,7 @@ impl SimulatedTxList {
     }
 
     pub fn nonce(&self) -> u64 {
-        if let Some(tx) = &self.current {
-            tx.nonce()
-        } else {
-            self.pending.peek_nonce().unwrap_or_default()
-        }
+        if let Some(tx) = &self.current { tx.nonce() } else { self.pending.peek_nonce().unwrap_or_default() }
     }
 
     pub fn push(&mut self, tx: Arc<Transaction>) {

@@ -2,7 +2,7 @@ use std::{
     cell::UnsafeCell,
     fmt,
     mem::MaybeUninit,
-    sync::atomic::{compiler_fence, AtomicU32, Ordering},
+    sync::atomic::{AtomicU32, Ordering, compiler_fence},
 };
 
 use super::ReadError;
@@ -45,11 +45,7 @@ impl<T: Clone> Seqlock<T> {
         *result = unsafe { (*self.data.get()).clone() };
         compiler_fence(Ordering::AcqRel);
         let v2 = self.version.load(Ordering::Acquire);
-        if v2 == expected_version {
-            Ok(())
-        } else {
-            Err(ReadError::SpedPast)
-        }
+        if v2 == expected_version { Ok(()) } else { Err(ReadError::SpedPast) }
     }
 
     #[inline(never)]
@@ -63,11 +59,7 @@ impl<T: Clone> Seqlock<T> {
         let result = unsafe { MaybeUninit::new((*self.data.get()).clone()) };
         compiler_fence(Ordering::AcqRel);
         let v2 = self.version.load(Ordering::Acquire);
-        if v2 == expected_version {
-            Ok(unsafe { result.assume_init() })
-        } else {
-            Err(ReadError::SpedPast)
-        }
+        if v2 == expected_version { Ok(unsafe { result.assume_init() }) } else { Err(ReadError::SpedPast) }
     }
 
     #[inline(never)]

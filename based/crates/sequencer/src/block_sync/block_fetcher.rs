@@ -1,13 +1,13 @@
 use alloy_provider::{Provider, ProviderBuilder};
 use bop_common::{
     actor::Actor,
-    communication::{messages::BlockFetch, SpineConnections},
+    communication::{SpineConnections, messages::BlockFetch},
     db::DatabaseRead,
 };
 use reqwest::Url;
 use tokio::runtime::Runtime;
 
-use super::{fetch_blocks::async_fetch_blocks_and_send_sequentially, AlloyProvider};
+use super::{AlloyProvider, fetch_blocks::async_fetch_blocks_and_send_sequentially};
 
 #[derive(Debug)]
 pub struct BlockFetcher {

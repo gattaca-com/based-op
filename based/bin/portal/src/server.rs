@@ -1,19 +1,19 @@
 use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
-use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
-    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
     BlockId, BlockNumberOrTag,
+    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
-    api::{EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpRpcBlock, RegistryApiClient, CAPABILITIES},
+    api::{CAPABILITIES, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpRpcBlock, RegistryApiClient},
     communication::messages::{RpcError, RpcResult},
     time::Nanos,
     utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::async_trait,
-    http_client::{transport::HttpBackend, HttpClientBuilder},
+    http_client::{HttpClientBuilder, transport::HttpBackend},
     server::{RpcServiceBuilder, ServerBuilder},
 };
 use op_alloy_rpc_types::OpTransactionReceipt;
@@ -22,7 +22,7 @@ use parking_lot::RwLock;
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, trace, Instrument, Level};
+use tracing::{Instrument, Level, debug, error, info, trace};
 
 use crate::{cli::PortalArgs, middleware::ProxyService};
 
@@ -178,7 +178,9 @@ impl PortalServer {
                 return Ok(());
             }
         }
-        error!("CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent");
+        error!(
+            "CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent"
+        );
         Ok(())
     }
 
