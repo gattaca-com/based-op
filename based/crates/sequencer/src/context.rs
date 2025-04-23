@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
 
-use alloy_consensus::{Header, EMPTY_OMMER_ROOT_HASH};
+use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::merge::BEACON_NONCE;
 use alloy_rpc_types::engine::{
     BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
@@ -318,7 +318,14 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// and clear the existing pool based on that
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
     pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
-        let blocks_to_fetch = self.block_executor.commit_block(block, &self.db, true).expect("couldn't commit block");
+        let blocks_to_fetch = match self.block_executor.commit_block(block, &self.db, true) {
+            Ok(blocks_to_fetch) => blocks_to_fetch,
+            Err(e) => {
+                tracing::error!("couldn't commit block: {e}");
+                let bn = block.number();
+                return Some((bn, bn));
+            }
+        };
 
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();
