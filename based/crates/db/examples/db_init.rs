@@ -4,7 +4,7 @@ use alloy_primitives::{Address, U256};
 use bop_common::db::state_changes_to_bundle_state;
 use bop_db::DatabaseRead;
 use reth_optimism_chainspec::BASE_SEPOLIA;
-use revm_primitives::{db::DatabaseRef, Account};
+use revm_primitives::{Account, db::DatabaseRef};
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();

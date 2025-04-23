@@ -59,7 +59,9 @@ impl BlockSync {
 
         // If the block number is greater than the head, we can apply it directly.
         if block_number > db_head + 1 {
-            warn!("got a block with a number greater than the head. Block number: {block_number}. Head block number: {db_head}. Inserting into pending blocks.");
+            warn!(
+                "got a block with a number greater than the head. Block number: {block_number}. Head block number: {db_head}. Inserting into pending blocks."
+            );
             self.insert_pending_block(block);
             return Ok(Some((db_head + 1, block_number - 1)));
         }
@@ -77,7 +79,9 @@ impl BlockSync {
             }
 
             // Roll back the database until we reach new_block_number-1.
-            warn!("got a block with previously committed number and different hash to the one committed. Rolling back database. Block number: {block_number}. Block hash: {new_block_hash:?}. DB head block number: {block_number}. DB head block hash: {db_block_hash:?}");
+            warn!(
+                "got a block with previously committed number and different hash to the one committed. Rolling back database. Block number: {block_number}. Block hash: {new_block_hash:?}. DB head block number: {block_number}. DB head block hash: {db_block_hash:?}"
+            );
             while db.head_block_number()? >= block_number {
                 db.roll_back_head()?;
             }
@@ -86,9 +90,7 @@ impl BlockSync {
         if block_number != 0 && db_head_hash != block.header.parent_hash {
             warn!(
                 "reorg detected. new block parent doesn't match db head. Block number: {}. Block parent hash: {:?}, db_head_hash: {:?}",
-                block.header.number,
-                block.header.parent_hash,
-                db_head_hash
+                block.header.number, block.header.parent_hash, db_head_hash
             );
 
             // Roll back head and request missing blocks.
@@ -229,13 +231,13 @@ mod tests {
     use alloy_primitives::B256;
     use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
-    use bop_db::{init_database, AlloyDB};
+    use bop_db::{AlloyDB, init_database};
     use reqwest::Url;
-    use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
+    use reth_optimism_chainspec::{BASE_SEPOLIA, OpChainSpecBuilder};
     use tracing::level_filters::LevelFilter;
 
     use super::*;
-    use crate::block_sync::fetch_blocks::{fetch_block, TEST_BASE_RPC_URL, TEST_BASE_SEPOLIA_RPC_URL};
+    use crate::block_sync::fetch_blocks::{TEST_BASE_RPC_URL, TEST_BASE_SEPOLIA_RPC_URL, fetch_block};
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";
 

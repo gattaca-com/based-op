@@ -2,8 +2,8 @@ use std::{
     fmt::Debug,
     future::IntoFuture,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
@@ -11,8 +11,8 @@ use alloy_consensus::BlockHeader;
 use alloy_eips::BlockId;
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{
-    network::{primitives::HeaderResponse, BlockResponse},
     Provider, RootProvider,
+    network::{BlockResponse, primitives::HeaderResponse},
 };
 use alloy_transport::TransportError;
 use alloy_transport_http::Http;
@@ -23,8 +23,8 @@ use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::BlockWithSenders;
 use reth_provider::{BlockExecutionOutput, ProviderError};
 use reth_trie_common::updates::TrieUpdates;
-use revm::{db::BundleState, DatabaseCommit, DatabaseRef};
-use revm_primitives::{db::Database, Account, AccountInfo, Bytecode, HashMap};
+use revm::{DatabaseCommit, DatabaseRef, db::BundleState};
+use revm_primitives::{Account, AccountInfo, Bytecode, HashMap, db::Database};
 use tokio::runtime::Runtime;
 
 use crate::{DatabaseRead, DatabaseWrite, Error};

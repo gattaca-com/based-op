@@ -1,13 +1,13 @@
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
-use tracing::{debug, span, Level};
+use tracing::{Level, debug, span};
 
 use crate::{
     communication::SpineConnections,
-    time::{vsync, Duration, Timer},
+    time::{Duration, Timer, vsync},
     utils::last_part_of_typename,
 };
 

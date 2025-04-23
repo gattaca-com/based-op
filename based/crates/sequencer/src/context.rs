@@ -1,14 +1,14 @@
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
 
-use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH};
+use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header};
 use alloy_eips::merge::BEACON_NONCE;
 use alloy_rpc_types::engine::{
     BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
 };
 use bop_common::{
     communication::{
-        messages::{BlockSyncMessage, EvmBlockParams},
         SendersSpine, TrackedSenders,
+        messages::{BlockSyncMessage, EvmBlockParams},
     },
     p2p::{FragV0, SealV0},
     shared::SharedState,
@@ -19,16 +19,16 @@ use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{
-    env::EvmEnv, execute::ProviderError, system_calls::SystemCaller, ConfigureEvmEnv, NextBlockEnvAttributes,
+    ConfigureEvmEnv, NextBlockEnvAttributes, env::EvmEnv, execute::ProviderError, system_calls::SystemCaller,
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use revm::{Database, DatabaseRef};
-use revm_primitives::{b256, BlockEnv, Bytes, EnvWithHandlerCfg, B256, U256};
+use revm_primitives::{B256, BlockEnv, Bytes, EnvWithHandlerCfg, U256, b256};
 use tracing::info;
 
-use crate::{block_sync::BlockSync, sorting::SortingData, FragSequence, SequencerConfig};
+use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
 
 /// These are used to time different parts of the sequencer loop
 pub struct SequencerTimers {

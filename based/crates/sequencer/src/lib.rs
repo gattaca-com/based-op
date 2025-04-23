@@ -7,11 +7,11 @@ use alloy_rpc_types::engine::{
 use bop_common::{
     actor::Actor,
     communication::{
+        Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
         messages::{
             self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
             SimulatorToSequencerMsg,
         },
-        Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
@@ -289,7 +289,9 @@ where
                 if fork_choice_state.head_block_hash == head_block_hash {
                     return Sorting(frag_seq, data);
                 }
-                warn!("received FCU when Sorting. Sending already Fragged txs back to the pools and syncing to the new head.");
+                warn!(
+                    "received FCU when Sorting. Sending already Fragged txs back to the pools and syncing to the new head."
+                );
                 for tx in frag_seq.txs.into_iter() {
                     ctx.handle_tx(tx.tx, senders);
                 }
