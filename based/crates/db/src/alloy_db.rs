@@ -15,21 +15,19 @@ use alloy_provider::{
     network::{BlockResponse, primitives::HeaderResponse},
 };
 use alloy_transport::TransportError;
-use alloy_transport_http::Http;
 use bop_common::time::BlockSyncTimers;
+use bop_common::typedefs::*;
 use op_alloy_network::Optimism;
 use reth_db::DatabaseError;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
-use reth_primitives::BlockWithSenders;
 use reth_provider::{BlockExecutionOutput, ProviderError};
 use reth_trie_common::updates::TrieUpdates;
-use op_revm::{db::BundleState, DatabaseCommit, DatabaseRef};
-use revm_primitives::{db::Database, Account, AccountInfo, Bytecode, HashMap};
+use revm_primitives::HashMap;
 use tokio::runtime::Runtime;
 
 use crate::{DatabaseRead, DatabaseWrite, Error};
 
-type AlloyProvider = RootProvider<Http<reqwest::Client>, Optimism>;
+type AlloyProvider = RootProvider<Optimism>;
 
 /// A stripped down version of [`revm::db::AlloyDB`].
 ///
@@ -96,11 +94,12 @@ where
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
         let block = self
             .rt
-            .block_on(
+            .block_on(async {
                 self.provider
                     // SAFETY: We know number <= u64::MAX, so we can safely convert it to u64
-                    .get_block_by_number(number.into(), false.into()),
-            )
+                    .get_block_by_number(number.into())
+                    .await
+            })
             .map_err(|e| ProviderError::Database(DatabaseError::Other(e.to_string())))?;
         // SAFETY: If the number is given, the block is supposed to be finalized, so unwrapping is safe.
         Ok(B256::new(*block.unwrap().header().hash()))
@@ -146,7 +145,7 @@ impl Database for AlloyDB {
 }
 
 impl DatabaseCommit for AlloyDB {
-    fn commit(&mut self, _: HashMap<Address, Account>) {
+    fn commit(&mut self, _: HashMap<Address, StateAccount>) {
         // No-op, as we don't need to commit to the database.
     }
 }
@@ -158,7 +157,7 @@ impl DatabaseRead for AlloyDB {
 
         let root = self
             .rt
-            .block_on(self.provider.get_block_by_number(next_block.into(), false.into()))
+            .block_on(async { self.provider.get_block_by_number(next_block.into()).await })
             .map_err(|e| Error::Other(e.to_string()))?
             .ok_or_else(|| Error::Other(format!("Block not found: {next_block}")))?
             .header()
@@ -180,7 +179,7 @@ impl DatabaseRead for AlloyDB {
 impl DatabaseWrite for AlloyDB {
     fn commit_block_unchecked(
         &self,
-        _block: &BlockWithSenders<OpBlock>,
+        _block: &RecoveredBlock<OpBlock>,
         _block_execution_output: BlockExecutionOutput<OpReceipt>,
         _trie_updates: TrieUpdates,
         _timers: &mut BlockSyncTimers,

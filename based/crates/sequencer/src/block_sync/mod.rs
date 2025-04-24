@@ -1,5 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
+use alloy_consensus::BlockHeader;
 use bop_common::{
     communication::messages::BlockSyncError,
     db::{DatabaseRead, DatabaseWrite},
@@ -7,46 +8,43 @@ use bop_common::{
 };
 use reth_consensus::ConsensusError;
 use reth_evm::execute::{
-    BlockExecutionError, BlockExecutionOutput, BlockExecutionStrategy, BlockExecutionStrategyFactory, ExecuteOutput,
-    InternalBlockExecutionError, ProviderError,
+    BlockExecutionError, BlockExecutionOutput, ExecuteOutput, InternalBlockExecutionError, ProviderError,
 };
 use reth_optimism_chainspec::OpChainSpec;
-use reth_optimism_evm::OpExecutionStrategyFactory;
+use reth_optimism_evm::OpExecutorProvider;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
-use reth_primitives::{BlockWithSenders, GotExpected};
+use reth_primitives::{GotExpected, RecoveredBlock};
 use reth_trie_common::updates::TrieUpdates;
-use revm::Database;
 use tracing::{info, warn};
 
 pub mod block_fetcher;
 pub mod fetch_blocks;
 pub mod mock_fetcher;
 
-pub type AlloyProvider =
-    alloy_provider::RootProvider<alloy_transport_http::Http<reqwest::Client>, op_alloy_network::Optimism>;
+pub type AlloyProvider = alloy_provider::RootProvider<op_alloy_network::Optimism>;
 
 #[derive(Debug, Clone)]
 pub struct BlockSync {
     chain_spec: Arc<OpChainSpec>,
-    execution_factory: OpExecutionStrategyFactory,
+    execution_factory: OpExecutorProvider,
     /// Blocks that we have received from the provider but require a prior block to be applied before this can be.
     /// Sorted list in reverse order by block number.
-    pending_blocks: Vec<BlockWithSenders<OpBlock>>,
+    pending_blocks: Vec<RecoveredBlock<OpBlock>>,
     timers: BlockSyncTimers,
 }
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
     pub fn new(chain_spec: Arc<OpChainSpec>) -> Self {
-        let execution_factory = OpExecutionStrategyFactory::optimism(chain_spec.clone());
+        let execution_factory = OpExecutorProvider::optimism(chain_spec.clone());
         Self { chain_spec, execution_factory, pending_blocks: vec![], timers: Default::default() }
     }
 
     /// Returns block numbers to fetch, start to end. This will be used in the case of a reorg.
-    #[tracing::instrument(skip_all, fields(block = %block.header.number))]
+    #[tracing::instrument(skip_all, fields(block = %block.number))]
     pub fn commit_block<DB>(
         &mut self,
-        block: &BlockWithSenders<OpBlock>,
+        block: &RecoveredBlock<OpBlock>,
         db: &DB,
         commit_block: bool,
     ) -> Result<Option<(u64, u64)>, BlockSyncError>
@@ -55,7 +53,7 @@ impl BlockSync {
     {
         self.timers.total.start();
         let db_head = db.head_block_number()?;
-        let block_number = block.header.number;
+        let block_number = block.number();
 
         // If the block number is greater than the head, we can apply it directly.
         if block_number > db_head + 1 {
@@ -68,7 +66,7 @@ impl BlockSync {
 
         // Check if we committed a different block with the same number and rewind the database if so.
         if block_number != 0 && block_number <= db_head {
-            let new_block_hash = block.header.hash_slow();
+            let new_block_hash = block.hash_slow();
 
             // Check if the block has already been committed.
             let db_block_hash = db
@@ -87,19 +85,21 @@ impl BlockSync {
             }
         }
         let db_head_hash = db.head_block_hash()?;
-        if block_number != 0 && db_head_hash != block.header.parent_hash {
+        if block_number != 0 && db_head_hash != block.parent_hash() {
             warn!(
                 "reorg detected. new block parent doesn't match db head. Block number: {}. Block parent hash: {:?}, db_head_hash: {:?}",
-                block.header.number, block.header.parent_hash, db_head_hash
+                block.number(),
+                block.parent_hash,
+                db_head_hash
             );
 
             // Roll back head and request missing blocks.
             db.roll_back_head()?;
             self.insert_pending_block(block);
             let head_block_number = db.head_block_number()?;
-            tracing::debug!("asking for blocks from {} to {}", head_block_number, block.header.number);
+            tracing::debug!("asking for blocks from {} to {}", head_block_number, block.number);
 
-            return Ok(Some((head_block_number, block.header.number)));
+            return Ok(Some((head_block_number, block.number)));
         }
 
         self.execute_and_maybe_commit(block, db, commit_block)?;
@@ -107,7 +107,7 @@ impl BlockSync {
         // Process any pending blocks that can now be applied
         while let Some(last_pending) = self.pending_blocks.last() {
             // Check if the next block can be applied
-            if last_pending.header.number != db.head_block_number()? + 1 {
+            if last_pending.number != db.head_block_number()? + 1 {
                 break;
             }
 
@@ -115,23 +115,23 @@ impl BlockSync {
 
             // Verify block links to current chain head
             let head_block_hash = db.head_block_hash()?;
-            if pending_block.header.parent_hash != head_block_hash {
+            if pending_block.parent_hash != head_block_hash {
                 warn!(
                     "pending block parent hash mismatch. Block number: {}, Expected parent: {:?}, Got: {:?}",
-                    pending_block.header.number, head_block_hash, pending_block.header.parent_hash
+                    pending_block.number, head_block_hash, pending_block.parent_hash
                 );
                 debug_assert!(false, "pending block parent hash doesn't match db head hash");
 
                 db.roll_back_head()?;
                 // Request to re-fetch rolled back block and the pending block.
-                return Ok(Some((pending_block.header.number - 1, pending_block.header.number)));
+                return Ok(Some((pending_block.number - 1, pending_block.number)));
             }
 
             self.execute_and_maybe_commit(&pending_block, db, commit_block)?;
         }
         self.timers.total.stop();
         info!(
-            n_txs = block.body.transactions.len(),
+            n_txs = block.transactions.len(),
             total_t = %self.timers.total.elapsed(),
         );
         tracing::debug!(
@@ -149,12 +149,12 @@ impl BlockSync {
 
     pub fn execute_and_maybe_commit<DB>(
         &mut self,
-        block: &BlockWithSenders<OpBlock>,
+        block: &RecoveredBlock<OpBlock>,
         db: &DB,
         commit: bool,
     ) -> Result<(), BlockSyncError>
     where
-        DB: DatabaseWrite + DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+        DB: DatabaseWrite + DatabaseRead + bop_common::typedefs::Database<Error: Into<ProviderError> + Display>,
     {
         self.timers.execution.start();
         let (execution_output, trie_updates) = self.execute(block, db)?;
@@ -171,16 +171,16 @@ impl BlockSync {
     /// Returns the execution output containing state changes, receipts, and gas usage.
     pub fn execute<DB>(
         &mut self,
-        block: &BlockWithSenders<OpBlock>,
+        block: &RecoveredBlock<OpBlock>,
         db: &DB,
     ) -> Result<(BlockExecutionOutput<OpReceipt>, TrieUpdates), BlockExecutionError>
     where
-        DB: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
+        DB: DatabaseRead + bop_common::typedefs::Database<Error: Into<ProviderError> + Display>,
     {
         let head_block_hash = db
             .head_block_hash()
             .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::LatestBlock(e.into())))?;
-        debug_assert!(block.header.parent_hash == head_block_hash, "can only apply blocks sequentially");
+        debug_assert!(block.parent_hash == head_block_hash, "can only apply blocks sequentially");
         self.timers.execute_txs.start();
         // Apply the block.
         let mut executor = self.execution_factory.create_strategy(db.clone());
@@ -203,22 +203,28 @@ impl BlockSync {
                 .calculate_state_root(&state)
                 .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::Other(e.into())))?;
 
-            if state_root != block.header.state_root {
+            if state_root != block.state_root {
                 return Err(BlockExecutionError::Consensus(ConsensusError::BodyStateRootDiff(
-                    GotExpected::new(state_root, block.header.state_root).into(),
+                    GotExpected::new(state_root, block.state_root).into(),
                 )));
             }
             Ok(trie_updates)
         })?;
         self.timers.state_root.stop();
 
-        Ok((BlockExecutionOutput { state, receipts, requests, gas_used }, trie_updates))
+        Ok((
+            BlockExecutionOutput {
+                state,
+                result: reth_evm::block::BlockExecutionResult { receipts, requests, gas_used },
+            },
+            trie_updates,
+        ))
     }
 
-    fn insert_pending_block(&mut self, block: &BlockWithSenders<OpBlock>) {
+    fn insert_pending_block(&mut self, block: &RecoveredBlock<OpBlock>) {
         let index = self
             .pending_blocks
-            .binary_search_by(|pending_block| pending_block.header.number.cmp(&block.header.number).reverse())
+            .binary_search_by(|pending_block| pending_block.number.cmp(&block.number).reverse())
             .unwrap_or_else(|i| i);
         self.pending_blocks.insert(index, block.clone());
     }
@@ -260,7 +266,7 @@ mod tests {
         let block = rt.block_on(async { fetch_block(25771900, &provider).await });
 
         // Create the alloydb.
-        let alloydb = AlloyDB::new(provider, block.header.number, rt);
+        let alloydb = AlloyDB::new(provider, block.number, rt);
 
         // Execute the block.
         let res = block_sync.commit_block(&block, &alloydb, false);
@@ -316,11 +322,11 @@ mod tests {
         let mut blocks = HashMap::new();
         for i in 0..5 {
             let block = rt.block_on(async { fetch_block(start_block - 1 + i, &provider).await });
-            blocks.insert(block.header.number, block);
+            blocks.insert(block.number, block);
         }
 
         for block in blocks.values() {
-            tracing::info!("Header: {:?}", block.header);
+            tracing::info!("Header: {:?}", block.header());
         }
 
         let state_root = db.state_root().unwrap();
@@ -329,7 +335,7 @@ mod tests {
             "State Root: {:?}, Block Number: {:?}, Block State Root: {:?}",
             state_root,
             start_block,
-            block.header.state_root
+            block.state_root
         );
 
         // Test Case 1: reorg at depth 2
@@ -343,7 +349,7 @@ mod tests {
 
             // Create a competing block at same height
             let mut competing_block = block.clone();
-            competing_block.header.parent_hash = B256::random(); // Force different parent hash - we don't commit the header to the db so this won't affect the db.
+            competing_block.parent_hash = B256::random(); // Force different parent hash - we don't commit the header to the db so this won't affect the db.
 
             // Apply competing block - should trigger reorg but won't ask for new blocks as the height is the same.
             let result = block_sync.commit_block(&competing_block, &db, true);
@@ -351,8 +357,8 @@ mod tests {
             let (from, to) = result.unwrap().expect("should request reorg blocks");
 
             // Verify correct blocks requested
-            assert_eq!(from, competing_block.header.number - 1);
-            assert_eq!(to, competing_block.header.number);
+            assert_eq!(from, competing_block.number - 1);
+            assert_eq!(to, competing_block.number);
 
             // Verify db state after reorg has gone past db.
             assert_eq!(db.head_block_number().unwrap(), start_block - 1);
@@ -366,7 +372,7 @@ mod tests {
         {
             // Apply blocks from head_block+1 to head_block + 3, skipping head_block + 2
             let block1 = blocks.get(&(head_block + 1)).unwrap();
-            tracing::info!("Block 1: {:?}", block1.header.number);
+            tracing::info!("Block 1: {:?}", block1.number);
             let result = block_sync.commit_block(block1, &db, true);
             tracing::info!("Result: {:?}", result);
             assert!(result.is_ok());
@@ -382,7 +388,7 @@ mod tests {
 
             // Verify block is in pending queue
             assert_eq!(block_sync.pending_blocks.len(), 1);
-            assert_eq!(block_sync.pending_blocks[0].header.number, head_block + 3);
+            assert_eq!(block_sync.pending_blocks[0].number, head_block + 3);
         }
 
         // Test Case 3: Apply pending blocks after gap is filled

@@ -1,10 +1,6 @@
-use std::{
-    fmt::{Debug, Formatter},
-    sync::Arc,
-};
-
 use alloy_consensus::BlockHeader;
 use bop_common::time::BlockSyncTimers;
+use bop_common::typedefs::*;
 use parking_lot::RwLock;
 use reth_db::{
     Bytecodes, CanonicalHeaders, DatabaseEnv,
@@ -16,21 +12,21 @@ use reth_db::{
 use reth_node_types::NodeTypesWithDBAdapter;
 use reth_optimism_node::OpNode;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
-use reth_primitives::{BlockWithSenders, StorageEntry};
+use reth_primitives::{RecoveredBlock, StorageEntry};
 use reth_provider::{
-    BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, ProviderFactory, StateWriter, TrieWriter,
-    providers::ConsistentDbView,
+    BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, OriginalValuesKnown, ProviderFactory,
+    StateWriter, TrieWriter, providers::ConsistentDbView,
 };
 use reth_storage_api::{DBProvider, HashedPostStateProvider};
 use reth_trie::{StateRoot, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
 use reth_trie_parallel::root::ParallelStateRoot;
-use revm::{
-    Database, DatabaseRef,
-    database::{BundleState, OriginalValuesKnown},
+use revm_primitives::{Address, B256, U256};
+use std::{
+    fmt::{Debug, Formatter},
+    sync::Arc,
 };
-use revm_primitives::{AccountInfo, Address, B256, Bytecode, U256};
 
 mod alloy_db;
 mod cache;
@@ -125,7 +121,7 @@ impl DatabaseWrite for SequencerDB {
     /// used if the state root calculation has already been performed upstream.
     fn commit_block_unchecked(
         &self,
-        block: &BlockWithSenders<OpBlock>,
+        block: &RecoveredBlock<OpBlock>,
         block_execution_output: BlockExecutionOutput<OpReceipt>,
         trie_updates: TrieUpdates,
         timers: &mut BlockSyncTimers,

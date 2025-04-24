@@ -6,12 +6,11 @@ use std::{
 
 use bop_common::{
     communication::{
-        SpineConnections,
-        messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg},
+        messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg}, SpineConnections
     },
-    db::{DBSorting, state::ensure_create2_deployer},
+    db::{state::ensure_create2_deployer, DBSorting},
     time::{Duration, Instant},
-    transaction::{SimulatedTx, Transaction},
+    transaction::{SimulatedTx, Transaction}, typedefs::{Database, DatabaseRef},
 };
 use bop_db::DatabaseRead;
 use reth_chainspec::EthereumHardforks;
@@ -21,8 +20,7 @@ use reth_evm::{
 };
 use reth_optimism_evm::OpBlockExecutionError;
 use reth_optimism_primitives::transaction::TransactionSenderInfo;
-use revm::{Database, DatabaseRef};
-use revm_primitives::{Address, EnvWithHandlerCfg, U256};
+use revm_primitives::{Address, U256};
 use tracing::trace;
 
 use super::FragSequence;
@@ -170,8 +168,8 @@ impl<Db> SortingData<Db> {
         }
         self.telemetry.n_sims_succesful += 1;
 
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
-            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
+        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining
+            && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
@@ -312,8 +310,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         evm.db_mut().db.write().set_state_clear_flag(should_set_state_clear_flag);
 
         context.system_caller.apply_beacon_root_contract_call(
-            timestamp,
-            block_number,
             parent_beacon_block_root,
             &mut evm,
         )?;

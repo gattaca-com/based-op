@@ -1,5 +1,5 @@
 use std::{ops::Deref, sync::Arc};
-
+use bop_common::typedefs::BlockSyncMessage;
 use alloy_consensus::{BlockHeader, TxEip1559};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_provider::{Provider, ProviderBuilder};
@@ -8,7 +8,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         SpineConnections,
-        messages::{self, BlockFetch, BlockSyncMessage, EngineApi},
+        messages::{self, BlockFetch, EngineApi},
     },
     config::MockMode,
     db::{DBFrag, DatabaseRead},
@@ -266,7 +266,6 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             let hash1 = sealed_block.execution_payload.payload_inner.payload_inner.block_hash;
             if hash1 != hash {
                 sealed_block.execution_payload.payload_inner.payload_inner.transactions = vec![];
-                block.body = Default::default();
                 let receipt = sealed_block.execution_payload.payload_inner.payload_inner.receipts_root;
                 if receipt == block.receipts_root {
                     info!("receipts match");

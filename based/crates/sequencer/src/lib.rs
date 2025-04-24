@@ -22,7 +22,7 @@ use bop_common::{
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
-use reth_primitives::BlockWithSenders;
+use reth_primitives::{BlockWithSenders, RecoveredBlock};
 use reth_primitives_traits::SignedTransaction;
 use revm::DatabaseRef;
 use sorting::FragSequence;
@@ -54,7 +54,7 @@ pub fn payload_to_block(
         .map(|tx| tx.recover_signer_unchecked())
         .collect::<Option<Vec<_>>>()
         .ok_or(BlockSyncError::SignerRecovery)?;
-    Ok(BlockWithSenders { block, senders: block_senders })
+    Ok(RecoveredBlock::new_unhashed(block, block_senders))
 }
 
 pub struct Sequencer<Db> {
@@ -89,8 +89,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0 &&
-                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0
+                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }

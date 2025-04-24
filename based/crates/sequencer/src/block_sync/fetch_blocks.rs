@@ -7,7 +7,7 @@ use bop_common::communication::{SendersSpine, TrackedSenders, messages::BlockSyn
 use bop_db::DatabaseRead;
 use futures::future::join_all;
 use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
-use reth_primitives::BlockWithSenders;
+use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::SignedTransaction;
 use tracing::{info, warn};
 
@@ -29,7 +29,7 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
 ) {
     let futures = (curr_block..=end_block).map(|i| fetch_block(i, provider));
 
-    let blocks: Vec<BlockWithSenders<OpBlock>> = join_all(futures).await;
+    let blocks: Vec<RecoveredBlock<OpBlock>> = join_all(futures).await;
 
     for block in blocks {
         block_sender.send_forever(block);
@@ -40,14 +40,14 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
 
 /// Fetches a block, retrying forever until successful.
 /// Conversion errors are logged as warnings.
-pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockWithSenders<OpBlock> {
+pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> RecoveredBlock<OpBlock> {
     const BACKOFF_MAX: Duration = Duration::from_secs(1);
     const BACKOFF_STEP: Duration = Duration::from_millis(10);
 
     let mut backoff = BACKOFF_STEP;
 
     loop {
-        match client.get_block_by_number(block_number.into(), true.into()).await {
+        match client.get_block_by_number(block_number.into()).await {
             Ok(Some(block)) => match convert_rpc_block(block) {
                 Ok(converted) => return converted,
                 Err(err) => {
@@ -75,7 +75,7 @@ pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockWith
 /// Converts an RPC block with OpTxEnvelope transactions to a consensus block with OpTransactionSigned
 pub fn convert_rpc_block(
     block: RpcBlock<op_alloy_rpc_types::Transaction>,
-) -> Result<BlockWithSenders<OpBlock>, BlockSyncError> {
+) -> Result<RecoveredBlock<OpBlock>, BlockSyncError> {
     // First convert the block to consensus format
     let consensus_block = block.into_consensus();
 
@@ -102,14 +102,14 @@ pub fn convert_rpc_block(
         header: consensus_block.header,
         body: alloy_consensus::BlockBody {
             transactions: converted_txs,
-            ommers: consensus_block.body.ommers,
-            withdrawals: consensus_block.body.withdrawals,
+            ommers: consensus_block.ommers,
+            withdrawals: consensus_block.withdrawals,
         },
     };
 
     // SAFETY: We've just constructed the block and senders vectors from the same source
     // and verified they have matching lengths through the unzip operation
-    Ok(BlockWithSenders::new_unchecked(block, senders))
+    Ok(RecoveredBlock::new_unchecked(block, senders))
 }
 
 #[cfg(test)]
@@ -133,11 +133,11 @@ mod tests {
         let provider = ProviderBuilder::new().network().on_http(TEST_BASE_RPC_URL.parse().unwrap());
         let block = fetch_block(25738473, &provider).await;
 
-        assert_eq!(block.header.number, 25738473);
-        assert_eq!(block.header.hash_slow(), b256!("ad9e6c25e60e711e5e99684892848adc06d44b1cc0e5056b06fcead6c7eb6186"));
+        assert_eq!(block.number, 25738473);
+        assert_eq!(block.hash_slow(), b256!("ad9e6c25e60e711e5e99684892848adc06d44b1cc0e5056b06fcead6c7eb6186"));
 
-        assert!(!block.body.transactions.is_empty());
-        assert!(block.body.transactions.first().unwrap().is_deposit());
+        assert!(!block.transactions.is_empty());
+        assert!(block.transactions.first().unwrap().is_deposit());
     }
 
     #[ignore = "Requires RPC call"]
@@ -159,11 +159,11 @@ mod tests {
         let mut blocks_received = 0;
 
         loop {
-            connections.receive(|block: BlockWithSenders<OpBlock>, _| {
+            connections.receive(|block: RecoveredBlock<OpBlock>, _| {
                 blocks_received += 1;
 
-                assert!(block.header.number > prev_block_num, "Blocks must be in ascending order");
-                prev_block_num = block.header.number;
+                assert!(block.number > prev_block_num, "Blocks must be in ascending order");
+                prev_block_num = block.number;
             });
 
             if blocks_received == (end_block - start_block + 1) as usize {
