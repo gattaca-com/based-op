@@ -131,7 +131,6 @@ impl SimulatedTx {
                 from: self.sender(),
                 to: self.to(),
                 contract_address: None,
-                authorization_list: None,
             },
             l1_block_info: L1BlockInfo::default(),
         }

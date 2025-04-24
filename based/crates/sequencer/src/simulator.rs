@@ -1,8 +1,4 @@
-use std::{
-    fmt::{Debug, Display},
-    sync::Arc,
-};
-
+use bop_common::typedefs::*;
 use bop_common::{
     actor::Actor,
     communication::{
@@ -20,8 +16,11 @@ use op_revm::{OpContext, OpEvm};
 use reth_evm::{ConfigureEvm, EvmEnv, execute::ProviderError};
 use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::OpHardfork;
-use revm::{Database, DatabaseRef, Evm};
 use revm_primitives::{Address, U256};
+use std::{
+    fmt::{Debug, Display},
+    sync::Arc,
+};
 
 /// Simulator thread.
 pub struct Simulator<Db: DatabaseRef> {
@@ -52,16 +51,16 @@ where
     }
 
     /// Simulates a transaction at the state of the `db` parameter.
-    pub fn simulate_transaction<SimulateTxDb: DatabaseRef>(
+    pub fn simulate_transaction<SimulateTxDb: DatabaseRef + Database>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
-        evm: &mut OpEvm<OptContext<SimulateTxDb>>,
+        evm: &mut OpEvm<OpContext<SimulateTxDb>, ()>,
         regolith_active: bool,
         allow_zero_payment: bool,
         allow_revert: bool,
     ) -> Result<SimulatedTx, SimulationError>
     where
-        SimulateTxDb::Error: std::fmt::Debug,
+        <SimulateTxDb as DatabaseRef>::Error: std::fmt::Debug,
     {
         let _ = std::mem::replace(evm.db_mut(), State::new(db));
         simulate_tx_inner(tx, evm, regolith_active, allow_zero_payment, allow_revert)
@@ -85,7 +84,7 @@ where
 /// Will not modify the db state after the simulation is complete.
 pub fn simulate_tx_inner<Db>(
     tx: Arc<Transaction>,
-    evm: &mut OpEvm<Db>,
+    evm: &mut OpEvm<Db, ()>,
     regolith_active: bool,
     allow_zero_payment: bool,
     allow_revert: bool,

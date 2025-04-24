@@ -6,26 +6,20 @@ use alloy_rpc_types::engine::{
     BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
 };
 use bop_common::{
-    communication::{
-        SendersSpine, TrackedSenders,
-        messages::{BlockSyncMessage, EvmBlockParams},
-    },
+    communication::{SendersSpine, TrackedSenders, messages::EvmBlockParams},
     p2p::{FragV0, SealV0},
     shared::SharedState,
     time::Timer,
     transaction::Transaction,
+    typedefs::*,
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::{
-    ConfigureEvmEnv, NextBlockEnvAttributes, env::EvmEnv, execute::ProviderError, system_calls::SystemCaller,
-};
+use reth_evm::{NextBlockEnvAttributes, env::EvmEnv, execute::ProviderError, system_calls::SystemCaller};
 use reth_optimism_chainspec::OpChainSpec;
-use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
-use revm::{Database, DatabaseRef};
-use revm_primitives::{B256, BlockEnv, Bytes, EnvWithHandlerCfg, U256, b256};
+use revm_primitives::{B256, Bytes, U256, b256};
 use tracing::info;
 
 use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
@@ -71,14 +65,14 @@ pub struct SequencerContext<Db> {
     pub parent_header: Header,
     pub fork_choice_state: ForkchoiceState,
     pub payload_attributes: Box<OpPayloadAttributes>,
-    pub system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
+    pub system_caller: SystemCaller<OpChainSpec>,
     pub timers: SequencerTimers,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
     pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
         let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
-        let system_caller = SystemCaller::new(config.evm_config.clone(), config.evm_config.chain_spec().clone());
+        let system_caller = SystemCaller::new(config.evm_config.chain_spec().clone());
         Self {
             db,
             shared_state,
@@ -205,16 +199,19 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
             prev_randao: attributes.payload_attributes.prev_randao,
             gas_limit: attributes.gas_limit.unwrap(),
+            parent_beacon_block_root: self.payload_attributes.payload_attributes.parent_beacon_block_root,
+            withdrawals: self.payload_attributes.payload_attributes.withdrawals
+            
         };
 
-        let EvmEnv { cfg_env_with_handler_cfg, block_env } = self
+        let EvmEnv { cfg_env, block_env } = self
             .config
             .evm_config
             .next_cfg_and_block_env(&self.parent_header, env_attributes)
             .expect("Valid block environment configuration");
 
         let env_with_handler_cfg =
-            EnvWithHandlerCfg::new_with_cfg_env(cfg_env_with_handler_cfg, block_env, Default::default());
+            EnvWithHandlerCfg::new_with_cfg_env(cfg_env, block_env, Default::default());
         let simulator_evm_block_params =
             EvmBlockParams { spec_id: env_with_handler_cfg.spec_id(), env: env_with_handler_cfg.env.clone() };
         (simulator_evm_block_params, env_with_handler_cfg)
@@ -299,17 +296,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
-        (seal, OpExecutionPayloadEnvelopeV3 {
-            execution_payload: ExecutionPayloadV3 {
-                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                blob_gas_used: 0,
-                excess_blob_gas: 0,
+        (
+            seal,
+            OpExecutionPayloadEnvelopeV3 {
+                execution_payload: ExecutionPayloadV3 {
+                    payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                    blob_gas_used: 0,
+                    excess_blob_gas: 0,
+                },
+                block_value: frag_seq.payment.to(),
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
             },
-            block_value: frag_seq.payment.to(),
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-        })
+        )
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
@@ -327,14 +327,14 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
             }
         };
 
-        self.parent_header = block.header.clone();
+        self.parent_header = block.header().clone();
         self.parent_hash = block.hash_slow();
 
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
 
             self.tx_pool.handle_new_block(
-                block.body.transactions.iter(),
+                block.transactions.iter(),
                 base_fee,
                 self.shared_state.as_ref(),
                 false,
