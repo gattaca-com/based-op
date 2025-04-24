@@ -8,23 +8,20 @@ use bop_common::{
     actor::Actor,
     communication::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
-        messages::{
-            self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
-            SimulatorToSequencerMsg,
-        },
+        messages::{self, BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
     shared::SharedState,
     time::{Duration, Repeater},
     transaction::Transaction,
+    typedefs::{BlockSyncMessage, DatabaseRef},
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
-use reth_primitives::{BlockWithSenders, RecoveredBlock};
+use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::SignedTransaction;
-use revm::DatabaseRef;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
@@ -47,13 +44,10 @@ pub fn payload_to_block(
     sidecar: ExecutionPayloadSidecar,
 ) -> Result<BlockSyncMessage, BlockSyncError> {
     let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
-    let block_senders = block
-        .body
-        .transactions
-        .iter()
-        .map(|tx| tx.recover_signer_unchecked())
-        .collect::<Option<Vec<_>>>()
-        .ok_or(BlockSyncError::SignerRecovery)?;
+    let mut block_senders = vec![];
+    for tx in &block.body.transactions {
+        block_senders.push(tx.recover_signer_unchecked().map_err(|_| BlockSyncError::SignerRecovery)?);
+    }
     Ok(RecoveredBlock::new_unhashed(block, block_senders))
 }
 
@@ -229,7 +223,7 @@ where
                 let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
 
                 // Update sorting context
-                ctx.parent_header = block.header.clone();
+                ctx.parent_header = block.header().clone();
                 ctx.parent_hash = payload_hash;
 
                 // Commit the block
@@ -434,7 +428,7 @@ where
                     return self;
                 }
                 data.timers.handle_sim.start();
-                sort_data.handle_sim(simulated_tx, sender, data.as_ref().basefee.to(), simtime);
+                sort_data.handle_sim(simulated_tx, sender, data.as_ref().basefee, simtime);
                 data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
@@ -462,7 +456,7 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
     /// Used to maintain block production cadence.
     fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db>) -> Self {
         use SequencerState::*;
-        let base_fee = data.as_ref().basefee.to();
+        let base_fee = data.as_ref().basefee;
         match self {
             Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
                 data.timers.waiting_for_sims.stop();

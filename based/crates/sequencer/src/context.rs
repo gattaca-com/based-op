@@ -16,7 +16,8 @@ use bop_common::{
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::{NextBlockEnvAttributes, env::EvmEnv, execute::ProviderError, system_calls::SystemCaller};
+use op_revm::OpSpecId;
+use reth_evm::{ConfigureEvm, NextBlockEnvAttributes, env::EvmEnv, execute::ProviderError, system_calls::SystemCaller};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use revm_primitives::{B256, Bytes, U256, b256};
@@ -159,7 +160,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         self.tx_pool.handle_new_tx(
             tx.clone(),
             self.shared_state.as_ref(),
-            self.as_ref().basefee.to(),
+            self.as_ref().basefee,
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
         );
@@ -176,8 +177,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
     ) -> (FragSequence, SortingData<Db>) {
         self.payload_attributes = attributes;
         let (simulator_evm_block_params, env_with_handler_cfg) = self.new_block_params();
-        self.block_env = simulator_evm_block_params.env.block.clone();
-        self.base_fee = self.block_env.basefee.to();
+        self.block_env = *simulator_evm_block_params.env.clone();
+        self.base_fee = self.block_env.basefee;
 
         // send new block params to simulators
         senders.send(simulator_evm_block_params).expect("should never fail");
@@ -192,7 +193,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         (seq, sorting)
     }
 
-    pub fn new_block_params(&mut self) -> (EvmBlockParams, EnvWithHandlerCfg) {
+    pub fn new_block_params(&mut self) -> (EvmBlockParams, EvmEnv<OpSpecId>) {
         let attributes = &self.payload_attributes;
         let env_attributes = NextBlockEnvAttributes {
             timestamp: attributes.payload_attributes.timestamp,
@@ -200,20 +201,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             prev_randao: attributes.payload_attributes.prev_randao,
             gas_limit: attributes.gas_limit.unwrap(),
             parent_beacon_block_root: self.payload_attributes.payload_attributes.parent_beacon_block_root,
-            withdrawals: self.payload_attributes.payload_attributes.withdrawals
-            
+            withdrawals: self.payload_attributes.payload_attributes.withdrawals.map(|w| w.into()),
         };
 
-        let EvmEnv { cfg_env, block_env } = self
-            .config
-            .evm_config
-            .next_cfg_and_block_env(&self.parent_header, env_attributes)
-            .expect("Valid block environment configuration");
-
-        let env_with_handler_cfg =
-            EnvWithHandlerCfg::new_with_cfg_env(cfg_env, block_env, Default::default());
+        let evm_env = self.config.evm_config.evm_env(&self.parent_header);
         let simulator_evm_block_params =
-            EvmBlockParams { spec_id: env_with_handler_cfg.spec_id(), env: env_with_handler_cfg.env.clone() };
+            EvmBlockParams { spec_id: evm_env.spec_id(), env: env_with_handler_cfg.env.clone() };
         (simulator_evm_block_params, env_with_handler_cfg)
     }
 
@@ -247,12 +240,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             receipts_root,
             withdrawals_root: Some(b256!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
             logs_bloom,
-            timestamp: self.block_env.timestamp.to(),
+            timestamp: self.block_env.timestamp,
             mix_hash: self.block_env.prevrandao.unwrap_or_default(),
             nonce: BEACON_NONCE.into(),
-            base_fee_per_gas: Some(self.block_env.basefee.to()),
-            number: self.block_env.number.to(),
-            gas_limit: self.block_env.gas_limit.to(),
+            base_fee_per_gas: Some(self.block_env.basefee),
+            number: self.block_env.number,
+            gas_limit: self.block_env.gas_limit,
             difficulty: U256::ZERO,
             gas_used,
             extra_data: extra_data.clone(),
@@ -269,10 +262,10 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             receipts_root,
             logs_bloom,
             prev_randao: self.block_env.prevrandao.unwrap_or_default(),
-            block_number: self.block_env.number.to(),
-            gas_limit: self.block_env.gas_limit.to(),
+            block_number: self.block_env.number,
+            gas_limit: self.block_env.gas_limit,
             gas_used,
-            timestamp: self.block_env.timestamp.to(),
+            timestamp: self.block_env.timestamp,
             extra_data,
             base_fee_per_gas: self.block_env.basefee,
             block_hash: header.hash_slow(),
@@ -333,13 +326,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
 
-            self.tx_pool.handle_new_block(
-                block.transactions.iter(),
-                base_fee,
-                self.shared_state.as_ref(),
-                false,
-                None,
-            );
+            self.tx_pool.handle_new_block(block.transactions.iter(), base_fee, self.shared_state.as_ref(), false, None);
         }
 
         blocks_to_fetch
