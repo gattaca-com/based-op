@@ -423,7 +423,7 @@ impl EngineApiServer for PortalServer {
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
-        if last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
+        if payload_attributes.is_none() && last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
             debug!("we seem to be in state syncing so only sending fcu to fallback");
             return Ok(response);
         }
