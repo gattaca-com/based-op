@@ -3,7 +3,7 @@ use std::time::Duration;
 use alloy_consensus::Block;
 use alloy_provider::Provider;
 use alloy_rpc_types::Block as RpcBlock;
-use bop_common::communication::{messages::BlockSyncMessage, SendersSpine, TrackedSenders};
+use bop_common::communication::{SendersSpine, TrackedSenders, messages::BlockSyncError};
 use bop_db::DatabaseRead;
 use futures::future::join_all;
 use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
@@ -38,7 +38,9 @@ pub async fn async_fetch_blocks_and_send_sequentially<Db: DatabaseRead>(
     info!(start = curr_block, last = end_block, "fetched blocks");
 }
 
-pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockSyncMessage {
+/// Fetches a block, retrying forever until successful.
+/// Conversion errors are logged as warnings.
+pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockWithSenders<OpBlock> {
     const BACKOFF_MAX: Duration = Duration::from_secs(1);
     const BACKOFF_STEP: Duration = Duration::from_millis(10);
 
@@ -46,12 +48,20 @@ pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockSync
 
     loop {
         match client.get_block_by_number(block_number.into(), true.into()).await {
-            Ok(Some(block)) => return convert_block(block),
-
+            Ok(Some(block)) => match convert_rpc_block(block) {
+                Ok(converted) => return converted,
+                Err(err) => {
+                    warn!(
+                        ?backoff,
+                        block_number = block_number,
+                        error = %err,
+                        "Block conversion failed, retrying"
+                    );
+                }
+            },
             Ok(None) => {
                 warn!(?backoff, block_number, "block not found");
             }
-
             Err(err) => {
                 warn!(?err, ?backoff, block_number, "failed fetching");
             }
@@ -63,25 +73,30 @@ pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> BlockSync
 }
 
 /// Converts an RPC block with OpTxEnvelope transactions to a consensus block with OpTransactionSigned
-pub fn convert_block(block: RpcBlock<op_alloy_rpc_types::Transaction>) -> BlockWithSenders<OpBlock> {
+pub fn convert_rpc_block(
+    block: RpcBlock<op_alloy_rpc_types::Transaction>,
+) -> Result<BlockWithSenders<OpBlock>, BlockSyncError> {
     // First convert the block to consensus format
     let consensus_block = block.into_consensus();
 
     // Now convert the transactions
     let mut recovery_buf = Vec::with_capacity(200);
-    let (converted_txs, senders): (Vec<_>, Vec<_>) = consensus_block
+    let conversion_results: Result<Vec<_>, BlockSyncError> = consensus_block
         .body
         .transactions
         .into_iter()
         .map(|tx| {
             let signed_tx = OpTransactionSigned::from_envelope(tx.inner.inner);
             recovery_buf.clear(); // Reuse buffer for next transaction
-            let sender = signed_tx
-                .recover_signer_unchecked_with_buf(&mut recovery_buf)
-                .expect("transaction signature must be valid");
-            (signed_tx, sender)
+
+            let sender =
+                signed_tx.recover_signer_unchecked_with_buf(&mut recovery_buf).ok_or(BlockSyncError::SignerRecovery)?;
+
+            Ok((signed_tx, sender))
         })
-        .unzip();
+        .collect();
+
+    let (converted_txs, senders): (Vec<_>, Vec<_>) = conversion_results?.into_iter().unzip();
 
     let block = Block {
         header: consensus_block.header,
@@ -92,7 +107,9 @@ pub fn convert_block(block: RpcBlock<op_alloy_rpc_types::Transaction>) -> BlockW
         },
     };
 
-    BlockWithSenders::new_unchecked(block, senders)
+    // SAFETY: We've just constructed the block and senders vectors from the same source
+    // and verified they have matching lengths through the unzip operation
+    Ok(BlockWithSenders::new_unchecked(block, senders))
 }
 
 #[cfg(test)]

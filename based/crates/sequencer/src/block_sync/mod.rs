@@ -59,7 +59,9 @@ impl BlockSync {
 
         // If the block number is greater than the head, we can apply it directly.
         if block_number > db_head + 1 {
-            warn!("got a block with a number greater than the head. Block number: {block_number}. Head block number: {db_head}. Inserting into pending blocks.");
+            warn!(
+                "got a block with a number greater than the head. Block number: {block_number}. Head block number: {db_head}. Inserting into pending blocks."
+            );
             self.insert_pending_block(block);
             return Ok(Some((db_head + 1, block_number - 1)));
         }
@@ -69,32 +71,35 @@ impl BlockSync {
             let new_block_hash = block.header.hash_slow();
 
             // Check if the block has already been committed.
-            let db_block_hash = db.block_hash_ref(block_number).expect("failed to get block hash"); // TODO: handle DatabaseRef errors
+            let db_block_hash = db
+                .block_hash_ref(block_number)
+                .map_err(|e| BlockSyncError::Database(bop_db::Error::ProviderError(e.into())))?;
             if db_block_hash == new_block_hash {
                 return Ok(None);
             }
 
             // Roll back the database until we reach new_block_number-1.
-            warn!("got a block with previously committed number and different hash to the one committed. Rolling back database. Block number: {block_number}. Block hash: {new_block_hash:?}. DB head block number: {block_number}. DB head block hash: {db_block_hash:?}");
+            warn!(
+                "got a block with previously committed number and different hash to the one committed. Rolling back database. Block number: {block_number}. Block hash: {new_block_hash:?}. DB head block number: {block_number}. DB head block hash: {db_block_hash:?}"
+            );
             while db.head_block_number()? >= block_number {
                 db.roll_back_head()?;
             }
         }
-        let db_head_hash = db.head_block_hash().expect("failed to get head block hash");
+        let db_head_hash = db.head_block_hash()?;
         if block_number != 0 && db_head_hash != block.header.parent_hash {
             warn!(
                 "reorg detected. new block parent doesn't match db head. Block number: {}. Block parent hash: {:?}, db_head_hash: {:?}",
-                block.header.number,
-                block.header.parent_hash,
-                db_head_hash
+                block.header.number, block.header.parent_hash, db_head_hash
             );
 
             // Roll back head and request missing blocks.
             db.roll_back_head()?;
             self.insert_pending_block(block);
-            tracing::debug!("asking for blocks from {} to {}", db.head_block_number().unwrap(), block.header.number);
+            let head_block_number = db.head_block_number()?;
+            tracing::debug!("asking for blocks from {} to {}", head_block_number, block.header.number);
 
-            return Ok(Some((db.head_block_number().unwrap(), block.header.number)));
+            return Ok(Some((head_block_number, block.header.number)));
         }
 
         self.execute_and_maybe_commit(block, db, commit_block)?;
@@ -106,15 +111,14 @@ impl BlockSync {
                 break;
             }
 
-            let pending_block = self.pending_blocks.pop().unwrap();
+            let pending_block = self.pending_blocks.pop().unwrap(); // Safe because we just checked last()
 
             // Verify block links to current chain head
-            if pending_block.header.parent_hash != db.head_block_hash().expect("failed to get head block hash") {
+            let head_block_hash = db.head_block_hash()?;
+            if pending_block.header.parent_hash != head_block_hash {
                 warn!(
                     "pending block parent hash mismatch. Block number: {}, Expected parent: {:?}, Got: {:?}",
-                    pending_block.header.number,
-                    db.head_block_hash().expect("failed to get head block hash"),
-                    pending_block.header.parent_hash
+                    pending_block.header.number, head_block_hash, pending_block.header.parent_hash
                 );
                 debug_assert!(false, "pending block parent hash doesn't match db head hash");
 
@@ -173,10 +177,10 @@ impl BlockSync {
     where
         DB: DatabaseRead + Database<Error: Into<ProviderError> + Display>,
     {
-        debug_assert!(
-            block.header.parent_hash == db.head_block_hash().expect("failed to get head block hash"),
-            "can only apply blocks sequentially"
-        );
+        let head_block_hash = db
+            .head_block_hash()
+            .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::LatestBlock(e.into())))?;
+        debug_assert!(block.header.parent_hash == head_block_hash, "can only apply blocks sequentially");
         self.timers.execute_txs.start();
         // Apply the block.
         let mut executor = self.execution_factory.create_strategy(db.clone());
@@ -227,13 +231,13 @@ mod tests {
     use alloy_primitives::B256;
     use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
-    use bop_db::{init_database, AlloyDB};
+    use bop_db::{AlloyDB, init_database};
     use reqwest::Url;
-    use reth_optimism_chainspec::{OpChainSpecBuilder, BASE_SEPOLIA};
+    use reth_optimism_chainspec::{BASE_SEPOLIA, OpChainSpecBuilder};
     use tracing::level_filters::LevelFilter;
 
     use super::*;
-    use crate::block_sync::fetch_blocks::{fetch_block, TEST_BASE_RPC_URL, TEST_BASE_SEPOLIA_RPC_URL};
+    use crate::block_sync::fetch_blocks::{TEST_BASE_RPC_URL, TEST_BASE_SEPOLIA_RPC_URL, fetch_block};
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";
 

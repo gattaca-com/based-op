@@ -3,7 +3,7 @@ use std::sync::Arc;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
 use parking_lot::RwLock;
-use revm_primitives::{HashMap, B256};
+use revm_primitives::{B256, HashMap};
 
 use crate::db::DBFrag;
 

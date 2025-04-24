@@ -1,7 +1,7 @@
 use std::{net::Ipv4Addr, path::PathBuf};
 
 use bop_common::config::LoggingConfig;
-use clap::{command, Parser};
+use clap::{Parser, command};
 use eyre::bail;
 use reqwest::Url;
 use reth_rpc_layer::JwtSecret;

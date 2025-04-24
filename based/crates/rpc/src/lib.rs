@@ -1,12 +1,12 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
     api::{EngineApiServer, MinimalEthApiServer},
     communication::{
-        messages::{EngineApi, RpcResult},
         Sender, Spine,
+        messages::{EngineApi, RpcResult},
     },
     config::GatewayArgs,
     db::DatabaseRead,
@@ -16,7 +16,7 @@ use bop_common::{
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
 use tokio::runtime::Runtime;
-use tracing::{error, info, trace, Level};
+use tracing::{Level, error, info, trace};
 
 mod engine;
 pub mod gossiper;

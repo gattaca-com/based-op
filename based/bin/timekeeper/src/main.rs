@@ -2,19 +2,19 @@ use std::io::stdout;
 
 use bop_common::{
     communication::queues_dir_string,
-    time::{utils::renderloop_60_fps, Nanos},
+    time::{Nanos, utils::renderloop_60_fps},
 };
 use bop_timekeeper::TimeKeeper;
 use crossterm::{
-    event::{self, KeyCode, KeyEvent, KeyEventKind},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{self, KeyCode, KeyEvent, KeyEventKind},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Layout},
     text::Line,
-    Terminal,
 };
 use tracing::warn;
 

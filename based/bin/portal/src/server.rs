@@ -1,31 +1,28 @@
-use std::{
-    fmt,
-    net::SocketAddr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
-use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
-    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
     BlockId, BlockNumberOrTag,
+    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
-    api::{EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpRpcBlock, RegistryApiClient, CAPABILITIES},
+    api::{CAPABILITIES, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpRpcBlock, RegistryApiClient},
     communication::messages::{RpcError, RpcResult},
+    time::Nanos,
     utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::async_trait,
-    http_client::{transport::HttpBackend, HttpClientBuilder},
+    http_client::{HttpClientBuilder, transport::HttpBackend},
     server::{RpcServiceBuilder, ServerBuilder},
 };
 use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
-use tracing::{debug, error, info, trace, Instrument, Level};
+use tokio::sync::Mutex;
+use tracing::{Instrument, Level, debug, error, info, trace};
 
 use crate::{cli::PortalArgs, middleware::ProxyService};
 
@@ -44,6 +41,10 @@ impl fmt::Debug for Gateway {
     }
 }
 
+/// If we get fcus faster than this threshold we assume that we are in sync mode and will
+/// not propagate anything to the gateways
+const SYNC_FCU_DT_THRESHOLD: Nanos = Nanos::from_millis(1500);
+
 #[derive(Clone)]
 pub struct PortalServer {
     fallback_eth_client: RpcClient,
@@ -52,6 +53,7 @@ pub struct PortalServer {
     current_gateway: Arc<Mutex<Gateway>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
+    last_fcu: Arc<RwLock<Nanos>>,
 }
 
 impl PortalServer {
@@ -91,7 +93,15 @@ impl PortalServer {
 
         let gateways = Arc::new(RwLock::new(gateways));
 
-        Ok(Self { fallback_eth_client, fallback_client, registry_client, current_gateway, gateways, gateway_timeout })
+        Ok(Self {
+            fallback_eth_client,
+            fallback_client,
+            registry_client,
+            current_gateway,
+            gateways,
+            gateway_timeout,
+            last_fcu: Default::default(),
+        })
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
@@ -133,37 +143,44 @@ impl PortalServer {
         Ok(())
     }
 
-    fn gateways_initialized(&self) -> bool {
-        self.gateways.read().len() != 0
-    }
-
     fn gateways(&self) -> Vec<Gateway> {
         self.gateways.read().clone()
     }
 
+    fn syncing(&self) -> bool {
+        self.last_fcu.read().elapsed() < SYNC_FCU_DT_THRESHOLD
+    }
+
     pub async fn refresh(&self) -> eyre::Result<()> {
-        let (_, gateway_url, _, jwt_as_b256) = self.registry_client.current_gateway().await?;
-        tracing::debug!("updating gateway to {gateway_url:?}");
-        if !self.gateways_initialized() {
-            tracing::debug!("registry was down until now, initializing gateways");
-            let mut gateways = vec![];
-            for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
-                gateways.push(create_gateway_client(
-                    gateway_url,
-                    unsafe {
-                        std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                    },
-                    self.gateway_timeout,
-                )?)
-            }
-            *self.gateways.write() = gateways;
+        let mut gateways = vec![];
+        for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
+            let Ok(client) = create_gateway_client(
+                gateway_url,
+                unsafe {
+                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
+                },
+                self.gateway_timeout,
+            ) else {
+                continue;
+            };
+            gateways.push(client);
+        }
+        *self.gateways.write() = gateways;
+
+        let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
+        if self.current_gateway.lock().await.id == gateway_url {
+            return Ok(());
         }
 
-        *self.current_gateway.lock() = create_gateway_client(
-            gateway_url,
-            unsafe { std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256) },
-            self.gateway_timeout,
-        )?;
+        for g in self.gateways() {
+            if g.id == gateway_url {
+                *self.current_gateway.lock().await = g;
+                return Ok(());
+            }
+        }
+        error!(
+            "CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent"
+        );
         Ok(())
     }
 
@@ -182,6 +199,7 @@ impl PortalServer {
             }
             Err(err) => trace!(%err, "Error: failed gateway"),
         }
+        debug!(?gateway, "served fcu")
     }
 }
 
@@ -218,7 +236,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.transaction_receipt(hash).await }
             }
             .in_current_span(),
@@ -247,7 +265,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.block_by_number(number, full).await }
             }
             .in_current_span(),
@@ -276,7 +294,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.block_by_hash(hash, full).await }
             }
             .in_current_span(),
@@ -305,7 +323,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.block_number().await }
             }
             .in_current_span(),
@@ -334,7 +352,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.transaction_count(address, block_number).await }
             }
             .in_current_span(),
@@ -363,7 +381,7 @@ impl EthApiServer for PortalServer {
         );
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().clone();
+                let client = self.current_gateway.lock().await.clone();
                 async move { client.client.balance(address, block_number).await }
             }
             .in_current_span(),
@@ -382,12 +400,14 @@ impl EthApiServer for PortalServer {
 
 #[async_trait]
 impl EngineApiServer for PortalServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn fork_choice_updated_v3(
         &self,
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<OpPayloadAttributes>,
     ) -> RpcResult<ForkchoiceUpdated> {
+        let last_fcu_dt = self.last_fcu.read().elapsed();
+        *self.last_fcu.write() = Nanos::now();
         let parent_block_hash = fork_choice_state.head_block_hash;
 
         if let Some(payload_attributes) = payload_attributes.as_ref() {
@@ -400,25 +420,16 @@ impl EngineApiServer for PortalServer {
 
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
-        if !self.gateways_initialized() {
+
+        if last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
+            debug!("we seem to be in state syncing so only sending fcu to fallback");
             return Ok(response);
         }
 
         if payload_attributes.is_some() {
+            let current_gateway = self.current_gateway.lock().await.clone();
             // pick only one gateway for this block
-            let mut curt = Instant::now();
-            while self.refresh().await.is_err() {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-                if curt.elapsed() > Duration::from_secs(1) {
-                    tracing::error!("couldn't get next gateway from registry. Retrying...");
-                    curt = Instant::now();
-                }
-            }
-
-            tokio::spawn(
-                Self::send_fcu(fork_choice_state, payload_attributes, self.current_gateway.lock().clone())
-                    .in_current_span(),
-            );
+            tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, current_gateway).in_current_span());
         } else {
             // send to all gateways
             for gateway in self.gateways() {
@@ -430,7 +441,7 @@ impl EngineApiServer for PortalServer {
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn new_payload_v3(
         &self,
         payload: ExecutionPayloadV3,
@@ -447,6 +458,15 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
+
+        let response = self
+            .fallback_client
+            .new_payload_v3(payload.clone(), versioned_hashes.clone(), parent_beacon_block_root)
+            .await?;
+
+        if self.syncing() {
+            return Ok(response);
+        }
 
         // send to all gateways
         for gateway in self.gateways() {
@@ -470,13 +490,15 @@ impl EngineApiServer for PortalServer {
             );
         }
 
-        let response = self.fallback_client.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await?;
         Ok(response)
     }
 
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE), fields(req_id = %uuid()))]
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         debug!(%payload_id, "new request");
+        if self.syncing() {
+            return Ok(self.fallback_client.clone().get_payload_v3(payload_id).await?);
+        }
 
         let fallback_fut = tokio::spawn({
             let client = self.fallback_client.clone();
@@ -487,7 +509,7 @@ impl EngineApiServer for PortalServer {
         let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV3, _>> = tokio::spawn(
             {
                 // only get payload from previously picked gateway
-                let gateway = self.current_gateway.lock().clone();
+                let gateway = self.current_gateway.lock().await.clone();
                 let fallback_client = self.fallback_client.clone();
 
                 async move {
@@ -523,6 +545,9 @@ impl EngineApiServer for PortalServer {
         // ignore join errors
         let fallback = fallback?;
         let gateway = gateway?;
+        if gateway.is_err() && fallback.is_ok() {
+            debug!("Couldn't retrieve payload from gateway, serving fallback")
+        }
 
         let payload = gateway.or(fallback)?;
 

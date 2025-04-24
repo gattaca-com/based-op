@@ -7,13 +7,13 @@ use alloy_rpc_types::engine::{ForkchoiceState, PayloadId};
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, BlockFetch, BlockSyncMessage, EngineApi},
         SpineConnections,
+        messages::{self, BlockFetch, BlockSyncMessage, EngineApi},
     },
     config::MockMode,
     db::{DBFrag, DatabaseRead},
     signing::ECDSASigner,
-    time::{utils::vsync_busy, Duration, Instant},
+    time::{Duration, Instant, utils::vsync_busy},
     transaction::Transaction,
 };
 use futures::future::join_all;
@@ -21,13 +21,13 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use rand::seq::{IndexedMutRandom, IndexedRandom};
 use reqwest::Url;
-use revm_primitives::{b256, Address, TxKind, B256, U256};
+use revm_primitives::{Address, B256, TxKind, U256, b256};
 use tokio::{runtime::Runtime, sync::oneshot};
 use tracing::{info, warn};
 
 use super::{
-    fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block},
     AlloyProvider,
+    fetch_blocks::{async_fetch_blocks_and_send_sequentially, fetch_block},
 };
 
 #[derive(Clone, Debug)]

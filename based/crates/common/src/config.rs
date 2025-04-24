@@ -87,6 +87,15 @@ pub struct GatewayArgs {
     /// If true will commit locally sequenced blocks to the db before getting payload from the engine api.
     #[arg(long = "sequencer.commit_sealed_frags_to_db", default_value_t = false)]
     pub commit_sealed_frags_to_db: bool,
+    /// URL of the supervisor service for transaction validation
+    #[arg(long = "supervisor.url")]
+    pub supervisor_url: Option<Url>,
+    /// URL of the supervisor service for transaction validation
+    #[arg(
+        long = "supervisor.safety_level",
+        help = "Safety level to pass to supervisor, values: finalized, safe, local-safe, cross-unsafe, unsafe, invalid"
+    )]
+    pub supervisor_safety_level: Option<String>,
 }
 
 #[derive(Debug, Clone)]

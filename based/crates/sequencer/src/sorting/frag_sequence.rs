@@ -2,9 +2,9 @@ use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
 use bop_common::{p2p::FragV0, time::Instant, transaction::SimulatedTx};
-use revm_primitives::{Bytes, B256};
+use revm_primitives::{B256, Bytes};
 
-use super::{sorting_data::SortingTelemetry, SortingData};
+use super::{SortingData, sorting_data::SortingTelemetry};
 use crate::context::SequencerContext;
 
 /// Sequence of frags applied on the last block
@@ -115,8 +115,8 @@ mod tests {
     use tracing::level_filters::LevelFilter;
 
     use crate::{
-        block_sync::fetch_blocks::fetch_block, context::SequencerContext, simulator::simulate_tx_inner,
-        SequencerConfig, Simulator,
+        SequencerConfig, Simulator, block_sync::fetch_blocks::fetch_block, context::SequencerContext,
+        simulator::simulate_tx_inner,
     };
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";

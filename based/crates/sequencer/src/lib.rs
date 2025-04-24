@@ -7,11 +7,11 @@ use alloy_rpc_types::engine::{
 use bop_common::{
     actor::Actor,
     communication::{
+        Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
         messages::{
             self, BlockFetch, BlockSyncError, BlockSyncMessage, EngineApi, SimulatorToSequencer,
             SimulatorToSequencerMsg,
         },
-        Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
@@ -34,6 +34,7 @@ pub mod config;
 mod context;
 pub mod simulator;
 pub(crate) mod sorting;
+mod supervisor;
 
 pub use config::SequencerConfig;
 use context::SequencerContext;
@@ -60,14 +61,17 @@ pub struct Sequencer<Db> {
     state: SequencerState<Db>,
     data: SequencerContext<Db>,
     heartbeat: Repeater,
+    supervisor: Option<supervisor::SupervisorValidator>,
 }
 
 impl<Db: DatabaseRead> Sequencer<Db> {
     pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
+        let supervisor = config.supervisor.as_ref().map(supervisor::SupervisorValidator::from);
         Self {
             state: SequencerState::default(),
             data: SequencerContext::new(db, shared_state, config),
             heartbeat: Repeater::every(Duration::from_secs(2)),
+            supervisor,
         }
     }
 }
@@ -77,20 +81,20 @@ where
     Db: DatabaseWrite + DatabaseRead,
 {
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
-        let block_sync_receive_duration = if matches!(self.state, SequencerState::Syncing { .. }) {
-            // we're syncing anyway
-            Duration::MAX
-        } else {
-            Duration::from_millis(10)
-        };
         // handle block sync
-        connections.receive_for(block_sync_receive_duration, |msg, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_block_sync(msg, &mut self.data, senders);
         });
 
         // handle new transaction
-        connections.receive(|msg, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
+            if self.data.timestamp() != 0 &&
+                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            {
+                return;
+            }
+
             self.state.handle_new_tx(msg, &mut self.data, senders);
         });
 
@@ -101,7 +105,7 @@ where
         });
 
         // handle engine API messages from rpc
-        connections.receive(|msg: messages::EngineApi, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
             let state = std::mem::take(&mut self.state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
         });
@@ -252,15 +256,18 @@ where
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
-        let head_bh = ctx.db.head_block_hash().expect("couldn't get db");
-        if head_bh != fork_choice_state.head_block_hash {
-            return self;
-        };
+        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
+        if fork_choice_state.head_block_hash != head_block_hash {
+            // We are on the wrong head. Switch to syncing and request the head block.
+            let head_block_number = ctx.db.head_block_number().expect("couldn't get db head block number");
+            ctx.shared_state.reset();
+            return Self::sync_until(head_block_number, head_block_number, senders);
+        }
 
         match self {
             // Waiting for new payload should not happen, but while testing
             // we can basically keep sequencing based on the same db state
-            WaitingForForkChoiceWithAttributes | WaitingForNewPayload => {
+            WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
                         // Don't start sequencing until we have a parent hash.
@@ -283,19 +290,7 @@ where
                         info!("start sorting with {} orders", first_frag.tof_snapshot.len());
                         SequencerState::Sorting(seq, first_frag)
                     }
-                    None => {
-                        // Check that we are at this head.
-                        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
-                        if fork_choice_state.head_block_hash != head_block_hash {
-                            // We are on the wrong head. Switch to syncing and request the head block.
-                            let head_block_number =
-                                ctx.db.head_block_number().expect("couldn't get db head block number");
-                            ctx.shared_state.reset();
-                            Self::sync_until(head_block_number, head_block_number, senders)
-                        } else {
-                            WaitingForForkChoiceWithAttributes
-                        }
-                    }
+                    None => self,
                 }
             }
 
@@ -304,7 +299,9 @@ where
                 if fork_choice_state.head_block_hash == head_block_hash {
                     return Sorting(frag_seq, data);
                 }
-                warn!("received FCU when Sorting. Sending already Fragged txs back to the pools and syncing to the new head.");
+                warn!(
+                    "received FCU when Sorting. Sending already Fragged txs back to the pools and syncing to the new head."
+                );
                 for tx in frag_seq.txs.into_iter() {
                     ctx.handle_tx(tx.tx, senders);
                 }

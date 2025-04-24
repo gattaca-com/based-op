@@ -2,8 +2,8 @@ use std::{
     fmt::Debug,
     future::IntoFuture,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
@@ -11,8 +11,8 @@ use alloy_consensus::BlockHeader;
 use alloy_eips::BlockId;
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{
-    network::{primitives::HeaderResponse, BlockResponse},
     Provider, RootProvider,
+    network::{BlockResponse, primitives::HeaderResponse},
 };
 use alloy_transport::TransportError;
 use alloy_transport_http::Http;

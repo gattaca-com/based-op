@@ -55,6 +55,12 @@ eyre = "0.6.12"
 futures = "0.3.31"
 hyper = "1.5.2"
 jsonrpsee = { version = "0.24", features = ["http-client", "macros", "server"] }
+kona-rpc = { git = "https://github.com/op-rs/kona", rev = "0493d8479e2ca9f0eb6d5c6154e2bedc61de7217", features = [
+  "client",
+  "interop",
+  "jsonrpsee",
+] }
+kona-interop = { git = "https://github.com/op-rs/kona", rev = "0493d8479e2ca9f0eb6d5c6154e2bedc61de7217" }
 moka = "0.12.10"
 hickory-resolver = "=0.25.0-alpha.5"
 op-alloy-consensus = { version = "=0.12.0", default-features = false, features = ["k256"] }
@@ -75,7 +81,9 @@ reth-db-api = { path = "../reth/crates/storage/db-api" }
 reth-db-common = { path = "../reth/crates/storage/db-common" }
 reth-evm = { path = "../reth/crates/evm" }
 reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
-reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = ["test-utils"] }
+reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
+  "test-utils",
+] }
 reth-node-types = { path = "../reth/crates/node/types" }
 reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
 reth-optimism-cli = { path = "../reth/crates/optimism/cli" }
@@ -86,14 +94,18 @@ reth-optimism-node = { path = "../reth/crates/optimism/node" }
 reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
 reth-primitives = { path = "../reth/crates/primitives" }
 reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
-reth-provider = { path = "../reth/crates/storage/provider", features = ["test-utils"] }
+reth-provider = { path = "../reth/crates/storage/provider", features = [
+  "test-utils",
+] }
 reth-revm = { path = "../reth/crates/revm" }
 reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
 reth-stages-types = { path = "../reth/crates/stages/types" }
 reth-storage-api = { path = "../reth/crates/storage/storage-api" }
 reth-storage-errors = { path = "../reth/crates/storage/errors" }
 reth-trie = { path = "../reth/crates/trie/trie" }
-reth-trie-common = { path = "../reth/crates/trie/common", features = ["test-utils"] }
+reth-trie-common = { path = "../reth/crates/trie/common", features = [
+  "test-utils",
+] }
 reth-trie-db = { path = "../reth/crates/trie/db" }
 reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
 revm = { version = "21.0.0", features = ["optional_balance_check", "secp256k1", "std"], default-features = false }

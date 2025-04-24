@@ -42,11 +42,7 @@ impl<T> CircularBuffer<T> {
 
     #[inline]
     pub fn len(&self) -> usize {
-        if self.filled {
-            self.data.len()
-        } else {
-            self.pos
-        }
+        if self.filled { self.data.len() } else { self.pos }
     }
 
     #[inline]
@@ -93,11 +89,7 @@ impl<T> CircularBuffer<T> {
     }
 
     fn first_pos(&self) -> usize {
-        if self.filled {
-            self.pos
-        } else {
-            0
-        }
+        if self.filled { self.pos } else { 0 }
     }
 
     pub fn nth_back(&self, id: usize) -> &T {

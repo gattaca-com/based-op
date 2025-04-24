@@ -1,9 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 use crate::config::LoggingConfig;
@@ -153,11 +153,7 @@ pub fn full_last_part_of_typename<T>() -> &'static str {
 
 pub fn last_part_of_typename<T>() -> &'static str {
     let full_name = strip_namespace(std::any::type_name::<T>());
-    if let Some(generic_start) = full_name.find('<') {
-        &full_name[..generic_start]
-    } else {
-        full_name
-    }
+    if let Some(generic_start) = full_name.find('<') { &full_name[..generic_start] } else { full_name }
 }
 
 pub fn uuid() -> Uuid {

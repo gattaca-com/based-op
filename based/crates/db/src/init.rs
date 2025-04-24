@@ -1,10 +1,10 @@
 use std::{fs, path::Path, sync::Arc};
 
 use eyre::bail;
-use reth_db::{init_db, mdbx::MaxReadTransactionDuration, ClientVersion};
+use reth_db::{ClientVersion, init_db, mdbx::MaxReadTransactionDuration};
 use reth_db_common::init::init_genesis;
 use reth_optimism_chainspec::OpChainSpec;
-use reth_provider::{providers::StaticFileProvider, ProviderFactory};
+use reth_provider::{ProviderFactory, providers::StaticFileProvider};
 use reth_storage_errors::db::LogLevel;
 
 use super::{Error, SequencerDB};
