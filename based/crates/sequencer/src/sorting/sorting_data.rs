@@ -6,16 +6,19 @@ use std::{
 
 use bop_common::{
     communication::{
-        messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg}, SpineConnections
+        SpineConnections,
+        messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
-    db::{state::ensure_create2_deployer, DBSorting},
+    db::{DBSorting, state::ensure_create2_deployer},
     time::{Duration, Instant},
-    transaction::{SimulatedTx, Transaction}, typedefs::{Database, DatabaseRef},
+    transaction::{SimulatedTx, Transaction},
+    typedefs::{Database, DatabaseRef},
 };
 use bop_db::DatabaseRead;
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
     ConfigureEvm,
+    block::StateChangeSource,
     execute::{BlockExecutionError, ProviderError},
 };
 use reth_optimism_evm::OpBlockExecutionError;
@@ -289,7 +292,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
     pub fn apply_block_start_to_state(
         &mut self,
         context: &mut SequencerContext<Db>,
-        env_with_handler_cfg: EnvWithHandlerCfg,
+        env_with_handler_cfg: reth_evm::EvmEnv<op_revm::OpSpecId>,
     ) -> Result<(), BlockExecutionError> {
         let timestamp = env_with_handler_cfg.block.timestamp.to();
         let block_number = env_with_handler_cfg.block.number.to();
@@ -309,10 +312,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         // Apply pre-execution changes.
         evm.db_mut().db.write().set_state_clear_flag(should_set_state_clear_flag);
 
-        context.system_caller.apply_beacon_root_contract_call(
-            parent_beacon_block_root,
-            &mut evm,
-        )?;
+        context.system_caller.apply_beacon_root_contract_call(parent_beacon_block_root, &mut evm)?;
         ensure_create2_deployer(chain_spec, timestamp, &mut evm.db_mut().db.write())
             .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
 
@@ -321,14 +321,14 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         };
 
         // Apply must include txs.
-        for tx in forced_inclusion_txs.iter() {
+        for (i, tx) in forced_inclusion_txs.iter().enumerate() {
             let tx = Arc::new(Transaction::decode(tx.clone()).unwrap());
 
             // Execute transaction.
             let mut simulated_tx = simulate_tx_inner(tx, &mut evm, regolith_active, true, true)
                 .expect("forced inclusing txs shouldn't fail");
 
-            context.system_caller.on_state(&simulated_tx.result_and_state.state);
+            context.system_caller.on_state(StateChangeSource::Transaction(i), &simulated_tx.result_and_state.state);
 
             evm.db_mut().commit_txs(std::iter::once(&mut simulated_tx));
             self.gas_remaining -= simulated_tx.gas_used();
