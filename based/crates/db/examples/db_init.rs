@@ -1,10 +1,9 @@
-use std::{collections::HashMap, str::FromStr};
-
 use alloy_primitives::{Address, U256};
 use bop_common::db::state_changes_to_bundle_state;
+use bop_common::typedefs::*;
 use bop_db::DatabaseRead;
 use reth_optimism_chainspec::BASE_SEPOLIA;
-use revm_primitives::{Account, db::DatabaseRef};
+use std::{collections::HashMap, str::FromStr};
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -16,7 +15,7 @@ fn main() {
         info.balance += U256::try_from(23).unwrap();
         info.nonce += 1;
 
-        let account = Account::from(info);
+        let account = StateAccount::from(info);
         let changes = HashMap::from_iter(vec![(addr, account)]);
         let bundle_state = state_changes_to_bundle_state(&db, changes).unwrap();
         let (root, updates) = db.calculate_state_root(&bundle_state).unwrap();

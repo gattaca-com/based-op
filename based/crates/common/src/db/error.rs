@@ -2,6 +2,7 @@ use std::io;
 
 use alloy_primitives::BlockNumber;
 use reth_storage_errors::{db::DatabaseError, provider::ProviderError};
+use revm::context::DBErrorMarker;
 use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
@@ -42,4 +43,8 @@ impl From<Error> for ProviderError {
             Error::BlockNotFound(_) => ProviderError::Database(DatabaseError::Other(value.to_string())),
         }
     }
+}
+
+impl DBErrorMarker for Error {
+    
 }

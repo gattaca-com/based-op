@@ -1,5 +1,5 @@
 use std::sync::Arc;
-
+use bop_common::typedefs::*;
 use alloy_primitives::{Address, B256, U256};
 use moka::sync::{Cache, CacheBuilder};
 use reth_db::{
@@ -7,8 +7,6 @@ use reth_db::{
     mdbx::{RO, tx::Tx},
 };
 use reth_db_api::{cursor::DbDupCursorRO, transaction::DbTx};
-use op_revm::db::BundleState;
-use revm_primitives::AccountInfo;
 
 use crate::Error;
 
