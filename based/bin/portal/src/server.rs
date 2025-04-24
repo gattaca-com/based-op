@@ -407,7 +407,9 @@ impl EngineApiServer for PortalServer {
         payload_attributes: Option<OpPayloadAttributes>,
     ) -> RpcResult<ForkchoiceUpdated> {
         let last_fcu_dt = self.last_fcu.read().elapsed();
-        *self.last_fcu.write() = Nanos::now();
+        if payload_attributes.is_none() {
+            *self.last_fcu.write() = Nanos::now();
+        }
         let parent_block_hash = fork_choice_state.head_block_hash;
 
         if let Some(payload_attributes) = payload_attributes.as_ref() {
