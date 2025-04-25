@@ -21,13 +21,16 @@ use std::{
     fmt::{Debug, Display},
     sync::Arc,
 };
+use revm::{
+    context::{BlockEnv, CfgEnv, TxEnv},
+};
 
 /// Simulator thread.
 pub struct Simulator<Db: DatabaseRef> {
     /// Top of frag evm.
-    evm_tof: OpEvm<OpContext<DBFrag<Db>>, ()>,
+    evm_tof: OpEvm<DBFrag<Db>, ()>,
     /// Evm on top of partially built frag
-    pub evm_sorting: OpEvm<OpContext<State<DBSorting<Db>>>, ()>,
+    pub evm_sorting: OpEvm<State<DBSorting<Db>>, ()>,
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
     /// How to create an EVM.
@@ -37,19 +40,21 @@ pub struct Simulator<Db: DatabaseRef> {
 
 impl<Db: DatabaseRef + Clone> Simulator<Db>
 where
-    <Db as DatabaseRef>::Error: Into<ProviderError> + Debug + Display,
+    <Db as DatabaseRef>::Error: Into<ProviderError> + Debug + Display + Send + Sync,
 {
     pub fn new(db: DBFrag<Db>, evm_config: OpEvmConfig, id: usize) -> Self {
         // Initialise with default evms. These will be overridden before the first sim by
         // `set_evm_for_new_block`.
         let db_tof = State::new(db.clone());
+
+        let evm_env = CfgEnv::new();
         let evm_tof = evm_config.evm_with_env(db_tof, EvmEnv::default());
         let db_sorting = State::new(DBSorting::new(db));
         let evm_sorting = evm_config.evm_with_env(db_sorting, EvmEnv::default());
 
         Self { evm_sorting, evm_tof, evm_config: evm_config.clone(), id, regolith_active: true }
     }
-
+>
     /// Simulates a transaction at the state of the `db` parameter.
     pub fn simulate_transaction<SimulateTxDb: DatabaseRef + Database>(
         tx: Arc<Transaction>,

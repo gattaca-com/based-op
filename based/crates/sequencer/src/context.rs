@@ -19,6 +19,7 @@ use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttribute
 use op_revm::OpSpecId;
 use reth_evm::{ConfigureEvm, NextBlockEnvAttributes, env::EvmEnv, execute::ProviderError, system_calls::SystemCaller};
 use reth_optimism_chainspec::OpChainSpec;
+use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use revm_primitives::{B256, Bytes, U256, b256};
 use tracing::info;
@@ -66,7 +67,7 @@ pub struct SequencerContext<Db> {
     pub parent_header: Header,
     pub fork_choice_state: ForkchoiceState,
     pub payload_attributes: Box<OpPayloadAttributes>,
-    pub system_caller: SystemCaller<OpChainSpec>,
+    pub system_caller: SystemCaller<Arc<OpChainSpec>>,
     pub timers: SequencerTimers,
 }
 
@@ -121,15 +122,15 @@ impl<Db> SequencerContext<Db> {
     }
 
     pub fn block_number(&self) -> u64 {
-        self.block_env.number.to()
+        self.block_env.number
     }
 
     pub fn base_fee(&self) -> u64 {
-        self.block_env.basefee.to()
+        self.block_env.basefee
     }
 
     pub fn timestamp(&self) -> u64 {
-        self.block_env.timestamp.to()
+        self.block_env.timestamp
     }
 }
 
@@ -176,38 +177,38 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         senders: &SendersSpine<Db>,
     ) -> (FragSequence, SortingData<Db>) {
         self.payload_attributes = attributes;
-        let (simulator_evm_block_params, env_with_handler_cfg) = self.new_block_params();
-        self.block_env = *simulator_evm_block_params.env.clone();
+        let simulator_evm_block_params = self.new_block_params();
+        self.block_env = simulator_evm_block_params.block_env.clone();
         self.base_fee = self.block_env.basefee;
 
         // send new block params to simulators
-        senders.send(simulator_evm_block_params).expect("should never fail");
+        senders.send(simulator_evm_block_params.clone()).expect("should never fail");
 
         let seq = FragSequence::new(self.gas_limit(), self.block_number(), self.timestamp());
         let mut sorting = SortingData::new(&seq, self);
 
         // Apply must include
-        sorting.apply_block_start_to_state(self, env_with_handler_cfg.clone()).expect("shouldn't fail");
+        sorting.apply_block_start_to_state(self, simulator_evm_block_params).expect("shouldn't fail");
         self.tx_pool.remove_mined_txs(sorting.txs.iter());
 
         (seq, sorting)
     }
 
-    pub fn new_block_params(&mut self) -> (EvmBlockParams, EvmEnv<OpSpecId>) {
+    pub fn new_block_params(&mut self) -> EvmEnv<OpSpecId> {
         let attributes = &self.payload_attributes;
-        let env_attributes = NextBlockEnvAttributes {
+        let env_attributes = OpNextBlockEnvAttributes {
             timestamp: attributes.payload_attributes.timestamp,
             suggested_fee_recipient: attributes.payload_attributes.suggested_fee_recipient,
             prev_randao: attributes.payload_attributes.prev_randao,
             gas_limit: attributes.gas_limit.unwrap(),
             parent_beacon_block_root: self.payload_attributes.payload_attributes.parent_beacon_block_root,
-            withdrawals: self.payload_attributes.payload_attributes.withdrawals.map(|w| w.into()),
+            extra_data: self.payload_attributes.eip_1559_params.unwrap_or_default().into(),
         };
 
-        let evm_env = self.config.evm_config.evm_env(&self.parent_header);
-        let simulator_evm_block_params =
-            EvmBlockParams { spec_id: evm_env.spec_id(), env: env_with_handler_cfg.env.clone() };
-        (simulator_evm_block_params, env_with_handler_cfg)
+        self.config
+            .evm_config
+            .next_evm_env(&self.parent_header, &env_attributes)
+            .expect("couldn't construct the next evm env")
     }
 
     pub fn seal_last_frag(&mut self, frag_seq: &mut FragSequence, last_frag: SortingData<Db>) -> FragV0 {
@@ -234,7 +235,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         let header = Header {
             parent_hash: self.parent_hash,
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            beneficiary: self.block_env.coinbase,
+            beneficiary: self.block_env.beneficiary,
             state_root,
             transactions_root,
             receipts_root,
@@ -257,7 +258,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 
         let v1 = ExecutionPayloadV1 {
             parent_hash: self.parent_hash,
-            fee_recipient: self.block_env.coinbase,
+            fee_recipient: self.block_env.beneficiary,
             state_root,
             receipts_root,
             logs_bloom,
@@ -267,15 +268,15 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             gas_used,
             timestamp: self.block_env.timestamp,
             extra_data,
-            base_fee_per_gas: self.block_env.basefee,
+            base_fee_per_gas: U256::from(self.block_env.basefee),
             block_hash: header.hash_slow(),
             transactions,
         };
         let seal = SealV0 {
             total_frags: frag_seq.next_seq,
-            block_number: self.block_env.number.to(),
+            block_number: self.block_env.number,
             gas_used,
-            gas_limit: self.block_env.gas_limit.to(),
+            gas_limit: self.block_env.gas_limit,
             parent_hash: self.parent_hash,
             transactions_root,
             receipts_root,
@@ -326,7 +327,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
 
-            self.tx_pool.handle_new_block(block.transactions.iter(), base_fee, self.shared_state.as_ref(), false, None);
+            self.tx_pool.handle_new_block(block.transactions_with_sender(), base_fee, self.shared_state.as_ref(), false, None);
         }
 
         blocks_to_fetch

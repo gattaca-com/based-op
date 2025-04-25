@@ -15,6 +15,7 @@ use bop_common::{
     typedefs::{Database, DatabaseRef},
 };
 use bop_db::DatabaseRead;
+use op_revm::{DefaultOp, OpContext, OpEvm};
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
     ConfigureEvm,
@@ -294,8 +295,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         context: &mut SequencerContext<Db>,
         env_with_handler_cfg: reth_evm::EvmEnv<op_revm::OpSpecId>,
     ) -> Result<(), BlockExecutionError> {
-        let timestamp = env_with_handler_cfg.block.timestamp.to();
-        let block_number = env_with_handler_cfg.block.number.to();
+        let timestamp = env_with_handler_cfg.block_env.timestamp;
+        let block_number = env_with_handler_cfg.block_env.number;
 
         let should_set_state_clear_flag =
             context.config.evm_config.chain_spec().is_spurious_dragon_active_at_block(block_number);
@@ -307,7 +308,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         let evm_config = context.config.evm_config.clone();
         let chain_spec = context.config.evm_config.chain_spec().clone();
         // Configure new EVM to apply pre-execution and must include txs.
-        let mut evm = evm_config.evm_with_env(context.shared_state.as_mut(), env_with_handler_cfg);
+        let mut evm = OpContext::op().with_cfg(cfg);
 
         // Apply pre-execution changes.
         evm.db_mut().db.write().set_state_clear_flag(should_set_state_clear_flag);
