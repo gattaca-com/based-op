@@ -4,19 +4,18 @@ pragma solidity 0.8.15;
 // Testing
 import { CommonTest } from "test/setup/CommonTest.sol";
 import { ForgeArtifacts, Abi } from "scripts/libraries/ForgeArtifacts.sol";
-import { GnosisSafe as Safe } from "safe-contracts/GnosisSafe.sol";
 import "test/safe-tools/SafeTestTools.sol";
 
 // Contracts
-import { IDeputyGuardianModule } from "src/safe/interfaces/IDeputyGuardianModule.sol";
+import { IDeputyGuardianModule } from "interfaces/safe/IDeputyGuardianModule.sol";
 
 // Libraries
 import "src/dispute/lib/Types.sol";
 
 // Interfaces
-import { IDisputeGame } from "src/dispute/interfaces/IDisputeGame.sol";
-import { IFaultDisputeGame } from "src/dispute/interfaces/IFaultDisputeGame.sol";
-import { IAnchorStateRegistry } from "src/dispute/interfaces/IAnchorStateRegistry.sol";
+import { IDisputeGame } from "interfaces/dispute/IDisputeGame.sol";
+import { IFaultDisputeGame } from "interfaces/dispute/IFaultDisputeGame.sol";
+import { IAnchorStateRegistry } from "interfaces/dispute/IAnchorStateRegistry.sol";
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
 contract DeputyGuardianModule_TestInit is CommonTest, SafeTestTools {
@@ -241,6 +240,11 @@ contract DeputyGuardianModule_setRespectedGameType_Test is DeputyGuardianModule_
     /// @dev Tests that `setRespectedGameType` successfully updates the respected game type when called by the deputy
     /// guardian.
     function testFuzz_setRespectedGameType_succeeds(GameType _gameType) external {
+        // Game type(uint32).max is reserved for setting the respectedGameTypeUpdatedAt timestamp.
+        // TODO(kelvin): Remove this once we've removed the hack.
+        uint32 boundedGameType = uint32(bound(_gameType.raw(), 0, type(uint32).max - 1));
+        _gameType = GameType.wrap(boundedGameType);
+
         vm.expectEmit(address(safeInstance.safe));
         emit ExecutionFromModuleSuccess(address(deputyGuardianModule));
 
@@ -257,7 +261,13 @@ contract DeputyGuardianModule_setRespectedGameType_Test is DeputyGuardianModule_
 contract DeputyGuardianModule_setRespectedGameType_TestFail is DeputyGuardianModule_TestInit {
     /// @dev Tests that `setRespectedGameType` when called by a non deputy guardian.
     function testFuzz_setRespectedGameType_notDeputyGuardian_reverts(GameType _gameType) external {
-        vm.assume(GameType.unwrap(optimismPortal2.respectedGameType()) != GameType.unwrap(_gameType));
+        // Change the game type if it's the same to avoid test rejections.
+        if (GameType.unwrap(optimismPortal2.respectedGameType()) == GameType.unwrap(_gameType)) {
+            unchecked {
+                _gameType = GameType.wrap(GameType.unwrap(_gameType) + 1);
+            }
+        }
+
         vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
         deputyGuardianModule.setRespectedGameType(optimismPortal2, _gameType);
         assertNotEq(GameType.unwrap(optimismPortal2.respectedGameType()), GameType.unwrap(_gameType));
@@ -288,8 +298,8 @@ contract DeputyGuardianModule_NoPortalCollisions_Test is DeputyGuardianModule_Te
         excludes[0] = "src/dispute/lib/*";
         excludes[1] = "src/L1/OptimismPortal2.sol";
         excludes[2] = "src/L1/OptimismPortalInterop.sol";
-        excludes[3] = "src/L1/interfaces/IOptimismPortal2.sol";
-        excludes[4] = "src/L1/interfaces/IOptimismPortalInterop.sol";
+        excludes[3] = "interfaces/L1/IOptimismPortal2.sol";
+        excludes[4] = "interfaces/L1/IOptimismPortalInterop.sol";
         Abi[] memory abis = ForgeArtifacts.getContractFunctionAbis("src/{L1,dispute,universal}", excludes);
         for (uint256 i; i < abis.length; i++) {
             for (uint256 j; j < abis[i].entries.length; j++) {

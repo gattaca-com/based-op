@@ -48,10 +48,9 @@ The directory is structured as follows
 
 ### Installation
 
-1. `cd` to the root of this repo.
-2. Install Foundry by running `just install-foundry`. This installs `foundryup`, the foundry toolchain installer, then installs the required foundry version.
-3. Install Kontrol by running `just install-kontrol`. This installs `kup`, the package manager for RV tools, then installs the required kontrol version.
-4. Install Docker.
+1. Make sure that the dependencies for the Optimism Monorepo are installed with `mise`.
+1. Install [`kup`](https://github.com/runtimeverification/k/releases/tag/v7.1.180).
+1. Use `kup` to [install `kontrol`](https://github.com/runtimeverification/kontrol?tab=readme-ov-file#fast-installation)
 
 ## Usage
 
@@ -91,7 +90,7 @@ Use the [`run-kontrol.sh`](./scripts/run-kontrol.sh) script to runs the proofs i
 The `run-kontrol.sh` script supports three modes of proof execution:
 
 - `container`: Runs the proofs using the same Docker image used in CI. This is the default execution mode—if no arguments are provided, the proofs will be executed in this mode.
-- `local`: Runs the proofs with your local Kontrol install, and enforces that the Kontrol version matches the one used in CI, which is specified in [`versions.json`](../../../../versions.json).
+- `local`: Runs the proofs with your local Kontrol install, and enforces that the Kontrol version matches the one used in CI, which is specified in [`mise.toml`](../../../../mise.toml).
 - `dev`: Run the proofs with your local Kontrol install, without enforcing any version in particular. The intended use case is proof development and related matters.
 
 It also supports two methods for specifying which tests to execute:
@@ -122,8 +121,8 @@ Write your proof in a `.k.sol` file in the [`proofs`](./proofs/) folder, which i
 To reference the correct addresses for writing the tests, first import the signatures as in this example:
 
 ```solidity
-import { IOptimismPortal as OptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
-import { ISuperchainConfig as SuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { IOptimismPortal as OptimismPortal } from "interfaces/L1/IOptimismPortal.sol";
+import { ISuperchainConfig as SuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 ```
 
 Declare the correspondent variables and cast the correct signatures to the correct addresses:
@@ -180,11 +179,11 @@ We commit the `DeploymentSummary.sol` and `DeploymentSummaryCode.sol` contracts,
 ### Kontrol Proof Execution using KaaS (Kontrol as a Service) & CI Integration
 
 To execute compute intensive Symbolic Kontrol proofs in a CI pipeline, we leverage KaaS (Kontrol as a Service) & CircleCI.
-On each execution a status is returned to the commit checks the execution was run from. The checks for a commit provides a "Details" link to the execution KCFG arrtifacts and kontrol proof summary results. See below for further infromation on how to fetch these artifacts from the summary using the Github API.
+On each execution a status is returned to the commit checks the execution was run from. The checks for a commit provides a "Details" link to the execution KCFG artifacts and kontrol proof summary results. See below for further information on how to fetch these artifacts from the summary using the Github API.
 
-A high level overview of the CI Setup is defined in CircleCI and configured within [.circleci/config.yml](../../../../.circleci/config.yml). The CirlceCI flow calls on the Github API to execute Kontrol test proofs utilzing the [test scripts](scripts/run-kontrol.sh) in this repo. CircleCI is configured with a Github fine-grained token provided by Runtime Verification to leverage better machines than available in CircleCI to run Kontrol proofs. The token needed is stored in the CircleCI project as a secret.
+A high level overview of the CI Setup is defined in CircleCI and configured within [.circleci/config.yml](../../../../.circleci/config.yml). The CirlceCI flow calls on the Github API to execute Kontrol test proofs utilizing the [test scripts](scripts/run-kontrol.sh) in this repo. CircleCI is configured with a Github fine-grained token provided by Runtime Verification to leverage better machines than available in CircleCI to run Kontrol proofs. The token needed is stored in the CircleCI project as a secret.
 
-The proofs can be run manually using the Github Fine-grained token and providing the appropriate parameters outlind in the below Github API call.
+The proofs can be run manually using the Github Fine-grained token and providing the appropriate parameters outlined in the below Github API call.
 ```bash
   curl -X POST \
     -H "Accept: application/vnd.github+json" \
@@ -201,7 +200,7 @@ The proofs can be run manually using the Github Fine-grained token and providing
       }
     }'
 ```
-NOTE: Making this call manually and providng a sha will overrite an existing statuses sha commit. It will not remove the history from RV's end but will be removed from the commit checks table in a PR or in the commit statuses.
+NOTE: Making this call manually and providing a sha will override an existing statuses sha commit. It will not remove the history from RV's end but will be removed from the commit checks table in a PR or in the commit statuses.
 
 Parameters to be replaced are:
 - **RV_COMPUTE_TOKEN**: The token used to authenticate to the KaaS service.
