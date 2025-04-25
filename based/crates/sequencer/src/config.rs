@@ -41,7 +41,7 @@ impl From<&GatewayArgs> for SequencerConfig {
             n_per_loop: args.sim_threads,
             rpc_url: args.eth_client_url.clone(),
             simulate_tof_in_pools: false,
-            evm_config: OpEvmConfig::new(args.chain.clone()),
+            evm_config: OpEvmConfig::new(args.chain.clone(), Default::default()),
             commit_sealed_frags_to_db: args.commit_sealed_frags_to_db,
             supervisor: args.supervisor_url.as_ref().map(|_| SuperVisorConfig::from(args)),
         }
