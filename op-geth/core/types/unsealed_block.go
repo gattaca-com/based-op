@@ -18,7 +18,6 @@ type UnsealedBlock struct {
 
 	Receipts              Receipts
 	Logs                  []*Log
-	Requests              Requests
 	CumulativeGasUsed     uint64
 	CumulativeBlobGasUsed uint64
 }
@@ -31,7 +30,6 @@ func NewUnsealedBlock(e *Env) *UnsealedBlock {
 		Hash:                  common.Hash{},
 		Receipts:              Receipts{},
 		Logs:                  []*Log{},
-		Requests:              Requests{},
 		CumulativeGasUsed:     0,
 		CumulativeBlobGasUsed: 0,
 	}
