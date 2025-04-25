@@ -1,26 +1,29 @@
 package core
 
 import (
+	"fmt"
 	"testing"
-
-	"github.com/ethereum-optimism/superchain-registry/superchain"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/superchain"
 	"github.com/ethereum/go-ethereum/triedb"
 )
 
 func TestOPStackGenesis(t *testing.T) {
-	for id := range superchain.OPChains {
-		_, err := LoadOPStackGenesis(id)
-		if err != nil {
-			t.Error(err)
-		}
+	for id, cfg := range superchain.Chains {
+		t.Run(fmt.Sprintf("chain-%s", cfg.Name), func(t *testing.T) {
+			t.Parallel()
+			_, err := LoadOPStackGenesis(id)
+			if err != nil {
+				t.Error(err)
+			}
+		})
 	}
 }
 
 func TestRegistryChainConfigOverride(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		name                 string
 		overrides            *ChainOverrides
 		setDenominator       *uint64
@@ -58,7 +61,6 @@ func TestRegistryChainConfigOverride(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			db := rawdb.NewMemoryDatabase()
@@ -83,7 +85,7 @@ func TestRegistryChainConfigOverride(t *testing.T) {
 			}
 			genesis.Config.Optimism.EIP1559DenominatorCanyon = tt.setDenominator
 			// create chain config, even with incomplete genesis input: the chain config should be corrected
-			chainConfig, _, err := SetupGenesisBlockWithOverride(db, tdb, genesis, tt.overrides)
+			chainConfig, _, _, err := SetupGenesisBlockWithOverride(db, tdb, genesis, tt.overrides)
 			if err != nil {
 				t.Fatal(err)
 			}
