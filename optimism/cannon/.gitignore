@@ -1,0 +1,13 @@
+node_modules
+artifacts
+cache
+.*.swp
+venv
+.idea
+*.log
+testdata/example/bin
+contracts/out
+*.pprof
+*.out
+bin
+multicannon/embeds/cannon*
