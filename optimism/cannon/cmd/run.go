@@ -6,10 +6,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/pkg/profile"
+	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
@@ -20,11 +27,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/ethereum-optimism/optimism/op-service/serialize"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/pkg/profile"
-	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -83,7 +85,7 @@ var (
 		Usage:    "stop at the first preimage request matching this type",
 		Required: false,
 	}
-	RunStopAtPreimageLargerThanFlag = &cli.StringFlag{
+	RunStopAtPreimageLargerThanFlag = &cli.IntFlag{
 		Name:     "stop-at-preimage-larger-than",
 		Usage:    "stop at the first step that requests a preimage larger than the specified size (in bytes)",
 		Required: false,
@@ -261,8 +263,20 @@ func (p *ProcessPreimageOracle) wait() {
 type StepFn func(proof bool) (*mipsevm.StepWitness, error)
 
 func Guard(proc *os.ProcessState, fn StepFn) StepFn {
-	return func(proof bool) (*mipsevm.StepWitness, error) {
-		wit, err := fn(proof)
+	return func(proof bool) (wit *mipsevm.StepWitness, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				if proc.Exited() {
+					err = fmt.Errorf("pre-image server exited with code %d, resulting in panic %s", proc.ExitCode(), string(buf))
+				} else {
+					err = fmt.Errorf("pre-image server resulted in panic %s", string(buf))
+				}
+			}
+		}()
+		wit, err = fn(proof)
 		if err != nil {
 			if proc.Exited() {
 				return nil, fmt.Errorf("pre-image server exited with code %d, resulting in err %w", proc.ExitCode(), err)
@@ -379,6 +393,8 @@ func Run(ctx *cli.Context) error {
 	}
 	l.Info("Loaded input state", "version", state.Version)
 	vm := state.CreateVM(l, po, outLog, errLog, meta)
+
+	// Enable debug/stats tracking as requested
 	debugProgram := ctx.Bool(RunDebugFlag.Name)
 	if debugProgram {
 		if metaPath := ctx.Path(RunMetaFlag.Name); metaPath == "" {
@@ -387,6 +403,9 @@ func Run(ctx *cli.Context) error {
 		if err := vm.InitDebug(); err != nil {
 			return fmt.Errorf("failed to initialize debug mode: %w", err)
 		}
+	}
+	if debugInfoFile := ctx.Path(RunDebugInfoFlag.Name); debugInfoFile != "" {
+		vm.EnableStats()
 	}
 
 	proofFmt := ctx.String(RunProofFmtFlag.Name)

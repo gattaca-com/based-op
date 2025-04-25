@@ -9,10 +9,10 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 
 // Interfaces
 import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import { ISemver } from "src/universal/interfaces/ISemver.sol";
-import { ICrossDomainMessenger } from "src/universal/interfaces/ICrossDomainMessenger.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
-import { IL2ERC721Bridge } from "src/L2/interfaces/IL2ERC721Bridge.sol";
+import { ISemver } from "interfaces/universal/ISemver.sol";
+import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
+import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { IL2ERC721Bridge } from "interfaces/L2/IL2ERC721Bridge.sol";
 
 /// @custom:proxied true
 /// @title L1ERC721Bridge
@@ -28,18 +28,18 @@ contract L1ERC721Bridge is ERC721Bridge, ISemver {
     ISuperchainConfig public superchainConfig;
 
     /// @notice Semantic version.
-    /// @custom:semver 2.2.0-beta.1
-    string public constant version = "2.2.0-beta.1";
+    /// @custom:semver 2.3.0
+    string public constant version = "2.3.0";
 
     /// @notice Constructs the L1ERC721Bridge contract.
     constructor() ERC721Bridge() {
-        initialize({ _messenger: ICrossDomainMessenger(address(0)), _superchainConfig: ISuperchainConfig(address(0)) });
+        _disableInitializers();
     }
 
     /// @notice Initializes the contract.
     /// @param _messenger   Contract of the CrossDomainMessenger on this network.
     /// @param _superchainConfig Contract of the SuperchainConfig contract on this network.
-    function initialize(ICrossDomainMessenger _messenger, ISuperchainConfig _superchainConfig) public initializer {
+    function initialize(ICrossDomainMessenger _messenger, ISuperchainConfig _superchainConfig) external initializer {
         superchainConfig = _superchainConfig;
         __ERC721Bridge_init({ _messenger: _messenger, _otherBridge: ERC721Bridge(payable(Predeploys.L2_ERC721_BRIDGE)) });
     }

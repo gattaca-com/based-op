@@ -11,8 +11,8 @@ import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
 import { OptimismMintableERC20Factory } from "src/universal/OptimismMintableERC20Factory.sol";
 
 // Interfaces
-import { IProxy } from "src/universal/interfaces/IProxy.sol";
-import { IOptimismMintableERC20Factory } from "src/universal/interfaces/IOptimismMintableERC20Factory.sol";
+import { IProxy } from "interfaces/universal/IProxy.sol";
+import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 
 contract OptimismMintableTokenFactory_Test is CommonTest {
     event StandardL2TokenCreated(address indexed remoteToken, address indexed localToken);
@@ -33,7 +33,7 @@ contract OptimismMintableTokenFactory_Test is CommonTest {
 
     /// @notice Tests that the upgrade is successful.
     function test_upgrading_succeeds() external {
-        IProxy proxy = IProxy(deploy.mustGetAddress("OptimismMintableERC20FactoryProxy"));
+        IProxy proxy = IProxy(artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy"));
         // Check an unused slot before upgrading.
         bytes32 slot21Before = vm.load(address(l1OptimismMintableERC20Factory), bytes32(uint256(21)));
         assertEq(bytes32(0), slot21Before);

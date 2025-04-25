@@ -43,7 +43,7 @@ func setupAliceAccount(t *testing.T, cfg e2esys.SystemConfig, sys *e2esys.System
 	require.NoError(t, err)
 	mintAmount := big.NewInt(1_000_000_000_000)
 	opts.Value = mintAmount
-	helpers.SendDepositTx(t, cfg, l1Client, l2Verif, opts, func(l2Opts *helpers.DepositTxOpts) {})
+	helpers.SendDepositTx(t, cfg, l1Client, l2Verif, opts, nil)
 
 	// Confirm balance
 	ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
@@ -86,7 +86,7 @@ func TestBrotliBatcherFjord(t *testing.T) {
 		opts.Value = big.NewInt(1_000_000_000)
 		opts.Nonce = 1 // Already have deposit
 		opts.ToAddr = &common.Address{0xff, 0xff}
-		opts.Gas, err = core.IntrinsicGas(opts.Data, nil, false, true, true, false)
+		opts.Gas, err = core.IntrinsicGas(opts.Data, nil, nil, false, true, true, false)
 		require.NoError(t, err)
 		opts.VerifyOnClients(l2Verif)
 	})

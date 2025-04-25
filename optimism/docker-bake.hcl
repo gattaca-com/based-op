@@ -6,6 +6,10 @@ variable "REPOSITORY" {
   default = "oplabs-tools-artifacts/images"
 }
 
+variable "KONA_VERSION" {
+  default = "kona-client-v0.1.0-beta.8"
+}
+
 variable "GIT_COMMIT" {
   default = "dev"
 }
@@ -73,6 +77,11 @@ variable "OP_DEPLOYER_VERSION" {
   default = "${GIT_VERSION}"
 }
 
+variable "OP_DRIPPER_VERSION" {
+  default = "${GIT_VERSION}"
+}
+
+
 target "op-node" {
   dockerfile = "ops/docker/op-stack-go/Dockerfile"
   context = "."
@@ -119,6 +128,7 @@ target "op-challenger" {
     GIT_COMMIT = "${GIT_COMMIT}"
     GIT_DATE = "${GIT_DATE}"
     OP_CHALLENGER_VERSION = "${OP_CHALLENGER_VERSION}"
+    KONA_VERSION="${KONA_VERSION}"
   }
   target = "op-challenger-target"
   platforms = split(",", PLATFORMS)
@@ -207,7 +217,7 @@ target "proofs-tools" {
   context = "."
   args = {
     CHALLENGER_VERSION="b46bffed42db3442d7484f089278d59f51503049"
-    KONA_VERSION="kona-client-v0.1.0-alpha.7"
+    KONA_VERSION="${KONA_VERSION}"
   }
   target="proofs-tools"
   platforms = split(",", PLATFORMS)
@@ -225,31 +235,6 @@ target "holocene-deployer" {
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/holocene-deployer:${tag}"]
 }
 
-target "ci-builder" {
-  dockerfile = "./ops/docker/ci-builder/Dockerfile"
-  context = "."
-  platforms = split(",", PLATFORMS)
-  target="base-builder"
-  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/ci-builder:${tag}"]
-}
-
-target "ci-builder-rust" {
-  dockerfile = "./ops/docker/ci-builder/Dockerfile"
-  context = "."
-  platforms = split(",", PLATFORMS)
-  target="rust-builder"
-  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/ci-builder-rust:${tag}"]
-}
-
-target "contracts-bedrock" {
-  dockerfile = "./ops/docker/Dockerfile.packages"
-  context = "."
-  target = "contracts-bedrock"
-  # See comment in Dockerfile.packages for why we only build for linux/amd64.
-  platforms = ["linux/amd64"]
-  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/contracts-bedrock:${tag}"]
-}
-
 target "op-deployer" {
   dockerfile = "ops/docker/op-stack-go/Dockerfile"
   context = "."
@@ -261,4 +246,17 @@ target "op-deployer" {
   target = "op-deployer-target"
   platforms = split(",", PLATFORMS)
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-deployer:${tag}"]
+}
+
+target "op-dripper" {
+  dockerfile = "ops/docker/op-stack-go/Dockerfile"
+  context = "."
+  args = {
+    GIT_COMMIT = "${GIT_COMMIT}"
+    GIT_DATE = "${GIT_DATE}"
+    OP_DRIPPER_VERSION = "${OP_DRIPPER_VERSION}"
+  }
+  target = "op-dripper-target"
+  platforms = split(",", PLATFORMS)
+  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-dripper:${tag}"]
 }
