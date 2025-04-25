@@ -2,7 +2,7 @@
 pragma solidity 0.8.19;
 
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
-import { ISemver } from "src/universal/interfaces/ISemver.sol";
+import { ISemver } from "interfaces/universal/ISemver.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { EIP1271Verifier } from "src/vendor/eas/eip1271/EIP1271Verifier.sol";
 import { ISchemaResolver } from "src/vendor/eas/resolver/ISchemaResolver.sol";
@@ -10,7 +10,6 @@ import { ISchemaResolver } from "src/vendor/eas/resolver/ISchemaResolver.sol";
 import {
     AccessDenied,
     EMPTY_UID,
-    Signature,
     InvalidLength,
     MAX_GAP,
     NotFound,
@@ -80,8 +79,8 @@ contract EAS is IEAS, ISemver, EIP1271Verifier {
     uint256[MAX_GAP - 3] private __gap;
 
     /// @notice Semantic version.
-    /// @custom:semver 1.4.1-beta.1
-    string public constant version = "1.4.1-beta.1";
+    /// @custom:semver 1.4.1-beta.3
+    string public constant version = "1.4.1-beta.3";
 
     /// @dev Creates a new EAS instance.
     constructor() EIP1271Verifier("EAS", "1.3.0") { }

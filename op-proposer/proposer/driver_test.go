@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-proposer/bindings"
 	"github.com/ethereum-optimism/optimism/op-proposer/metrics"
+	"github.com/ethereum-optimism/optimism/op-proposer/proposer/source"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -42,9 +43,9 @@ type StubDGFContract struct {
 	hasProposedCount int
 }
 
-func (m *StubDGFContract) HasProposedSince(_ context.Context, _ common.Address, _ time.Time, _ uint32) (bool, time.Time, error) {
+func (m *StubDGFContract) HasProposedSince(_ context.Context, _ common.Address, _ time.Time, _ uint32) (bool, time.Time, common.Hash, error) {
 	m.hasProposedCount++
-	return false, time.Unix(1000, 0), nil
+	return false, time.Unix(1000, 0), common.Hash{0xdd}, nil
 }
 
 func (m *StubDGFContract) ProposalTx(_ context.Context, _ uint32, _ common.Hash, _ uint64) (txmgr.TxCandidate, error) {
@@ -91,7 +92,7 @@ func setup(t *testing.T, testName string) (*L2OutputSubmitter, *mockRollupEndpoi
 		Metr:           metrics.NoopMetrics,
 		Cfg:            proposerConfig,
 		Txmgr:          txmgr,
-		RollupProvider: ep,
+		ProposalSource: source.NewRollupProposalSource(ep),
 	}
 
 	parsed, err := bindings.L2OutputOracleMetaData.GetAbi()
@@ -173,7 +174,7 @@ func TestL2OutputSubmitter_OutputRetry(t *testing.T) {
 				require.Equal(t, numFails+1, dgfContract.hasProposedCount)
 			}
 
-			require.Len(t, logs.FindLogs(testlog.NewMessageContainsFilter("Error getting output")), numFails)
+			require.Len(t, logs.FindLogs(testlog.NewMessageContainsFilter("Error getting proposal")), numFails)
 			require.NotNil(t, logs.FindLog(testlog.NewMessageFilter("Proposer tx successfully published")))
 			require.NotNil(t, logs.FindLog(testlog.NewMessageFilter("loop returning")))
 		})

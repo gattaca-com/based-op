@@ -110,7 +110,13 @@
       }
     ],
     "name": "relayMessage",
-    "outputs": [],
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "returnData_",
+        "type": "bytes"
+      }
+    ],
     "stateMutability": "payable",
     "type": "function"
   },
@@ -245,6 +251,11 @@
   {
     "inputs": [],
     "name": "IdOriginNotL2ToL2CrossDomainMessenger",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidChainId",
     "type": "error"
   },
   {

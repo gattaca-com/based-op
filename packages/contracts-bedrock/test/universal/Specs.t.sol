@@ -8,23 +8,21 @@ import { console2 as console } from "forge-std/console2.sol";
 // Scripts
 import { ForgeArtifacts, Abi, AbiEntry } from "scripts/libraries/ForgeArtifacts.sol";
 
-// Contracts
-import { OPContractsManager } from "src/L1/OPContractsManager.sol";
-
 // Interfaces
-import { IOptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
-import { IOptimismPortal2 } from "src/L1/interfaces/IOptimismPortal2.sol";
-import { IOptimismPortalInterop } from "src/L1/interfaces/IOptimismPortalInterop.sol";
-import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
-import { ISystemConfigInterop } from "src/L1/interfaces/ISystemConfigInterop.sol";
-import { IDataAvailabilityChallenge } from "src/L1/interfaces/IDataAvailabilityChallenge.sol";
-import { IProtocolVersions } from "src/L1/interfaces/IProtocolVersions.sol";
+import { IOPContractsManager } from "interfaces/L1/IOPContractsManager.sol";
+import { IOPPrestateUpdater } from "interfaces/L1/IOPPrestateUpdater.sol";
+import { IOptimismPortal2 } from "interfaces/L1/IOptimismPortal2.sol";
+import { IOptimismPortalInterop } from "interfaces/L1/IOptimismPortalInterop.sol";
+import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
+import { ISystemConfigInterop } from "interfaces/L1/ISystemConfigInterop.sol";
+import { IDataAvailabilityChallenge } from "interfaces/L1/IDataAvailabilityChallenge.sol";
+import { IProtocolVersions } from "interfaces/L1/IProtocolVersions.sol";
 
 /// @title Specification_Test
 /// @dev Specifies common security properties of entrypoints to L1 contracts, including authorization and
 ///      pausability.
 ///      When adding new functions to the L1 system, the `setUp` function must be updated to document the security
-///      properties of the new function. The `Spec` struct reppresents this documentation. However, this contract does
+///      properties of the new function. The `Spec` struct represents this documentation. However, this contract does
 ///      not actually test to verify these properties, only that a spec is defined.
 contract Specification_Test is CommonTest {
     enum Role {
@@ -34,6 +32,7 @@ contract Specification_Test is CommonTest {
         SYSTEMCONFIGOWNER,
         GUARDIAN,
         DEPUTYGUARDIAN,
+        PAUSEDEPUTY,
         MESSENGER,
         L1PROXYADMINOWNER,
         GOVERNANCETOKENOWNER,
@@ -120,12 +119,11 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("RELAY_RESERVED_GAS()") });
         _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("baseGas(bytes,uint32)") });
         _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("failedMessages(bytes32)") });
-        _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("initialize(address,address,address)") });
+        _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("initialize(address,address)") });
         _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("messageNonce()") });
         _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("paused()") });
         _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("otherMessenger()") });
         _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("portal()") });
-        _addSpec({ _name: "L1CrossDomainMessenger", _sel: _getSel("systemConfig()") });
         _addSpec({
             _name: "L1CrossDomainMessenger",
             _sel: _getSel("relayMessage(uint256,address,address,uint256,uint256,bytes)"),
@@ -200,76 +198,13 @@ contract Specification_Test is CommonTest {
             _auth: Role.MESSENGER,
             _pausable: true
         });
-        _addSpec({ _name: "L1StandardBridge", _sel: _getSel("initialize(address,address,address)") });
+        _addSpec({ _name: "L1StandardBridge", _sel: _getSel("initialize(address,address)") });
         _addSpec({ _name: "L1StandardBridge", _sel: _getSel("l2TokenBridge()") });
         _addSpec({ _name: "L1StandardBridge", _sel: _getSel("messenger()") });
         _addSpec({ _name: "L1StandardBridge", _sel: _getSel("otherBridge()") });
         _addSpec({ _name: "L1StandardBridge", _sel: _getSel("paused()") });
         _addSpec({ _name: "L1StandardBridge", _sel: _getSel("superchainConfig()") });
         _addSpec({ _name: "L1StandardBridge", _sel: _getSel("version()") });
-        _addSpec({ _name: "L1StandardBridge", _sel: _getSel("systemConfig()") });
-
-        // L2OutputOracle
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("CHALLENGER()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("FINALIZATION_PERIOD_SECONDS()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("L2_BLOCK_TIME()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("PROPOSER()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("SUBMISSION_INTERVAL()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("challenger()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("computeL2Timestamp(uint256)") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("deleteL2Outputs(uint256)"), _auth: Role.CHALLENGER });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("finalizationPeriodSeconds()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("getL2Output(uint256)") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("getL2OutputAfter(uint256)") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("getL2OutputIndexAfter(uint256)") });
-        _addSpec({
-            _name: "L2OutputOracle",
-            _sel: _getSel("initialize(uint256,uint256,uint256,uint256,address,address,uint256)")
-        });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("l2BlockTime()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("latestBlockNumber()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("latestOutputIndex()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("nextBlockNumber()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("nextOutputIndex()") });
-        _addSpec({
-            _name: "L2OutputOracle",
-            _sel: _getSel("proposeL2Output(bytes32,uint256,bytes32,uint256)"),
-            _auth: Role.PROPOSER
-        });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("proposer()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("startingBlockNumber()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("startingTimestamp()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("submissionInterval()") });
-        _addSpec({ _name: "L2OutputOracle", _sel: _getSel("version()") });
-
-        // OptimismPortal
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("depositTransaction(address,uint256,uint64,bool,bytes)") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("donateETH()") });
-        _addSpec({
-            _name: "OptimismPortal",
-            _sel: IOptimismPortal.finalizeWithdrawalTransaction.selector,
-            _pausable: true
-        });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("finalizedWithdrawals(bytes32)") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("guardian()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("initialize(address,address,address)") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("isOutputFinalized(uint256)") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("l2Oracle()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("l2Sender()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("minimumGasLimit(uint64)") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("params()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("paused()") });
-        _addSpec({ _name: "OptimismPortal", _sel: IOptimismPortal.proveWithdrawalTransaction.selector, _pausable: true });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("provenWithdrawals(bytes32)") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("superchainConfig()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("systemConfig()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("version()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("balance()") });
-        _addSpec({
-            _name: "OptimismPortal",
-            _sel: _getSel("depositERC20Transaction(address,uint256,uint256,uint64,bool,bytes)")
-        });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("setGasPayingToken(address,uint8,bytes32,bytes32)") });
 
         // OptimismPortalInterop
         _addSpec({
@@ -323,12 +258,6 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "OptimismPortalInterop", _sel: _getSel("respectedGameTypeUpdatedAt()") });
         _addSpec({ _name: "OptimismPortalInterop", _sel: _getSel("proofSubmitters(bytes32,uint256)") });
         _addSpec({ _name: "OptimismPortalInterop", _sel: _getSel("numProofSubmitters(bytes32)") });
-        _addSpec({ _name: "OptimismPortalInterop", _sel: _getSel("balance()") });
-        _addSpec({
-            _name: "OptimismPortalInterop",
-            _sel: _getSel("depositERC20Transaction(address,uint256,uint256,uint64,bool,bytes)")
-        });
-        _addSpec({ _name: "OptimismPortalInterop", _sel: _getSel("setGasPayingToken(address,uint8,bytes32,bytes32)") });
         _addSpec({
             _name: "OptimismPortalInterop",
             _sel: IOptimismPortalInterop.setConfig.selector,
@@ -375,12 +304,6 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("respectedGameTypeUpdatedAt()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("proofSubmitters(bytes32,uint256)") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("numProofSubmitters(bytes32)") });
-        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("balance()") });
-        _addSpec({
-            _name: "OptimismPortal2",
-            _sel: _getSel("depositERC20Transaction(address,uint256,uint256,uint64,bool,bytes)")
-        });
-        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("setGasPayingToken(address,uint8,bytes32,bytes32)") });
 
         // ProtocolVersions
         _addSpec({ _name: "ProtocolVersions", _sel: _getSel("RECOMMENDED_SLOT()") });
@@ -457,10 +380,6 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "SystemConfig", _sel: _getSel("OPTIMISM_PORTAL_SLOT()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("OPTIMISM_MINTABLE_ERC20_FACTORY_SLOT()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("BATCH_INBOX_SLOT()") });
-        _addSpec({ _name: "SystemConfig", _sel: _getSel("gasPayingToken()") });
-        _addSpec({ _name: "SystemConfig", _sel: _getSel("gasPayingTokenName()") });
-        _addSpec({ _name: "SystemConfig", _sel: _getSel("gasPayingTokenSymbol()") });
-        _addSpec({ _name: "SystemConfig", _sel: _getSel("isCustomGasToken()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("DISPUTE_GAME_FACTORY_SLOT()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("disputeGameFactory()") });
         _addSpec({
@@ -471,6 +390,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "SystemConfig", _sel: _getSel("basefeeScalar()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("blobbasefeeScalar()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("maximumGasLimit()") });
+        _addSpec({ _name: "SystemConfig", _sel: _getSel("getAddresses()") });
 
         // SystemConfigInterop
         _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("UNSAFE_BLOCK_SIGNER_SLOT()") });
@@ -533,10 +453,6 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("OPTIMISM_PORTAL_SLOT()") });
         _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("OPTIMISM_MINTABLE_ERC20_FACTORY_SLOT()") });
         _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("BATCH_INBOX_SLOT()") });
-        _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("gasPayingToken()") });
-        _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("gasPayingTokenName()") });
-        _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("gasPayingTokenSymbol()") });
-        _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("isCustomGasToken()") });
         _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("DISPUTE_GAME_FACTORY_SLOT()") });
         _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("disputeGameFactory()") });
         _addSpec({
@@ -554,6 +470,7 @@ contract Specification_Test is CommonTest {
             _auth: Role.DEPENDENCYMANAGER
         });
         _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("dependencyManager()") });
+        _addSpec({ _name: "SystemConfigInterop", _sel: _getSel("getAddresses()") });
 
         // ProxyAdmin
         _addSpec({ _name: "ProxyAdmin", _sel: _getSel("addressManager()") });
@@ -635,13 +552,24 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "MintManager", _sel: _getSel("upgrade(address)"), _auth: Role.MINTMANAGEROWNER });
 
         // AnchorStateRegistry
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("anchorGame()") });
         _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("anchors(uint32)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("getAnchorRoot()") });
         _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("disputeGameFactory()") });
-        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("initialize((uint32,(bytes32,uint256))[],address)") });
-        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("tryUpdateAnchorState()") });
-        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("setAnchorState(address)"), _auth: Role.GUARDIAN });
-        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("version()") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("initialize(address,address,address,(bytes32,uint256))") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("isGameBlacklisted(address)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("isGameClaimValid(address)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("isGameFinalized(address)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("isGameProper(address)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("isGameRegistered(address)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("isGameResolved(address)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("isGameRespected(address)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("isGameRetired(address)") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("portal()") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("respectedGameType()") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("setAnchorState(address)") });
         _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("superchainConfig()") });
+        _addSpec({ _name: "AnchorStateRegistry", _sel: _getSel("version()") });
 
         // PermissionedDisputeGame
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("absolutePrestate()") });
@@ -652,6 +580,7 @@ contract Specification_Test is CommonTest {
             _sel: _getSel("attack(bytes32,uint256,bytes32)"),
             _auth: Role.CHALLENGER
         });
+        _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("bondDistributionMode()") });
         _addSpec({
             _name: "PermissionedDisputeGame",
             _sel: _getSel("challengeRootL2Block((bytes32,bytes32,bytes32,bytes32),bytes)"),
@@ -663,6 +592,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("claimDataLen()") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("claims(bytes32)") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("clockExtension()") });
+        _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("closeGame()") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("createdAt()") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("credit(address)") });
         _addSpec({
@@ -677,6 +607,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("getChallengerDuration(uint256)") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("getNumToResolve(uint256)") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("getRequiredBond(uint128)") });
+        _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("hasUnlockedCredit(address)") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("initialize()") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("l1Head()") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("l2BlockNumber()") });
@@ -691,6 +622,8 @@ contract Specification_Test is CommonTest {
             _auth: Role.CHALLENGER
         });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("proposer()") });
+        _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("normalModeCredit(address)") });
+        _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("refundModeCredit(address)") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("resolutionCheckpoints(uint256)") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("resolve()") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("resolveClaim(uint256,uint256)") });
@@ -710,6 +643,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("subgames(uint256,uint256)") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("version()") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("vm()") });
+        _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("wasRespectedGameTypeWhenCreated()") });
         _addSpec({ _name: "PermissionedDisputeGame", _sel: _getSel("weth()") });
 
         // FaultDisputeGame
@@ -717,6 +651,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("addLocalData(uint256,uint256,uint256)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("anchorStateRegistry()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("attack(bytes32,uint256,bytes32)") });
+        _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("bondDistributionMode()") });
         _addSpec({
             _name: "FaultDisputeGame",
             _sel: _getSel("challengeRootL2Block((bytes32,bytes32,bytes32,bytes32),bytes)")
@@ -726,6 +661,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("claimDataLen()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("claims(bytes32)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("clockExtension()") });
+        _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("closeGame()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("createdAt()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("credit(address)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("defend(bytes32,uint256,bytes32)") });
@@ -735,6 +671,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("gameType()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("getChallengerDuration(uint256)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("getRequiredBond(uint128)") });
+        _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("hasUnlockedCredit(address)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("initialize()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("l1Head()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("l2BlockNumber()") });
@@ -747,6 +684,8 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("resolutionCheckpoints(uint256)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("resolve()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("getNumToResolve(uint256)") });
+        _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("normalModeCredit(address)") });
+        _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("refundModeCredit(address)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("resolveClaim(uint256,uint256)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("resolvedAt()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("resolvedSubgames(uint256)") });
@@ -760,7 +699,139 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("subgames(uint256,uint256)") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("version()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("vm()") });
+        _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("wasRespectedGameTypeWhenCreated()") });
         _addSpec({ _name: "FaultDisputeGame", _sel: _getSel("weth()") });
+
+        // SuperFaultDisputeGame
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("absolutePrestate()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("addLocalData(uint256,uint256,uint256)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("anchorStateRegistry()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("attack(bytes32,uint256,bytes32)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("bondDistributionMode()") });
+        _addSpec({
+            _name: "SuperFaultDisputeGame",
+            _sel: _getSel("challengeRootL2Block((bytes32,bytes32,bytes32,bytes32),bytes)")
+        });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("claimCredit(address)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("claimData(uint256)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("claimDataLen()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("claims(bytes32)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("clockExtension()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("closeGame()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("createdAt()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("credit(address)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("defend(bytes32,uint256,bytes32)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("extraData()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("gameCreator()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("gameData()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("gameType()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("getChallengerDuration(uint256)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("getRequiredBond(uint128)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("hasUnlockedCredit(address)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("initialize()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("l1Head()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("l2BlockNumber()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("l2BlockNumberChallenged()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("l2BlockNumberChallenger()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("l2ChainId()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("maxClockDuration()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("maxGameDepth()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("move(bytes32,uint256,bytes32,bool)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("resolutionCheckpoints(uint256)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("resolve()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("getNumToResolve(uint256)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("normalModeCredit(address)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("refundModeCredit(address)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("resolveClaim(uint256,uint256)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("resolvedAt()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("resolvedSubgames(uint256)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("rootClaim()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("splitDepth()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("startingBlockNumber()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("startingOutputRoot()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("startingRootHash()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("status()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("step(uint256,bool,bytes,bytes)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("subgames(uint256,uint256)") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("version()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("vm()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("wasRespectedGameTypeWhenCreated()") });
+        _addSpec({ _name: "SuperFaultDisputeGame", _sel: _getSel("weth()") });
+
+        // SuperPermissionedDisputeGame
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("absolutePrestate()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("addLocalData(uint256,uint256,uint256)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("anchorStateRegistry()") });
+        _addSpec({
+            _name: "SuperPermissionedDisputeGame",
+            _sel: _getSel("attack(bytes32,uint256,bytes32)"),
+            _auth: Role.CHALLENGER
+        });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("bondDistributionMode()") });
+        _addSpec({
+            _name: "SuperPermissionedDisputeGame",
+            _sel: _getSel("challengeRootL2Block((bytes32,bytes32,bytes32,bytes32),bytes)"),
+            _auth: Role.CHALLENGER
+        });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("challenger()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("claimCredit(address)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("claimData(uint256)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("claimDataLen()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("claims(bytes32)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("clockExtension()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("closeGame()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("createdAt()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("credit(address)") });
+        _addSpec({
+            _name: "SuperPermissionedDisputeGame",
+            _sel: _getSel("defend(bytes32,uint256,bytes32)"),
+            _auth: Role.CHALLENGER
+        });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("extraData()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("gameCreator()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("gameData()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("gameType()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("getChallengerDuration(uint256)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("getNumToResolve(uint256)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("getRequiredBond(uint128)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("hasUnlockedCredit(address)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("initialize()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("l1Head()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("l2BlockNumber()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("l2BlockNumberChallenged()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("l2BlockNumberChallenger()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("l2ChainId()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("maxClockDuration()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("maxGameDepth()") });
+        _addSpec({
+            _name: "SuperPermissionedDisputeGame",
+            _sel: _getSel("move(bytes32,uint256,bytes32,bool)"),
+            _auth: Role.CHALLENGER
+        });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("proposer()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("normalModeCredit(address)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("refundModeCredit(address)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("resolutionCheckpoints(uint256)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("resolve()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("resolveClaim(uint256,uint256)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("resolvedAt()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("resolvedSubgames(uint256)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("rootClaim()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("splitDepth()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("startingBlockNumber()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("startingOutputRoot()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("startingRootHash()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("status()") });
+        _addSpec({
+            _name: "SuperPermissionedDisputeGame",
+            _sel: _getSel("step(uint256,bool,bytes,bytes)"),
+            _auth: Role.CHALLENGER
+        });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("subgames(uint256,uint256)") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("version()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("vm()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("wasRespectedGameTypeWhenCreated()") });
+        _addSpec({ _name: "SuperPermissionedDisputeGame", _sel: _getSel("weth()") });
 
         // DisputeGameFactory
         _addSpec({ _name: "DisputeGameFactory", _sel: _getSel("create(uint32,bytes32,bytes)") });
@@ -804,6 +875,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "DelayedWETH", _sel: _getSel("delay()") });
         _addSpec({ _name: "DelayedWETH", _sel: _getSel("deposit()") });
         _addSpec({ _name: "DelayedWETH", _sel: _getSel("hold(address,uint256)"), _auth: Role.DELAYEDWETHOWNER });
+        _addSpec({ _name: "DelayedWETH", _sel: _getSel("hold(address)"), _auth: Role.DELAYEDWETHOWNER });
         _addSpec({ _name: "DelayedWETH", _sel: _getSel("initialize(address,address)") });
         _addSpec({ _name: "DelayedWETH", _sel: _getSel("name()") });
         _addSpec({ _name: "DelayedWETH", _sel: _getSel("owner()") });
@@ -837,25 +909,50 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "OPContractsManager", _sel: _getSel("version()") });
         _addSpec({ _name: "OPContractsManager", _sel: _getSel("superchainConfig()") });
         _addSpec({ _name: "OPContractsManager", _sel: _getSel("protocolVersions()") });
+        _addSpec({ _name: "OPContractsManager", _sel: _getSel("superchainProxyAdmin()") });
         _addSpec({ _name: "OPContractsManager", _sel: _getSel("l1ContractsRelease()") });
-        _addSpec({ _name: "OPContractsManager", _sel: _getSel("systemConfigs(uint256)") });
-        _addSpec({ _name: "OPContractsManager", _sel: _getSel("OUTPUT_VERSION()") });
-        _addSpec({ _name: "OPContractsManager", _sel: OPContractsManager.deploy.selector });
-        _addSpec({ _name: "OPContractsManager", _sel: OPContractsManager.blueprints.selector });
-        _addSpec({ _name: "OPContractsManager", _sel: OPContractsManager.chainIdToBatchInboxAddress.selector });
-        _addSpec({ _name: "OPContractsManager", _sel: OPContractsManager.implementations.selector });
+        _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.deploy.selector });
+        _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.blueprints.selector });
+        _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.chainIdToBatchInboxAddress.selector });
+        _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.implementations.selector });
+        _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.upgrade.selector });
+        _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.addGameType.selector });
+        _addSpec({ _name: "OPContractsManager", _sel: _getSel("isRC()") });
+        _addSpec({ _name: "OPContractsManager", _sel: _getSel("setRC(bool)") });
+        _addSpec({ _name: "OPContractsManager", _sel: _getSel("upgradeController()") });
+
+        // OPPrestateUpdate
+        _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("version()") });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("superchainConfig()") });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("protocolVersions()") });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("superchainProxyAdmin()") });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("l1ContractsRelease()") });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.deploy.selector });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.blueprints.selector });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.chainIdToBatchInboxAddress.selector });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.implementations.selector });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.upgrade.selector });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.addGameType.selector });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: IOPPrestateUpdater.updatePrestate.selector });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("isRC()") });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("setRC(bool)") });
+        _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("upgradeController()") });
 
         // OPContractsManagerInterop
         _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("version()") });
         _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("superchainConfig()") });
         _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("protocolVersions()") });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("superchainProxyAdmin()") });
         _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("l1ContractsRelease()") });
-        _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("systemConfigs(uint256)") });
-        _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("OUTPUT_VERSION()") });
-        _addSpec({ _name: "OPContractsManagerInterop", _sel: OPContractsManager.deploy.selector });
-        _addSpec({ _name: "OPContractsManagerInterop", _sel: OPContractsManager.blueprints.selector });
-        _addSpec({ _name: "OPContractsManagerInterop", _sel: OPContractsManager.chainIdToBatchInboxAddress.selector });
-        _addSpec({ _name: "OPContractsManagerInterop", _sel: OPContractsManager.implementations.selector });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.deploy.selector });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.blueprints.selector });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.chainIdToBatchInboxAddress.selector });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.implementations.selector });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.upgrade.selector });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.addGameType.selector });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("isRC()") });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("setRC(bool)") });
+        _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("upgradeController()") });
 
         // DeputyGuardianModule
         _addSpec({
@@ -879,6 +976,24 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "DeputyGuardianModule", _sel: _getSel("safe()") });
         _addSpec({ _name: "DeputyGuardianModule", _sel: _getSel("superchainConfig()") });
         _addSpec({ _name: "DeputyGuardianModule", _sel: _getSel("version()") });
+
+        // DeputyPauseModule
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("version()") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("foundationSafe()") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("deputyGuardianModule()") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("superchainConfig()") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("deputy()") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("usedNonces(bytes32)") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("pauseMessageTypehash()") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("deputyAuthMessageTypehash()") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("setDeputy(address,bytes)"), _auth: Role.DEPUTYGUARDIAN });
+        _addSpec({
+            _name: "DeputyPauseModule",
+            _sel: _getSel("setDeputyGuardianModule(address)"),
+            _auth: Role.DEPUTYGUARDIAN
+        });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("eip712Domain()") });
+        _addSpec({ _name: "DeputyPauseModule", _sel: _getSel("pause(bytes32,bytes)"), _auth: Role.PAUSEDEPUTY });
 
         // LivenessGuard
         _addSpec({ _name: "LivenessGuard", _sel: _getSel("checkAfterExecution(bytes32,bool)"), _auth: Role.COUNCILSAFE });
@@ -906,6 +1021,38 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "LivenessModule", _sel: _getSel("safe()") });
         _addSpec({ _name: "LivenessModule", _sel: _getSel("thresholdPercentage()") });
         _addSpec({ _name: "LivenessModule", _sel: _getSel("version()") });
+
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("superchainConfig()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("protocolVersions()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("l1PAOMultisig()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("mips()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("challenger()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("superchainConfigImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("protocolVersionsImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("l1ERC721BridgeImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("optimismPortalImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("systemConfigImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("optimismMintableERC20FactoryImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("l1CrossDomainMessengerImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("l1StandardBridgeImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("disputeGameFactoryImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("anchorStateRegistryImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("delayedWETHImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("mipsImpl()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("superchainConfigVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("protocolVersionsVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("systemConfigVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("permissionedDisputeGameVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("mipsVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("optimismPortalVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("anchorStateRegistryVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("delayedWETHVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("disputeGameFactoryVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("l1CrossDomainMessengerVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("l1ERC721BridgeVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("l1StandardBridgeVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("optimismMintableERC20FactoryVersion()") });
+        _addSpec({ _name: "StandardValidator", _sel: _getSel("preimageOracleVersion()") });
     }
 
     /// @dev Computes the selector from a function signature.
@@ -940,12 +1087,12 @@ contract Specification_Test is CommonTest {
     /// @notice Ensures that there's an auth spec for every L1 contract function.
     function test_contractAuth_works() public {
         string[] memory pathExcludes = new string[](6);
-        pathExcludes[0] = "src/dispute/interfaces/*";
+        pathExcludes[0] = "interfaces/dispute/*";
         pathExcludes[1] = "src/dispute/lib/*";
         pathExcludes[2] = "src/safe/SafeSigners.sol";
-        pathExcludes[3] = "src/L1/interfaces/*";
-        pathExcludes[4] = "src/governance/interfaces/*";
-        pathExcludes[5] = "src/safe/interfaces/*";
+        pathExcludes[3] = "interfaces/L1/*";
+        pathExcludes[4] = "interfaces/governance/*";
+        pathExcludes[5] = "interfaces/safe/*";
         Abi[] memory abis = ForgeArtifacts.getContractFunctionAbis(
             "src/{L1,dispute,governance,safe,universal/ProxyAdmin.sol,universal/WETH98.sol}", pathExcludes
         );
@@ -989,13 +1136,14 @@ contract Specification_Test is CommonTest {
 
     /// @notice Ensures that the DeputyGuardian is authorized to take all Guardian actions.
     function test_deputyGuardianAuth_works() public view {
-        assertEq(specsByRole[Role.DEPUTYGUARDIAN].length, specsByRole[Role.GUARDIAN].length);
-        assertEq(specsByRole[Role.DEPUTYGUARDIAN].length, 5);
+        // Additional 2 roles for the DeputyPauseModule
+        // Additional role for `setAnchorState` which is in DGM but no longer role-restricted.
+        assertEq(specsByRole[Role.GUARDIAN].length, 4);
+        assertEq(specsByRole[Role.DEPUTYGUARDIAN].length, specsByRole[Role.GUARDIAN].length + 3);
 
         mapping(bytes4 => Spec) storage dgmFuncSpecs = specs["DeputyGuardianModule"];
         mapping(bytes4 => Spec) storage superchainConfigFuncSpecs = specs["SuperchainConfig"];
         mapping(bytes4 => Spec) storage portal2FuncSpecs = specs["OptimismPortal2"];
-        mapping(bytes4 => Spec) storage anchorRegFuncSpecs = specs["AnchorStateRegistry"];
 
         // Ensure that for each of the DeputyGuardianModule's methods there is a corresponding method on another
         // system contract authed to the Guardian role.
@@ -1012,6 +1160,5 @@ contract Specification_Test is CommonTest {
         _assertRolesEq(portal2FuncSpecs[_getSel("setRespectedGameType(uint32)")].auth, Role.GUARDIAN);
 
         _assertRolesEq(dgmFuncSpecs[_getSel("setAnchorState(address,address)")].auth, Role.DEPUTYGUARDIAN);
-        _assertRolesEq(anchorRegFuncSpecs[_getSel("setAnchorState(address)")].auth, Role.GUARDIAN);
     }
 }

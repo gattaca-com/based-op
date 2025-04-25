@@ -6,11 +6,11 @@ import (
 	"path"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 
 	"github.com/stretchr/testify/require"
 
@@ -27,7 +27,7 @@ var testingJWTSecret = [32]byte{123}
 func WriteDefaultJWT(t TestingBase) string {
 	// Sadly the geth node config cannot load JWT secret from memory, it has to be a file
 	jwtPath := path.Join(t.TempDir(), "jwt_secret")
-	if err := os.WriteFile(jwtPath, []byte(hexutil.Encode(testingJWTSecret[:])), 0600); err != nil {
+	if err := os.WriteFile(jwtPath, []byte(hexutil.Encode(testingJWTSecret[:])), 0o600); err != nil {
 		t.Fatalf("failed to prepare jwt file for geth: %v", err)
 	}
 	return jwtPath
@@ -107,6 +107,9 @@ func Ether(v uint64) *big.Int {
 }
 
 func GetL2AllocsMode(dc *genesis.DeployConfig, t uint64) genesis.L2AllocsMode {
+	if fork := dc.IsthmusTime(t); fork != nil && *fork <= 0 {
+		return genesis.L2AllocsIsthmus
+	}
 	if fork := dc.HoloceneTime(t); fork != nil && *fork <= 0 {
 		return genesis.L2AllocsHolocene
 	}
@@ -205,8 +208,14 @@ func Setup(t require.TestingT, deployParams *DeployParams, alloc *AllocParams) *
 		FjordTime:              deployConf.FjordTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		GraniteTime:            deployConf.GraniteTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		HoloceneTime:           deployConf.HoloceneTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		IsthmusTime:            deployConf.IsthmusTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		InteropTime:            deployConf.InteropTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		AltDAConfig:            pcfg,
+		ChainOpConfig: &params.OptimismConfig{
+			EIP1559Elasticity:        deployConf.EIP1559Elasticity,
+			EIP1559Denominator:       deployConf.EIP1559Denominator,
+			EIP1559DenominatorCanyon: &deployConf.EIP1559DenominatorCanyon,
+		},
 	}
 
 	require.NoError(t, rollupCfg.Check())
@@ -226,16 +235,12 @@ func Setup(t require.TestingT, deployParams *DeployParams, alloc *AllocParams) *
 }
 
 func SystemConfigFromDeployConfig(deployConfig *genesis.DeployConfig) eth.SystemConfig {
-	return eth.SystemConfig{
-		BatcherAddr: deployConfig.BatchSenderAddress,
-		Overhead:    eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(deployConfig.GasPriceOracleOverhead))),
-		Scalar:      eth.Bytes32(deployConfig.FeeScalar()),
-		GasLimit:    uint64(deployConfig.L2GenesisBlockGasLimit),
-	}
+	return deployConfig.GenesisSystemConfig()
 }
 
 func ApplyDeployConfigForks(deployConfig *genesis.DeployConfig) {
-	isHolocene := os.Getenv("OP_E2E_USE_HOLOCENE") == "true"
+	isIsthmus := os.Getenv("OP_E2E_USE_ISTHMUS") == "true"
+	isHolocene := isIsthmus || os.Getenv("OP_E2E_USE_HOLOCENE") == "true"
 	isGranite := isHolocene || os.Getenv("OP_E2E_USE_GRANITE") == "true"
 	isFjord := isGranite || os.Getenv("OP_E2E_USE_FJORD") == "true"
 	isEcotone := isFjord || os.Getenv("OP_E2E_USE_ECOTONE") == "true"
@@ -254,6 +259,9 @@ func ApplyDeployConfigForks(deployConfig *genesis.DeployConfig) {
 	}
 	if isHolocene {
 		deployConfig.L2GenesisHoloceneTimeOffset = new(hexutil.Uint64)
+	}
+	if isIsthmus {
+		deployConfig.L2GenesisIsthmusTimeOffset = new(hexutil.Uint64)
 	}
 	// Canyon and lower is activated by default
 	deployConfig.L2GenesisCanyonTimeOffset = new(hexutil.Uint64)

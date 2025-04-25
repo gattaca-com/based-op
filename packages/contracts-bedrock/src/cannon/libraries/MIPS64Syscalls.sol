@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.15;
+pragma solidity ^0.8.0;
 
+// Libraries
 import { MIPS64Memory } from "src/cannon/libraries/MIPS64Memory.sol";
 import { MIPS64State as st } from "src/cannon/libraries/MIPS64State.sol";
-import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
+import { IPreimageOracle } from "interfaces/cannon/IPreimageOracle.sol";
 import { PreimageKeyLib } from "src/cannon/PreimageKeyLib.sol";
 import { MIPS64Arch as arch } from "src/cannon/libraries/MIPS64Arch.sol";
 
@@ -27,6 +28,23 @@ library MIPS64Syscalls {
         uint256 proofOffset;
         /// @param _memRoot The current memory root.
         bytes32 memRoot;
+    }
+
+    /// @custom:field _a0 The file descriptor.
+    /// @custom:field _a1 The memory address to read from.
+    /// @custom:field _a2 The number of bytes to read.
+    /// @custom:field _preimageKey The current preimaageKey.
+    /// @custom:field _preimageOffset The current preimageOffset.
+    /// @custom:field _proofOffset The offset of the memory proof in calldata.
+    /// @custom:field _memRoot The current memory root.
+    struct SysWriteParams {
+        uint64 _a0;
+        uint64 _a1;
+        uint64 _a2;
+        bytes32 _preimageKey;
+        uint64 _preimageOffset;
+        uint256 _proofOffset;
+        bytes32 _memRoot;
     }
 
     uint64 internal constant U64_MASK = 0xFFffFFffFFffFFff;
@@ -101,9 +119,6 @@ library MIPS64Syscalls {
 
     uint64 internal constant FUTEX_WAIT_PRIVATE = 128;
     uint64 internal constant FUTEX_WAKE_PRIVATE = 129;
-    uint64 internal constant FUTEX_TIMEOUT_STEPS = 10000;
-    uint64 internal constant FUTEX_NO_TIMEOUT = type(uint64).max;
-    uint64 internal constant FUTEX_EMPTY_ADDR = U64_MASK;
 
     uint64 internal constant SCHED_QUANTUM = 100_000;
     uint64 internal constant HZ = 10_000_000;
@@ -150,7 +165,6 @@ library MIPS64Syscalls {
     uint32 internal constant REG_SYSCALL_PARAM1 = REG_A0;
     uint32 internal constant REG_SYSCALL_PARAM2 = REG_A1;
     uint32 internal constant REG_SYSCALL_PARAM3 = REG_A2;
-    uint32 internal constant REG_SYSCALL_PARAM4 = REG_A3;
 
     // Constants copied from MIPS64Arch for use in Yul
     uint64 internal constant WORD_SIZE_BYTES = 8;
@@ -162,11 +176,10 @@ library MIPS64Syscalls {
     /// @return a0_ The first argument available to the syscall operation.
     /// @return a1_ The second argument available to the syscall operation.
     /// @return a2_ The third argument available to the syscall operation.
-    /// @return a3_ The fourth argument available to the syscall operation.
     function getSyscallArgs(uint64[32] memory _registers)
         internal
         pure
-        returns (uint64 sysCallNum_, uint64 a0_, uint64 a1_, uint64 a2_, uint64 a3_)
+        returns (uint64 sysCallNum_, uint64 a0_, uint64 a1_, uint64 a2_)
     {
         unchecked {
             sysCallNum_ = _registers[REG_SYSCALL_NUM];
@@ -174,9 +187,8 @@ library MIPS64Syscalls {
             a0_ = _registers[REG_SYSCALL_PARAM1];
             a1_ = _registers[REG_SYSCALL_PARAM2];
             a2_ = _registers[REG_SYSCALL_PARAM3];
-            a3_ = _registers[REG_SYSCALL_PARAM4];
 
-            return (sysCallNum_, a0_, a1_, a2_, a3_);
+            return (sysCallNum_, a0_, a1_, a2_);
         }
     }
 
@@ -308,26 +320,11 @@ library MIPS64Syscalls {
     }
 
     /// @notice Like a Linux write syscall. Splits unaligned writes into aligned writes.
-    /// @param _a0 The file descriptor.
-    /// @param _a1 The memory address to read from.
-    /// @param _a2 The number of bytes to read.
-    /// @param _preimageKey The current preimaageKey.
-    /// @param _preimageOffset The current preimageOffset.
-    /// @param _proofOffset The offset of the memory proof in calldata.
-    /// @param _memRoot The current memory root.
     /// @return v0_ The number of bytes written, or -1 on error.
     /// @return v1_ The error code, or 0 if empty.
     /// @return newPreimageKey_ The new preimageKey.
     /// @return newPreimageOffset_ The new preimageOffset.
-    function handleSysWrite(
-        uint64 _a0,
-        uint64 _a1,
-        uint64 _a2,
-        bytes32 _preimageKey,
-        uint64 _preimageOffset,
-        uint256 _proofOffset,
-        bytes32 _memRoot
-    )
+    function handleSysWrite(SysWriteParams memory _args)
         internal
         pure
         returns (uint64 v0_, uint64 v1_, bytes32 newPreimageKey_, uint64 newPreimageOffset_)
@@ -337,20 +334,22 @@ library MIPS64Syscalls {
             // returns: v0_ = written, v1_ = err code
             v0_ = uint64(0);
             v1_ = uint64(0);
-            newPreimageKey_ = _preimageKey;
-            newPreimageOffset_ = _preimageOffset;
+            newPreimageKey_ = _args._preimageKey;
+            newPreimageOffset_ = _args._preimageOffset;
 
-            if (_a0 == FD_STDOUT || _a0 == FD_STDERR || _a0 == FD_HINT_WRITE) {
-                v0_ = _a2; // tell program we have written everything
+            if (_args._a0 == FD_STDOUT || _args._a0 == FD_STDERR || _args._a0 == FD_HINT_WRITE) {
+                v0_ = _args._a2; // tell program we have written everything
             }
             // pre-image oracle
-            else if (_a0 == FD_PREIMAGE_WRITE) {
+            else if (_args._a0 == FD_PREIMAGE_WRITE) {
                 // mask the addr to align it to 4 bytes
-                uint64 mem = MIPS64Memory.readMem(_memRoot, _a1 & arch.ADDRESS_MASK, _proofOffset);
-                bytes32 key = _preimageKey;
+                uint64 mem = MIPS64Memory.readMem(_args._memRoot, _args._a1 & arch.ADDRESS_MASK, _args._proofOffset);
+                bytes32 key = _args._preimageKey;
 
                 // Construct pre-image key from memory
                 // We use assembly for more precise ops, and no var count limit
+                uint64 _a1 = _args._a1;
+                uint64 _a2 = _args._a2;
                 assembly {
                     let alignment := and(_a1, EXT_MASK) // the read might not start at an aligned address
                     let space := sub(WORD_SIZE_BYTES, alignment) // remaining space in memory word
@@ -360,11 +359,12 @@ library MIPS64Syscalls {
                     mem := and(shr(mul(sub(space, _a2), 8), mem), mask) // align value to right, mask it
                     key := or(key, mem) // insert into key
                 }
+                _args._a2 = _a2;
 
                 // Write pre-image key to oracle
                 newPreimageKey_ = key;
                 newPreimageOffset_ = 0; // reset offset, to read new pre-image data from the start
-                v0_ = _a2;
+                v0_ = _args._a2;
             } else {
                 v0_ = U64_MASK;
                 v1_ = EBADF;

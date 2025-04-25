@@ -8,7 +8,7 @@ import { CommonTest } from "test/setup/CommonTest.sol";
 import { CREATE3, Bytes32AddressLib } from "@rari-capital/solmate/src/utils/CREATE3.sol";
 
 // Target contract
-import { IOptimismSuperchainERC20 } from "src/L2/interfaces/IOptimismSuperchainERC20.sol";
+import { IOptimismSuperchainERC20 } from "interfaces/L2/IOptimismSuperchainERC20.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
 
 /// @title OptimismSuperchainERC20FactoryTest
@@ -22,6 +22,9 @@ contract OptimismSuperchainERC20FactoryTest is CommonTest {
 
     /// @notice Sets up the test suite.
     function setUp() public override {
+        // Skip the test until OptimismSuperchainERC20Factory is integrated again
+        vm.skip(true);
+
         super.enableInterop();
         super.setUp();
     }

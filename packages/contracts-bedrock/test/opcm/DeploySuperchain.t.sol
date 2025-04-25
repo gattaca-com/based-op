@@ -7,7 +7,7 @@ import { stdToml } from "forge-std/StdToml.sol";
 import { ProxyAdmin } from "src/universal/ProxyAdmin.sol";
 import { Proxy } from "src/universal/Proxy.sol";
 import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
-import { IProtocolVersions, ProtocolVersion } from "src/L1/interfaces/IProtocolVersions.sol";
+import { IProtocolVersions, ProtocolVersion } from "interfaces/L1/IProtocolVersions.sol";
 import { DeploySuperchainInput, DeploySuperchain, DeploySuperchainOutput } from "scripts/deploy/DeploySuperchain.s.sol";
 
 contract DeploySuperchainInput_Test is Test {
@@ -232,6 +232,15 @@ contract DeploySuperchain_Test is Test {
         vm.expectRevert("DeploySuperchainInput: recommendedProtocolVersion not set");
         deploySuperchain.run(dsi, dso);
         vm.store(address(dsi), bytes32(slot), bytes32(unwrap(defaultRecommendedProtocolVersion)));
+    }
+
+    function test_deploySuperchainImplementationContracts_reuseAddresses_succeeds() public {
+        deploySuperchain.deploySuperchainImplementationContracts(dsi, dso);
+        address originalConfig = address(dso.superchainConfigImpl());
+        address originalProtocolVersions = address(dso.protocolVersionsImpl());
+        deploySuperchain.deploySuperchainImplementationContracts(dsi, dso);
+        assertEq(address(dso.superchainConfigImpl()), originalConfig, "100");
+        assertEq(address(dso.protocolVersionsImpl()), originalProtocolVersions, "200");
     }
 
     function zeroOutSlotForSelector(bytes4 _selector) internal returns (uint256 slot_) {
