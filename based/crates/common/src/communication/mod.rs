@@ -1,7 +1,9 @@
 use crate::typedefs::*;
 use messages::{
-    BlockFetch, EngineApi, EvmBlockParams, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer,
+    BlockFetch, EngineApi, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer,
 };
+use op_revm::OpSpecId;
+use reth_evm::EvmEnv;
 use shared_memory::ShmemError;
 use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
 use thiserror::Error;
@@ -264,7 +266,7 @@ pub struct Spine<Db: 'static> {
     sender_sequencer_frag_broadcast: Sender<VersionedMessage>,
     receiver_sequencer_frag_broadcast: CrossBeamReceiver<VersionedMessage>,
 
-    evm_block_params: Queue<InternalMessage<EvmBlockParams>>,
+    evm_block_params: Queue<InternalMessage<EvmEnv<OpSpecId>>>,
 }
 
 impl<Db> Default for Spine<Db> {
@@ -367,16 +369,16 @@ from_spine!(Arc<Transaction>, eth_rpc_to_sequencer, Sender);
 from_spine!(BlockSyncMessage, blockfetch_to_sequencer, Sender);
 from_spine!(messages::BlockFetch, sequencer_to_blockfetch, Sender);
 
-impl<Db> HasSender<EvmBlockParams> for SendersSpine<Db> {
-    type Sender = Producer<InternalMessage<EvmBlockParams>>;
+impl<Db> HasSender<EvmEnv<OpSpecId>> for SendersSpine<Db> {
+    type Sender = Producer<InternalMessage<EvmEnv<OpSpecId>>>;
 
     fn get_sender(&self) -> &Self::Sender {
         &self.evm_block_params
     }
 }
 
-impl<Db> AsMut<Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>>>> for ReceiversSpine<Db> {
-    fn as_mut(&mut self) -> &mut Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>>> {
+impl<Db> AsMut<Receiver<EvmEnv<OpSpecId>, Consumer<InternalMessage<EvmEnv<OpSpecId>>>>> for ReceiversSpine<Db> {
+    fn as_mut(&mut self) -> &mut Receiver<EvmEnv<OpSpecId>, Consumer<InternalMessage<EvmEnv<OpSpecId>>>> {
         &mut self.evm_block_params
     }
 }
@@ -395,7 +397,7 @@ pub struct SendersSpine<Db> {
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     sequencer_frag_broadcast: Sender<VersionedMessage>,
-    evm_block_params: Producer<InternalMessage<EvmBlockParams>>,
+    evm_block_params: Producer<InternalMessage<EvmEnv<OpSpecId>>>,
     sequencer_to_blockfetch: Sender<BlockFetch>,
     timestamp: IngestionTime,
 }
@@ -441,7 +443,7 @@ pub struct ReceiversSpine<Db> {
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
     sequencer_frag_broadcast: Receiver<VersionedMessage>,
-    evm_block_params: Receiver<EvmBlockParams, Consumer<InternalMessage<EvmBlockParams>>>,
+    evm_block_params: Receiver<EvmEnv<OpSpecId>, Consumer<InternalMessage<EvmEnv<OpSpecId>>>>,
     sequencer_to_blockfetch: Receiver<BlockFetch>,
 }
 

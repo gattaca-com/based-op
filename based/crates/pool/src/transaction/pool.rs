@@ -8,7 +8,7 @@ use bop_common::{
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
 };
-use reth_optimism_primitives::transaction::TransactionSenderInfo;
+use reth_optimism_primitives::transaction::{TransactionSenderInfo, signed::OpTransaction};
 
 use crate::transaction::active::Active;
 
@@ -117,17 +117,19 @@ impl TxPool {
         self.active_txs.forward(sender, nonce);
     }
 
-    pub fn remove_mined_txs<'a, T: TransactionSenderInfo + 'a>(&mut self, mined_txs: impl Iterator<Item = &'a T>) {
+    pub fn remove_mined_txs<'a, T: OpTransaction + TransactionTrait + 'a>(
+        &mut self,
+        mined_txs: impl Iterator<Item = (&'a Address, &'a T)>,
+    ) {
         // Clear all mined nonces from the pool
-        for tx in mined_txs {
-            let sender = tx.sender();
+        for (sender, tx) in mined_txs {
             let nonce = tx.nonce();
-            if let Some(sender_tx_list) = self.pool_data.get_mut(&sender) {
+            if let Some(sender_tx_list) = self.pool_data.get_mut(sender) {
                 if sender_tx_list.forward(nonce) {
-                    self.pool_data.remove(&sender);
+                    self.pool_data.remove(sender);
                 }
             }
-            self.active_txs.forward(&sender, nonce);
+            self.active_txs.forward(sender, nonce);
         }
     }
 
@@ -135,9 +137,9 @@ impl TxPool {
     /// This gets called in two places:
     /// 1) When we sync a new block.
     /// 2) When we commit a new Frag.
-    pub fn handle_new_block<'a, Db: DatabaseRead, T: TransactionSenderInfo + 'a>(
+    pub fn handle_new_block<'a, Db: DatabaseRead, T: OpTransaction + TransactionTrait + 'a>(
         &mut self,
-        mined_txs: impl Iterator<Item = &'a T>,
+        mined_txs: impl Iterator<Item = (&'a Address, &'a T)>,
         base_fee: u64,
         db: &DBFrag<Db>,
         syncing: bool,
