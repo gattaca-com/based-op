@@ -12,15 +12,39 @@ import (
 )
 
 const (
-	EnvVarPrefix               = "DEPLOYER"
-	L1RPCURLFlagName           = "l1-rpc-url"
-	L1ChainIDFlagName          = "l1-chain-id"
-	L2ChainIDsFlagName         = "l2-chain-ids"
-	WorkdirFlagName            = "workdir"
-	OutdirFlagName             = "outdir"
-	PrivateKeyFlagName         = "private-key"
-	DeploymentStrategyFlagName = "deployment-strategy"
+	EnvVarPrefix       = "DEPLOYER"
+	L1RPCURLFlagName   = "l1-rpc-url"
+	L1ChainIDFlagName  = "l1-chain-id"
+	L2ChainIDsFlagName = "l2-chain-ids"
+	WorkdirFlagName    = "workdir"
+	OutdirFlagName     = "outdir"
+	PrivateKeyFlagName = "private-key"
+	IntentTypeFlagName = "intent-type"
 )
+
+type DeploymentTarget string
+
+const (
+	DeploymentTargetLive     DeploymentTarget = "live"
+	DeploymentTargetGenesis  DeploymentTarget = "genesis"
+	DeploymentTargetCalldata DeploymentTarget = "calldata"
+	DeploymentTargetNoop     DeploymentTarget = "noop"
+)
+
+func NewDeploymentTarget(s string) (DeploymentTarget, error) {
+	switch s {
+	case string(DeploymentTargetLive):
+		return DeploymentTargetLive, nil
+	case string(DeploymentTargetGenesis):
+		return DeploymentTargetGenesis, nil
+	case string(DeploymentTargetCalldata):
+		return DeploymentTargetCalldata, nil
+	case string(DeploymentTargetNoop):
+		return DeploymentTargetNoop, nil
+	default:
+		return "", fmt.Errorf("invalid deployment target: %s", s)
+	}
+}
 
 var (
 	L1RPCURLFlag = &cli.StringFlag{
@@ -35,7 +59,7 @@ var (
 		Name:    L1ChainIDFlagName,
 		Usage:   "Chain ID of the L1 chain.",
 		EnvVars: PrefixEnvVar("L1_CHAIN_ID"),
-		Value:   900,
+		Value:   11155111,
 	}
 	L2ChainIDsFlag = &cli.StringFlag{
 		Name:    L2ChainIDsFlagName,
@@ -56,11 +80,23 @@ var (
 		Usage:   "Private key of the deployer account.",
 		EnvVars: PrefixEnvVar("PRIVATE_KEY"),
 	}
-	DeploymentStrategyFlag = &cli.StringFlag{
-		Name:    DeploymentStrategyFlagName,
-		Usage:   fmt.Sprintf("Deployment strategy to use. Options: %s, %s", state.DeploymentStrategyLive, state.DeploymentStrategyGenesis),
-		EnvVars: PrefixEnvVar("DEPLOYMENT_STRATEGY"),
-		Value:   string(state.DeploymentStrategyLive),
+	DeploymentTargetFlag = &cli.StringFlag{
+		Name:    "deployment-target",
+		Usage:   fmt.Sprintf("Where to deploy L1 contracts. Options: %s, %s, %s, %s", DeploymentTargetLive, DeploymentTargetGenesis, DeploymentTargetCalldata, DeploymentTargetNoop),
+		EnvVars: PrefixEnvVar("DEPLOYMENT_TARGET"),
+		Value:   string(DeploymentTargetLive),
+	}
+	IntentTypeFlag = &cli.StringFlag{
+		Name: IntentTypeFlagName,
+		Usage: fmt.Sprintf("Intent config type to use. Options: %s (default), %s, %s",
+			state.IntentTypeStandard,
+			state.IntentTypeCustom,
+			state.IntentTypeStandardOverrides),
+		EnvVars: PrefixEnvVar("INTENT_TYPE"),
+		Value:   string(state.IntentTypeStandard),
+		Aliases: []string{
+			"intent-config-type",
+		},
 	}
 )
 
@@ -70,13 +106,20 @@ var InitFlags = []cli.Flag{
 	L1ChainIDFlag,
 	L2ChainIDsFlag,
 	WorkdirFlag,
-	DeploymentStrategyFlag,
+	IntentTypeFlag,
 }
 
 var ApplyFlags = []cli.Flag{
 	L1RPCURLFlag,
 	WorkdirFlag,
 	PrivateKeyFlag,
+	DeploymentTargetFlag,
+}
+
+var UpgradeFlags = []cli.Flag{
+	L1RPCURLFlag,
+	PrivateKeyFlag,
+	DeploymentTargetFlag,
 }
 
 func PrefixEnvVar(name string) []string {

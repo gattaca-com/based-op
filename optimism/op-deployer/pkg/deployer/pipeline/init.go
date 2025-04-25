@@ -3,16 +3,20 @@ package pipeline
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/standard"
-
 	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/state"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/script"
 
 	"github.com/ethereum/go-ethereum/common"
 )
+
+var ErrRefusingToDeployTaggedReleaseWithoutOPCM = errors.New("refusing to deploy tagged release without OPCM")
 
 func IsSupportedStateVersion(version int) bool {
 	return version == 1
@@ -22,17 +26,21 @@ func InitLiveStrategy(ctx context.Context, env *Env, intent *state.Intent, st *s
 	lgr := env.Logger.New("stage", "init", "strategy", "live")
 	lgr.Info("initializing pipeline")
 
-	if err := initCommonChecks(st); err != nil {
+	if err := initCommonChecks(intent, st); err != nil {
 		return err
 	}
 
-	if intent.L1ContractsLocator.IsTag() {
+	opcmAddress, opcmAddrErr := standard.ManagerImplementationAddrFor(intent.L1ChainID, intent.L1ContractsLocator.Tag)
+	hasPredeployedOPCM := opcmAddrErr == nil
+	isTag := intent.L1ContractsLocator.IsTag()
+
+	if isTag && hasPredeployedOPCM {
 		superCfg, err := standard.SuperchainFor(intent.L1ChainID)
 		if err != nil {
 			return fmt.Errorf("error getting superchain config: %w", err)
 		}
 
-		proxyAdmin, err := standard.ManagerOwnerAddrFor(intent.L1ChainID)
+		proxyAdmin, err := standard.SuperchainProxyAdminAddrFor(intent.L1ChainID)
 		if err != nil {
 			return fmt.Errorf("error getting superchain proxy admin address: %w", err)
 		}
@@ -41,16 +49,16 @@ func InitLiveStrategy(ctx context.Context, env *Env, intent *state.Intent, st *s
 		// own Address type.
 		st.SuperchainDeployment = &state.SuperchainDeployment{
 			ProxyAdminAddress:            proxyAdmin,
-			ProtocolVersionsProxyAddress: common.Address(*superCfg.Config.ProtocolVersionsAddr),
-			SuperchainConfigProxyAddress: common.Address(*superCfg.Config.SuperchainConfigAddr),
+			ProtocolVersionsProxyAddress: superCfg.ProtocolVersionsAddr,
+			SuperchainConfigProxyAddress: superCfg.SuperchainConfigAddr,
 		}
 
-		opcmAddress, err := standard.ManagerImplementationAddrFor(intent.L1ChainID)
-		if err != nil {
-			return fmt.Errorf("error getting OPCM proxy address: %w", err)
-		}
 		st.ImplementationsDeployment = &state.ImplementationsDeployment{
 			OpcmAddress: opcmAddress,
+		}
+	} else if isTag && !hasPredeployedOPCM {
+		if err := displayWarning(); err != nil {
+			return err
 		}
 	}
 
@@ -92,7 +100,7 @@ func InitLiveStrategy(ctx context.Context, env *Env, intent *state.Intent, st *s
 	return nil
 }
 
-func initCommonChecks(st *state.State) error {
+func initCommonChecks(intent *state.Intent, st *state.State) error {
 	// Ensure the state version is supported.
 	if !IsSupportedStateVersion(st.Version) {
 		return fmt.Errorf("unsupported state version: %d", st.Version)
@@ -104,6 +112,7 @@ func initCommonChecks(st *state.State) error {
 			return fmt.Errorf("failed to generate CREATE2 salt: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -111,7 +120,7 @@ func InitGenesisStrategy(env *Env, intent *state.Intent, st *state.State) error 
 	lgr := env.Logger.New("stage", "init", "strategy", "genesis")
 	lgr.Info("initializing pipeline")
 
-	if err := initCommonChecks(st); err != nil {
+	if err := initCommonChecks(intent, st); err != nil {
 		return err
 	}
 
@@ -126,4 +135,24 @@ func InitGenesisStrategy(env *Env, intent *state.Intent, st *state.State) error 
 
 func immutableErr(field string, was, is any) error {
 	return fmt.Errorf("%s is immutable: was %v, is %v", field, was, is)
+}
+
+func displayWarning() error {
+	warning := strings.TrimPrefix(`
+####################### WARNING! WARNING WARNING! #######################
+
+You are deploying a tagged release to a chain with no pre-deployed OPCM.
+Due to a quirk of our contract version system, this can lead to deploying
+contracts containing unaudited or untested code. As a result, this 
+functionality is currently disabled.
+
+We will fix this in an upcoming release.
+
+This process will now exit.
+
+####################### WARNING! WARNING WARNING! #######################
+`, "\n")
+
+	_, _ = fmt.Fprint(os.Stderr, warning)
+	return ErrRefusingToDeployTaggedReleaseWithoutOPCM
 }

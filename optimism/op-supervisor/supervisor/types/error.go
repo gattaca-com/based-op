@@ -13,8 +13,14 @@ var (
 	ErrSkipped = errors.New("skipped data")
 	// ErrFuture happens when data is just not yet available
 	ErrFuture = errors.New("future data")
+	// ErrIneffective happens when data is accepted as compatible, but did not change anything.
+	// This happens when a node is deriving an L2 block we already know of being derived from the given source,
+	// but without path to skip forward to newer source blocks without doing the known derivation work first.
+	ErrIneffective = errors.New("ineffective data")
 	// ErrConflict happens when we know for sure that there is different canonical data
 	ErrConflict = errors.New("conflicting data")
+	// ErrAwaitReplacementBlock happens when we know for sure that a replacement block is needed before progress can be made.
+	ErrAwaitReplacementBlock = errors.New("awaiting replacement block")
 	// ErrStop can be used in iterators to indicate iteration has to stop
 	ErrStop = errors.New("iter stop")
 	// ErrOutOfScope is when data is accessed, but access is not allowed, because of a limited scope.
@@ -27,4 +33,6 @@ var (
 	ErrUnknownChain = errors.New("unknown chain")
 	// ErrNoRPCSource happens when a sub-service needs an RPC data source, but is not configured with one.
 	ErrNoRPCSource = errors.New("no RPC client configured")
+	// ErrUninitialized happens when a chain database is not initialized yet
+	ErrUninitialized = errors.New("uninitialized chain database")
 )

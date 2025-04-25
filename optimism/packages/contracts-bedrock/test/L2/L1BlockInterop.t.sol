@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-// Testing utilities
+// Testing
 import { CommonTest } from "test/setup/CommonTest.sol";
 
 // Libraries
 import { StaticConfig } from "src/libraries/StaticConfig.sol";
-
-// Target contract dependencies
-import { L1BlockInterop, ConfigType } from "src/L2/L1BlockInterop.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import "src/libraries/L1BlockErrors.sol";
+
+// Interfaces
+import { IL1BlockInterop, ConfigType } from "interfaces/L2/IL1BlockInterop.sol";
 
 contract L1BlockInteropTest is CommonTest {
     event GasPayingTokenSet(address indexed token, uint8 indexed decimals, bytes32 name, bytes32 symbol);
@@ -64,8 +64,6 @@ contract L1BlockInteropTest is CommonTest {
 
     /// @dev Tests that the dependency set size is correct when adding an arbitrary number of chain IDs.
     function testFuzz_dependencySetSize_succeeds(uint8 _dependencySetSize) public prankDepositor {
-        vm.assume(_dependencySetSize <= type(uint8).max);
-
         uint256 uniqueCount = 0;
 
         for (uint256 i = 0; i < _dependencySetSize; i++) {
@@ -80,45 +78,6 @@ contract L1BlockInteropTest is CommonTest {
     /// @dev Tests that the dependency set size is correct when the dependency set is empty.
     function test_dependencySetSize_dependencySetEmpty_succeeds() public view {
         assertEq(_l1BlockInterop().dependencySetSize(), 0);
-    }
-
-    /// @dev Tests that the config for setting the gas paying token succeeds.
-    function testFuzz_setConfig_gasPayingToken_succeeds(
-        address _token,
-        uint8 _decimals,
-        bytes32 _name,
-        bytes32 _symbol
-    )
-        public
-        prankDepositor
-    {
-        vm.assume(_token != address(vm));
-
-        vm.expectEmit(address(l1Block));
-        emit GasPayingTokenSet({ token: _token, decimals: _decimals, name: _name, symbol: _symbol });
-
-        _l1BlockInterop().setConfig(
-            ConfigType.SET_GAS_PAYING_TOKEN,
-            StaticConfig.encodeSetGasPayingToken({ _token: _token, _decimals: _decimals, _name: _name, _symbol: _symbol })
-        );
-    }
-
-    /// @dev Tests that setting the gas paying token config as not the depositor reverts.
-    function testFuzz_setConfig_gasPayingTokenButNotDepositor_reverts(
-        address _token,
-        uint8 _decimals,
-        bytes32 _name,
-        bytes32 _symbol
-    )
-        public
-    {
-        vm.assume(_token != address(vm));
-
-        vm.expectRevert(NotDepositor.selector);
-        _l1BlockInterop().setConfig(
-            ConfigType.SET_GAS_PAYING_TOKEN,
-            StaticConfig.encodeSetGasPayingToken({ _token: _token, _decimals: _decimals, _name: _name, _symbol: _symbol })
-        );
     }
 
     /// @dev Tests that the config for adding a dependency can be set.
@@ -199,8 +158,8 @@ contract L1BlockInteropTest is CommonTest {
     }
 
     /// @dev Returns the L1BlockInterop instance.
-    function _l1BlockInterop() internal view returns (L1BlockInterop) {
-        return L1BlockInterop(address(l1Block));
+    function _l1BlockInterop() internal view returns (IL1BlockInterop) {
+        return IL1BlockInterop(address(l1Block));
     }
 }
 
@@ -261,7 +220,7 @@ contract L1BlockInteropSetL1BlockValuesInterop_Test is L1BlockInteropTest {
 
         vm.prank(_l1BlockInterop().DEPOSITOR_ACCOUNT());
         (bool success,) = address(l1Block).call(
-            abi.encodePacked(L1BlockInterop.setL1BlockValuesInterop.selector, setValuesEcotoneCalldata)
+            abi.encodePacked(IL1BlockInterop.setL1BlockValuesInterop.selector, setValuesEcotoneCalldata)
         );
         assertTrue(success, "function call failed");
 

@@ -22,7 +22,15 @@ func TestBatcherConcurrentAltDARequests(t *testing.T) {
 	numL1TxsExpected := int64(10)
 
 	cfg := e2esys.DefaultSystemConfig(t)
+	// Manually configure these since the alt-DA values aren't
+	// set at all in the standard config unless UseAltDA is set.
+	// For some reason this test doesn't use the alt DA allocs.
 	cfg.DeployConfig.UseAltDA = true
+	cfg.DeployConfig.DACommitmentType = "KeccakCommitment"
+	cfg.DeployConfig.DAChallengeWindow = 16
+	cfg.DeployConfig.DAResolveWindow = 16
+	cfg.DeployConfig.DABondSize = 1000000
+	cfg.DeployConfig.DAResolverRefundPercentage = 0
 	cfg.BatcherMaxPendingTransactions = 0 // no limit on parallel txs
 	// ensures that batcher txs are as small as possible
 	cfg.BatcherMaxL1TxSizeBytes = derive.FrameV0OverHeadSize + 1 /*version bytes*/ + 1
@@ -34,7 +42,9 @@ func TestBatcherConcurrentAltDARequests(t *testing.T) {
 	cfg.DisableBatcher = true
 	sys, err := cfg.Start(t)
 	require.NoError(t, err, "Error starting up system")
-	defer sys.Close()
+	t.Cleanup(func() {
+		sys.Close()
+	})
 
 	// make every request take 5 seconds, such that only concurrent requests will be able to make progress fast enough
 	sys.FakeAltDAServer.SetPutRequestLatency(5 * time.Second)

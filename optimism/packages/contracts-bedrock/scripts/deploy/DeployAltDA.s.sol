@@ -2,11 +2,11 @@
 pragma solidity 0.8.15;
 
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
-import { IDataAvailabilityChallenge } from "src/L1/interfaces/IDataAvailabilityChallenge.sol";
-import { IProxy } from "src/universal/interfaces/IProxy.sol";
+import { IDataAvailabilityChallenge } from "interfaces/L1/IDataAvailabilityChallenge.sol";
+import { IProxy } from "interfaces/universal/IProxy.sol";
 import { Script } from "forge-std/Script.sol";
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
-import { IProxyAdmin } from "src/universal/interfaces/IProxyAdmin.sol";
+import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { Solarray } from "scripts/libraries/Solarray.sol";
 
 contract DeployAltDAInput is BaseDeployIO {
@@ -178,7 +178,7 @@ contract DeployAltDA is Script {
         address admin = proxy.admin();
         require(admin == address(_dai.proxyAdmin()), "DACP-10");
 
-        DeployUtils.assertInitialized({ _contractAddress: address(proxy), _slot: 0, _offset: 0 });
+        DeployUtils.assertInitialized({ _contractAddress: address(proxy), _isProxy: true, _slot: 0, _offset: 0 });
 
         vm.prank(address(0));
         address impl = proxy.implementation();
@@ -194,6 +194,6 @@ contract DeployAltDA is Script {
 
     function assertValidDataAvailabilityChallengeImpl(DeployAltDAOutput _dao) public view {
         IDataAvailabilityChallenge dac = _dao.dataAvailabilityChallengeImpl();
-        DeployUtils.assertInitialized({ _contractAddress: address(dac), _slot: 0, _offset: 0 });
+        DeployUtils.assertInitialized({ _contractAddress: address(dac), _isProxy: false, _slot: 0, _offset: 0 });
     }
 }
