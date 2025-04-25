@@ -440,7 +440,6 @@ func SealBlock(bc *core.BlockChain, ub *types.UnsealedBlock) (*types.Block, erro
 		Transactions: ub.Transactions(),
 		Uncles:       nil,
 		Withdrawals:  []*types.Withdrawal{},
-		Requests:     ub.Requests,
 	})
 
 	_, err := bc.InsertBlockWithoutSetHead(block, false)

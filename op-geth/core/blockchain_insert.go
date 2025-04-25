@@ -209,7 +209,6 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 		Transactions: frag.Txs,
 		Uncles:       nil,
 		Withdrawals:  []*types.Withdrawal{},
-		Requests:     []*types.Request{},
 	})
 
 	res, err := bc.Processor().ProcessWithCumulativeGas(block, bc.unsealedBlockDbState, bc.vmConfig, &bc.currentUnsealedBlock.CumulativeGasUsed)
@@ -226,7 +225,6 @@ func (bc *BlockChain) InsertNewFrag(frag types.Frag) error {
 	currentUnsealedBlock.LastSequenceNumber = &frag.Seq
 	currentUnsealedBlock.Receipts = append(currentUnsealedBlock.Receipts, res.Receipts...)
 	currentUnsealedBlock.Logs = append(currentUnsealedBlock.Logs, res.Logs...)
-	currentUnsealedBlock.Requests = append(currentUnsealedBlock.Requests, res.Requests...)
 	currentUnsealedBlock.CumulativeGasUsed = res.GasUsed
 
 	return nil
