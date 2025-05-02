@@ -35,7 +35,7 @@
 	"eip1559Elasticity": 6,
 	"eip1559Denominator": 50,
 	"eip1559DenominatorCanyon": 250
-}
+},
   "deposit_contract_address": "0x0d7c09388932b7b98e6fe74afcff433b2c792b6d",
   "l1_system_config_address": "0x4e813c251818f85479f5b8513f7fd786591d4fe9",
   "protocol_versions_address": "0x79add5713b383daa0a138d3c4780c7a1804a8090"
