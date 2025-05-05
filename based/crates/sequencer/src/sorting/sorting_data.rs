@@ -308,7 +308,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         let evm_config = context.config.evm_config.clone();
         let chain_spec = context.config.evm_config.chain_spec().clone();
         // Configure new EVM to apply pre-execution and must include txs.
-        let mut evm = OpContext::op().with_cfg(cfg);
+        let mut evm = OpContext::op().with_cfg(evm_config);
 
         // Apply pre-execution changes.
         evm.db_mut().db.write().set_state_clear_flag(should_set_state_clear_flag);
