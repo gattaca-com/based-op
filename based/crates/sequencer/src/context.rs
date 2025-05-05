@@ -147,7 +147,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
             "sealing frag"
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
-        self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
+        self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)));
         (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
     }
 }
@@ -189,7 +189,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 
         // Apply must include
         sorting.apply_block_start_to_state(self, simulator_evm_block_params).expect("shouldn't fail");
-        self.tx_pool.remove_mined_txs(sorting.txs.iter());
+
+        self.tx_pool.remove_mined_txs(sorting.txs.iter().map(|t| (t.sender_ref(), t)));
 
         (seq, sorting)
     }

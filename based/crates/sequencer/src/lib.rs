@@ -462,7 +462,7 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
                 // Reset the tx pool.
-                data.tx_pool.remove_mined_txs(sorting_data.txs.iter());
+                data.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)));
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
 
