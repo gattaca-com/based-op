@@ -224,7 +224,7 @@ mod tests {
 
         // Apply non-must include txs using simulator
         let mut sim = Simulator::new(sim_db, &evm_config, 0);
-        let (simulator_evm_block_params, _) = ctx.new_block_params();
+        let simulator_evm_block_params = ctx.new_block_params();
         sim.update_evm_environments(simulator_evm_block_params);
 
         for tx in non_must_include_txs {

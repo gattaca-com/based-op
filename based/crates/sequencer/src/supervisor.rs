@@ -21,7 +21,7 @@ impl SupervisorValidator {
             return true;
         };
 
-        let inbox_entries = SupervisorValidator::parse_access_list(access_list).cloned().collect::<Vec<_>>();
+        let inbox_entries = SupervisorValidator::parse_access_list(&access_list.0).cloned().collect::<Vec<_>>();
 
         if inbox_entries.is_empty() {
             return true;
@@ -33,7 +33,6 @@ impl SupervisorValidator {
                 inbox_entries.as_slice(),
                 self.safety,
                 descriptor,
-                Some(core::time::Duration::from_millis(100)),
             ),
         );
         match res {
