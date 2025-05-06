@@ -1,0 +1,137 @@
+# fill out env_example and copy it to .env besides this file
+services:
+  op-geth:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.8-rc.1
+    network_mode: "host"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # 1) if this directory lacks the geth chaindata, initialize it
+        if [ ! -d /data/geth/geth/chaindata ]; then
+          echo ">>> initializing geth datadir…"
+          geth init \
+            --state.scheme=hash \
+            --datadir=/data/geth \
+            /config/genesis.json 
+        fi
+        # 2) then exec the real geth with all your flags
+        exec geth \
+          --networkid=$NETWORK_ID \
+          --datadir=/data/geth \
+          --gcmode=archive \
+          --state.scheme=hash \
+          --http \
+          --http.addr=0.0.0.0 \
+          --http.vhosts="*" \
+          --http.corsdomain="*" \
+          --http.api="admin,engine,net,eth,web3,debug,miner,txpool" \
+          --ws \
+          --ws.addr=0.0.0.0 \
+          --ws.port=$OP_GETH_WS_PORT \
+          --ws.api="admin,engine,net,eth,web3,debug,miner,txpool" \
+          --ws.origins="*" \
+          --authrpc.port=$OP_GETH_ENGINE_RPC_PORT \
+          --authrpc.addr=0.0.0.0 \
+          --authrpc.vhosts="*" \
+          --authrpc.jwtsecret=/config/jwt \
+          --syncmode=full \
+          --rpc.allow-unprotected-txs \
+          --discovery.port=$OP_GETH_GOSSIP_PORT \
+          --port=$OP_GETH_GOSSIP_PORT
+
+    volumes:
+      - ./data/geth:/data/geth
+      - ./config:/config
+
+  op-node:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2
+    network_mode: "host"
+
+    command:
+      - op-node
+      - --l2=http://0.0.0.0:$PORTAL_PORT
+      - --l2.jwt-secret=/config/jwt
+      - --verifier.l1-confs=1
+      - --rollup.config=/config/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=$OP_NODE_RPC_PORT
+      - --rpc.enable-admin
+      - --l1=$L1_RPC_URL
+      - --l1.rpckind=standard
+      - --l1.beacon=$L1_BEACON_RPC_URL
+      - --p2p.advertise.ip=$OP_NODE_GOSSIP_IP
+      - --p2p.advertise.tcp=$OP_NODE_GOSSIP_PORT
+      - --p2p.advertise.udp=$OP_NODE_GOSSIP_PORT
+      - --p2p.listen.ip=0.0.0.0
+      - --p2p.listen.tcp=$OP_NODE_GOSSIP_PORT
+      - --p2p.listen.udp=$OP_NODE_GOSSIP_PORT
+      - --p2p.sequencer.key=$OP_NODE_SEQUENCER_KEY
+      - --safedb.path=/data/op-node/op-node-beacon-data
+      - --sequencer.enabled
+
+    volumes:
+      - ./data/node:/data/op-node
+      - ./config:/config
+    depends_on:
+      - op-geth
+    
+  op-batcher:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.2
+    network_mode: "host"
+    command:
+      - op-batcher
+      - --l2-eth-rpc=http://0.0.0.0:$PORTAL_PORT
+      - --rollup-rpc=http://0.0.0.0:$OP_NODE_RPC_PORT
+      - --sub-safety-margin=6
+      - --num-confirmations=1
+      - --safe-abort-nonce-too-low-count=3
+      - --resubmission-timeout=30s
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=8548
+      - --rpc.enable-admin
+      - --max-channel-duration=50
+      - --l1-eth-rpc=$L1_RPC_URL
+      - --private-key=$OP_BATCHER_PRIVATE_KEY
+      - --max-blocks-per-span-batch=10
+      - --data-availability-type=blobs
+    depends_on:
+      - op-node
+
+  op-proposer:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.10.0
+    network_mode: "host"
+    command:
+      - op-proposer
+      - --poll-interval=12s
+      - --rpc.port=8560
+      - --rollup-rpc=http://0.0.0.0:$OP_NODE_RPC_PORT
+      - --game-factory-address=$DISPUTE_GAME_ADDRESS
+      - --game-type=$DISPUTE_GAME_TYPE 
+      - --l1-eth-rpc=$L1_RPC_URL
+      - --proposal-interval=2s
+    depends_on:
+      - op-node
+
+  portal:
+    image: based_portal_local
+    network_mode: "host"
+    command:
+      - --fallback.eth_url=http://0.0.0.0:$OP_GETH_RPC_PORT
+      - --fallback.url=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
+      - --fallback.jwt_path=/config/jwt
+      - --registry.url=http://0.0.0.0:$REGISTRY_PORT
+      - --gateway.timeout_ms=100
+    volumes:
+      - ./config:/config
+
+  registry:
+    image: based_registry_local
+    network_mode: "host"
+    command:
+      - --registry.path=/config/registry.json
+      - --eth_client.url=http://0.0.0.0:$PORTAL_PORT
+      - --eth_client.timeout_ms=10
+      - --registry.port=$REGISTRY_PORT
+    volumes: 
+      - ./config:/config
+

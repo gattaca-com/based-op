@@ -35,7 +35,7 @@ pub struct GatewayArgs {
     #[arg(long = "rpc.port", default_value_t = 9090)]
     pub rpc_port: u16,
     #[arg(long = "rpc.jwt")]
-    pub rpc_jwt: JwtSecret,
+    pub rpc_jwt: String,
     /// Url to an L2 eth api rpc
     #[arg(long = "eth_client.url", default_value = "http://localhost:8545")]
     pub eth_client_url: Url,
@@ -96,6 +96,14 @@ pub struct GatewayArgs {
         help = "Safety level to pass to supervisor, values: finalized, safe, local-safe, cross-unsafe, unsafe, invalid"
     )]
     pub supervisor_safety_level: Option<String>,
+}
+
+impl GatewayArgs {
+    pub fn sequencer_jwt(&self) -> JwtSecret {
+        JwtSecret::from_hex(&self.rpc_jwt)
+            .or_else(|_| JwtSecret::from_file(std::path::Path::new(&self.rpc_jwt)))
+            .expect("Couldn't parse sequencer_jwt")
+    }
 }
 
 #[derive(Debug, Clone)]

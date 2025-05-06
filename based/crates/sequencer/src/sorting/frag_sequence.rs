@@ -153,6 +153,7 @@ mod tests {
             evm_config: evm_config.clone(),
             simulate_tof_in_pools: false,
             commit_sealed_frags_to_db: false,
+            supervisor: None,
         };
 
         // Create the alloydb.

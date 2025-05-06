@@ -15,10 +15,10 @@
 # - BOP_EL_PORT: This is the port of the Follower's BOP-Node.
 #
 # Note: The Kurtosis enclave must be running for these to work.
-OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurtosis | grep 'rpc: 8541/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+#OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+#BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+#BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+#PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurtosis | grep 'rpc: 8541/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 
 # Some servers default to executing shell scripts below with /bin/sh, we set bash to make sure our bash syntax works
 SHELL := /bin/bash
@@ -63,15 +63,55 @@ build-registry: ## 🏗️ Build based registry from based directory
 build-gateway: ## 🏗️ Build based gateway from based directory
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
-build-op-node: ## 🏗️ Build OP node from optimism directory
+run-main:
+	@if [ -f main_node/compose.yml ] && [ -f main_node/config/rollup.json ] && [ -f main_node/config/jwt ] && [ -f main_node/config/genesis.json ] && [ -f main_node/config/registry.json ]; then \
+		cd main_node && docker compose up -d; \
+	else \
+		echo "Missing required files! Look in the main_node subdir. We need: main_node/compose.yml, main_node/config/jwt, main_node/config/rollup.json, main_node/config/genesis.json, main_node/config/registry.json"; \
+		exit 1; \
+	fi
+
+run-registry:
+	@if [ -f main_node/.env ] && [ -f main_node/config/registry.json ]; then \
+		cd main_node && docker compose up -d registry; \
+	else \
+		echo "Missing required files! Look in the main_node subdir. We need: main_node/.env, main_node/config/registry.json"; \
+		exit 1; \
+	fi
+
+run-portal:
+	@if [ -f main_node/.env ] && [ -f main_node/config/jwt ]; then \
+		cd main_node && docker compose up -d portal; \
+	else \
+		echo "Missing required files! Look in the main_node subdir. We need: main_node/.env, main_node/config/jwt"; \
+		exit 1; \
+	fi
+
+run-gateway:
+	@if [ -f main_node/.env ] && [ -f main_node/config/genesis.json ] && [ -f main_node/config/jwt ]; then \
+		cd main_node && docker compose up -d gateway; \
+	else \
+		echo "Missing required files! Look in the main_node subdir. We need: main_node/.env, main_node/genesis.json, main_node/config/jwt. You can generate the jwt by using make gateway-jwt"; \
+		exit 1; \
+	fi
+
+main-jwt:
+	mkdir -p main_node/config && openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' | tee main_node/config/jwt
+follower-jwt:
+	mkdir -p follower_node/config && openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' | tee follower_node/config/jwt
+	
+
+build-follower-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
 	IMAGE_TAGS=develop \
 	docker buildx bake \
 	-f docker-bake.hcl \
 	--set op-node.tags=based_op_node \
+	--no-cache \
+	--load \
 	op-node
 
-build-op-geth: ## 🏗️ Build OP geth from op-eth directory
+build-follower-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t based_op_geth ./op-geth
 
 build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and Firefox
@@ -80,16 +120,16 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-run: ## 🚀 Run
+run-kurtosis: ## 🚀 Run
 	kurtosis run optimism-package --args-file config.yml --enclave based-op && $(MAKE) dump
 
-run-maxgas: ## 🚀 Run
+run-kurtosis-maxgas: ## 🚀 Run
 	kurtosis run optimism-package --args-file config_maxgas.yml --enclave based-op && $(MAKE) dump
 
-run-multiple: ## 🚀 Run
+run-kurtosis-multiple: ## 🚀 Run
 	kurtosis run optimism-package --args-file config_multiple_gateways.yml --enclave based-op && $(MAKE) dump
 
-restart-no-gateway: clean build-no-gateway run ## rip rebuild run
+restart-kurtosis-no-gateway: clean build-no-gateway run ## rip rebuild run
 
 run-follower: build-op-node build-op-geth ## 🚀 Run a single follower node with RPC enabled.
 	cd follower-node && \
@@ -100,16 +140,6 @@ logs: ## 📜 Show logs
 
 dump:
 	bash -c 'kurtosis files download based-op $$(kurtosis enclave inspect based-op | grep op-deployer-configs | awk "{print \$$1}") ./genesis'
-
-gateway: ## 🚀 Run the gateway
-	cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway --features shmem -- \
-	--db.datadir $(datadir) \
-	--eth_client.url http://127.0.0.1:$(OP_EL_PORT) \
-	--chain ./genesis/genesis-2151908.json \
-	--rpc.port $(port) \
-	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
-	--rpc.jwt 0x1b11d6635cdf11d69f530dc0656ab8960735464d01fe1d4124107548896ba581
-
 
 batcher-logs:
 	$(MAKE) logs SERVICE=op-batcher-op-kurtosis
