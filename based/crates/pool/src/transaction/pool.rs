@@ -8,7 +8,7 @@ use bop_common::{
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
 };
-use reth_optimism_primitives::transaction::{TransactionSenderInfo, signed::OpTransaction};
+use reth_optimism_primitives::transaction::OpTransaction;
 
 use crate::transaction::active::Active;
 

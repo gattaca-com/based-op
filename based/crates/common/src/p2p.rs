@@ -126,7 +126,8 @@ pub struct SealV0 {
 
 impl VersionedMessage {
     pub fn to_json(&self, signer: &ECDSASigner) -> serde_json::Value {
-        let signature = signer.sign_message(self.tree_hash_root()).expect("couldn't sign message");
+        let hash = self.tree_hash_root();
+        let signature = signer.sign_message(hash).expect("couldn't sign message");
         let signature = Bytes::from(signature.as_bytes());
 
         let method = match &self {

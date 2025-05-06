@@ -15,15 +15,13 @@ use bop_common::{
     typedefs::{Database, DatabaseRef},
 };
 use bop_db::DatabaseRead;
-use op_revm::{DefaultOp, OpContext, OpEvm};
+use op_revm::{DefaultOp, OpContext};
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
-    ConfigureEvm,
     block::StateChangeSource,
     execute::{BlockExecutionError, ProviderError},
 };
 use reth_optimism_evm::OpBlockExecutionError;
-use reth_optimism_primitives::transaction::TransactionSenderInfo;
 use revm_primitives::{Address, U256};
 use tracing::trace;
 

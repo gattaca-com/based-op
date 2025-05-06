@@ -8,10 +8,11 @@ use bop_common::{
 };
 use reth_consensus::ConsensusError;
 use reth_evm::execute::{
-    BlockExecutionError, BlockExecutionOutput, ExecuteOutput, InternalBlockExecutionError, ProviderError,
+    BasicBlockExecutorProvider, BlockExecutionError, BlockExecutionOutput, BlockExecutorProvider, Executor,
+    InternalBlockExecutionError, ProviderError,
 };
 use reth_optimism_chainspec::OpChainSpec;
-use reth_optimism_evm::OpExecutorProvider;
+use reth_optimism_evm::{OpEvmConfig, OpExecutorProvider};
 use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::{GotExpected, RecoveredBlock};
 use reth_trie_common::updates::TrieUpdates;
@@ -23,10 +24,10 @@ pub mod mock_fetcher;
 
 pub type AlloyProvider = alloy_provider::RootProvider<op_alloy_network::Optimism>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct BlockSync {
     chain_spec: Arc<OpChainSpec>,
-    execution_factory: OpExecutorProvider,
+    execution_factory: BasicBlockExecutorProvider<OpEvmConfig>,
     /// Blocks that we have received from the provider but require a prior block to be applied before this can be.
     /// Sorted list in reverse order by block number.
     pending_blocks: Vec<RecoveredBlock<OpBlock>>,
@@ -131,7 +132,7 @@ impl BlockSync {
         }
         self.timers.total.stop();
         info!(
-            n_txs = block.transactions.len(),
+            n_txs = block.body().transactions.len(),
             total_t = %self.timers.total.elapsed(),
         );
         tracing::debug!(
@@ -154,7 +155,9 @@ impl BlockSync {
         commit: bool,
     ) -> Result<(), BlockSyncError>
     where
-        DB: DatabaseWrite + DatabaseRead + bop_common::typedefs::Database<Error: Into<ProviderError> + Display>,
+        DB: DatabaseWrite
+            + DatabaseRead
+            + bop_common::typedefs::Database<Error: Into<ProviderError> + Display + Send + Sync + 'static>,
     {
         self.timers.execution.start();
         let (execution_output, trie_updates) = self.execute(block, db)?;
@@ -175,50 +178,39 @@ impl BlockSync {
         db: &DB,
     ) -> Result<(BlockExecutionOutput<OpReceipt>, TrieUpdates), BlockExecutionError>
     where
-        DB: DatabaseRead + bop_common::typedefs::Database<Error: Into<ProviderError> + Display>,
+        DB: DatabaseRead + bop_common::typedefs::Database<Error: Into<ProviderError> + Display + Send + Sync + 'static>,
     {
-        let head_block_hash = db
-            .head_block_hash()
-            .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::LatestBlock(e.into())))?;
+        let head_block_hash =
+            db.head_block_hash().map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::other(e)))?;
         debug_assert!(block.parent_hash == head_block_hash, "can only apply blocks sequentially");
         self.timers.execute_txs.start();
         // Apply the block.
-        let mut executor = self.execution_factory.create_strategy(db.clone());
-        executor.apply_pre_execution_changes(block)?;
-        let ExecuteOutput { receipts, gas_used } = executor.execute_transactions(block)?;
-        let requests = executor.apply_post_execution_changes(block, &receipts)?;
+        let executor = self.execution_factory.executor(db.clone());
+        let res = executor.execute(block)?;
         self.timers.execute_txs.stop();
 
         // Validate receipts/ gas used
-        self.timers
-            .validate
-            .time(|| reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &receipts))?;
-
-        // Merge transitions and take bundle state.
-        let state = self.timers.take_bundle.time(|| executor.finish());
+        self.timers.validate.time(|| {
+            reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &res.receipts)
+                .map_err(|e| BlockExecutionError::other(e))
+        })?;
 
         // Validate state root
         let trie_updates = self.timers.state_root.time(|| {
             let (state_root, trie_updates) = db
-                .calculate_state_root(&state)
+                .calculate_state_root(&res.state)
                 .map_err(|e| BlockExecutionError::Internal(InternalBlockExecutionError::Other(e.into())))?;
 
             if state_root != block.state_root {
-                return Err(BlockExecutionError::Consensus(ConsensusError::BodyStateRootDiff(
-                    GotExpected::new(state_root, block.state_root).into(),
+                return Err(BlockExecutionError::Internal(InternalBlockExecutionError::Other(
+                    ConsensusError::BodyStateRootDiff(GotExpected::new(state_root, block.state_root).into()).into(),
                 )));
             }
             Ok(trie_updates)
         })?;
         self.timers.state_root.stop();
 
-        Ok((
-            BlockExecutionOutput {
-                state,
-                result: reth_evm::block::BlockExecutionResult { receipts, requests, gas_used },
-            },
-            trie_updates,
-        ))
+        Ok((res, trie_updates))
     }
 
     fn insert_pending_block(&mut self, block: &RecoveredBlock<OpBlock>) {
@@ -262,7 +254,7 @@ mod tests {
         let mut block_sync = BlockSync::new(chain_spec);
 
         // Fetch the block from the RPC.
-        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let provider = AlloyProvider::new_http(rpc_url);
         let block = rt.block_on(async { fetch_block(25771900, &provider).await });
 
         // Create the alloydb.
@@ -293,7 +285,7 @@ mod tests {
         let chain_spec = BASE_SEPOLIA.clone();
         let mut block_sync = BlockSync::new(chain_spec);
 
-        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let provider = AlloyProvider::new_http(rpc_url);
         let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &provider).await });
 
         // Execute the block.
@@ -311,7 +303,7 @@ mod tests {
         let db: bop_db::SequencerDB = init_database(&db_location, 1000, 1000, BASE_SEPOLIA.clone()).unwrap();
         let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
         let rpc_url = Url::parse(TEST_BASE_SEPOLIA_RPC_URL).unwrap();
-        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let provider = AlloyProvider::new_http(rpc_url);
 
         let mut block_sync = BlockSync::new(BASE_SEPOLIA.clone());
 
@@ -349,7 +341,7 @@ mod tests {
 
             // Create a competing block at same height
             let mut competing_block = block.clone();
-            competing_block.parent_hash = B256::random(); // Force different parent hash - we don't commit the header to the db so this won't affect the db.
+            competing_block.header_mut().parent_hash = B256::random(); // Force different parent hash - we don't commit the header to the db so this won't affect the db.
 
             // Apply competing block - should trigger reorg but won't ask for new blocks as the height is the same.
             let result = block_sync.commit_block(&competing_block, &db, true);
