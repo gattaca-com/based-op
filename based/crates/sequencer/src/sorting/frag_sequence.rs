@@ -96,7 +96,7 @@ impl FragSequence {
 mod tests {
     use std::sync::Arc;
 
-    use alloy_consensus::Signed;
+    use alloy_consensus::{BlockHeader, Signed};
     use alloy_eips::eip2718::Encodable2718;
     use alloy_primitives::Bytes;
     use alloy_provider::ProviderBuilder;
@@ -115,8 +115,7 @@ mod tests {
     use tracing::level_filters::LevelFilter;
 
     use crate::{
-        SequencerConfig, Simulator, block_sync::fetch_blocks::fetch_block, context::SequencerContext,
-        simulator::simulate_tx_inner,
+        block_sync::{fetch_blocks::fetch_block, AlloyProvider}, context::SequencerContext, simulator::simulate_tx_inner, SequencerConfig, Simulator
     };
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";
@@ -135,15 +134,15 @@ mod tests {
         tracing::info!("RPC URL: {}", rpc_url);
 
         // Create the block executor.
-        let evm_config = OpEvmConfig::new(BASE_SEPOLIA.clone());
+        let evm_config = OpEvmConfig::new(BASE_SEPOLIA.clone(), Default::default());
 
         // Fetch the block from the RPC.
-        let provider = ProviderBuilder::new().network().on_http(rpc_url.clone());
+        let provider = AlloyProvider::new_http(rpc_url.clone());
         let block_number = 21803240;
         let block = rt.block_on(async { fetch_block(block_number, &provider).await });
         let previous_block = rt.block_on(async { fetch_block(block_number - 1, &provider).await });
-        let header = block.block.header();
-        let previous_header = previous_block.block.header();
+        let header = block.header();
+        let previous_header = previous_block.header();
         tracing::info!("Testing block header: {:?}", header);
 
         let config = SequencerConfig {
@@ -153,11 +152,12 @@ mod tests {
             evm_config: evm_config.clone(),
             simulate_tof_in_pools: false,
             commit_sealed_frags_to_db: false,
+            supervisor: None,
         };
 
         // Create the alloydb.
-        let client = ProviderBuilder::new().network().on_http(rpc_url);
-        let alloy_db = AlloyDB::new(client, block.block.header.number, rt);
+        let provider = AlloyProvider::new_http(rpc_url.clone());
+        let alloy_db = AlloyDB::new(provider, block.number(), rt);
 
         let db_frag: DBFrag<AlloyDB> = alloy_db.clone().into();
         let sim_db = db_frag.clone();
@@ -174,33 +174,16 @@ mod tests {
         ctx.base_fee = block.base_fee_per_gas.unwrap();
 
         let mut must_include_txs = Vec::with_capacity(10);
-        let mut non_must_include_txs = Vec::with_capacity(block.block.body.transactions.len().saturating_sub(10));
+        let mut non_must_include_txs = vec![];
         // Split into must include and non-must include txs
         // Note: for this test as assume the first 10 txs are must include txs, the rest are not
-        for (index, signed_tx) in block.block.body.transactions.iter().enumerate() {
+        for (index, signed_tx) in block.body().transactions().enumerate() {
             let sender = signed_tx.recover_signer().unwrap();
-            let typed_tx: &OpTypedTransaction = &signed_tx.transaction;
-            let envelope: OpTxEnvelope = match typed_tx {
-                OpTypedTransaction::Legacy(x) => {
-                    Signed::new_unchecked(x.clone(), signed_tx.signature().clone(), *signed_tx.tx_hash()).into()
-                }
-                OpTypedTransaction::Eip2930(x) => {
-                    Signed::new_unchecked(x.clone(), signed_tx.signature().clone(), *signed_tx.tx_hash()).into()
-                }
-                OpTypedTransaction::Eip1559(x) => {
-                    Signed::new_unchecked(x.clone(), signed_tx.signature().clone(), *signed_tx.tx_hash()).into()
-                }
-                OpTypedTransaction::Eip7702(x) => {
-                    Signed::new_unchecked(x.clone(), signed_tx.signature().clone(), *signed_tx.tx_hash()).into()
-                }
-                OpTypedTransaction::Deposit(x) => x.clone().into(),
-            };
-
-            let rlp_tx = Bytes::from(envelope.encoded_2718());
+            let rlp_tx = Bytes::from(signed_tx.encoded_2718());
             if index < 10 {
                 must_include_txs.push(rlp_tx);
             } else {
-                let bop_tx = Arc::new(Transaction::new(envelope, sender, rlp_tx.into()));
+                let bop_tx = Arc::new(Transaction::new(signed_tx.clone(), sender, rlp_tx.into()));
                 non_must_include_txs.push(bop_tx);
             }
         }
@@ -223,7 +206,7 @@ mod tests {
         let (mut seq, mut sorting_db) = ctx.start_sequencing(attributes, sim_connections.senders());
 
         // Apply non-must include txs using simulator
-        let mut sim = Simulator::new(sim_db, &evm_config, 0);
+        let mut sim = Simulator::new(sim_db, evm_config, 0);
         let simulator_evm_block_params = ctx.new_block_params();
         sim.update_evm_environments(simulator_evm_block_params);
 
@@ -242,6 +225,6 @@ mod tests {
 
         // Seal the block
         let (_seal, payload) = ctx.seal_block(seq);
-        assert_eq!(block.block.header.hash_slow(), payload.execution_payload.payload_inner.payload_inner.block_hash);
+        assert_eq!(block.hash_slow(), payload.execution_payload.payload_inner.payload_inner.block_hash);
     }
 }

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use alloy_consensus::Block;
+use alloy_consensus::{Block, BlockHeader, EthBlock};
 use alloy_provider::Provider;
 use alloy_rpc_types::Block as RpcBlock;
 use bop_common::communication::{SendersSpine, TrackedSenders, messages::BlockSyncError};
@@ -86,11 +86,10 @@ pub fn convert_rpc_block(
         .transactions
         .into_iter()
         .map(|tx| {
-            let signed_tx = OpTransactionSigned::from_envelope(tx.inner.inner);
+            let signed_tx = tx.inner.inner.into_inner();
             recovery_buf.clear(); // Reuse buffer for next transaction
 
-            let sender =
-                signed_tx.recover_signer_unchecked_with_buf(&mut recovery_buf).ok_or(BlockSyncError::SignerRecovery)?;
+            let sender = signed_tx.recover_signer_unchecked_with_buf(&mut recovery_buf)?;
 
             Ok((signed_tx, sender))
         })
@@ -102,14 +101,14 @@ pub fn convert_rpc_block(
         header: consensus_block.header,
         body: alloy_consensus::BlockBody {
             transactions: converted_txs,
-            ommers: consensus_block.ommers,
-            withdrawals: consensus_block.withdrawals,
+            ommers: consensus_block.body.ommers,
+            withdrawals: consensus_block.body.withdrawals,
         },
     };
 
     // SAFETY: We've just constructed the block and senders vectors from the same source
     // and verified they have matching lengths through the unzip operation
-    Ok(RecoveredBlock::new_unchecked(block, senders))
+    Ok(RecoveredBlock::new_unhashed(block, senders))
 }
 
 #[cfg(test)]
@@ -121,7 +120,6 @@ pub const TEST_BASE_SEPOLIA_RPC_URL: &str = "https://base-sepolia-rpc.publicnode
 #[cfg(test)]
 mod tests {
     use alloy_primitives::b256;
-    use alloy_provider::ProviderBuilder;
     use bop_common::communication::Spine;
     use bop_db::AlloyDB;
 
@@ -130,14 +128,14 @@ mod tests {
     #[ignore = "Requires RPC call"]
     #[tokio::test]
     async fn test_single_block_fetch() {
-        let provider = ProviderBuilder::new().network().on_http(TEST_BASE_RPC_URL.parse().unwrap());
+        let provider = AlloyProvider::new_http(TEST_BASE_RPC_URL.parse().unwrap());
         let block = fetch_block(25738473, &provider).await;
 
         assert_eq!(block.number, 25738473);
         assert_eq!(block.hash_slow(), b256!("ad9e6c25e60e711e5e99684892848adc06d44b1cc0e5056b06fcead6c7eb6186"));
 
-        assert!(!block.transactions.is_empty());
-        assert!(block.transactions.first().unwrap().is_deposit());
+        assert!(block.body().transactions().count() > 0);
+        assert!(block.body().transactions().next().unwrap().is_deposit());
     }
 
     #[ignore = "Requires RPC call"]
@@ -150,7 +148,7 @@ mod tests {
         let mut connections = spine.to_connections("test");
         let senders_clone = connections.senders().clone();
 
-        let provider = ProviderBuilder::new().network().on_http(TEST_BASE_RPC_URL.parse().unwrap());
+        let provider = AlloyProvider::new_http(TEST_BASE_RPC_URL.parse().unwrap());
         let handle = tokio::spawn(async move {
             async_fetch_blocks_and_send_sequentially(start_block, end_block, &senders_clone, &provider).await;
         });

@@ -7,7 +7,7 @@ use alloy_rpc_types::{AccessList, TransactionReceipt};
 use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};
 use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use op_revm::OpHaltReason;
-use reth_optimism_primitives::{OpReceipt, transaction::TransactionSenderInfo};
+use reth_optimism_primitives::OpReceipt;
 use reth_primitives::ReceiptWithBloom;
 use reth_primitives_traits::SignedTransaction;
 use revm::{context::result::ResultAndState, state::EvmState};
@@ -157,16 +157,6 @@ impl Deref for SimulatedTx {
     }
 }
 
-impl TransactionSenderInfo for SimulatedTx {
-    fn sender(&self) -> Address {
-        self.sender
-    }
-
-    fn nonce(&self) -> u64 {
-        self.tx.nonce()
-    }
-}
-
 impl Typed2718 for SimulatedTx {
     #[doc = " Returns the EIP-2718 type flag."]
     fn ty(&self) -> u8 {
@@ -286,7 +276,7 @@ impl TransactionTrait for SimulatedTx {
     }
 }
 
-impl reth_optimism_primitives::transaction::signed::OpTransaction for SimulatedTx {
+impl reth_optimism_primitives::transaction::OpTransaction for SimulatedTx {
     fn is_deposit(&self) -> bool {
         false
     }

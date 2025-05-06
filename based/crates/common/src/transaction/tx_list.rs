@@ -1,8 +1,6 @@
 use std::{collections::VecDeque, ops::Deref, sync::Arc};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
-use alloy_rpc_types::TransactionTrait;
-use reth_optimism_primitives::transaction::TransactionSenderInfo;
 use revm_primitives::Address;
 
 use crate::transaction::Transaction;

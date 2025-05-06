@@ -9018,6 +9018,7 @@ dependencies = [
  "reth-primitives",
  "reth-primitives-traits",
  "reth-zstd-compressors",
+ "revm-primitives",
  "rstest",
  "secp256k1",
  "serde",

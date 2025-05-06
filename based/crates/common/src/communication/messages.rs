@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::typedefs::*;
-use alloy_consensus::BlockHeader;
+use alloy_consensus::{BlockHeader, Transaction as TransactionTrait};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, PayloadAttributes, PayloadError,
@@ -14,7 +14,7 @@ use alloy_rpc_types::engine::{
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
-use reth_optimism_primitives::transaction::TransactionSenderInfo;
+use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
@@ -374,7 +374,7 @@ pub enum BlockSyncError {
     #[error("Payload error: {0}")]
     Payload(#[from] PayloadError),
     #[error("Failed to recover transaction signer")]
-    SignerRecovery,
+    SignerRecovery(#[from] RecoveryError),
 }
 
 #[derive(Clone, Debug, AsRefStr)]

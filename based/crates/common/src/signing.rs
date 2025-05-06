@@ -2,7 +2,7 @@ use std::fmt;
 
 use alloy_consensus::{SignableTransaction, Signed};
 use alloy_network::TxSignerSync;
-use alloy_primitives::{Address, B256, PrimitiveSignature, hex, hex::FromHexError};
+use alloy_primitives::{Address, B256, Signature, hex, hex::FromHexError};
 use alloy_signer::SignerSync;
 use alloy_signer_local::PrivateKeySigner;
 use rand::RngCore;
@@ -43,7 +43,7 @@ impl ECDSASigner {
     }
 
     #[inline]
-    pub fn sign_message(&self, message: B256) -> Result<PrimitiveSignature, SignerError> {
+    pub fn sign_message(&self, message: B256) -> Result<Signature, SignerError> {
         let sig = self.secret.sign_hash_sync(&message)?;
         Ok(sig)
     }
@@ -55,7 +55,7 @@ impl ECDSASigner {
         Self::try_from_secret(&bytes).expect("valid random 32 bytes should create valid secret key")
     }
 
-    pub fn sign_tx<T: SignableTransaction<PrimitiveSignature>>(&self, mut tx: T) -> Result<Signed<T>, SignerError> {
+    pub fn sign_tx<T: SignableTransaction<Signature>>(&self, mut tx: T) -> Result<Signed<T>, SignerError> {
         let signature = self.secret.sign_transaction_sync(&mut tx)?;
         let signed = tx.into_signed(signature);
         Ok(signed)

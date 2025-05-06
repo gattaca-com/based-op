@@ -196,7 +196,6 @@ impl DatabaseWrite for AlloyDB {
 
 #[cfg(test)]
 mod tests {
-    use alloy_provider::ProviderBuilder;
     use revm_primitives::address;
 
     use super::*;
@@ -204,9 +203,8 @@ mod tests {
     #[test]
     #[ignore = "flaky RPC"]
     fn can_get_basic() {
-        let provider = ProviderBuilder::new()
-            .network()
-            .on_http("https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27".parse().unwrap());
+        let provider =
+            AlloyProvider::new_http("https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27".parse().unwrap());
         let alloydb = AlloyDB::new(provider, 16148323, Arc::new(Runtime::new().unwrap()));
 
         // ETH/USDT pair on Uniswap V2
