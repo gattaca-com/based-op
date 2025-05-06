@@ -46,7 +46,7 @@ pub fn payload_to_block(
     let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
     let mut block_senders = vec![];
     for tx in &block.body.transactions {
-        block_senders.push(tx.recover_signer_unchecked().map_err(|_| BlockSyncError::SignerRecovery)?);
+        block_senders.push(tx.recover_signer_unchecked()?);
     }
     Ok(RecoveredBlock::new_unhashed(block, block_senders))
 }

@@ -1,9 +1,8 @@
-use std::{ops::Deref, sync::Arc};
-use bop_common::typedefs::BlockSyncMessage;
 use alloy_consensus::{BlockHeader, TxEip1559};
 use alloy_eips::eip2718::Encodable2718;
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::Provider;
 use alloy_rpc_types::engine::{ForkchoiceState, PayloadId};
+use bop_common::typedefs::BlockSyncMessage;
 use bop_common::{
     actor::Actor,
     communication::{
@@ -22,6 +21,7 @@ use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use rand::seq::{IndexedMutRandom, IndexedRandom};
 use reqwest::Url;
 use revm_primitives::{Address, B256, TxKind, U256, b256};
+use std::{ops::Deref, sync::Arc};
 use tokio::{runtime::Runtime, sync::oneshot};
 use tracing::{info, warn};
 
@@ -142,7 +142,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             .enable_all()
             .build()
             .expect("couldn't build local tokio runtime");
-        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let provider = AlloyProvider::new_http(rpc_url);
         let mode = match mode {
             MockMode::Benchmark => Mode::Benchmark(BenchmarkData::default()),
             MockMode::Spammer => Mode::Spammer(SpamData::default()),

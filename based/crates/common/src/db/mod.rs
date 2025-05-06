@@ -25,7 +25,7 @@ use crate::time::BlockSyncTimers;
 /// Database trait for all DB operations.
 #[auto_impl(&, Arc)]
 pub trait DatabaseWrite:
-    Database<Error: Into<ProviderError> + Display> + Send + Sync + 'static + Clone + Debug
+    Database<Error: Into<ProviderError> + Display + Send + Sync + 'static> + Send + Sync + 'static + Clone + Debug
 {
     fn commit_block_unchecked(
         &self,
@@ -41,7 +41,7 @@ pub trait DatabaseWrite:
 /// Database read functions
 #[auto_impl(&, Arc)]
 pub trait DatabaseRead:
-    DatabaseRef<Error: Debug + Display + Into<ProviderError>> + Send + Sync + 'static + Clone + Debug
+    DatabaseRef<Error: Debug + Display + Into<ProviderError> + Send + Sync + 'static> + Send + Sync + 'static + Clone + Debug
 {
     /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;

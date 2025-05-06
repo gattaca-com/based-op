@@ -1,4 +1,4 @@
-use alloy_provider::{Provider, ProviderBuilder};
+use alloy_provider::Provider;
 use bop_common::{
     actor::Actor,
     communication::{SpineConnections, messages::BlockFetch},
@@ -25,7 +25,7 @@ impl BlockFetcher {
             .build()
             .expect("couldn't build local tokio runtime");
 
-        let provider = ProviderBuilder::new().network().on_http(rpc_url);
+        let provider = AlloyProvider::new_http(rpc_url);
 
         Self { executor, next_block: db_block + 1, sync_until: db_block + 1, batch_size: 20, provider }
     }

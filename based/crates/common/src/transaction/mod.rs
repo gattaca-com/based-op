@@ -9,7 +9,7 @@ use alloy_primitives::{Address, B256, Bytes, U256};
 use op_alloy_consensus::{DepositTransaction, OpTxEnvelope};
 use op_revm::OpTransaction;
 use reth_evm::IntoTxEnv;
-use reth_optimism_primitives::{OpTransactionSigned, transaction::TransactionSenderInfo};
+use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives_traits::SignedTransaction;
 use revm::context::TxEnv;
 pub use simulated::{SimulatedTx, SimulatedTxList};
@@ -237,34 +237,6 @@ impl From<OpTransactionSigned> for Transaction {
     fn from(value: OpTransactionSigned) -> Self {
         let sender = value.recover_signer().expect("could not recover signer");
         let envelope = value.encoded_2718().into();
-        let (tx, signature, _hash) = value.into_parts();
-        let tx = match tx {
-            op_alloy_consensus::OpTypedTransaction::Legacy(tx_legacy) => {
-                OpTxEnvelope::Legacy(tx_legacy.into_signed(signature))
-            }
-            op_alloy_consensus::OpTypedTransaction::Eip2930(tx_eip2930) => {
-                OpTxEnvelope::Eip2930(tx_eip2930.into_signed(signature))
-            }
-            op_alloy_consensus::OpTypedTransaction::Eip1559(tx_eip1559) => {
-                OpTxEnvelope::Eip1559(tx_eip1559.into_signed(signature))
-            }
-            op_alloy_consensus::OpTypedTransaction::Eip7702(tx_eip7702) => {
-                OpTxEnvelope::Eip7702(tx_eip7702.into_signed(signature))
-            }
-            op_alloy_consensus::OpTypedTransaction::Deposit(tx_deposit) => OpTxEnvelope::Deposit(tx_deposit.seal()),
-        };
-        Self { tx, sender, envelope }
-    }
-}
-
-impl TransactionSenderInfo for Transaction {
-    #[inline]
-    fn sender(&self) -> Address {
-        self.sender
-    }
-
-    #[inline]
-    fn nonce(&self) -> u64 {
-        self.tx.nonce()
+        Self { tx: value.into(), sender, envelope }
     }
 }
