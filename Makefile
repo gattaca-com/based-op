@@ -34,26 +34,10 @@ docs: ## 📚 Build local docs
 	npm run build && \
 	npm run start
 
-deps: ## 🚀 Install all dependencies
-	# Kurtosis
-	if [[ "$$(uname -s)" == "Darwin" ]]; then \
-		xcode-select --install; \
-		brew install kurtosis-tech/tap/kurtosis-cli; \
-	elif [[ "$$(uname -s)" == "Linux" ]]; then \
-		echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list; \
-		sudo apt update; \
-		sudo apt install -y kurtosis-cli; \
-	fi
-	# Rust
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-	curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-	if [[ "$$(uname -m)" == "arm"* ]]; then \
-		docker pull --platform=linux/amd64 ghcr.io/blockscout/smart-contract-verifier:v1.9.0; \
-	fi
-
 build: build-portal build-gateway build-op-node build-op-geth build-registry ## 🏗️ Build
 
 build-no-gateway: build-portal build-op-node build-op-geth ## 🏗️ Build without gateway
+
 build-portal: ## 🏗️ Build based portal from based directory
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
@@ -87,20 +71,6 @@ run-portal:
 		exit 1; \
 	fi
 
-run-gateway:
-	@if [ -f main_node/.env ] && [ -f main_node/config/genesis.json ] && [ -f main_node/config/jwt ]; then \
-		cd main_node && docker compose up -d gateway; \
-	else \
-		echo "Missing required files! Look in the main_node subdir. We need: main_node/.env, main_node/genesis.json, main_node/config/jwt. You can generate the jwt by using make gateway-jwt"; \
-		exit 1; \
-	fi
-
-main-jwt:
-	mkdir -p main_node/config && openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' | tee main_node/config/jwt
-follower-jwt:
-	mkdir -p follower_node/config && openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' | tee follower_node/config/jwt
-	
-
 build-follower-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
 	IMAGE_TAGS=develop \
@@ -120,51 +90,60 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-run-kurtosis: ## 🚀 Run
-	kurtosis run optimism-package --args-file config.yml --enclave based-op && $(MAKE) dump
-
-run-kurtosis-maxgas: ## 🚀 Run
-	kurtosis run optimism-package --args-file config_maxgas.yml --enclave based-op && $(MAKE) dump
-
-run-kurtosis-multiple: ## 🚀 Run
-	kurtosis run optimism-package --args-file config_multiple_gateways.yml --enclave based-op && $(MAKE) dump
-
-restart-kurtosis-no-gateway: clean build-no-gateway run ## rip rebuild run
-
-run-follower: build-op-node build-op-geth ## 🚀 Run a single follower node with RPC enabled.
-	cd follower-node && \
+run-follower: build-follower-op-node build-follower-op-geth build-gateway## 🚀 Run a single follower node with RPC enabled.
+	ifndef PORTAL
+		$(error PORTAL is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
+	endif
+	ifndef GATEWAY_SEQUENCING_KEY
+		$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
+	endif
+	@if [ ! -d follower_node/config ]; then \
+		mkdir follower_node/config; \
+	fi \
+	@if [ ! -f follower_node/config/jwt ]; then \
+	    echo "Generating a new jwt file, please communicate this with the registry operator"; \
+		openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' | tee follower_node/config/jwt; \
+	fi \
+	@if [ ! -f follower_node/.env ]; then \
+	    echo "Generating a .env from PORTAL"; \
+	    echo "PORTAL=$(PORTAL)" >> follower_node/.env; \
+	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)" >> follower_node/.env; \
+	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$(curl -s -X POST -H \"Content-Type: application/json\" --data \'{\"jsonrpc\":\"2.0\",\"method\":\"portal_opNodeGossipStatic\",\"params\":[],\"id\":1}\' $PORTAL | jq -r \'.result\')" >> follower_node/.env; \
+	    echo "MAIN_OP_NODE_ENR=$(curl -s -X POST -H \"Content-Type: application/json\" --data \'{\"jsonrpc\":\"2.0\",\"method\":\"portal_opNodeBootnodeEnr\",\"params\":[],\"id\":1}\' $PORTAL | jq -r \'.result\')" >> follower_node/.env; \
+	    echo "MAIN_OP_GETH_ENODE=$(curl -s -X POST -H \"Content-Type: application/json\" --data \'{\"jsonrpc\":\"2.0\",\"method\":\"portal_opGethBootnodeEnode\",\"params\":[],\"id\":1}\' $PORTAL | jq -r \'.result\')" >> follower_node/.env; \
+	    echo "NETWORK_ID=$(curl -s -X POST -H \"Content-Type: application/json\" --data \'{\"jsonrpc\":\"2.0\",\"method\":\"portal_l2ChainId\",\"params\":[],\"id\":1}\' $PORTAL | jq -r \'.result\')" >> follower_node/.env; \
+	    echo "MAIN_OP_NODE_ENR=$(curl -s -X POST -H \"Content-Type: application/json\" --data '{\"jsonrpc\":\"2.0\",\"method\":\"portal_opNodeBootnodeEnr\",\"params\":[],\"id\":1}' $PORTAL | jq -r '.result')" >> follower_node/.env; \
+	    curl -s -X POST -H \"Content-Type: application/json\" --data '{\"jsonrpc\":\"2.0\",\"method\":\"portal_fileRollup\",\"params\":[],\"id\":1}' $PORTAL | jq -r '.result' >> follower_node/config/rollup.json; \
+	    curl -s -X POST -H \"Content-Type: application/json\" --data '{\"jsonrpc\":\"2.0\",\"method\":\"portal_fileGenesis\",\"params\":[],\"id\":1}' $PORTAL | jq -r '.result' >> follower_node/config/genesis.json; \
+	fi \
+	 
+	cd follower_node && \
 		docker compose up -d
 
-logs: ## 📜 Show logs
-	kurtosis service logs -f based-op $(SERVICE)
+logs-portal: ## 📜 Show portal logs
+	docker logs main_node-portal-1 --tail 100 -f
 
-dump:
-	bash -c 'kurtosis files download based-op $$(kurtosis enclave inspect based-op | grep op-deployer-configs | awk "{print \$$1}") ./genesis'
+logs-gateway: ## 📜 Show gateway logs
+	docker logs follower_node-gateway-1 --tail 100 -f
+	
+logs-main-op-node: ## 📜 Show main op-node logs (when on main box)
+	docker logs main_node-op-node-1 --tail 100 -f
+	
+logs-main-op-geth: ## 📜 Show main op-geth logs (when on main box)
+	docker logs main_node-op-geth-1 --tail 100 -f
+	
+logs-follower-op-geth: ## 📜 Show follower op-geth logs (when on running a follower node)
+	docker logs follower_node-op-geth-1 --tail 100 -f
+	
+logs-follower-op-node: ## 📜 Show follower op-node logs (when on running a follower node)
+	docker logs follower_node-op-node-1 --tail 100 -f 
 
-batcher-logs:
-	$(MAKE) logs SERVICE=op-batcher-op-kurtosis
+logs-batcher:
+	docker logs main_node-op-batcher-1 --tail 100 -f
+	
+logs-proposer:
+	docker logs main_node-op-proposer-1 --tail 100 -f 
 
-portal-logs:
-	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
-
-gateway-logs:
-	$(MAKE) logs SERVICE=gateway-1-gateway-op-kurtosis
-
-op-node-logs:
-	$(MAKE) logs SERVICE=op-cl-1-op-node-op-reth-op-kurtosis
-
-op-geth-logs:
-	$(MAKE) logs SERVICE=op-el-2-op-geth-op-node-op-kurtosis
-
-clean: ## 🧹 Clean
-	rm -rf ./genesis ./data
-	docker compose -f follower-node/compose.yml down
-	docker volume rm -f follower-node_geth_data follower-node_node_data follower-node_jwt
-	kurtosis enclave rm based-op --force
-
-restart: clean run ## 🔄 Restart
-
-# Testing
 
 FOLLOWER_NODE_HOST?=http://localhost
 BLOCK_NUMBER?=$(shell echo $$(( $$(cast block-number --rpc-url http://localhost:$(BOP_EL_PORT)) + 1 )))

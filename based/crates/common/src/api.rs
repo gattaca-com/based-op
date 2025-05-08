@@ -128,10 +128,10 @@ pub trait RegistryApi {
 #[rpc(client, server, namespace = "portal")]
 pub trait PortalApi {
     /// The network id of the l2
-    #[method(name = "l2NetworkId")]
+    #[method(name = "l2ChainId")]
     async fn l2_chain_id(&self) -> RpcResult<u64>;
     /// The network id of the l1
-    #[method(name = "l1NetworkId")]
+    #[method(name = "l1ChainId")]
     async fn l1_chain_id(&self) -> RpcResult<u64>;
 
     /// rollup.json file

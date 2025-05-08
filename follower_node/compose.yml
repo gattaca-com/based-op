@@ -38,8 +38,8 @@ services:
           --allow-insecure-unlock \
           --discovery.port=$OP_GETH_GOSSIP_PORT \
           --port=$OP_GETH_GOSSIP_PORT \
-          --bootnodes=enode://$MAIN_GETH_ENODE@$MAIN_NODE_IP:$OP_GETH_GOSSIP_PORT \
-          --rollup.sequencerhttp=http://$MAIN_NODE_IP:$PORTAL_PORT 
+          --bootnodes=$MAIN_OP_GETH_ENODE \
+          --rollup.sequencerhttp=$PORTAL
 
     volumes:
       - ./data/geth:/data/geth
@@ -66,9 +66,9 @@ services:
       - --p2p.listen.tcp=$OP_NODE_GOSSIP_PORT
       - --p2p.listen.udp=$OP_NODE_GOSSIP_PORT
       - --safedb.path=/data/op-node/op-node-beacon-data
-      - --p2p.static=/ip4/$MAIN_NODE_IP/tcp/$OP_NODE_GOSSIP_PORT/p2p/$MAIN_OP_NODE_ID 
+      - --p2p.static=$MAIN_OP_NODE_GOSSIP_STATIC
       - --rpc.enable-based 
-      - --registry=http://$MAIN_NODE_IP:$REGISTRY_PORT
+      - --registry=$PORTAL
       - --p2p.bootnodes=$MAIN_OP_NODE_ENR
     volumes:
       - ./data/node:/data/op-node
@@ -84,7 +84,7 @@ services:
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway
-      - --eth_client.url=http://$MAIN_NODE_IP:$PORTAL_PORT
+      - --eth_client.url=$PORTAL
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
     volumes: 
