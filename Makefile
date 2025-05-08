@@ -100,14 +100,13 @@ run-follower: build-follower-op-node build-follower-op-geth build-gateway ## ðŸš
 
 	@# generate jwt if missing
 	@if [ ! -f follower_node/config/jwt ]; then \
-	  echo "Generating a new jwt file, please communicate this with the registry operator"; \
 	  openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > follower_node/config/jwt; \
 	fi
 
 	@# generate .env and fetch JSON if missing
 	@if [ ! -f follower_node/.env ]; then \
 	  cp follower_node/env_example follower_node/.env; \
-	  echo "Generating a .env from PORTAL"; \
+	  echo "Generating a .env from PORTAL..."; \
 	  { \
 	    echo "PORTAL=$(PORTAL)"; \
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
@@ -132,6 +131,16 @@ run-follower: build-follower-op-node build-follower-op-geth build-gateway ## ðŸš
 	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
 	    $(PORTAL) | jq -r '.result' > follower_node/config/genesis.json; \
 	fi
+	@echo "...Done"
+	@echo ""
+	@echo "Starting with the following generated .env:"
+	@cat follower_node/.env
+	@echo ""
+	@echo ""
+	@echo "Communicate the following jwt with the registry operator:"
+	@cat follower_node/config/jwt
+	@echo ""
+	@echo ""
 
 	@cd follower_node && docker compose up -d
 
