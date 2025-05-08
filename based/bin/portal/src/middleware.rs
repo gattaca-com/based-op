@@ -86,7 +86,7 @@ where
 
                     Some(("registry", rest)) => {
                         debug!(method = %req.method_name(), "forwarding request to registry");
-                        registry_client.request(rest, params).await
+                        registry_client.request(req.method_name(), params).await
                     }
                     Some((_, _)) => {
                         error!(method = %req.method_name(), "i don't know what to do with this");
