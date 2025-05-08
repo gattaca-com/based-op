@@ -243,12 +243,13 @@ pub trait OpNodeApi {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+#[allow(non_snake_case)]
 pub struct PeerInfo {
     pub peer_id: String,
     pub node_id: String,
     pub user_agent: String,
     pub protocol_version: String,
-    pub enr: String,
+    pub ENR: String,
     pub addresses: Vec<String>,
     pub protocols: Option<Value>,
     pub connectedness: u8,

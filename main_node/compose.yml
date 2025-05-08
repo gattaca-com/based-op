@@ -117,7 +117,7 @@ services:
     network_mode: "host"
     command:
       - --fallback.eth_url=http://0.0.0.0:$OP_GETH_RPC_PORT
-      - --fallback.url=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
+      - --fallback.engine_url=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
       - --registry.url=http://0.0.0.0:$REGISTRY_PORT
       - --gateway.timeout_ms=100
     volumes:
