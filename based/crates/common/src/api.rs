@@ -244,7 +244,9 @@ pub trait OpNodeApi {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerInfo {
+    #[serde(rename = "peerID")]
     pub peer_id: String,
+    #[serde(rename = "nodeID")]
     pub node_id: String,
     pub user_agent: String,
     pub protocol_version: String,
@@ -255,6 +257,7 @@ pub struct PeerInfo {
     pub connectedness: u8,
     pub direction: u8,
     pub protected: bool,
+    #[serde(rename = "chainID")]
     pub chain_id: u64,
     pub latency: u64,
     pub gossip_blocks: bool,
@@ -384,4 +387,13 @@ pub trait OpGethAdminApi {
     /// The rollup config of the op-node
     #[method(name = "nodeInfo")]
     async fn node_info(&self) -> RpcResult<OpGethInfo>;
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+    #[test]
+    fn parse_peerinfo() {
+        assert_ne!(serde_json::from_str::<PeerInfo>("{\"ENR\":\"enr:-J-4QKMgVCRicuzgRSXF--kcfNcSb3el3gnK0VTKH5IqfAnjY096UPHcnpeOkYf8Y6hdbhFbjIoRcdMxKgy1QOftlZGGAZavZyU2gmlkgnY0gmlwhKwfGmOHb3BzdGFja4Xkq4MBAIlzZWNwMjU2azGhA38YA_8AH2SrzzVprDUjXbyv88AJION0F_UdgJmIk7v2g3RjcIIjK4N1ZHCCIys\",\"addresses\":[\"/ip4/127.0.0.1/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"/ip4/172.31.26.99/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\"],\"chainID\":0,\"connectedness\":0,\"direction\":0,\"gossipBlocks\":true,\"latency\":0,\"nodeID\":\"ca1451eb9482746566a92fbde4bcb7c646d23bfceb21f66d4d79e1e0f0819cfc\",\"peerID\":\"16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"protected\":false,\"protocolVersion\":\"\",\"protocols\":null,\"scores\":{\"gossip\":{\"IPColocationFactor\":0,\"behavioralPenalty\":0,\"blocks\":{\"firstMessageDeliveries\":0,\"invalidMessageDeliveries\":0,\"meshMessageDeliveries\":0,\"timeInMesh\":0},\"total\":0},\"reqResp\":{\"errorResponses\":0,\"rejectedPayloads\":0,\"validResponses\":0}},\"userAgent\":\"\"}").unwrap().peer_id, "");
+    }
 }
