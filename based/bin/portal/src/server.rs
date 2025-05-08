@@ -614,7 +614,7 @@ impl PortalApiServer for PortalServer {
 
     /// The enr that can be used to sync with the op-node
     async fn op_node_bootnode_enr(&self) -> RpcResult<String> {
-        Ok(self.op_node_client.peer_info().await.map(|p| p.ENR)?)
+        Ok(self.op_node_client.peer_info().await.map(|p| p.enr)?)
     }
 
     /// The enode that can be used to sync with the op-geth
