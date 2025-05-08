@@ -118,7 +118,6 @@ services:
     command:
       - --fallback.eth_url=http://0.0.0.0:$OP_GETH_RPC_PORT
       - --fallback.url=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
-      - --fallback.jwt_path=/config/jwt
       - --registry.url=http://0.0.0.0:$REGISTRY_PORT
       - --gateway.timeout_ms=100
     volumes:
