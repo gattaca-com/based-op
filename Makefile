@@ -77,7 +77,6 @@ build-follower-op-node: ## 🏗️ Build OP node from optimism directory
 	docker buildx bake \
 	-f docker-bake.hcl \
 	--set op-node.tags=based_op_node \
-	--no-cache \
 	--load \
 	op-node
 
@@ -90,35 +89,51 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-run-follower: build-follower-op-node build-follower-op-geth build-gateway## 🚀 Run a single follower node with RPC enabled.
-	ifndef PORTAL
-		$(error PORTAL is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
-	endif
-	ifndef GATEWAY_SEQUENCING_KEY
-		$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
-	endif
-	@if [ ! -d follower_node/config ]; then \
-		mkdir follower_node/config; \
-	fi \
+ifndef PORTAL
+	$(error PORTAL is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
+endif
+ifndef GATEWAY_SEQUENCING_KEY
+	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
+endif
+run-follower: build-follower-op-node build-follower-op-geth build-gateway ## 🚀 Run a single follower node with RPC enabled.
+	@mkdir -p follower_node/config
+
+	@# generate jwt if missing
 	@if [ ! -f follower_node/config/jwt ]; then \
-	    echo "Generating a new jwt file, please communicate this with the registry operator"; \
-		openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' | tee follower_node/config/jwt; \
-	fi \
+	  echo "Generating a new jwt file, please communicate this with the registry operator"; \
+	  openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > follower_node/config/jwt; \
+	fi
+
+	@# generate .env and fetch JSON if missing
 	@if [ ! -f follower_node/.env ]; then \
-	    echo "Generating a .env from PORTAL"; \
-	    echo "PORTAL=$(PORTAL)" >> follower_node/.env; \
-	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)" >> follower_node/.env; \
-	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$(curl -s -X POST -H \"Content-Type: application/json\" --data \'{\"jsonrpc\":\"2.0\",\"method\":\"portal_opNodeGossipStatic\",\"params\":[],\"id\":1}\' $PORTAL | jq -r \'.result\')" >> follower_node/.env; \
-	    echo "MAIN_OP_NODE_ENR=$(curl -s -X POST -H \"Content-Type: application/json\" --data \'{\"jsonrpc\":\"2.0\",\"method\":\"portal_opNodeBootnodeEnr\",\"params\":[],\"id\":1}\' $PORTAL | jq -r \'.result\')" >> follower_node/.env; \
-	    echo "MAIN_OP_GETH_ENODE=$(curl -s -X POST -H \"Content-Type: application/json\" --data \'{\"jsonrpc\":\"2.0\",\"method\":\"portal_opGethBootnodeEnode\",\"params\":[],\"id\":1}\' $PORTAL | jq -r \'.result\')" >> follower_node/.env; \
-	    echo "NETWORK_ID=$(curl -s -X POST -H \"Content-Type: application/json\" --data \'{\"jsonrpc\":\"2.0\",\"method\":\"portal_l2ChainId\",\"params\":[],\"id\":1}\' $PORTAL | jq -r \'.result\')" >> follower_node/.env; \
-	    echo "MAIN_OP_NODE_ENR=$(curl -s -X POST -H \"Content-Type: application/json\" --data '{\"jsonrpc\":\"2.0\",\"method\":\"portal_opNodeBootnodeEnr\",\"params\":[],\"id\":1}' $PORTAL | jq -r '.result')" >> follower_node/.env; \
-	    curl -s -X POST -H \"Content-Type: application/json\" --data '{\"jsonrpc\":\"2.0\",\"method\":\"portal_fileRollup\",\"params\":[],\"id\":1}' $PORTAL | jq -r '.result' >> follower_node/config/rollup.json; \
-	    curl -s -X POST -H \"Content-Type: application/json\" --data '{\"jsonrpc\":\"2.0\",\"method\":\"portal_fileGenesis\",\"params\":[],\"id\":1}' $PORTAL | jq -r '.result' >> follower_node/config/genesis.json; \
-	fi \
-	 
-	cd follower_node && \
-		docker compose up -d
+	  cp follower_node/env_example follower_node/.env; \
+	  echo "Generating a .env from PORTAL"; \
+	  { \
+	    echo "PORTAL=$(PORTAL)"; \
+	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
+	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	      --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
+	      $(PORTAL) | jq -r '.result')"; \
+	    echo "MAIN_OP_NODE_ENR=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	      --data '{"jsonrpc":"2.0","method":"portal_opNodeBootnodeEnr","params":[],"id":1}' \
+	      $(PORTAL) | jq -r '.result')"; \
+	    echo "MAIN_OP_GETH_ENODE=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	      --data '{"jsonrpc":"2.0","method":"portal_opGethBootnodeEnode","params":[],"id":1}' \
+	      $(PORTAL) | jq -r '.result')"; \
+	    echo "NETWORK_ID=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	      --data '{"jsonrpc":"2.0","method":"portal_l2ChainId","params":[],"id":1}' \
+	      $(PORTAL) | jq -r '.result')"; \
+	  } >> follower_node/.env; \
+	  \
+	  curl -s -X POST -H "Content-Type: application/json" \
+	    --data '{"jsonrpc":"2.0","method":"portal_fileRollup","params":[],"id":1}' \
+	    $(PORTAL) | jq -r '.result' > follower_node/config/rollup.json; \
+	  curl -s -X POST -H "Content-Type: application/json" \
+	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
+	    $(PORTAL) | jq -r '.result' > follower_node/config/genesis.json; \
+	fi
+
+	@cd follower_node && docker compose up -d
 
 logs-portal: ## 📜 Show portal logs
 	docker logs main_node-portal-1 --tail 100 -f
