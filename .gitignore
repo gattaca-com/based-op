@@ -34,3 +34,4 @@ follower_node/data
 follower_node/config
 follower_node/.env
 .local/
+.local_gateway_and_follower

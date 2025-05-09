@@ -96,18 +96,18 @@ ifndef GATEWAY_SEQUENCING_KEY
 	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
 endif
 run-gateway: build-follower-op-node build-follower-op-geth build-gateway 
-	@mkdir -p .local/config
+	@mkdir -p .local_gateway_and_follower/config
 
 	@# generate jwt if missing
-	@if [ ! -f .local/config/jwt ]; then \
-	  openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local/config/jwt; \
+	@if [ ! -f .local_gateway_and_follower/config/jwt ]; then \
+	  openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_gateway_and_follower/config/jwt; \
 	fi
 
 	@# generate .env and fetch JSON if missing
-	@if [ ! -f .local/.env ]; then \
-	  cp follower_node/env_example .local/.env; \
-	  cp follower_node/compose.yml .local/compose.yml; \
-	  echo "Initializing gateway and follower op-node in ./.local ..."; \
+	@if [ ! -f .local_gateway_and_follower/.env ]; then \
+	  cp follower_node/env_example .local_gateway_and_follower/.env; \
+	  cp follower_node/compose.yml .local_gateway_and_follower/compose.yml; \
+	  echo "Initializing gateway and follower op-node in ./.local_gateway_and_follower ..."; \
 	  { \
 	    echo "PORTAL=$(PORTAL)"; \
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
@@ -123,27 +123,30 @@ run-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    echo "NETWORK_ID=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_l2ChainId","params":[],"id":1}' \
 	      $(PORTAL) | jq -r '.result')"; \
-	  } >> .local/.env; \
+	  } >> .local_gateway_and_follower/.env; \
 	  \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileRollup","params":[],"id":1}' \
-	    $(PORTAL) | jq -r '.result' > .local/config/rollup.json; \
+	    $(PORTAL) | jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
-	    $(PORTAL) | jq -r '.result' > .local/config/genesis.json; \
+	    $(PORTAL) | jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
 	fi
+
 	@echo "...Done"
 	@echo ""
 	@echo "Starting with the following generated .env:"
-	@cat .local/.env
+	@cat .local_gateway_and_follower/.env
 	@echo ""
 	@echo ""
 	@echo "Communicate the following with the registry operator:"
-	@echo "ip: $(curl ifconfig.me), jwt: $(cat .local/config/jwt)" 
+	@echo "ip: $(shell curl ifconfig.me)"
+	@echo "address: $$(docker run --rm -e PK="$(GATEWAY_SEQUENCING_KEY)" nikolaik/python-nodejs:python3.13-nodejs24-slim sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && NODE_PATH=$$(npm root -g) node -e "const { Wallet } = require(\"ethers\"); console.log(new Wallet(process.env.PK).address)"')"
+	@echo "jwt: $$(cat .local_gateway_and_follower/config/jwt)"
 	@echo ""
 	@echo ""
 
-	@cd .local && docker compose up -d
+	@cd .local_gateway_and_follower && docker compose up -d
 
 logs-portal: ## 📜 Show portal logs
 	docker logs main_node-portal-1 --tail 100 -f

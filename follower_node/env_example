@@ -1,4 +1,3 @@
-# fill this out and copy to .env besides your filled out compose.yml
 L1_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 L1_BEACON_RPC_URL=https://ethereum-sepolia-beacon-api.publicnode.com
 OP_NODE_GOSSIP_IP=0.0.0.0
