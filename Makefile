@@ -15,10 +15,10 @@
 # - BOP_EL_PORT: This is the port of the Follower's BOP-Node.
 #
 # Note: The Kurtosis enclave must be running for these to work.
-OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurtosis | grep 'rpc: 8541/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+#OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+#BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+#BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+#PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurtosis | grep 'rpc: 8541/tcp -> http://127.0.0.1:' | cut -d : -f 4)
 
 # Some servers default to executing shell scripts below with /bin/sh, we set bash to make sure our bash syntax works
 SHELL := /bin/bash
@@ -34,26 +34,10 @@ docs: ## 📚 Build local docs
 	npm run build && \
 	npm run start
 
-deps: ## 🚀 Install all dependencies
-	# Kurtosis
-	if [[ "$$(uname -s)" == "Darwin" ]]; then \
-		xcode-select --install; \
-		brew install kurtosis-tech/tap/kurtosis-cli; \
-	elif [[ "$$(uname -s)" == "Linux" ]]; then \
-		echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list; \
-		sudo apt update; \
-		sudo apt install -y kurtosis-cli; \
-	fi
-	# Rust
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-	curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-	if [[ "$$(uname -m)" == "arm"* ]]; then \
-		docker pull --platform=linux/amd64 ghcr.io/blockscout/smart-contract-verifier:v1.9.0; \
-	fi
-
 build: build-portal build-gateway build-op-node build-op-geth build-registry ## 🏗️ Build
 
 build-no-gateway: build-portal build-op-node build-op-geth ## 🏗️ Build without gateway
+
 build-portal: ## 🏗️ Build based portal from based directory
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
@@ -63,15 +47,40 @@ build-registry: ## 🏗️ Build based registry from based directory
 build-gateway: ## 🏗️ Build based gateway from based directory
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
-build-op-node: ## 🏗️ Build OP node from optimism directory
+run-main:
+	@if [ -f main_node/compose.yml ] && [ -f main_node/config/rollup.json ] && [ -f main_node/config/jwt ] && [ -f main_node/config/genesis.json ] && [ -f main_node/config/registry.json ]; then \
+		cd main_node && docker compose up -d; \
+	else \
+		echo "Missing required files! Look in the main_node subdir. We need: main_node/compose.yml, main_node/config/jwt, main_node/config/rollup.json, main_node/config/genesis.json, main_node/config/registry.json"; \
+		exit 1; \
+	fi
+
+run-registry:
+	@if [ -f main_node/.env ] && [ -f main_node/config/registry.json ]; then \
+		cd main_node && docker compose up -d registry; \
+	else \
+		echo "Missing required files! Look in the main_node subdir. We need: main_node/.env, main_node/config/registry.json"; \
+		exit 1; \
+	fi
+
+run-portal:
+	@if [ -f main_node/.env ] && [ -f main_node/config/jwt ]; then \
+		cd main_node && docker compose up -d portal; \
+	else \
+		echo "Missing required files! Look in the main_node subdir. We need: main_node/.env, main_node/config/jwt"; \
+		exit 1; \
+	fi
+
+build-follower-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
 	IMAGE_TAGS=develop \
 	docker buildx bake \
 	-f docker-bake.hcl \
 	--set op-node.tags=based_op_node \
+	--load \
 	op-node
 
-build-op-geth: ## 🏗️ Build OP geth from op-eth directory
+build-follower-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t based_op_geth ./op-geth
 
 build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and Firefox
@@ -80,61 +89,88 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-run: ## 🚀 Run
-	kurtosis run optimism-package --args-file config.yml --enclave based-op && $(MAKE) dump
+ifndef PORTAL
+	$(error PORTAL is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
+endif
+ifndef GATEWAY_SEQUENCING_KEY
+	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
+endif
+run-gateway: build-follower-op-node build-follower-op-geth build-gateway 
+	@mkdir -p .local_gateway_and_follower/config
 
-run-maxgas: ## 🚀 Run
-	kurtosis run optimism-package --args-file config_maxgas.yml --enclave based-op && $(MAKE) dump
+	@# generate jwt if missing
+	@if [ ! -f .local_gateway_and_follower/config/jwt ]; then \
+	  openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_gateway_and_follower/config/jwt; \
+	fi
 
-run-multiple: ## 🚀 Run
-	kurtosis run optimism-package --args-file config_multiple_gateways.yml --enclave based-op && $(MAKE) dump
+	@# generate .env and fetch JSON if missing
+	@if [ ! -f .local_gateway_and_follower/.env ]; then \
+	  cp follower_node/env_example .local_gateway_and_follower/.env; \
+	  cp follower_node/compose.yml .local_gateway_and_follower/compose.yml; \
+	  echo "Initializing gateway and follower op-node in ./.local_gateway_and_follower ..."; \
+	  { \
+	    echo "PORTAL=$(PORTAL)"; \
+	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
+	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	      --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
+	      $(PORTAL) | jq -r '.result')"; \
+	    echo "MAIN_OP_NODE_ENR=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	      --data '{"jsonrpc":"2.0","method":"portal_opNodeBootnodeEnr","params":[],"id":1}' \
+	      $(PORTAL) | jq -r '.result')"; \
+	    echo "MAIN_OP_GETH_ENODE=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	      --data '{"jsonrpc":"2.0","method":"portal_opGethBootnodeEnode","params":[],"id":1}' \
+	      $(PORTAL) | jq -r '.result')"; \
+	    echo "NETWORK_ID=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	      --data '{"jsonrpc":"2.0","method":"portal_l2ChainId","params":[],"id":1}' \
+	      $(PORTAL) | jq -r '.result')"; \
+	  } >> .local_gateway_and_follower/.env; \
+	  \
+	  curl -s -X POST -H "Content-Type: application/json" \
+	    --data '{"jsonrpc":"2.0","method":"portal_fileRollup","params":[],"id":1}' \
+	    $(PORTAL) | jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
+	  curl -s -X POST -H "Content-Type: application/json" \
+	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
+	    $(PORTAL) | jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
+	fi
 
-restart-no-gateway: clean build-no-gateway run ## rip rebuild run
+	@wallet=$$(docker run --rm \
+	               -e PK="$(GATEWAY_SEQUENCING_KEY)" \
+	               nikolaik/python-nodejs:python3.13-nodejs24-slim \
+	               sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
+	                      NODE_PATH=$$(npm root -g) \
+	                      node -e "const { Wallet } = require(\"ethers\"); \
+	                               console.log(new Wallet(process.env.PK).address)"'); \
+	echo "...Done"; \
+	echo; \
+	echo "Starting with the following generated .env:"; \
+	cat .local_gateway_and_follower/.env; \
+	echo; echo; \
+	echo "Communicate the following with the registry operator:"; \
+	echo "ip: $$(curl -s ifconfig.me):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2)"; \
+	echo "address: $$wallet"; \
+	echo "jwt: $$(cat .local_gateway_and_follower/config/jwt)"; \
+	echo; echo
 
-run-follower: build-op-node build-op-geth ## 🚀 Run a single follower node with RPC enabled.
-	cd follower-node && \
-		docker compose up -d
+	@cd .local_gateway_and_follower && docker compose up -d
 
-logs: ## 📜 Show logs
-	kurtosis service logs -f based-op $(SERVICE)
+logs-portal: ## 📜 Show portal logs
+	docker logs main_node-portal-1 --tail 100 -f
 
-dump:
-	bash -c 'kurtosis files download based-op $$(kurtosis enclave inspect based-op | grep op-deployer-configs | awk "{print \$$1}") ./genesis'
+logs-gateway: ## 📜 Show gateway logs
+	docker logs based-op-gateway --tail 100 -f
+	
+logs-op-node: ## 📜 Show main op-node logs (when on main box)
+	docker logs based-op-node --tail 100 -f
+	
+logs-op-geth: ## 📜 Show main op-geth logs (when on main box)
+	docker logs based-op-geth --tail 100 -f
+	
+logs-batcher:
+	docker logs op-batcher --tail 100 -f
+	
+logs-proposer:
+	docker logs op-proposer --tail 100 -f 
 
-gateway: ## 🚀 Run the gateway
-	cargo run --manifest-path ./based/Cargo.toml --profile=release-with-debug --bin bop-gateway --features shmem -- \
-	--db.datadir $(datadir) \
-	--eth_client.url http://127.0.0.1:$(OP_EL_PORT) \
-	--chain ./genesis/genesis-2151908.json \
-	--rpc.port $(port) \
-	--gossip.root_peer_url http://127.0.0.1:$(BOP_NODE_PORT) \
-	--rpc.jwt 0x1b11d6635cdf11d69f530dc0656ab8960735464d01fe1d4124107548896ba581
-
-
-batcher-logs:
-	$(MAKE) logs SERVICE=op-batcher-op-kurtosis
-
-portal-logs:
-	$(MAKE) logs SERVICE=op-based-portal-1-op-kurtosis
-
-gateway-logs:
-	$(MAKE) logs SERVICE=gateway-1-gateway-op-kurtosis
-
-op-node-logs:
-	$(MAKE) logs SERVICE=op-cl-1-op-node-op-reth-op-kurtosis
-
-op-geth-logs:
-	$(MAKE) logs SERVICE=op-el-2-op-geth-op-node-op-kurtosis
-
-clean: ## 🧹 Clean
-	rm -rf ./genesis ./data
-	docker compose -f follower-node/compose.yml down
-	docker volume rm -f follower-node_geth_data follower-node_node_data follower-node_jwt
-	kurtosis enclave rm based-op --force
-
-restart: clean run ## 🔄 Restart
-
-# Testing
 
 FOLLOWER_NODE_HOST?=http://localhost
 BLOCK_NUMBER?=$(shell echo $$(( $$(cast block-number --rpc-url http://localhost:$(BOP_EL_PORT)) + 1 )))

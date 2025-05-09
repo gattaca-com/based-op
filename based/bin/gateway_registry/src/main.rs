@@ -23,12 +23,8 @@ pub type RpcClient = jsonrpsee::http_client::HttpClient;
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, name = "gateway-registry")]
 pub struct RegistryArgs {
-    /// The host to run the registry on
-    #[arg(long = "registry.host", default_value_t = Ipv4Addr::UNSPECIFIED)]
-    pub registry_host: Ipv4Addr,
-
     /// The port to run the registry on
-    #[arg(long = "registry.port", default_value_t = 8081)]
+    #[arg(long = "port", default_value_t = 8081)]
     pub registry_port: u16,
 
     /// TEMP: The path to store the registry to
@@ -36,12 +32,12 @@ pub struct RegistryArgs {
     pub registry_path: std::path::PathBuf,
 
     /// The url of the portal
-    #[arg(long = "eth_client.url")]
-    pub eth_client_url: Url,
+    #[arg(long = "portal.url", default_value = "http://0.0.0.0:8080")]
+    pub portal_url: Url,
 
     /// Timeout when trying to contact the portal
-    #[arg(long = "eth_client.timeout_ms", default_value_t = 1_000)]
-    pub eth_client_timeout: u64,
+    #[arg(long = "portal.timeout_ms", default_value_t = 100)]
+    pub portal_timeout: u64,
 
     /// Enable debug logging
     #[arg(long)]
@@ -96,7 +92,7 @@ pub struct RegistryServer {
 
 impl RegistryServer {
     pub fn new(args: RegistryArgs) -> eyre::Result<Self> {
-        let portal_eth_client = create_client(args.eth_client_url, Duration::from_millis(args.eth_client_timeout))?;
+        let portal_eth_client = create_client(args.portal_url, Duration::from_millis(args.portal_timeout))?;
 
         let gateway_clients = Arc::new(RwLock::new(refresh_gateway_clients(&args.registry_path).unwrap_or_default()));
         let gateway_clients_cloned = gateway_clients.clone();
@@ -183,9 +179,9 @@ async fn main() -> eyre::Result<()> {
     let args = RegistryArgs::parse();
     let _guard = init_tracing((&args).into());
 
-    let addr = SocketAddr::new(IpAddr::V4(args.registry_host), args.registry_port);
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.registry_port);
     let server = RegistryServer::new(args.clone())?;
 
-    info!(%addr,  eth_client_url = %args.eth_client_url, "starting Based Registry");
+    info!(%addr,  eth_client_url = %args.portal_url, "starting Based Registry");
     server.run(addr).await
 }

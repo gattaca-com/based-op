@@ -1,0 +1,96 @@
+services:
+  op-geth:
+    image: based_op_geth
+    container_name: based-op-geth
+    network_mode: "host"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # 1) if this directory lacks the geth chaindata, initialize it
+        if [ ! -d /data/geth/geth/chaindata ]; then
+          echo ">>> initializing geth datadir…"
+          geth init \
+            --state.scheme=hash \
+            --datadir=/data/geth \
+            /config/genesis.json 
+        fi
+        # 2) then exec the real geth with all your flags
+        exec geth \
+          --networkid=$NETWORK_ID \
+          --datadir=/data/geth \
+          --gcmode=archive \
+          --state.scheme=hash \
+          --http \
+          --http.addr=0.0.0.0 \
+          --http.vhosts="*" \
+          --http.corsdomain="*" \
+          --http.api="admin,engine,net,eth,web3,debug,miner,txpool" \
+          --ws \
+          --ws.addr=0.0.0.0 \
+          --ws.port=$OP_GETH_WS_PORT \
+          --ws.api="admin,engine,net,eth,web3,debug,miner,txpool" \
+          --ws.origins="*" \
+          --authrpc.port=$OP_GETH_ENGINE_RPC_PORT \
+          --authrpc.addr=0.0.0.0 \
+          --authrpc.vhosts="*" \
+          --authrpc.jwtsecret=/config/jwt \
+          --syncmode=full \
+          --rpc.allow-unprotected-txs \
+          --allow-insecure-unlock \
+          --discovery.port=$OP_GETH_GOSSIP_PORT \
+          --port=$OP_GETH_GOSSIP_PORT \
+          --bootnodes=$MAIN_OP_GETH_ENODE \
+          --rollup.sequencerhttp=$PORTAL
+
+    volumes:
+      - ./data/geth:/data/geth
+      - ./config:/config
+
+  op-node:
+    image: based_op_node
+    container_name: based-op-node
+    network_mode: "host"
+    command:
+      - op-node
+      - --l2=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
+      - --l2.jwt-secret=/config/jwt
+      - --verifier.l1-confs=1
+      - --rollup.config=/config/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=8547
+      - --rpc.enable-admin
+      - --l1=$L1_RPC_URL
+      - --l1.rpckind=standard
+      - --l1.beacon=$L1_BEACON_RPC_URL
+      - --p2p.advertise.tcp=$OP_NODE_GOSSIP_PORT
+      - --p2p.advertise.udp=$OP_NODE_GOSSIP_PORT
+      - --p2p.listen.ip=0.0.0.0
+      - --p2p.listen.tcp=$OP_NODE_GOSSIP_PORT
+      - --p2p.listen.udp=$OP_NODE_GOSSIP_PORT
+      - --safedb.path=/data/op-node/op-node-beacon-data
+      - --p2p.static=$MAIN_OP_NODE_GOSSIP_STATIC
+      - --rpc.enable-based 
+      - --registry=$PORTAL
+      - --p2p.bootnodes=$MAIN_OP_NODE_ENR
+    volumes:
+      - ./data/node:/data/op-node
+      - ./config:/config
+    depends_on:
+      - op-geth
+
+  gateway:
+    image: based_gateway_local
+    container_name: based-op-gateway
+    network_mode: "host"
+    command:
+      - --rpc.port=$GATEWAY_PORT
+      - --rpc.host=0.0.0.0
+      - --chain=/config/genesis.json
+      - --db.datadir=/data/gateway
+      - --eth_client.url=$PORTAL
+      - --rpc.jwt=/config/jwt
+      - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
+    volumes: 
+      - ./config:/config
+      - ./data/gateway:/data/gateway
+

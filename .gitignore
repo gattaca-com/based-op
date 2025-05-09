@@ -27,3 +27,11 @@ data
 
 assets
 data2
+main_node/.env
+main_node/config
+main_node/data
+follower_node/data
+follower_node/config
+follower_node/.env
+.local/
+.local_gateway_and_follower

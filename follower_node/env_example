@@ -1,0 +1,9 @@
+L1_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+L1_BEACON_RPC_URL=https://ethereum-sepolia-beacon-api.publicnode.com
+OP_NODE_GOSSIP_IP=0.0.0.0
+OP_NODE_GOSSIP_PORT=9003
+OP_GETH_GOSSIP_PORT=30303
+OP_GETH_ENGINE_RPC_PORT=8551
+OP_GETH_RPC_PORT=8545
+OP_GETH_WS_PORT=8546
+GATEWAY_PORT=9997

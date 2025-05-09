@@ -23,7 +23,7 @@ pub mod gossiper;
 
 pub fn start_rpc<Db: DatabaseRead>(config: &GatewayArgs, spine: &Spine<Db>, rt: &Runtime) {
     let addr = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
-    let server = RpcServer::new(spine, config.rpc_jwt);
+    let server = RpcServer::new(spine, config.sequencer_jwt());
     rt.spawn(server.run(addr));
 }
 

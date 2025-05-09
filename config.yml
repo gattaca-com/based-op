@@ -36,3 +36,4 @@ ethereum_package:
     - el_type: geth
       # This is fixed because v1.15.0 (latest) introduces breaking changes
       el_image: ethereum/client-go:v1.14.13
+

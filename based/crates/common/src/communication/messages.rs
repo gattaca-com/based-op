@@ -272,6 +272,9 @@ pub enum RpcError {
     #[error("db error: {0}")]
     Db(#[from] crate::db::Error),
 
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error("no return")]
     NoReturn,
 }
@@ -285,6 +288,7 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::Jsonrpsee(_) |
             RpcError::TokioJoin(_) |
             RpcError::Db(_) |
+            RpcError::Io(_) |
             RpcError::NoReturn => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
