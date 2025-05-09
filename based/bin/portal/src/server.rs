@@ -6,13 +6,16 @@ use alloy_rpc_types::{
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
-    api::{CAPABILITIES, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpRpcBlock, RegistryApiClient},
+    api::{
+        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient, OpNodeApiClient,
+        OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
+    },
     communication::messages::{RpcError, RpcResult},
     time::Nanos,
     utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
-    core::async_trait,
+    core::{ClientError, async_trait},
     http_client::{HttpClientBuilder, transport::HttpBackend},
     server::{RpcServiceBuilder, ServerBuilder},
 };
@@ -49,23 +52,31 @@ const SYNC_FCU_DT_THRESHOLD: Nanos = Nanos::from_millis(1500);
 pub struct PortalServer {
     fallback_eth_client: RpcClient,
     fallback_client: AuthRpcClient,
+    op_node_client: RpcClient,
     registry_client: RpcClient,
     current_gateway: Arc<Mutex<Gateway>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
     last_fcu: Arc<RwLock<Nanos>>,
+    args: Arc<PortalArgs>,
 }
 
 impl PortalServer {
     pub async fn new(args: PortalArgs) -> eyre::Result<Self> {
-        let fallback_jwt = args.fallback_jwt()?;
+        let fallback_jwt = args.fallback_jwt();
 
         let fallback_eth_client =
-            create_client(args.fallback_eth_url, Duration::from_millis(args.fallback_timeout_ms))?;
+            create_client(args.fallback_eth_url.clone(), Duration::from_millis(args.fallback_timeout_ms))?;
 
-        let fallback_client =
-            create_auth_client(args.fallback_url, fallback_jwt, Duration::from_millis(args.fallback_timeout_ms))?;
-        let registry_client = create_client(args.registry_url, Duration::from_millis(args.registry_timeout_ms))?;
+        let op_node_client = create_client(args.op_node_url.clone(), Duration::from_millis(args.fallback_timeout_ms))?;
+
+        let fallback_client = create_auth_client(
+            args.fallback_url.clone(),
+            fallback_jwt,
+            Duration::from_millis(args.fallback_timeout_ms),
+        )?;
+        let registry_client =
+            create_client(args.registry_url.clone(), Duration::from_millis(args.registry_timeout_ms))?;
 
         let (_, gateway_url, _, jwt_as_b256) = registry_client
             .current_gateway()
@@ -96,20 +107,31 @@ impl PortalServer {
         Ok(Self {
             fallback_eth_client,
             fallback_client,
+            op_node_client,
             registry_client,
             current_gateway,
             gateways,
             gateway_timeout,
             last_fcu: Default::default(),
+            args: Arc::new(args),
         })
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
         let fallback_client = self.fallback_client.clone();
         let fallback_eth_client = self.fallback_eth_client.clone();
+        let op_node_client = self.op_node_client.clone();
+        let registry_client = self.registry_client.clone();
 
         let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| {
-            ProxyService::new(CAPABILITIES, s, fallback_eth_client.clone(), fallback_client.clone())
+            ProxyService::new(
+                PORTAL_CAPABILITIES,
+                s,
+                fallback_eth_client.clone(),
+                fallback_client.clone(),
+                op_node_client.clone(),
+                registry_client.clone(),
+            )
         });
 
         let server = ServerBuilder::default()
@@ -121,6 +143,7 @@ impl PortalServer {
 
         let mut module = EngineApiServer::into_rpc(self.clone());
         module.merge(EthApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        module.merge(PortalApiServer::into_rpc(self.clone())).expect("failed to merge modules");
 
         tokio::spawn(async move {
             loop {
@@ -485,6 +508,7 @@ impl EngineApiServer for PortalServer {
                                 error!(?gateway, ?res, "gateway response");
                             }
                         }
+                        Err(ClientError::Call(_)) => {}
                         Err(err) => error!(?gateway, %err, "failed gateway"),
                     }
                 }
@@ -554,6 +578,48 @@ impl EngineApiServer for PortalServer {
         let payload = gateway.or(fallback)?;
 
         Ok(payload)
+    }
+}
+
+#[async_trait]
+impl PortalApiServer for PortalServer {
+    /// The network id of the l2
+    async fn l2_chain_id(&self) -> RpcResult<u64> {
+        Ok(self.op_node_client.rollup_config().await.map(|config| config.l2_chain_id)?)
+    }
+
+    /// The network id of the l1
+    async fn l1_chain_id(&self) -> RpcResult<u64> {
+        Ok(self.op_node_client.rollup_config().await.map(|config| config.l1_chain_id)?)
+    }
+
+    /// rollup.json file
+    async fn file_rollup(&self) -> RpcResult<String> {
+        let genesis_path = self.args.config_dir.join("rollup.json");
+        Ok(std::fs::read_to_string(genesis_path)?)
+    }
+
+    /// genesis.json file
+    async fn file_genesis(&self) -> RpcResult<String> {
+        let genesis_path = self.args.config_dir.join("genesis.json");
+        Ok(std::fs::read_to_string(genesis_path)?)
+    }
+
+    /// The gossip static address string used by the op-node
+    async fn op_node_gossip_static(&self) -> RpcResult<String> {
+        Ok(self.op_node_client.peer_info().await.and_then(|p| {
+            p.addresses.last().cloned().map(Ok).unwrap_or(Err(ClientError::Custom("empty peer addresses".to_string())))
+        })?)
+    }
+
+    /// The enr that can be used to sync with the op-node
+    async fn op_node_bootnode_enr(&self) -> RpcResult<String> {
+        Ok(self.op_node_client.peer_info().await.map(|p| p.enr)?)
+    }
+
+    /// The enode that can be used to sync with the op-geth
+    async fn op_geth_bootnode_enode(&self) -> RpcResult<String> {
+        Ok(self.fallback_eth_client.node_info().await.map(|p| p.enode)?)
     }
 }
 

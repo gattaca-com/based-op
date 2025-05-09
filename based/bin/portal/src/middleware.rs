@@ -19,6 +19,8 @@ pub struct ProxyService<S> {
     inner: S,
     fallback_eth_client: RpcClient,
     fallback_client: AuthRpcClient,
+    op_client: RpcClient,
+    registry_client: RpcClient,
 }
 
 impl<S> ProxyService<S> {
@@ -27,8 +29,10 @@ impl<S> ProxyService<S> {
         inner: S,
         fallback_eth_client: RpcClient,
         fallback_client: AuthRpcClient,
+        op_client: RpcClient,
+        registry_client: RpcClient,
     ) -> Self {
-        Self { supported_methods, inner, fallback_eth_client, fallback_client }
+        Self { supported_methods, inner, fallback_eth_client, fallback_client, op_client, registry_client }
     }
 }
 
@@ -40,27 +44,59 @@ where
 
     #[tracing::instrument(skip_all, name = "middleware")]
     fn call(&self, req: Request<'a>) -> Self::Future {
+        //TODO: is this really the best way to do this?
         let inner = self.inner.clone();
         let fallback_client = self.fallback_client.clone();
         let fallback_eth_client = self.fallback_eth_client.clone();
+        let registry_client = self.registry_client.clone();
+        let op_client = self.op_client.clone();
+
         let supported_methods = self.supported_methods;
 
         async move {
-            if supported_methods.contains(&req.method_name()) {
+            if &req.method_name()[0..=5] == "portal" || supported_methods.contains(&req.method_name()) {
                 debug!(method = %req.method_name(), "handling request");
-
                 inner.call(req).await
             } else {
                 let params = WrapParams(req.params());
-
-                let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =
-                    if req.method_name().contains("engine_") {
+                let r: Result<serde_json::Value, jsonrpsee::core::ClientError> = match req.method_name().split_once('_')
+                {
+                    Some(("engine", _)) => {
                         debug!(method = %req.method_name(), "forwarding request to fallback");
-                        fallback_client.request(req.method_name(), params).await
-                    } else {
+                        fallback_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("eth", _)) => {
                         debug!(method = %req.method_name(), "forwarding request to eth fallback");
-                        fallback_eth_client.request(req.method_name(), params).await
-                    };
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("optimism", _)) | Some(("opp2p", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to op-node fallback");
+                        op_client.request(req.method_name(), params).await
+                    }
+
+                    Some(("node", rest)) => {
+                        debug!(method = %req.method_name(), "forwarding request to op-node");
+                        op_client.request(rest, params).await
+                    }
+
+                    Some(("geth", rest)) => {
+                        debug!(method = %req.method_name(), "forwarding request to op-geth");
+                        fallback_client.clone().request(rest, params).await
+                    }
+
+                    Some(("registry", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to registry");
+                        registry_client.request(req.method_name(), params).await
+                    }
+                    Some((_, _)) => {
+                        error!(method = %req.method_name(), "i don't know what to do with this");
+                        Err(jsonrpsee::core::ClientError::Custom("method nonexistent".to_string()))
+                    }
+                    None => {
+                        error!(id = %req.id ,"received empty request");
+                        Err(jsonrpsee::core::ClientError::Custom("empty request".to_string()))
+                    }
+                };
 
                 match r {
                     Ok(r) => {
@@ -68,7 +104,7 @@ where
                         MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
                     }
                     Err(err) => {
-                        error!(?err, "error forwarding request to fallback");
+                        error!(?err, "error forwarding {} request", req.method_name());
 
                         MethodResponse::error(
                             req.id,
@@ -161,8 +197,26 @@ mod tests {
             .build("http://127.0.0.1:9091")
             .unwrap();
 
+        let op_client = HttpClientBuilder::default()
+            .max_request_size(u32::MAX)
+            .max_response_size(u32::MAX)
+            .build("http://127.0.0.1:9545")
+            .unwrap();
+        let registry_client = HttpClientBuilder::default()
+            .max_request_size(u32::MAX)
+            .max_response_size(u32::MAX)
+            .build("http://127.0.0.1:8081")
+            .unwrap();
+
         let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| {
-            ProxyService::new(&["hello_mux"], s, fallback_eth_client.clone(), fallback_client.clone())
+            ProxyService::new(
+                &["hello_mux"],
+                s,
+                fallback_eth_client.clone(),
+                fallback_client.clone(),
+                op_client.clone(),
+                registry_client.clone(),
+            )
         });
 
         let mux_server = ServerBuilder::default()
