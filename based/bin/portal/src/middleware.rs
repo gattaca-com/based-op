@@ -84,7 +84,7 @@ where
                         fallback_client.clone().request(rest, params).await
                     }
 
-                    Some(("registry", rest)) => {
+                    Some(("registry", _)) => {
                         debug!(method = %req.method_name(), "forwarding request to registry");
                         registry_client.request(req.method_name(), params).await
                     }

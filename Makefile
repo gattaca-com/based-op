@@ -95,18 +95,19 @@ endif
 ifndef GATEWAY_SEQUENCING_KEY
 	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
 endif
-run-follower: build-follower-op-node build-follower-op-geth build-gateway ## 🚀 Run a single follower node with RPC enabled.
-	@mkdir -p follower_node/config
+run-gateway: build-follower-op-node build-follower-op-geth build-gateway 
+	@mkdir -p .local/config
 
 	@# generate jwt if missing
-	@if [ ! -f follower_node/config/jwt ]; then \
-	  openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > follower_node/config/jwt; \
+	@if [ ! -f .local/config/jwt ]; then \
+	  openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local/config/jwt; \
 	fi
 
 	@# generate .env and fetch JSON if missing
-	@if [ ! -f follower_node/.env ]; then \
-	  cp follower_node/env_example follower_node/.env; \
-	  echo "Generating a .env from PORTAL..."; \
+	@if [ ! -f .local/.env ]; then \
+	  cp follower_node/env_example .local/.env; \
+	  cp follower_node/compose.yml .local/compose.yml; \
+	  echo "Initializing gateway and follower op-node in ./.local ..."; \
 	  { \
 	    echo "PORTAL=$(PORTAL)"; \
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
@@ -122,51 +123,45 @@ run-follower: build-follower-op-node build-follower-op-geth build-gateway ## �
 	    echo "NETWORK_ID=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_l2ChainId","params":[],"id":1}' \
 	      $(PORTAL) | jq -r '.result')"; \
-	  } >> follower_node/.env; \
+	  } >> .local/.env; \
 	  \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileRollup","params":[],"id":1}' \
-	    $(PORTAL) | jq -r '.result' > follower_node/config/rollup.json; \
+	    $(PORTAL) | jq -r '.result' > .local/config/rollup.json; \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
-	    $(PORTAL) | jq -r '.result' > follower_node/config/genesis.json; \
+	    $(PORTAL) | jq -r '.result' > .local/config/genesis.json; \
 	fi
 	@echo "...Done"
 	@echo ""
 	@echo "Starting with the following generated .env:"
-	@cat follower_node/.env
+	@cat .local/.env
 	@echo ""
 	@echo ""
-	@echo "Communicate the following jwt with the registry operator:"
-	@cat follower_node/config/jwt
+	@echo "Communicate the following with the registry operator:"
+	@echo "ip: $(curl ifconfig.me), jwt: $(cat .local/config/jwt)" 
 	@echo ""
 	@echo ""
 
-	@cd follower_node && docker compose up -d
+	@cd .local && docker compose up -d
 
 logs-portal: ## 📜 Show portal logs
 	docker logs main_node-portal-1 --tail 100 -f
 
 logs-gateway: ## 📜 Show gateway logs
-	docker logs follower_node-gateway-1 --tail 100 -f
+	docker logs based-op-gateway --tail 100 -f
 	
-logs-main-op-node: ## 📜 Show main op-node logs (when on main box)
-	docker logs main_node-op-node-1 --tail 100 -f
+logs-op-node: ## 📜 Show main op-node logs (when on main box)
+	docker logs based-op-node --tail 100 -f
 	
-logs-main-op-geth: ## 📜 Show main op-geth logs (when on main box)
-	docker logs main_node-op-geth-1 --tail 100 -f
+logs-op-geth: ## 📜 Show main op-geth logs (when on main box)
+	docker logs based-op-geth --tail 100 -f
 	
-logs-follower-op-geth: ## 📜 Show follower op-geth logs (when on running a follower node)
-	docker logs follower_node-op-geth-1 --tail 100 -f
-	
-logs-follower-op-node: ## 📜 Show follower op-node logs (when on running a follower node)
-	docker logs follower_node-op-node-1 --tail 100 -f 
-
 logs-batcher:
-	docker logs main_node-op-batcher-1 --tail 100 -f
+	docker logs op-batcher --tail 100 -f
 	
 logs-proposer:
-	docker logs main_node-op-proposer-1 --tail 100 -f 
+	docker logs op-proposer --tail 100 -f 
 
 
 FOLLOWER_NODE_HOST?=http://localhost

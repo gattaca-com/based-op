@@ -1,6 +1,7 @@
 services:
   op-geth:
     image: based_op_geth
+    container_name: based-op-geth
     network_mode: "host"
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -47,6 +48,7 @@ services:
 
   op-node:
     image: based_op_node
+    container_name: based-op-node
     network_mode: "host"
     command:
       - op-node
@@ -78,6 +80,7 @@ services:
 
   gateway:
     image: based_gateway_local
+    container_name: based-op-gateway
     network_mode: "host"
     command:
       - --rpc.port=$GATEWAY_PORT
