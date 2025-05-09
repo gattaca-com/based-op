@@ -133,18 +133,23 @@ run-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    $(PORTAL) | jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
 	fi
 
-	@echo "...Done"
-	@echo ""
-	@echo "Starting with the following generated .env:"
-	@cat .local_gateway_and_follower/.env
-	@echo ""
-	@echo ""
-	@echo "Communicate the following with the registry operator:"
-	@echo "ip: $(shell curl ifconfig.me)"
-	@echo "address: $$(docker run --rm -e PK="$(GATEWAY_SEQUENCING_KEY)" nikolaik/python-nodejs:python3.13-nodejs24-slim sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && NODE_PATH=$$(npm root -g) node -e "const { Wallet } = require(\"ethers\"); console.log(new Wallet(process.env.PK).address)"')"
-	@echo "jwt: $$(cat .local_gateway_and_follower/config/jwt)"
-	@echo ""
-	@echo ""
+	@wallet=$$(docker run --rm \
+	               -e PK="$(GATEWAY_SEQUENCING_KEY)" \
+	               nikolaik/python-nodejs:python3.13-nodejs24-slim \
+	               sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
+	                      NODE_PATH=$$(npm root -g) \
+	                      node -e "const { Wallet } = require(\"ethers\"); \
+	                               console.log(new Wallet(process.env.PK).address)"'); \
+	echo "...Done"; \
+	echo; \
+	echo "Starting with the following generated .env:"; \
+	cat .local_gateway_and_follower/.env; \
+	echo; echo; \
+	echo "Communicate the following with the registry operator:"; \
+	echo "ip: $$(curl -s ifconfig.me):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2)"; \
+	echo "address: $$wallet"; \
+	echo "jwt: $$(cat .local_gateway_and_follower/config/jwt)"; \
+	echo; echo
 
 	@cd .local_gateway_and_follower && docker compose up -d
 
