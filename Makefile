@@ -1,8 +1,8 @@
 .PHONY: deps run clean restart help \
-		build build-portal build-op-node build-op-geth \
-		logs op-node-logs op-geth-logs \
-		test-frag test-seal \
-		docs
+build build-portal build-op-node build-op-geth \
+logs op-node-logs op-geth-logs \
+test-frag test-seal \
+docs
 
 .DEFAULT_GOAL := help
 
@@ -90,12 +90,16 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro:mv2
 
 ifndef PORTAL
-	$(error PORTAL is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
+	$(error PORTAL is undefined! Please invoke like `make run-gateway PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
 endif
 ifndef GATEWAY_SEQUENCING_KEY
-	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make target PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
+	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make run-gateway PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
 endif
-run-gateway: build-follower-op-node build-follower-op-geth build-gateway 
+run-gateway: build-follower-op-node build-follower-op-geth build-gateway
+	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
+		echo "❌  Gateway already running."; \
+		exit 1; \
+	fi
 	@mkdir -p .local_gateway_and_follower/config
 
 	@# generate jwt if missing
@@ -152,6 +156,54 @@ run-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	echo; echo
 
 	@cd .local_gateway_and_follower && docker compose up -d
+
+stop-gateway:
+	cd follower_node && docker compose down
+
+L2_CHAIN_ID?=2151908
+L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
+L1_RPC_URL?=https://ethereum-hoodi-rpc.publicnode.com
+L1_BEACON_URL?=https://ethereum-hoodi-beacon-api.publicnode.com
+
+ifndef OP_PROPOSER_KEY
+$(error OP_PROPOSER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+endif
+ifndef MAIN_KEY
+$(error MAIN_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+endif
+ifndef OP_BATCHER_KEY
+$(error OP_BATCHER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+endif
+deploy-chain:
+	@mkdir -p .local_main_node/config
+	@wallet_batcher=$$(docker run --rm \
+		-e PK="$(OP_BATCHER_KEY)" \
+		nikolaik/python-nodejs:python3.13-nodejs24-slim \
+		sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
+		      NODE_PATH=$$(npm root -g) \
+		      node -e "const { Wallet } = require(\"ethers\"); \
+		               console.log(new Wallet(process.env.PK).address)"'); \
+	wallet_proposer=$$(docker run --rm \
+		-e PK="$(OP_PROPOSER_KEY)" \
+		nikolaik/python-nodejs:python3.13-nodejs24-slim \
+		sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
+		      NODE_PATH=$$(npm root -g) \
+		      node -e "const { Wallet } = require(\"ethers\"); \
+		               console.log(new Wallet(process.env.PK).address)"'); \
+	wallet_main=$$(docker run --rm \
+		-e PK="$(MAIN_KEY)" \
+		nikolaik/python-nodejs:python3.13-nodejs24-slim \
+		sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
+		      NODE_PATH=$$(npm root -g) \
+		      node -e "const { Wallet } = require(\"ethers\"); \
+		               console.log(new Wallet(process.env.PK).address)"'); \
+	sed -E \
+		-e 's@"L2_CHAIN_ID_PLACEHOLDER"@"$${L2_CHAIN_ID_HEX}"@g' \
+		-e 's@"VAULT_WALLET"@"$${wallet_main}"@g' \
+		-e 's@"BATCHER_WALLET"@"$${wallet_batcher}"@g' \
+		-e 's@"PROPOSER_WALLET"@"$${wallet_proposer}"@g' \
+		main_node/intent.template.toml \
+		> .local_main_node/config/intent.toml
 
 logs-portal: ## 📜 Show portal logs
 	docker logs main_node-portal-1 --tail 100 -f
