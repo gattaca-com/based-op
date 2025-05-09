@@ -160,6 +160,7 @@ run-gateway: build-follower-op-node build-follower-op-geth build-gateway
 stop-gateway:
 	cd follower_node && docker compose down
 
+L1_CHAIN_ID?=560048
 L2_CHAIN_ID?=2151908
 L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
 L1_RPC_URL?=https://ethereum-hoodi-rpc.publicnode.com
@@ -198,12 +199,13 @@ deploy-chain:
 		      node -e "const { Wallet } = require(\"ethers\"); \
 		               console.log(new Wallet(process.env.PK).address)"'); \
 	sed -E \
-		-e 's@"L2_CHAIN_ID_PLACEHOLDER"@"$${L2_CHAIN_ID_HEX}"@g' \
-		-e 's@"VAULT_WALLET"@"$${wallet_main}"@g' \
-		-e 's@"BATCHER_WALLET"@"$${wallet_batcher}"@g' \
-		-e 's@"PROPOSER_WALLET"@"$${wallet_proposer}"@g' \
-		main_node/intent.template.toml \
-		> .local_main_node/config/intent.toml
+		  -e "s@L1_CHAIN_ID@$(L1_CHAIN_ID)@g" \
+		  -e "s@L2_CHAIN_ID@$(L2_CHAIN_ID_HEX)@g" \
+		  -e "s@VAULT_WALLET@$${wallet_main}@g" \
+		  -e "s@OP_BATCHER_WALLET@$${wallet_batcher}@g" \
+		  -e "s@OP_PROPOSER_WALLET@$${wallet_proposer}@g" \
+		  main_node/intent.template.toml \
+		  > .local_main_node/config/intent.toml
 
 logs-portal: ## 📜 Show portal logs
 	docker logs main_node-portal-1 --tail 100 -f
