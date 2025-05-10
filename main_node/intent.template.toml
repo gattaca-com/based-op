@@ -1,3 +1,4 @@
+deploymentStrategy = "live"
 configType = "standard-overrides"
 l1ChainID = L1_CHAIN_ID
 fundDevAccounts = true

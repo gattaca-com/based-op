@@ -47,7 +47,7 @@ services:
   op-node:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2
     network_mode: "host"
-
+    container_name: op-node
     command:
       - op-node
       - --l2=http://0.0.0.0:$PORTAL_PORT
@@ -75,10 +75,12 @@ services:
       - ./config:/config
     depends_on:
       - op-geth
+      - based-portal
     
   op-batcher:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.2
     network_mode: "host"
+    container_name: op-batcher
     command:
       - op-batcher
       - --l2-eth-rpc=http://0.0.0.0:$PORTAL_PORT
@@ -101,21 +103,23 @@ services:
   op-proposer:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.10.0
     network_mode: "host"
+    container_name: op-proposer
     command:
       - op-proposer
       - --poll-interval=12s
       - --rpc.port=8560
       - --rollup-rpc=http://0.0.0.0:$OP_NODE_RPC_PORT
-      - --game-factory-address=$DISPUTE_GAME_ADDRESS
+      - --game-factory-address=$DISPUTE_GAME_FACTORY_ADDRESS
       - --game-type=$DISPUTE_GAME_TYPE 
       - --l1-eth-rpc=$L1_RPC_URL
       - --proposal-interval=2s
     depends_on:
       - op-node
 
-  portal:
+  based-portal:
     image: based_portal_local
     network_mode: "host"
+    container_name: based-portal
     command:
       - --fallback.eth_url=http://0.0.0.0:$OP_GETH_RPC_PORT
       - --fallback.engine_url=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
@@ -124,14 +128,15 @@ services:
     volumes:
       - ./config:/config
 
-  registry:
+  based-registry:
     image: based_registry_local
     network_mode: "host"
+    container_name: based-registry
     command:
       - --registry.path=/config/registry.json
-      - --eth_client.url=http://0.0.0.0:$PORTAL_PORT
-      - --eth_client.timeout_ms=10
-      - --registry.port=$REGISTRY_PORT
+      - --portal.url=http://0.0.0.0:$PORTAL_PORT
+      - --portal.timeout_ms=10
+      - --port=$REGISTRY_PORT
     volumes: 
       - ./config:/config
 

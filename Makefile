@@ -47,14 +47,6 @@ build-registry: ## 🏗️ Build based registry from based directory
 build-gateway: ## 🏗️ Build based gateway from based directory
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
-run-main:
-	@if [ -f main_node/compose.yml ] && [ -f main_node/config/rollup.json ] && [ -f main_node/config/jwt ] && [ -f main_node/config/genesis.json ] && [ -f main_node/config/registry.json ]; then \
-		cd main_node && docker compose up -d; \
-	else \
-		echo "Missing required files! Look in the main_node subdir. We need: main_node/compose.yml, main_node/config/jwt, main_node/config/rollup.json, main_node/config/genesis.json, main_node/config/registry.json"; \
-		exit 1; \
-	fi
-
 run-registry:
 	@if [ -f main_node/.env ] && [ -f main_node/config/registry.json ]; then \
 		cd main_node && docker compose up -d registry; \
@@ -158,13 +150,13 @@ run-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	@cd .local_gateway_and_follower && docker compose up -d
 
 stop-gateway:
-	cd follower_node && docker compose down
+	cd .local_gateway_and_follower && docker compose down
 
-L1_CHAIN_ID?=560048
+L1_CHAIN_ID?=11155111
 L2_CHAIN_ID?=2151908
 L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
-L1_RPC_URL?=https://ethereum-hoodi-rpc.publicnode.com
-L1_BEACON_URL?=https://ethereum-hoodi-beacon-api.publicnode.com
+L1_RPC_URL?=https://ethereum-sepolia-rpc.publicnode.com
+L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
 
 ifndef OP_PROPOSER_KEY
 $(error OP_PROPOSER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
@@ -177,6 +169,7 @@ $(error OP_BATCHER_KEY is undefined! Please invoke like `make deploy-chain OP_BA
 endif
 deploy-chain:
 	@mkdir -p .local_main_node/config
+	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
 	@wallet_batcher=$$(docker run --rm \
 		-e PK="$(OP_BATCHER_KEY)" \
 		nikolaik/python-nodejs:python3.13-nodejs24-slim \
@@ -206,6 +199,75 @@ deploy-chain:
 		  -e "s@OP_PROPOSER_WALLET@$${wallet_proposer}@g" \
 		  main_node/intent.template.toml \
 		  > .local_main_node/config/intent.toml
+
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY) 
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/genesis.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
+	@jq '.chain_op_config={eip1559Elasticity:6,eip1559Denominator:50,eip1559DenominatorCanyon:250}' \
+       .local_main_node/config/rollup.json \
+      > .local_main_node/config/rollup.json.tmp && \
+     mv .local_main_node/config/rollup.json.tmp .local_main_node/config/config.json
+	@blockNumber=$$(jq -r '.genesis.l1.number' .local_main_node/config/rollup.json); \
+	 hex=$$(printf "0x%x" $$blockNumber); \
+	 hash=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	   --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["'"$$hex"'",false]}' \
+	   $(L1_RPC_URL) | jq -r '.result.hash'); \
+	 jq --arg h "$$hash" '.genesis.l1.hash = $$h' .local_main_node/config/rollup.json \
+	   > .local_main_node/config/rollup.json.tmp && mv .local_main_node/config/rollup.json.tmp .local_main_node/config/rollup.json
+
+ifndef OP_PROPOSER_KEY
+$(error OP_PROPOSER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+endif
+ifndef MAIN_KEY
+$(error MAIN_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+endif
+ifndef OP_BATCHER_KEY
+$(error OP_BATCHER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+endif
+run-main-node: build-portal build-registry
+	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
+		echo "❌  Main node already running."; \
+		exit 1; \
+	fi
+	@if [ ! -d .local_main_node/config ]; then \
+		echo ".local_main_node/config does not exist. Either fill it with rollup.json and genesis.json or run make deploy-chain to deploy a new chain."; \
+		exit 1; \
+	fi
+	@# generate jwt if missing
+	@if [ ! -f .local_main_node/config/jwt ]; then \
+	  openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt; \
+	fi
+	@# generate .env and fetch JSON if missing
+	@if [ ! -f .local_main_node/.env ]; then \
+	  cp main_node/env_example .local_main_node/.env; \
+	  cp main_node/compose.yml .local_main_node/compose.yml; \
+	  echo "Initializing all components of a main sequencing node in ./.local_main_node ..."; \
+	  { \
+	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(jq -r '.implementationsDeployment.disputeGameFactoryImplAddress' .local_main_node/config/state.json)"; \
+	    echo "NETWORK_ID=$$(jq -r '.l2_chain_id' .local_main_node/config/rollup.json)"; \
+	    echo "L1_RPC_URL=$(L1_RPC_URL)"; \
+	    echo "L1_BEACON_RPC_URL=$(L1_BEACON_RPC_URL)"; \
+	    echo "OP_NODE_SEQUENCER_KEY=$(MAIN_KEY)"; \
+	    echo "OP_NODE_GOSSIP_IP=$$(curl ifconfig.me)"; \
+	    echo "OP_BATCHER_PRIVATE_KEY=$(OP_BATCHER_KEY)"; \
+	    echo "OP_PROPOSER_PRIVATE_KEY=$(OP_PROPOSER_KEY)"; \
+	  } >> .local_main_node/.env; \
+	fi
+	@if [ ! -f .local_main_node/config/registry.json ]; then \
+		echo "[]" > .local_main_node/registry.json; \
+	fi
+	echo "...Done"; \
+	echo; \
+	echo "Starting with the following generated .env:"; \
+	cat .local_main_node/.env; \
+	echo; echo; \
+
+	@cd .local_main_node && docker compose up -d
+
+stop-main-node:
+	cd .local_main_node && docker compose down
+
 
 logs-portal: ## 📜 Show portal logs
 	docker logs main_node-portal-1 --tail 100 -f
