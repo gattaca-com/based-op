@@ -110,7 +110,8 @@ services:
       - --rpc.port=8560
       - --rollup-rpc=http://0.0.0.0:$OP_NODE_RPC_PORT
       - --game-factory-address=$DISPUTE_GAME_FACTORY_ADDRESS
-      - --game-type=$DISPUTE_GAME_TYPE 
+      - --game-type=$DISPUTE_GAME_TYPE
+      - --private-key=$OP_PROPOSER_PRIVATE_KEY
       - --l1-eth-rpc=$L1_RPC_URL
       - --proposal-interval=2s
     depends_on:

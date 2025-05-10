@@ -69,6 +69,22 @@ where
                         debug!(method = %req.method_name(), "forwarding request to eth fallback");
                         fallback_eth_client.clone().request(req.method_name(), params).await
                     }
+                    Some(("miner", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("net", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("web3", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("txpool", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
                     Some(("optimism", _)) | Some(("opp2p", _)) => {
                         debug!(method = %req.method_name(), "forwarding request to op-node fallback");
                         op_client.request(req.method_name(), params).await
