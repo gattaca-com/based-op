@@ -54,7 +54,7 @@ pub struct PortalServer {
     fallback_client: AuthRpcClient,
     op_node_client: RpcClient,
     registry_client: RpcClient,
-    current_gateway: Arc<Mutex<Gateway>>,
+    current_gateway: Option<Arc<Mutex<Gateway>>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
     last_fcu: Arc<RwLock<Nanos>>,
@@ -78,18 +78,20 @@ impl PortalServer {
         let registry_client =
             create_client(args.registry_url.clone(), Duration::from_millis(args.registry_timeout_ms))?;
 
-        let (_, gateway_url, _, jwt_as_b256) = registry_client
-            .current_gateway()
-            .await
-            .unwrap_or_else(|_| (0, Url::parse("http://default.net").unwrap(), Address::ZERO, B256::ZERO));
-
         let gateway_timeout = Duration::from_millis(args.gateway_timeout_ms);
 
-        let current_gateway = Arc::new(Mutex::new(create_gateway_client(
-            gateway_url,
-            unsafe { std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256) },
-            gateway_timeout,
-        )?));
+        let current_gateway =
+            registry_client.current_gateway().await.ok().and_then(|(_, gateway_url, _, jwt_as_b256)| {
+                create_gateway_client(
+                    gateway_url,
+                    unsafe {
+                        std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
+                    },
+                    gateway_timeout,
+                )
+                .ok()
+                .map(|client| Arc::new(Mutex::new(client)))
+            });
 
         let mut gateways = vec![];
         for (gateway_url, _, jwt_as_b256) in registry_client.registered_gateways().await.unwrap_or_else(|_| vec![]) {
@@ -191,16 +193,18 @@ impl PortalServer {
         *self.gateways.write() = gateways;
 
         let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
-        if self.current_gateway.lock().await.id == gateway_url {
-            return Ok(());
-        }
-
-        for g in self.gateways() {
-            if g.id == gateway_url {
-                *self.current_gateway.lock().await = g;
+        if let Some(current_gateway) = self.current_gateway.as_ref() {
+            if current_gateway.lock().await.id == gateway_url {
                 return Ok(());
             }
+            for g in self.gateways() {
+                if g.id == gateway_url {
+                    *current_gateway.lock().await = g;
+                    return Ok(());
+                }
+            }
         }
+
         error!(
             "CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent"
         );
@@ -257,9 +261,12 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
+
+        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
+
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().await.clone();
+                let client = current_gateway.lock().await.clone();
                 async move { client.client.transaction_receipt(hash).await }
             }
             .in_current_span(),
@@ -286,9 +293,12 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
+
+        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
+
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().await.clone();
+                let client = current_gateway.lock().await.clone();
                 async move { client.client.block_by_number(number, full).await }
             }
             .in_current_span(),
@@ -315,9 +325,10 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
+        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().await.clone();
+                let client = current_gateway.lock().await.clone();
                 async move { client.client.block_by_hash(hash, full).await }
             }
             .in_current_span(),
@@ -344,9 +355,10 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
+        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().await.clone();
+                let client = current_gateway.lock().await.clone();
                 async move { client.client.block_number().await }
             }
             .in_current_span(),
@@ -373,9 +385,10 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
+        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().await.clone();
+                let client = current_gateway.lock().await.clone();
                 async move { client.client.transaction_count(address, block_number).await }
             }
             .in_current_span(),
@@ -402,9 +415,10 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
+        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
         let gateway_fut = tokio::spawn(
             {
-                let client = self.current_gateway.lock().await.clone();
+                let client = current_gateway.lock().await.clone();
                 async move { client.client.balance(address, block_number).await }
             }
             .in_current_span(),
@@ -451,15 +465,17 @@ impl EngineApiServer for PortalServer {
             return Ok(response);
         }
 
-        if payload_attributes.is_some() {
-            let current_gateway = self.current_gateway.lock().await.clone();
-            // pick only one gateway for this block
-            tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, current_gateway).in_current_span());
-        } else {
-            // send to all gateways
-            for gateway in self.gateways() {
-                let payload_attributes = payload_attributes.clone();
-                tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span());
+        if let Some(current_gateway) = self.current_gateway.as_ref() {
+            if payload_attributes.is_some() {
+                let current_gateway = current_gateway.lock().await.clone();
+                // pick only one gateway for this block
+                tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, current_gateway).in_current_span());
+            } else {
+                // send to all gateways
+                for gateway in self.gateways() {
+                    let payload_attributes = payload_attributes.clone();
+                    tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span());
+                }
             }
         }
 
@@ -532,10 +548,12 @@ impl EngineApiServer for PortalServer {
             async move { client.get_payload_v3(payload_id).await }
         });
 
+        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
+
         let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV3, _>> = tokio::spawn(
             {
                 // only get payload from previously picked gateway
-                let gateway = self.current_gateway.lock().await.clone();
+                let gateway = current_gateway.lock().await.clone();
                 let fallback_client = self.fallback_client.clone();
 
                 async move {

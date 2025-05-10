@@ -2,14 +2,13 @@ use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
     MethodResponse,
     core::{client::ClientT, traits::ToRpcParams},
-    http_client::HttpRequest,
     server::middleware::rpc::RpcServiceT,
     types::{
         ErrorObject, Params, Request, ResponsePayload,
         error::{INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
     },
 };
-use serde_json::{json, value::RawValue};
+use serde_json::value::RawValue;
 use tracing::{debug, error};
 
 use crate::server::{AuthRpcClient, RpcClient};
@@ -106,7 +105,11 @@ where
                     }
                     Err(_)
                         if req.method_name() == "eth_getBlockByNumber"
-                            && req.params.as_ref().is_some_and(|p| p.to_string().contains("finalized") || p.to_string().contains("latest") || p.to_string().contains("safe")) =>
+                            && req.params.as_ref().is_some_and(|p| {
+                                p.to_string().contains("finalized")
+                                    || p.to_string().contains("latest")
+                                    || p.to_string().contains("safe")
+                            }) =>
                     {
                         let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =
                             fallback_eth_client.clone().request("eth_getBlockByNumber", ("latest", false)).await;

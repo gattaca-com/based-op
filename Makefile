@@ -81,12 +81,16 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
+
+ifneq ($(filter run-gateway,$(MAKECMDGOALS)),)
 ifndef PORTAL
 	$(error PORTAL is undefined! Please invoke like `make run-gateway PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
 endif
 ifndef GATEWAY_SEQUENCING_KEY
 	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make run-gateway PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
 endif
+endif
+
 run-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
@@ -158,15 +162,31 @@ L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
 L1_RPC_URL?=https://ethereum-sepolia-rpc.publicnode.com
 L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
 
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Only perform these parse-time checks if the user asked for deploy-chain
+# or run-main-node on the command line.
+# ────────────────────────────────────────────────────────────────────────────────
+ifneq ($(filter deploy-chain run-main-node,$(MAKECMDGOALS)),)
+
 ifndef OP_PROPOSER_KEY
-$(error OP_PROPOSER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+$(error OP_PROPOSER_KEY is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
 endif
+
 ifndef MAIN_KEY
-$(error MAIN_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+$(error MAIN_KEY is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
 endif
+
 ifndef OP_BATCHER_KEY
-$(error OP_BATCHER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
+$(error OP_BATCHER_KEY is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
 endif
+
+endif
+# ────────────────────────────────────────────────────────────────────────────────
+
 deploy-chain:
 	@mkdir -p .local_main_node/config
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
@@ -216,15 +236,7 @@ deploy-chain:
 	 jq --arg h "$$hash" '.genesis.l1.hash = $$h' .local_main_node/config/rollup.json \
 	   > .local_main_node/config/rollup.json.tmp && mv .local_main_node/config/rollup.json.tmp .local_main_node/config/rollup.json
 
-ifndef OP_PROPOSER_KEY
-$(error OP_PROPOSER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
-endif
-ifndef MAIN_KEY
-$(error MAIN_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
-endif
-ifndef OP_BATCHER_KEY
-$(error OP_BATCHER_KEY is undefined! Please invoke like `make deploy-chain OP_BATCHER_KEY=… OP_PROPOSER_KEY=… MAIN_KEY=…`)
-endif
+
 run-main-node: build-portal build-registry
 	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
 		echo "❌  Main node already running."; \
@@ -255,7 +267,7 @@ run-main-node: build-portal build-registry
 	  } >> .local_main_node/.env; \
 	fi
 	@if [ ! -f .local_main_node/config/registry.json ]; then \
-		echo "[]" > .local_main_node/registry.json; \
+		echo "[]" > .local_main_node/config/registry.json; \
 	fi
 	echo "...Done"; \
 	echo; \
