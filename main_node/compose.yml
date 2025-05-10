@@ -141,3 +141,52 @@ services:
     volumes: 
       - ./config:/config
 
+################################################################################
+# Postgres for Blockscout
+################################################################################
+  blockscout-postgres:
+    image: postgres:14-alpine
+    container_name: blockscout-postgres
+    restart: unless-stopped
+    network_mode: "host"          # everything else in your stack is host-mode already
+    environment:
+      # these credentials will be baked into the Blockscout DATABASE_URL below
+      POSTGRES_USER: blockscout
+      POSTGRES_PASSWORD: blockscout
+      POSTGRES_DB:     blockscout
+    volumes:
+      - ./data/blockscout-postgres:/var/lib/postgresql/data
+
+################################################################################
+# Blockscout explorer
+################################################################################
+  blockscout:
+    image: blockscout/blockscout:6.8.0
+    container_name: blockscout
+    command:
+      - /bin/sh
+      - -c
+      - bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()" && bin/blockscout start
+    
+    network_mode: "host"          # everything else in your stack is host-mode already
+    depends_on:
+      - op-node                  # need the L2 node up to serve RPC
+      - blockscout-postgres      # need the DB up first
+    environment:
+      # point to the Postgres above
+      DATABASE_URL:     "postgresql://blockscout:blockscout@0.0.0.0:5432/blockscout"
+      # point to your L2 JSON-RPC:
+      ETHEREUM_JSONRPC_HTTP_URL: "http://0.0.0.0:${OP_GETH_RPC_PORT}"
+      # WebSockets (if you want to enable filters/tx-watch)
+      ETHEREUM_JSONRPC_WS_URL:   "ws://0.0.0.0:${OP_GETH_WS_PORT}"
+      ETHEREUM_JSONRPC_TRACE_URL: "http://0.0.0.0:${OP_GETH_RPC_PORT}"
+      ETHEREUM_JSONRPC_VARIANT: "geth"
+      SECRET_KEY_BASE: "56NtB48ear7+wMSf0IQuWDAAazhpb31qyc7GiyspBP2vh7t5zlCsF5QDv76chXeN"
+      # A “network name” for Blockscout’s UI
+      NETWORK:           "local"
+      API_V2_ENABLED: "true"
+      # disable Subgraph support if you don’t have one
+      ECTO_USE_SSL: "false"
+      SSG_ENABLED:       "false"
+    # no ports: host-mode means Blockscout binds to 4000 on the host automatically
+
