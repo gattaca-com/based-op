@@ -111,11 +111,6 @@ impl RegistryServer {
                 tokio::time::sleep(Duration::from_secs(30)).await;
             }
         });
-        while gateway_clients.read().is_empty() {
-            info!("Waiting until at least one gateway becomes available");
-            std::thread::sleep(Duration::from_millis(200));
-        }
-
         Ok(Self { eth_client: portal_eth_client, gateway_clients, gateway_update_blocks: args.gateway_update_blocks })
     }
 

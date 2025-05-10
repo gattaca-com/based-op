@@ -237,7 +237,7 @@ deploy-chain:
 	   > .local_main_node/config/rollup.json.tmp && mv .local_main_node/config/rollup.json.tmp .local_main_node/config/rollup.json
 
 
-run-main-node: build-portal build-registry
+start-main-node: build-portal build-registry
 	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
 		echo "❌  Main node already running."; \
 		exit 1; \
@@ -276,10 +276,51 @@ run-main-node: build-portal build-registry
 	echo; echo; \
 
 	@cd .local_main_node && docker compose up -d
+	$(MAKE) logs-main-node
 
+start-portal: build-portal
+	@if [ ! -d .local_main_node/config ]; then \
+		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		exit 1; \
+	fi
+	docker compose -f .local_main_node/compose.yml based-portal up -d
+	$(MAKE) logs-main-node
+	
+start-registry: build-registry
+	@if [ ! -d .local_main_node/config ]; then \
+		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		exit 1; \
+	fi
+	docker compose -f .local_main_node/compose.yml based-registry up -d
+	$(MAKE) logs-main-node
+	
 stop-main-node:
-	cd .local_main_node && docker compose down
+	@if [ ! -d .local_main_node/config ]; then \
+		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		exit 1; \
+	fi
+	docker compose -f .local_main_node/compose.yml down
 
+stop-portal:
+	@if [ ! -d .local_main_node/config ]; then \
+		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		exit 1; \
+	fi
+	docker compose -f .local_main_node/compose.yml down based-portal
+
+stop-registry:
+	@if [ ! -d .local_main_node/config ]; then \
+		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		exit 1; \
+	fi
+	docker compose -f .local_main_node/compose.yml down based-registry
+
+logs-main-node:
+	@if [ ! -d .local_main_node/config ]; then \
+		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		exit 1; \
+	fi
+	docker compose -f .local_main_node/compose.yml logs --tail 100 -f
 
 logs-portal: ## 📜 Show portal logs
 	docker logs main_node-portal-1 --tail 100 -f
