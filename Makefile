@@ -47,22 +47,6 @@ build-registry: ## 🏗️ Build based registry from based directory
 build-gateway: ## 🏗️ Build based gateway from based directory
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
-run-registry:
-	@if [ -f main_node/.env ] && [ -f main_node/config/registry.json ]; then \
-		cd main_node && docker compose up -d registry; \
-	else \
-		echo "Missing required files! Look in the main_node subdir. We need: main_node/.env, main_node/config/registry.json"; \
-		exit 1; \
-	fi
-
-run-portal:
-	@if [ -f main_node/.env ] && [ -f main_node/config/jwt ]; then \
-		cd main_node && docker compose up -d portal; \
-	else \
-		echo "Missing required files! Look in the main_node subdir. We need: main_node/.env, main_node/config/jwt"; \
-		exit 1; \
-	fi
-
 build-follower-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \
 	IMAGE_TAGS=develop \
@@ -86,14 +70,17 @@ ifeq ($(filter start-gateway,$(MAKECMDGOALS)),start-gateway)
   ifeq ($(strip $(PORTAL)),)
     $(error PORTAL is undefined! \
            Please invoke like `make start-gateway \
-           PORTAL=http://… GATEWAY_SEQUENCING_KEY=0x…`)
+           PORTAL=http://… GATEWAY_SEQUENCING_KEY=…`)
   endif
   ifeq ($(strip $(GATEWAY_SEQUENCING_KEY)),)
     $(error GATEWAY_SEQUENCING_KEY is undefined! \
            Please invoke like `make start-gateway \
-           PORTAL=http://… GATEWAY_SEQUENCING_KEY=0x…`)
+           PORTAL=http://… GATEWAY_SEQUENCING_KEY=…`)
   endif
 endif
+GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
+BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
+BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
 start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
@@ -136,29 +123,42 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
 	fi
 
-	@wallet=$$(docker run --rm \
-	               -e PK="$(GATEWAY_SEQUENCING_KEY)" \
-	               nikolaik/python-nodejs:python3.13-nodejs24-slim \
-	               sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
-	                      NODE_PATH=$$(npm root -g) \
-	                      node -e "const { Wallet } = require(\"ethers\"); \
-	                               console.log(new Wallet(process.env.PK).address)"'); \
-	echo "...Done"; \
-	echo; \
-	echo "Starting with the following generated .env:"; \
-	cat .local_gateway_and_follower/.env; \
-	echo; echo; \
-	echo "Communicate the following with the registry operator:"; \
-	echo "ip: $$(curl -s ifconfig.me):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2)"; \
-	echo "address: $$wallet"; \
-	echo "jwt: $$(cat .local_gateway_and_follower/config/jwt)"; \
-	echo; echo
+	@mkdir -p $(BASED_OP_GETH_DATA_DIR)
+	@mkdir -p $(BASED_OP_NODE_DATA_DIR)
+	@mkdir -p $(GATEWAY_DATA_DIR)
+	@if [ ! -L ".local_gateway_and_follower/data/geth" ] || [ "$$(readlink .local_gateway_and_follower/data/geth)" != "$(BASED_OP_GETH_DATA_DIR)" ]; then \
+	    ln -s $(BASED_OP_GETH_DATA_DIR) .local_gateway_and_follower/data/geth; \
+	fi
+	@if [ ! -L ".local_gateway_and_follower/data/node" ] || [ "$$(readlink .local_gateway_and_follower/data/node)" != "$(BASED_OP_NODE_DATA_DIR)" ]; then \
+	    ln -s $(BASED_OP_NODE_DATA_DIR) .local_gateway_and_follower/data/node; \
+	fi
+	@if [ ! -L ".local_gateway_and_follower/data/gateway" ] || [ "$$(readlink .local_gateway_and_follower/data/gateway)" != "$(GATEWAY_DATA_DIR)" ]; then \
+	    ln -s $(GATEWAY_DATA_DIR) .local_gateway_and_follower/data/gateway; \
+	fi
+
+	@wallet=$$(cd based && cargo run --bin key_to_address $(GATEWAY_SEQUENCING_KEY)); \
+      echo "...Done"; \
+      echo; \
+      echo "Starting with the following generated .env:"; \
+      cat .local_gateway_and_follower/.env; \
+      echo; echo; \
+      echo "Calling registerGateway method via JSON-RPC:"; \
+      GATEWAY_URL=http://$$(curl -s ifconfig.me):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2); \
+      GATEWAY_ADDRESS=$$wallet; \
+      JWT=$$(cat .local_gateway_and_follower/config/jwt); \
+      curl -X POST $$PORTAL \
+        -H "Content-Type: application/json" \
+        -d "{\"jsonrpc\":\"2.0\", \
+             \"method\":\"registry_registerGateway\", \
+             \"params\":[ \
+               [\"$$GATEWAY_URL\", \"$$GATEWAY_ADDRESS\", \"$$JWT\"] \
+             ], \
+             \"id\":1}"; \
+      echo; echo
 
 	@cd .local_gateway_and_follower && docker compose up -d
-	$(MAKE) logs-gateway
+	$(MAKE) logs-follower-node
 
-stop-gateway:
-	cd .local_gateway_and_follower && docker compose down
 
 L1_CHAIN_ID?=11155111
 L2_CHAIN_ID?=2151908
@@ -169,9 +169,9 @@ L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Only perform these parse-time checks if the user asked for deploy-chain
-# or run-main-node on the command line.
+# or start-main-node on the command line.
 # ────────────────────────────────────────────────────────────────────────────────
-ifneq ($(filter deploy-chain run-main-node,$(MAKECMDGOALS)),)
+ifneq ($(filter deploy-chain start-main-node,$(MAKECMDGOALS)),)
 
 ifndef OP_PROPOSER_KEY
 $(error OP_PROPOSER_KEY is undefined!  Please invoke like \
@@ -198,27 +198,9 @@ deploy-chain:
 	fi
 	@mkdir -p .local_main_node/config
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
-	@wallet_batcher=$$(docker run --rm \
-		-e PK="$(OP_BATCHER_KEY)" \
-		nikolaik/python-nodejs:python3.13-nodejs24-slim \
-		sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
-		      NODE_PATH=$$(npm root -g) \
-		      node -e "const { Wallet } = require(\"ethers\"); \
-		               console.log(new Wallet(process.env.PK).address)"'); \
-	wallet_proposer=$$(docker run --rm \
-		-e PK="$(OP_PROPOSER_KEY)" \
-		nikolaik/python-nodejs:python3.13-nodejs24-slim \
-		sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
-		      NODE_PATH=$$(npm root -g) \
-		      node -e "const { Wallet } = require(\"ethers\"); \
-		               console.log(new Wallet(process.env.PK).address)"'); \
-	wallet_main=$$(docker run --rm \
-		-e PK="$(MAIN_KEY)" \
-		nikolaik/python-nodejs:python3.13-nodejs24-slim \
-		sh -c 'npm install -g --silent ethers@6 >/dev/null 2>&1 && \
-		      NODE_PATH=$$(npm root -g) \
-		      node -e "const { Wallet } = require(\"ethers\"); \
-		               console.log(new Wallet(process.env.PK).address)"'); \
+	@wallet_batcher=$$(cd based && cargo run --bin key_to_address $(OP_BATCHER_KEY)); \
+	wallet_proposer=$$(cd based && cargo run --bin key_to_address $(OP_PROPOSER_KEY)); \
+	wallet_main=$$(cd based && cargo run --bin key_to_address $(MAIN_KEY)); \
 	sed -E \
 		  -e "s@L1_CHAIN_ID@$(L1_CHAIN_ID)@g" \
 		  -e "s@L2_CHAIN_ID@$(L2_CHAIN_ID_HEX)@g" \
@@ -242,6 +224,13 @@ deploy-chain:
 	 docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq --arg h "$$hash" '.genesis.l1.hash = $$h' /config/rollup.json > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/rollup.json
 
 	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
+	@echo "...Done deploying. See chain config in"
+	@echo ".local_main_node/config" 
+	@echo
+	@echo "start sequencing the chain using"
+	@echo "make start-main-node OP_BATCHER_KEY=<private-key matching batcher address> OP_PROPOSER_KEY=<private-key matching proposer address> MAIN_KEY=<op-node sequencer private key>"
+	@echo
+	@echo
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Only perform these parse-time checks if the user asked for config-main-node
@@ -286,13 +275,20 @@ config-main-node:
 	@cp $(ROLLUP_JSON) .local_main_node/config
 	@cp $(GENESIS_JSON) .local_main_node/config
 	@cp $(STATE_JSON) .local_main_node/config
-	@ln -s $(OP_GETH_DATA_DIR) .local_main_node/data/geth
-	@ln -s $(OP_NODE_DATA_DIR) .local_main_node/data/node
+	@mkdir -p $(OP_GETH_DATA_DIR)
+	@mkdir -p $(OP_NODE_DATA_DIR)
+	@if [ ! -L ".local_main_node/data/geth" ] || [ "$$(readlink .local_main_node/data/geth)" != "$(OP_GETH_DATA_DIR)" ]; then \
+	    ln -s $(OP_GETH_DATA_DIR) .local_main_node/data/geth; \
+	fi
+	@if [ ! -L ".local_main_node/data/node" ] || [ "$$(readlink .local_main_node/data/node)" != "$(OP_NODE_DATA_DIR)" ]; then \
+	    ln -s $(OP_NODE_DATA_DIR) .local_main_node/data/node; \
+	fi
 	@echo "...Done initializing .local_main_node" 
 	@echo "dir structure is:"
 	@ls -la .local_main_node
 	@echo
-	@echo "start sequencing the chain using make start-main-node"
+	@echo "start sequencing the chain using"
+	@echo "make start-main-node OP_BATCHER_KEY=<private-key matching batcher address> OP_PROPOSER_KEY=<private-key matching proposer address> MAIN_KEY=<op-node sequencer private key>"
 	@echo
 	@echo
 
@@ -341,59 +337,72 @@ start-main-node: build-portal build-registry
 
 start-portal: build-portal
 	@if [ ! -d .local_main_node/config ]; then \
-		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		echo ".local_main_node/config does not seem to have been started. run make start-main-node."; \
 		exit 1; \
 	fi
-	docker compose -f .local_main_node/compose.yml based-portal up -d
-	$(MAKE) logs-main-node
+	docker compose -f .local_main_node/compose.yml up -d based-portal 
+	$(MAKE) logs-portal
 	
 start-registry: build-registry
 	@if [ ! -d .local_main_node/config ]; then \
-		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		echo ".local_main_node/config does not seem to have been started. run make start-main-node."; \
 		exit 1; \
 	fi
-	docker compose -f .local_main_node/compose.yml based-registry up -d
-	$(MAKE) logs-main-node
+	docker compose -f .local_main_node/compose.yml up -d based-registry 
+	$(MAKE) logs-registry
 	
+stop-gateway:
+	cd .local_gateway_and_follower && docker compose down
+
 stop-main-node:
 	@if [ ! -d .local_main_node/config ]; then \
-		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		echo ".local_main_node/config does not seem to have been started. run make start-main-node."; \
 		exit 1; \
 	fi
 	docker compose -f .local_main_node/compose.yml down
 
 stop-portal:
 	@if [ ! -d .local_main_node/config ]; then \
-		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		echo ".local_main_node/config does not seem to have been started. run make start-main-node."; \
 		exit 1; \
 	fi
 	docker compose -f .local_main_node/compose.yml down based-portal
 
 stop-registry:
 	@if [ ! -d .local_main_node/config ]; then \
-		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		echo ".local_main_node/config does not seem to have been started. run make start-main-node."; \
 		exit 1; \
 	fi
 	docker compose -f .local_main_node/compose.yml down based-registry
 
 logs-main-node:
 	@if [ ! -d .local_main_node/config ]; then \
-		echo ".local_main_node/config does not seem to have been started. run make run-main-node."; \
+		echo ".local_main_node/config does not seem to have been started. run make start-main-node."; \
 		exit 1; \
 	fi
 	docker compose -f .local_main_node/compose.yml logs --tail 100 -f
 
+logs-follower-node:
+	@if [ ! -d .local_gateway_and_follower/config ]; then \
+		echo ".local_gateway_and_follower/config does not seem to have been started. run make start-main-node."; \
+		exit 1; \
+	fi
+	docker compose -f .local_gateway_and_follower/compose.yml logs --tail 100 -f
+
 logs-portal: ## 📜 Show portal logs
 	docker logs based-portal --tail 100 -f
+
+logs-registry: ## 📜 Show registry logs
+	docker logs based-registry --tail 100 -f
 
 logs-gateway: ## 📜 Show gateway logs
 	docker logs based-op-gateway --tail 100 -f
 	
 logs-op-node: ## 📜 Show main op-node logs (when on main box)
-	docker logs based-op-node --tail 100 -f
+	docker logs op-node --tail 100 -f
 	
 logs-op-geth: ## 📜 Show main op-geth logs (when on main box)
-	docker logs based-op-geth --tail 100 -f
+	docker logs op-geth --tail 100 -f
 	
 logs-batcher:
 	docker logs op-batcher --tail 100 -f
@@ -406,9 +415,10 @@ FOLLOWER_NODE_HOST?=http://localhost
 BLOCK_NUMBER?=$(shell echo $$(( $$(cast block-number --rpc-url http://localhost:$(BOP_EL_PORT)) + 1 )))
 DUMMY_RICH_WALLET_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 DUMMY_TX=$(shell cast mktx --rpc-url  $(FOLLOWER_NODE_HOST):$(BOP_EL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a | xxd -r -p | base64)
+PORTAL_PORT?=8080
 
 test-tx:
-	cast send --rpc-url  http://127.0.0.1:$(PORTAL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a
+	cast send --rpc-url  http://0.0.0.0:$(PORTAL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a
 
 test-frag:
 	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \

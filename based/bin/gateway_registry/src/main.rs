@@ -82,12 +82,17 @@ fn refresh_gateway_clients(path: impl AsRef<Path>) -> Result<Vec<(Url, Address, 
     Ok(serde_json::from_reader(std::fs::File::open(path.as_ref())?)?)
 }
 
+fn write_gateway_clients(path: Arc<PathBuf>, clients: &[(Url, Address, B256)]) {
+    let _ = std::fs::write(Arc::unwrap_or_clone(path), serde_json::to_string(clients).unwrap());
+}
+
 #[derive(Clone)]
 pub struct RegistryServer {
     eth_client: RpcClient,
     // url, address, jwt secret
     gateway_clients: Arc<RwLock<Vec<(Url, Address, B256)>>>,
     gateway_update_blocks: u64,
+    registry_path: Arc<PathBuf>,
 }
 
 impl RegistryServer {
@@ -96,6 +101,7 @@ impl RegistryServer {
 
         let gateway_clients = Arc::new(RwLock::new(refresh_gateway_clients(&args.registry_path).unwrap_or_default()));
         let gateway_clients_cloned = gateway_clients.clone();
+        let registry_path = Arc::new(args.registry_path.clone());
         tokio::spawn(async move {
             loop {
                 match refresh_gateway_clients(&args.registry_path) {
@@ -111,7 +117,12 @@ impl RegistryServer {
                 tokio::time::sleep(Duration::from_secs(30)).await;
             }
         });
-        Ok(Self { eth_client: portal_eth_client, gateway_clients, gateway_update_blocks: args.gateway_update_blocks })
+        Ok(Self {
+            eth_client: portal_eth_client,
+            gateway_clients,
+            gateway_update_blocks: args.gateway_update_blocks,
+            registry_path,
+        })
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
@@ -144,23 +155,35 @@ impl RegistryServer {
 impl RegistryApiServer for RegistryServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
-        info!(n_blocks_into_the_future, "serving future gateway");
         let curblock = self.eth_client.block_number().await?;
         let gateways = self.gateway_clients.read();
         let n_gateways = gateways.len();
         if n_gateways == 0 {
             return Err(RpcError::NoReturn);
         }
-        let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)? +
-            n_blocks_into_the_future;
+        let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)?
+            + n_blocks_into_the_future;
 
         let id = (target_block / self.gateway_update_blocks) as usize;
         let (url, address, jwt_in_b256) = gateways[id % n_gateways].clone();
+        info!("serving future gateway for block {target_block}: url={url}, address={address}", );
         Ok((target_block, url, address, jwt_in_b256))
     }
 
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
         Ok(self.gateway_clients.read().clone())
+    }
+
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
+    async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()> {
+        let mut gateways = self.gateway_clients.read().clone();
+        if !gateways.iter().any(|g| g.0.host() == gateway.0.host()) {
+            gateways.push(gateway);
+            write_gateway_clients(self.registry_path.clone(), &gateways);
+            *self.gateway_clients.write() = gateways;
+        }
+        Ok(())
     }
 }
 

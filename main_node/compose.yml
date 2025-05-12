@@ -141,7 +141,7 @@ services:
     container_name: based-registry
     command:
       - --registry.path=/config/registry.json
-      - --portal.url=http://0.0.0.0:$PORTAL_PORT
+      - --portal.url=http://0.0.0.0:$OP_GETH_RPC_PORT
       - --portal.timeout_ms=10
       - --port=$REGISTRY_PORT
     volumes: 

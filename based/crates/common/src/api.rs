@@ -123,6 +123,10 @@ pub trait RegistryApi {
     /// Returns the current blocknumber and corresponding gateway url and address
     #[method(name = "registeredGateways")]
     async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>>;
+
+    /// Returns the current blocknumber and corresponding gateway url and address
+    #[method(name = "registerGateway")]
+    async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()>;
 }
 
 #[rpc(client, server, namespace = "portal")]
@@ -368,8 +372,8 @@ pub struct EthConfig {
     pub fjord_time: u64,
     pub granite_time: u64,
     pub holocene_time: u64,
-    pub terminal_total_difficulty: u64,
-    pub terminal_total_difficulty_passed: bool,
+    pub terminal_total_difficulty: Option<u64>,
+    pub terminal_total_difficulty_passed: Option<bool>,
     pub deposit_contract_address: String,
     pub optimism: OptimismConfig,
 }
