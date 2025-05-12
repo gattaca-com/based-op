@@ -231,9 +231,8 @@ deploy-chain:
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/genesis.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/rollup.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
-	@docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq \
-    jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
-    > /config/rollup.json.tmp && mv /config/rollup.json.tmp /config/config.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
+    > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
 	@blockNumber=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.genesis.l1.number' /config/rollup.json); \
 	 hex=$$(printf "0x%x" $$blockNumber); \
 	 hash=$$(curl -s -X POST -H 'Content-Type: application/json' \
