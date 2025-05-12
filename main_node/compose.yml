@@ -48,6 +48,12 @@ services:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2
     network_mode: "host"
     container_name: op-node
+    entrypoint:
+      - sh
+      - -c
+      - |
+        sleep "${OP_NODE_DELAY:-15}" &&
+        exec op-node "$@"
     command:
       - op-node
       - --l2=http://0.0.0.0:$PORTAL_PORT
