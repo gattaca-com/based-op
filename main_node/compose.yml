@@ -183,10 +183,10 @@ services:
       ETHEREUM_JSONRPC_VARIANT: "geth"
       SECRET_KEY_BASE: "56NtB48ear7+wMSf0IQuWDAAazhpb31qyc7GiyspBP2vh7t5zlCsF5QDv76chXeN"
       # A “network name” for Blockscout’s UI
-      NETWORK:           "local"
+      NETWORK:        "local"
       API_V2_ENABLED: "true"
       # disable Subgraph support if you don’t have one
-      ECTO_USE_SSL: "false"
-      SSG_ENABLED:       "false"
+      ECTO_USE_SSL:   "false"
+      SSG_ENABLED:    "false"
     # no ports: host-mode means Blockscout binds to 4000 on the host automatically
 
