@@ -81,6 +81,10 @@ where
                         debug!(method = %req.method_name(), "forwarding request to eth fallback");
                         fallback_eth_client.clone().request(req.method_name(), params).await
                     }
+                    Some(("admin", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
                     Some(("txpool", _)) => {
                         debug!(method = %req.method_name(), "forwarding request to eth fallback");
                         fallback_eth_client.clone().request(req.method_name(), params).await

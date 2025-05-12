@@ -155,6 +155,7 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	echo; echo
 
 	@cd .local_gateway_and_follower && docker compose up -d
+	$(MAKE) logs-gateway
 
 stop-gateway:
 	cd .local_gateway_and_follower && docker compose down
@@ -383,7 +384,7 @@ logs-main-node:
 	docker compose -f .local_main_node/compose.yml logs --tail 100 -f
 
 logs-portal: ## 📜 Show portal logs
-	docker logs main_node-portal-1 --tail 100 -f
+	docker logs based-portal --tail 100 -f
 
 logs-gateway: ## 📜 Show gateway logs
 	docker logs based-op-gateway --tail 100 -f
