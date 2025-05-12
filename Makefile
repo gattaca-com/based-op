@@ -82,13 +82,17 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro:mv2
 
 
-ifneq ($(filter start-gateway,$(MAKECMDGOALS)),)
-ifndef PORTAL
-	$(error PORTAL is undefined! Please invoke like `make run-gateway PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
-endif
-ifndef GATEWAY_SEQUENCING_KEY
-	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make run-gateway PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
-endif
+ifeq ($(filter start-gateway,$(MAKECMDGOALS)),start-gateway)
+  ifeq ($(strip $(PORTAL)),)
+    $(error PORTAL is undefined! \
+           Please invoke like `make start-gateway \
+           PORTAL=http://… GATEWAY_SEQUENCING_KEY=0x…`)
+  endif
+  ifeq ($(strip $(GATEWAY_SEQUENCING_KEY)),)
+    $(error GATEWAY_SEQUENCING_KEY is undefined! \
+           Please invoke like `make start-gateway \
+           PORTAL=http://… GATEWAY_SEQUENCING_KEY=0x…`)
+  endif
 endif
 start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
