@@ -249,49 +249,60 @@ ifneq ($(filter config-main-node,$(MAKECMDGOALS)),)
 
 ifndef ROLLUP_JSON
 $(error ROLLUP_JSON is undefined!  Please invoke like \
-    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
 endif
 
 ifndef GENESIS_JSON
 $(error ROLLUP_JSON is undefined!  Please invoke like \
-    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
+ifndef STATE_JSON
+$(error STATE_JSON is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
 endif
 
 ifndef OP_GETH_DATA_DIR
 $(error  OP_GETH_DATA_DIR is undefined!  Please invoke like \
-    `make $(MAKECMDGOALS) OP_BATCHER_KEY=… OP_PROPOSER_KEY=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
 endif
 
 ifndef OP_NODE_DATA_DIR
 $(error  OP_NODE_DATA_DIR is undefined!  Please invoke like \
-    `make $(MAKECMDGOALS) OP_BATCHER_KEY=… OP_PROPOSER_KEY=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
 endif
 
 endif
 # ────────────────────────────────────────────────────────────────────────────────
 config-main-node:
-	@if [ -d .local_main_node/config ] \
+	@if [ -d .local_main_node/config ]; then \
 		echo "❌  Seems like the main node was already configured (see .local_main_node/config)."; \
 		exit 1; \
 	fi
-	mkdir -p .local_main_node/config
+	@mkdir -p .local_main_node/config
+	@mkdir -p .local_main_node/data
 	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
 	@cp $(ROLLUP_JSON) .local_main_node/config
 	@cp $(GENESIS_JSON) .local_main_node/config
-	@ln -s $(OP_GETH_DATA_DIR) .local_main_node/config/data/geth
-	@ln -s $(OP_NODE_DATA_DIR) .local_main_node/config/data/geth
+	@cp $(STATE_JSON) .local_main_node/config
+	@ln -s $(OP_GETH_DATA_DIR) .local_main_node/data/geth
+	@ln -s $(OP_NODE_DATA_DIR) .local_main_node/data/node
+	@echo "...Done initializing .local_main_node" 
+	@echo "dir structure is:"
+	@tree .local_main_node
+	@echo
+	@echo "start sequencing the chain using make start-main-node"
+	@echo
+	@echo
 
 # By default these will be pointing to directories under .local_<xyz>
 start-main-node: build-portal build-registry
-
-	@mkdir -p .local_main_node/config
-
 	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
 		echo "❌  Main node already running."; \
 		exit 1; \
 	fi
 	@if [ ! -d .local_main_node/config ]; then \
-		echo ".local_main_node/config does not exist. Either fill it with rollup.json and genesis.json or run make deploy-chain to deploy a new chain."; \
+		echo ".local_main_node/config does not exist. run make config-main-node to configure, or first run make deploy-chain to deploy a new sepolia chain."; \
 		exit 1; \
 	fi
 	@# generate jwt if missing
@@ -304,14 +315,12 @@ start-main-node: build-portal build-registry
 	  cp main_node/compose.yml .local_main_node/compose.yml; \
 	  echo "Initializing all components of a main sequencing node in ./.local_main_node ..."; \
 	  { \
-	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -i imega/jq <  -r '.implementationsDeployment.disputeGameFactoryImplAddress' .local_main_node/config/state.json)"; \
-	    echo "NETWORK_ID=$$(docker run -i imega/jq < -r '.l2_chain_id' .local_main_node/config/rollup.json)"; \
+	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.implementationsDeployment.disputeGameFactoryImplAddress' /config/state.json)"; \
+	    echo "NETWORK_ID=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.l2_chain_id' /config/rollup.json)"; \
 	    echo "L1_RPC_URL=$(L1_RPC_URL)"; \
 	    echo "L1_BEACON_RPC_URL=$(L1_BEACON_RPC_URL)"; \
 	    echo "OP_NODE_SEQUENCER_KEY=$(MAIN_KEY)"; \
 	    echo "OP_NODE_GOSSIP_IP=$$(curl ifconfig.me)"; \
-	    echo "OP_NODE_DATA_DIR=$(OP_NODE_DATADIR)"; \
-	    echo "OP_GETH_DATA_DIR=$(OP_GETH_DATADIR)"; \
 	    echo "OP_BATCHER_PRIVATE_KEY=$(OP_BATCHER_KEY)"; \
 	    echo "OP_PROPOSER_PRIVATE_KEY=$(OP_PROPOSER_KEY)"; \
 	  } >> .local_main_node/.env; \
@@ -319,11 +328,12 @@ start-main-node: build-portal build-registry
 	@if [ ! -f .local_main_node/config/registry.json ]; then \
 		echo "[]" > .local_main_node/config/registry.json; \
 	fi
-	echo "...Done"; \
-	echo; \
-	echo "Starting with the following generated .env:"; \
-	cat .local_main_node/.env; \
-	echo; echo; \
+	@echo "...Done"
+	@echo
+	@echo "Starting with the following generated .env:"
+	@cat .local_main_node/.env
+	@echo
+	@echo
 
 	@cd .local_main_node && docker compose up -d
 	$(MAKE) logs-main-node
