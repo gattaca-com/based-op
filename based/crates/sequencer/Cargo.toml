@@ -22,6 +22,7 @@ futures.workspace = true
 jsonrpsee.workspace = true
 kona-rpc.workspace = true
 kona-interop.workspace = true
+hickory-resolver.workspace = true
 op-alloy-consensus.workspace = true
 op-alloy-network.workspace = true
 op-alloy-rpc-types.workspace = true
