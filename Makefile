@@ -116,24 +116,24 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
 	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
-	      $(PORTAL) | docker run -i stedolan/jq -r '.result')"; \
+	      $(PORTAL) | docker run -i imega/jq -r '.result')"; \
 	    echo "MAIN_OP_NODE_ENR=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeBootnodeEnr","params":[],"id":1}' \
-	      $(PORTAL) | docker run -i stedolan/jq -r '.result')"; \
+	      $(PORTAL) | docker run -i imega/jq -r '.result')"; \
 	    echo "MAIN_OP_GETH_ENODE=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opGethBootnodeEnode","params":[],"id":1}' \
-	      $(PORTAL) | docker run -i stedolan/jq -r '.result')"; \
+	      $(PORTAL) | docker run -i imega/jq -r '.result')"; \
 	    echo "NETWORK_ID=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_l2ChainId","params":[],"id":1}' \
-	      $(PORTAL) | docker run -i stedolan/jq -r '.result')"; \
+	      $(PORTAL) | docker run -i imega/jq -r '.result')"; \
 	  } >> .local_gateway_and_follower/.env; \
 	  \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileRollup","params":[],"id":1}' \
-	    $(PORTAL) | docker run -i stedolan/jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
+	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
-	    $(PORTAL) | docker run -i stedolan/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
+	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
 	fi
 
 	@wallet=$$(docker run --rm \
