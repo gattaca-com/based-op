@@ -289,7 +289,7 @@ config-main-node:
 	@ln -s $(OP_NODE_DATA_DIR) .local_main_node/data/node
 	@echo "...Done initializing .local_main_node" 
 	@echo "dir structure is:"
-	@tree .local_main_node
+	@ls -la .local_main_node
 	@echo
 	@echo "start sequencing the chain using make start-main-node"
 	@echo
