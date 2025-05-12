@@ -191,7 +191,7 @@ endif
 # ────────────────────────────────────────────────────────────────────────────────
 
 deploy-chain:
-	@if [ -d .local_main_node/config ] \
+	@if [ -d .local_main_node/config ]; then \
 		echo "❌  Seems like information of a previous chain is already present. Please remove .local_main_node to deploy a new one."; \
 		exit 1; \
 	fi
@@ -231,17 +231,15 @@ deploy-chain:
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/genesis.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/rollup.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
-	@docker run -i imega/jq <  '.chain_op_config={eip1559Elasticity:6,eip1559Denominator:50,eip1559DenominatorCanyon:250}' \
-       .local_main_node/config/rollup.json \
-      > .local_main_node/config/rollup.json.tmp && \
-     mv .local_main_node/config/rollup.json.tmp .local_main_node/config/config.json
-	@blockNumber=$$(docker run -i imega/jq <  -r '.genesis.l1.number' .local_main_node/config/rollup.json); \
+	@docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq \
+    jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
+    > /config/rollup.json.tmp && mv /config/rollup.json.tmp /config/config.json
+	@blockNumber=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.genesis.l1.number' /config/rollup.json); \
 	 hex=$$(printf "0x%x" $$blockNumber); \
 	 hash=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	   --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["'"$$hex"'",false]}' \
-	   $(L1_RPC_URL) | docker run -i imega/jq <  -r '.result.hash'); \
-	 docker run -i imega/jq <  --arg h "$$hash" '.genesis.l1.hash = $$h' .local_main_node/config/rollup.json \
-	   > .local_main_node/config/rollup.json.tmp && mv .local_main_node/config/rollup.json.tmp .local_main_node/config/rollup.json
+	   $(L1_RPC_URL) | docker run -i imega/jq -r '.result.hash'); \
+	 docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq --arg h "$$hash" '.genesis.l1.hash = $$h' /config/rollup.json > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/rollup.json
 
 	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
 
