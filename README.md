@@ -12,7 +12,18 @@
 > - [Rust](https://www.rust-lang.org/tools/install)
 > - [Docker](https://docs.docker.com/get-docker/)
 > - [Make](https://www.gnu.org/software/make/)
-> - [Kurtosis CLI](https://docs.kurtosis.com/install/) (installed later in the setup process)
+
+
+### Quick start
+
+#### With existing OP chain
+The following steps have been tested on Sepolia
+
+1. locate your `rollup.json` and `genesis.json` files
+
+
+
+
 
 ### Quick Start
 

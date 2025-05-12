@@ -82,7 +82,7 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro:mv2
 
 
-ifneq ($(filter run-gateway,$(MAKECMDGOALS)),)
+ifneq ($(filter start-gateway,$(MAKECMDGOALS)),)
 ifndef PORTAL
 	$(error PORTAL is undefined! Please invoke like `make run-gateway PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
 endif
@@ -90,8 +90,7 @@ ifndef GATEWAY_SEQUENCING_KEY
 	$(error GATEWAY_SEQUENCING_KEY is undefined! Please invoke like `make run-gateway PORTAL=http://ip_to_portal:8080 GATEWAY_SEQUENCING_KEY=0xyour_private_key_here`)
 endif
 endif
-
-run-gateway: build-follower-op-node build-follower-op-geth build-gateway
+start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
 		exit 1; \
@@ -113,24 +112,24 @@ run-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
 	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
-	      $(PORTAL) | jq -r '.result')"; \
+	      $(PORTAL) | docker run -i stedolan/jq -r '.result')"; \
 	    echo "MAIN_OP_NODE_ENR=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeBootnodeEnr","params":[],"id":1}' \
-	      $(PORTAL) | jq -r '.result')"; \
+	      $(PORTAL) | docker run -i stedolan/jq -r '.result')"; \
 	    echo "MAIN_OP_GETH_ENODE=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opGethBootnodeEnode","params":[],"id":1}' \
-	      $(PORTAL) | jq -r '.result')"; \
+	      $(PORTAL) | docker run -i stedolan/jq -r '.result')"; \
 	    echo "NETWORK_ID=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_l2ChainId","params":[],"id":1}' \
-	      $(PORTAL) | jq -r '.result')"; \
+	      $(PORTAL) | docker run -i stedolan/jq -r '.result')"; \
 	  } >> .local_gateway_and_follower/.env; \
 	  \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileRollup","params":[],"id":1}' \
-	    $(PORTAL) | jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
+	    $(PORTAL) | docker run -i stedolan/jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
-	    $(PORTAL) | jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
+	    $(PORTAL) | docker run -i stedolan/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
 	fi
 
 	@wallet=$$(docker run --rm \
@@ -188,6 +187,10 @@ endif
 # ────────────────────────────────────────────────────────────────────────────────
 
 deploy-chain:
+	@if [ -d .local_main_node/config ] \
+		echo "❌  Seems like information of a previous chain is already present. Please remove .local_main_node to deploy a new one."; \
+		exit 1; \
+	fi
 	@mkdir -p .local_main_node/config
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
 	@wallet_batcher=$$(docker run --rm \
@@ -236,8 +239,52 @@ deploy-chain:
 	 jq --arg h "$$hash" '.genesis.l1.hash = $$h' .local_main_node/config/rollup.json \
 	   > .local_main_node/config/rollup.json.tmp && mv .local_main_node/config/rollup.json.tmp .local_main_node/config/rollup.json
 
+	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
 
+# ────────────────────────────────────────────────────────────────────────────────
+# Only perform these parse-time checks if the user asked for config-main-node
+# ────────────────────────────────────────────────────────────────────────────────
+ifneq ($(filter config-main-node,$(MAKECMDGOALS)),)
+
+ifndef ROLLUP_JSON
+$(error ROLLUP_JSON is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
+ifndef GENESIS_JSON
+$(error ROLLUP_JSON is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
+ifndef OP_GETH_DATA_DIR
+$(error  OP_GETH_DATA_DIR is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) OP_BATCHER_KEY=… OP_PROPOSER_KEY=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
+ifndef OP_NODE_DATA_DIR
+$(error  OP_NODE_DATA_DIR is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) OP_BATCHER_KEY=… OP_PROPOSER_KEY=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
+endif
+# ────────────────────────────────────────────────────────────────────────────────
+config-main-node:
+	@if [ -d .local_main_node/config ] \
+		echo "❌  Seems like the main node was already configured (see .local_main_node/config)."; \
+		exit 1; \
+	fi
+	mkdir -p .local_main_node/config
+	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
+	@cp $(ROLLUP_JSON) .local_main_node/config
+	@cp $(GENESIS_JSON) .local_main_node/config
+	@ln -s $(OP_GETH_DATA_DIR) .local_main_node/config/data/geth
+	@ln -s $(OP_NODE_DATA_DIR) .local_main_node/config/data/geth
+
+# By default these will be pointing to directories under .local_<xyz>
 start-main-node: build-portal build-registry
+
+	@mkdir -p .local_main_node/config
+
 	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
 		echo "❌  Main node already running."; \
 		exit 1; \
@@ -262,6 +309,8 @@ start-main-node: build-portal build-registry
 	    echo "L1_BEACON_RPC_URL=$(L1_BEACON_RPC_URL)"; \
 	    echo "OP_NODE_SEQUENCER_KEY=$(MAIN_KEY)"; \
 	    echo "OP_NODE_GOSSIP_IP=$$(curl ifconfig.me)"; \
+	    echo "OP_NODE_DATA_DIR=$(OP_NODE_DATADIR)"; \
+	    echo "OP_GETH_DATA_DIR=$(OP_GETH_DATADIR)"; \
 	    echo "OP_BATCHER_PRIVATE_KEY=$(OP_BATCHER_KEY)"; \
 	    echo "OP_PROPOSER_PRIVATE_KEY=$(OP_PROPOSER_KEY)"; \
 	  } >> .local_main_node/.env; \
