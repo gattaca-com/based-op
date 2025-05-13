@@ -123,17 +123,17 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
 	fi
 	@mkdir -p .local_gateway_and_follower/data
-	@if [ "$(BASED_OP_GETH_DATA_DIR)" != ".local_gateway_and_follower/data/geth" ]; then \
+	@if [ "$(BASED_OP_GETH_DATA_DIR)" != ".local_gateway_and_follower/data/geth" ] && [ -d "$(BASED_OP_GETH_DATA_DIR)" ] && [ ! -d ".local_gateway_and_follower/data/geth" ]; then \
 	    ln -s $(BASED_OP_GETH_DATA_DIR) .local_gateway_and_follower/data/geth; \
 	else \
 	    mkdir -p $(BASED_OP_GETH_DATA_DIR); \
 	fi
-	@if [ "$(BASED_OP_NODE_DATA_DIR)" != ".local_gateway_and_follower/data/node" ]; then \
+	@if [ "$(BASED_OP_NODE_DATA_DIR)" != ".local_gateway_and_follower/data/node" ] && [ -d "$(BASED_OP_NODE_DATA_DIR)" ] && [ ! -d ".local_gateway_and_follower/data/node" ]; then \
 	    ln -s $(BASED_OP_NODE_DATA_DIR) .local_gateway_and_follower/data/node; \
 	else \
 	    mkdir -p $(BASED_OP_NODE_DATA_DIR); \
 	fi
-	@if [ "$(BASED_GATEWAY_DATA_DIR)" != ".local_gateway_and_follower/data/gateway" ]; then \
+	@if [ "$(BASED_GATEWAY_DATA_DIR)" != ".local_gateway_and_follower/data/gateway" ] && [ -d "$(BASED_GATEWAY_DATA_DIR)" ] && [ ! -d ".local_gateway_and_follower/data/gateway" ]; then \
 	    ln -s $(BASED_GATEWAY_DATA_DIR) .local_gateway_and_follower/data/gateway; \
 	else \
 	    mkdir -p $(BASED_GATEWAY_DATA_DIR); \
@@ -278,13 +278,15 @@ config-main-node:
 	@cp $(ROLLUP_JSON) .local_main_node/config
 	@cp $(GENESIS_JSON) .local_main_node/config
 	@cp $(STATE_JSON) .local_main_node/config
-	@mkdir -p $(OP_GETH_DATA_DIR)
-	@mkdir -p $(OP_NODE_DATA_DIR)
-	@if [ ! -L ".local_main_node/data/geth" ] || [ "$$(readlink .local_main_node/data/geth)" != "$(OP_GETH_DATA_DIR)" ]; then \
+	@if [ "$(OP_GETH_DATA_DIR)" != ".local_main_node/data/geth" ] && [ ! -d ".local_main_node/data/geth" ]; then \
 	    ln -s $(OP_GETH_DATA_DIR) .local_main_node/data/geth; \
+	else \
+	    mkdir -p $(BASED_OP_GETH_DATA_DIR); \
 	fi
-	@if [ ! -L ".local_main_node/data/node" ] || [ "$$(readlink .local_main_node/data/node)" != "$(OP_NODE_DATA_DIR)" ]; then \
+	@if [ "$(OP_NODE_DATA_DIR)" != ".local_main_node/data/node" ] && [ ! -d ".local_main_node/data/node" ]; then \
 	    ln -s $(OP_NODE_DATA_DIR) .local_main_node/data/node; \
+	else \
+	    mkdir -p $(OP_NODE_DATA_DIR); \
 	fi
 	@echo "...Done initializing .local_main_node" 
 	@echo "dir structure is:"
