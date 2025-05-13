@@ -69,6 +69,26 @@ where
                         debug!(method = %req.method_name(), "forwarding request to eth fallback");
                         fallback_eth_client.clone().request(req.method_name(), params).await
                     }
+                    Some(("miner", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("net", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("web3", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("admin", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
+                    Some(("txpool", _)) => {
+                        debug!(method = %req.method_name(), "forwarding request to eth fallback");
+                        fallback_eth_client.clone().request(req.method_name(), params).await
+                    }
                     Some(("optimism", _)) | Some(("opp2p", _)) => {
                         debug!(method = %req.method_name(), "forwarding request to op-node fallback");
                         op_client.request(req.method_name(), params).await
@@ -102,6 +122,31 @@ where
                     Ok(r) => {
                         let payload = ResponsePayload::success(r);
                         MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
+                    }
+                    Err(_)
+                        if req.method_name() == "eth_getBlockByNumber" &&
+                            req.params.as_ref().is_some_and(|p| {
+                                p.to_string().contains("finalized") ||
+                                    p.to_string().contains("latest") ||
+                                    p.to_string().contains("safe")
+                            }) =>
+                    {
+                        let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =
+                            fallback_eth_client.clone().request("eth_getBlockByNumber", ("latest", false)).await;
+                        match r {
+                            Ok(r) => {
+                                let payload = ResponsePayload::success(r);
+                                MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
+                            }
+                            Err(err) => {
+                                error!(?err, "error forwarding {} request", req.method_name());
+
+                                MethodResponse::error(
+                                    req.id,
+                                    ErrorObject::borrowed(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, None),
+                                )
+                            }
+                        }
                     }
                     Err(err) => {
                         error!(?err, "error forwarding {} request", req.method_name());

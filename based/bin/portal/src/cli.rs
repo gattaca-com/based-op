@@ -61,6 +61,7 @@ impl PortalArgs {
     pub fn fallback_jwt(&self) -> JwtSecret {
         JwtSecret::from_hex(&self.fallback_jwt)
             .or_else(|_| JwtSecret::from_file(std::path::Path::new(&self.fallback_jwt)))
+            .or_else(|_| JwtSecret::from_file(std::path::Path::new(&self.config_dir.join("jwt"))))
             .expect("Please set the --fallback.jwt flag manually, or generate and place a jwt file in the config dir")
     }
 }

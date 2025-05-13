@@ -123,6 +123,10 @@ pub trait RegistryApi {
     /// Returns the current blocknumber and corresponding gateway url and address
     #[method(name = "registeredGateways")]
     async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>>;
+
+    /// Returns the current blocknumber and corresponding gateway url and address
+    #[method(name = "registerGateway")]
+    async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()>;
 }
 
 #[rpc(client, server, namespace = "portal")]
@@ -244,20 +248,20 @@ pub trait OpNodeApi {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PeerInfo {
-    #[serde(rename = "peerID")]
+    #[serde(alias = "peerID")]
     pub peer_id: String,
-    #[serde(rename = "nodeID")]
+    #[serde(alias = "nodeID")]
     pub node_id: String,
     pub user_agent: String,
     pub protocol_version: String,
-    #[serde(rename = "ENR")]
+    #[serde(alias = "ENR")]
     pub enr: String,
     pub addresses: Vec<String>,
     pub protocols: Option<Value>,
     pub connectedness: u8,
     pub direction: u8,
     pub protected: bool,
-    #[serde(rename = "chainID")]
+    #[serde(alias = "chainID")]
     pub chain_id: u64,
     pub latency: u64,
     pub gossip_blocks: bool,
@@ -368,8 +372,8 @@ pub struct EthConfig {
     pub fjord_time: u64,
     pub granite_time: u64,
     pub holocene_time: u64,
-    pub terminal_total_difficulty: u64,
-    pub terminal_total_difficulty_passed: bool,
+    pub terminal_total_difficulty: Option<u64>,
+    pub terminal_total_difficulty_passed: Option<bool>,
     pub deposit_contract_address: String,
     pub optimism: OptimismConfig,
 }
@@ -395,5 +399,10 @@ pub mod test {
     #[test]
     fn parse_peerinfo() {
         assert_ne!(serde_json::from_str::<PeerInfo>("{\"ENR\":\"enr:-J-4QKMgVCRicuzgRSXF--kcfNcSb3el3gnK0VTKH5IqfAnjY096UPHcnpeOkYf8Y6hdbhFbjIoRcdMxKgy1QOftlZGGAZavZyU2gmlkgnY0gmlwhKwfGmOHb3BzdGFja4Xkq4MBAIlzZWNwMjU2azGhA38YA_8AH2SrzzVprDUjXbyv88AJION0F_UdgJmIk7v2g3RjcIIjK4N1ZHCCIys\",\"addresses\":[\"/ip4/127.0.0.1/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"/ip4/172.31.26.99/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\"],\"chainID\":0,\"connectedness\":0,\"direction\":0,\"gossipBlocks\":true,\"latency\":0,\"nodeID\":\"ca1451eb9482746566a92fbde4bcb7c646d23bfceb21f66d4d79e1e0f0819cfc\",\"peerID\":\"16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"protected\":false,\"protocolVersion\":\"\",\"protocols\":null,\"scores\":{\"gossip\":{\"IPColocationFactor\":0,\"behavioralPenalty\":0,\"blocks\":{\"firstMessageDeliveries\":0,\"invalidMessageDeliveries\":0,\"meshMessageDeliveries\":0,\"timeInMesh\":0},\"total\":0},\"reqResp\":{\"errorResponses\":0,\"rejectedPayloads\":0,\"validResponses\":0}},\"userAgent\":\"\"}").unwrap().peer_id, "");
+    }
+
+    #[test]
+    fn parse_gethinfo() {
+        assert_ne!(serde_json::from_str::<OpGethInfo>("{\"enode\":\"enode://36c3170ea04471fb52a8c0d4f8f06da660e2e7388959089844269d5b790be4215ebc5052892cf40be08ffc19bcd7439db6fdf713c6fb6d0f7960906ce088de52@57.133.217.139:30303?discport=1089\",\"enr\":\"enr:-Ku4QA9W-NTtseU4M0OBXgdVBkpSEKP_D3l-TicPAyBACAdLPVjNRD2oMpBeK8_z-Y7Xl31iovo-O0eoJ4HII6d0CS6GAZbFKQKgg2V0aMfGhBXQ1LeAgmlkgnY0gmlwhDmF2YuJc2VjcDI1NmsxoQI2wxcOoERx-1KowNT48G2mYOLnOIlZCJhEJp1beQvkIYRzbmFwwIN0Y3CCdl-DdWRwggRBhHVkcDaCdl8\",\"id\":\"4b259315183c61074e998c46eec2689f2cc321e81226b4bea0c83ee57a00c96f\",\"ip\":\"57.133.217.139\",\"listenAddr\":\"[::]:30303\",\"name\":\"Geth/v1.101411.8-rc.1-374d61f9-20250211/linux-amd64/go1.23.6\",\"ports\":{\"discovery\":1089,\"listener\":30303},\"protocols\":{\"eth\":{\"config\":{\"arrowGlacierBlock\":0,\"bedrockBlock\":0,\"berlinBlock\":0,\"byzantiumBlock\":0,\"cancunTime\":0,\"canyonTime\":0,\"chainId\":2151908,\"constantinopleBlock\":0,\"depositContractAddress\":\"0x0000000000000000000000000000000000000000\",\"ecotoneTime\":0,\"eip150Block\":0,\"eip155Block\":0,\"eip158Block\":0,\"fjordTime\":0,\"graniteTime\":0,\"grayGlacierBlock\":0,\"holoceneTime\":0,\"homesteadBlock\":0,\"istanbulBlock\":0,\"londonBlock\":0,\"mergeNetsplitBlock\":0,\"muirGlacierBlock\":0,\"optimism\":{\"eip1559Denominator\":50,\"eip1559DenominatorCanyon\":250,\"eip1559Elasticity\":6},\"petersburgBlock\":0,\"regolithTime\":0,\"shanghaiTime\":0,\"terminalTotalDifficulty\":0},\"difficulty\":0,\"genesis\":\"0xf81cfade9797c41a311da5bb09fbc77fa481bfdaff40e9fcc99a4dc43453b1b3\",\"head\":\"0x4469e2e3a10785af7b05b69cbbeae7bd3c3c47b3df81dfb98dfee974918350b5\",\"network\":2151908},\"snap\":{}}}").unwrap().id, "");
     }
 }
