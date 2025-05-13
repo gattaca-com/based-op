@@ -2,6 +2,7 @@
 services:
   op-geth:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.8-rc.1
+    container_name: op-geth
     network_mode: "host"
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -46,7 +47,13 @@ services:
   op-node:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2
     network_mode: "host"
-
+    container_name: op-node
+    entrypoint:
+      - sh
+      - -c
+      - |
+        sleep "${OP_NODE_DELAY:-15}" &&
+        exec op-node "$@"
     command:
       - op-node
       - --l2=http://0.0.0.0:$PORTAL_PORT
@@ -74,10 +81,12 @@ services:
       - ./config:/config
     depends_on:
       - op-geth
+      - based-portal
     
   op-batcher:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.2
     network_mode: "host"
+    container_name: op-batcher
     command:
       - op-batcher
       - --l2-eth-rpc=http://0.0.0.0:$PORTAL_PORT
@@ -100,21 +109,24 @@ services:
   op-proposer:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.10.0
     network_mode: "host"
+    container_name: op-proposer
     command:
       - op-proposer
       - --poll-interval=12s
       - --rpc.port=8560
       - --rollup-rpc=http://0.0.0.0:$OP_NODE_RPC_PORT
-      - --game-factory-address=$DISPUTE_GAME_ADDRESS
-      - --game-type=$DISPUTE_GAME_TYPE 
+      - --game-factory-address=$DISPUTE_GAME_FACTORY_ADDRESS
+      - --game-type=$DISPUTE_GAME_TYPE
+      - --private-key=$OP_PROPOSER_PRIVATE_KEY
       - --l1-eth-rpc=$L1_RPC_URL
       - --proposal-interval=2s
     depends_on:
       - op-node
 
-  portal:
+  based-portal:
     image: based_portal_local
     network_mode: "host"
+    container_name: based-portal
     command:
       - --fallback.eth_url=http://0.0.0.0:$OP_GETH_RPC_PORT
       - --fallback.engine_url=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
@@ -123,14 +135,64 @@ services:
     volumes:
       - ./config:/config
 
-  registry:
+  based-registry:
     image: based_registry_local
     network_mode: "host"
+    container_name: based-registry
     command:
       - --registry.path=/config/registry.json
-      - --eth_client.url=http://0.0.0.0:$PORTAL_PORT
-      - --eth_client.timeout_ms=10
-      - --registry.port=$REGISTRY_PORT
+      - --portal.url=http://0.0.0.0:$OP_GETH_RPC_PORT
+      - --portal.timeout_ms=10
+      - --port=$REGISTRY_PORT
     volumes: 
       - ./config:/config
+
+################################################################################
+# Postgres for Blockscout
+################################################################################
+  blockscout-postgres:
+    image: postgres:14-alpine
+    container_name: blockscout-postgres
+    restart: unless-stopped
+    network_mode: "host"          # everything else in your stack is host-mode already
+    environment:
+      # these credentials will be baked into the Blockscout DATABASE_URL below
+      POSTGRES_USER: blockscout
+      POSTGRES_PASSWORD: blockscout
+      POSTGRES_DB:     blockscout
+    volumes:
+      - ./data/blockscout-postgres:/var/lib/postgresql/data
+
+################################################################################
+# Blockscout explorer
+################################################################################
+  blockscout:
+    image: blockscout/blockscout:6.8.0
+    container_name: blockscout
+    command:
+      - /bin/sh
+      - -c
+      - bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()" && bin/blockscout start
+    
+    network_mode: "host"          # everything else in your stack is host-mode already
+    depends_on:
+      - op-node                  # need the L2 node up to serve RPC
+      - blockscout-postgres      # need the DB up first
+    environment:
+      # point to the Postgres above
+      DATABASE_URL:     "postgresql://blockscout:blockscout@0.0.0.0:5432/blockscout"
+      # point to your L2 JSON-RPC:
+      ETHEREUM_JSONRPC_HTTP_URL: "http://0.0.0.0:${OP_GETH_RPC_PORT}"
+      # WebSockets (if you want to enable filters/tx-watch)
+      ETHEREUM_JSONRPC_WS_URL:   "ws://0.0.0.0:${OP_GETH_WS_PORT}"
+      ETHEREUM_JSONRPC_TRACE_URL: "http://0.0.0.0:${OP_GETH_RPC_PORT}"
+      ETHEREUM_JSONRPC_VARIANT: "geth"
+      SECRET_KEY_BASE: "56NtB48ear7+wMSf0IQuWDAAazhpb31qyc7GiyspBP2vh7t5zlCsF5QDv76chXeN"
+      # A “network name” for Blockscout’s UI
+      NETWORK:        "local"
+      API_V2_ENABLED: "true"
+      # disable Subgraph support if you don’t have one
+      ECTO_USE_SSL:   "false"
+      SSG_ENABLED:    "false"
+    # no ports: host-mode means Blockscout binds to 4000 on the host automatically
 

@@ -1,5 +1,5 @@
 services:
-  op-geth:
+  based-op-geth:
     image: based_op_geth
     container_name: based-op-geth
     network_mode: "host"
@@ -22,6 +22,7 @@ services:
           --state.scheme=hash \
           --http \
           --http.addr=0.0.0.0 \
+          --http.port=$OP_GETH_RPC_PORT \
           --http.vhosts="*" \
           --http.corsdomain="*" \
           --http.api="admin,engine,net,eth,web3,debug,miner,txpool" \
@@ -46,7 +47,7 @@ services:
       - ./data/geth:/data/geth
       - ./config:/config
 
-  op-node:
+  based-op-node:
     image: based_op_node
     container_name: based-op-node
     network_mode: "host"
@@ -76,7 +77,7 @@ services:
       - ./data/node:/data/op-node
       - ./config:/config
     depends_on:
-      - op-geth
+      - based-op-geth
 
   gateway:
     image: based_gateway_local

@@ -1,19 +1,11 @@
 # fill this out and copy to .env besides your filled out compose.yml
-L1_RPC_URL=#<L1_RPC>
-L1_BEACON_RPC_URL=#<L1_BEACON>
 OP_NODE_RPC_PORT=9545
-OP_NODE_GOSSIP_IP=#<actual outside accessible ip address>
 OP_NODE_GOSSIP_PORT=9003
-OP_NODE_SEQUENCER_KEY=#< key your op-node will sign payloads with> 
 OP_GETH_RPC_PORT=8545
 OP_GETH_ENGINE_RPC_PORT=8551
 OP_GETH_GOSSIP_PORT=30303
 OP_GETH_WS_PORT=8546
-OP_BATCHER_PRIVATE_KEY=#<private key to the address of the batcher specified when creating the l2>
-OP_PROPOSER_PRIVATE_KEY=#<private key to the address of the proposer specified when creating the l2>
-DISPUTE_GAME_ADDRESS=0xd29a0f34bf4f987cb320312d17381d6dda643a00
-DISPUTE_GAME_TYPE=1
 PORTAL_PORT=8080
 REGISTRY_PORT=8082
 GATEWAY_PORT=9997
-NETWORK_ID=2151908
+DISPUTE_GAME_TYPE=1

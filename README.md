@@ -1,6 +1,6 @@
 # based-op
 
-## Local Development
+## Local Development/Quick start
 
 > [!IMPORTANT]
 >
@@ -12,128 +12,50 @@
 > - [Rust](https://www.rust-lang.org/tools/install)
 > - [Docker](https://docs.docker.com/get-docker/)
 > - [Make](https://www.gnu.org/software/make/)
-> - [Kurtosis CLI](https://docs.kurtosis.com/install/) (installed later in the setup process)
+>
+> Based-op is fully l1 pectra ready
 
-### Quick Start
 
-Run the following to download the dependencies, build, and run the project:
+### With existing OP chain
+The following steps have been tested on Sepolia, with a previously deployed L2 chain (l2 non-pectra) 
+1. locate your `rollup.json`, `genesis.json` and `state.json` files
+2. run `make config-main-node OP_NODE_DATA_DIR=<path/to/op-node/data> OP_GETH_DATA_DIR=<path/to/op-geth/data> ROLLUP_JSON=<path/to/rollup.json> GENESIS_JSON=<path/to/genesis.json> STATE_JSON=<path/to/state.json>`
+3. there should be some files set up in `.local_main_node`
+4. start sequencing the main chain with `make start-main-node OP_BATCHER_KEY=<op-batcher-private-key> OP_PROPOSER_KEY=<op-proposer-private-key> MAIN_KEY=<vault-key/main-sequencing key> L1_RPC_URL=<sepolia rpc url> L1_BEACON_RPC_URL=<sepolia beacon rpc url>`
+5. Normally you should see some logs starting
+6. `blockscout` should be up and running at `http://0.0.0.0:4000` 
+7a. `make stop-main-node` to stop all the sequencing services
+7b. `make logs-main-node` to output logs of all the main services
 
-```Shell
-make deps build run
-```
+### Deploy a new l2 chain on Sepolia
+1. To deploy a new chain on l2, make sure to have an address on Sepolia with some funds. This will be used as the `MAIN`/`vault` address.
+2. create 2 more accounts, deposit ~0.2 eth in them. One will be used for the `op-batcher` one for the `op-proposer.
+3. run `make deploy-chain OP_BATCHER_KEY=<op-batcher private key> OP_PROPOSER_KEY=<op-proposer private key> MAIN_KEY=<vault key> L1_RPC_URL=<l1 sepolia rpc url> L1_BEACON_RPC_URL=<l1 sepolia beacon rpc url>`
+4. start sequencing the main chain with `make start-main-node OP_BATCHER_KEY=<op-batcher-private-key> OP_PROPOSER_KEY=<op-proposer-private-key> MAIN_KEY=<vault-key/main-sequencing key> L1_RPC_URL=<sepolia rpc url> L1_BEACON_RPC_URL=<sepolia beacon rpc url>`
+5. Normally you should see some logs starting
+6. `blockscout` should be up and running at `http://0.0.0.0:4000` 
+7a. `make stop-main-node` to stop all the sequencing services
+7b. `make logs-main-node` to output logs of all the main services
 
-All the components, including sequencer, gateway, portal, and follower nodes will start in a new kurtosis enclave. To test sending transactions, you can use `make test-tx`
+### Run a based-gateway
+1. run `make start-gateway PORTAL=<portal rpc url> GATEWAY_SEQUENCING_KEY=<private key used to sequence with>`
+2. to stop the based gateway run `make stop-gateway`
+3. for logs `make logs-gateway`
 
-### Available Commands
+### Add/Update based-gateways to Registry
+When a based-gateway is started with `make start-gateway`, it will register itself to the Registry behind the `PORTAL`. For now, the Registry is kept in a simple json file in `.local_main_node/config/registry.json`. You can add/update/remove gateways there, the Registry and Portal will pick up on the changes every minute.
 
-Run `make` to see the available commands:
+If you have started both the main sequencing node and the gateway on the same machine, you might need to change the ip to `0.0.0.0`, by default `curl ifconfig.me` is used to populate
+your url.
 
-```Shell
-$ make
-build-op-geth                  🏗️ Build OP geth from op-eth directory
-build-op-node                  🏗️ Build OP node from optimism directory
-build-portal                   🏗️ Build based portal from based directory
-build-gateway                  🏗️ Build based gateway from based directory
-build                          🏗️ Build
-clean                          🧹 Clean
-deps                           🚀 Install all dependencies
-gateway                        🚀 Run the gateway
-help                           📚 Show help for each of the Makefile recipes
-logs                           📜 Show logs
-restart                        🔄 Restart
-run-follower                   🚀 Run a single follower node with RPC enabled.
-run                            🚀 Run
-```
+### Send your first tx
+You can now test sending a transaction with `make test-tx`.
+The transaction will be sent to the Portal, and forwarded to the gateway, which will sequence the transaction in a new Frag, and broacast it via p2p to follower nodes.
 
-#### Restart
-
-> [!WARNING]
-> This will remove the based-op enclave.
-
-Run the following to restart the project:
-
-```
-make restart
-```
-
-#### Logging
-
-To view the logs, run the following:
-
-```Shell
-make op-node-logs            // OP node logs
-make op-reth-logs            // OP reth logs
-make gateway-logs            // Based gateway logs
-make portal-logs             // Based portal logs
-
-make logs SERVICE=<service>  // Replace <service> with the service name
-```
-
-#### Docker Image Build
-
-```Shell
-make build-portal            // Build the local portal docker image, named `based_portal_local`
-make build-gateway           // Build the local gateway docker image, named `based_gateway_local`
-make build-op-geth           // Builds the modified op-geth image, named `based_op_geth`
-make build-op-node           // Build the modified op-node image, named `based_op_node`
-```
-
-### Running multiple Follower Nodes
-
-To run multiple OP nodes with kurtosis, edit the `config.yml` file adding more items to the `participants` vector:
-
-```yaml
-optimism_package:
-  chains:
-    - participants:
-        # Vanilla Stack (OP-Node, OP-EL) for the Sequencer
-        - el_type: op-reth
-          cl_type: op-node
-          cl_image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:latest
-        # Follower Node Stack 1 (BOP-Node, BOP-EL)
-        - el_type: op-geth
-          el_image: based_op_geth
-          el_extra_params:
-            - --rollup.sequencerhttp
-            - http://host.docker.internal:9997
-          cl_type: op-node
-          cl_image: based_op_node
-          cl_extra_params:
-            - --rpc.enable-based
-        # Follower Node Stack 2 (BOP-Node, BOP-EL)
-        - el_type: op-geth
-          el_image: based_op_geth
-          el_extra_params:
-            - --rollup.sequencerhttp
-            - http://host.docker.internal:9997
-          cl_type: op-node
-          cl_image: based_op_node
-          cl_extra_params:
-            - --rpc.enable-based
-      mev_type: based-portal
-      mev_params:
-        based_portal_image: based_portal_local
-        builder_host: "172.17.0.1"
-        builder_port: "9997"
-      additional_services:
-        - blockscout
-
-ethereum_package:
-  participants:
-    - el_type: geth
-      # This is fixed because v1.15.0 (latest) introduces braking changes
-      el_image: ethereum/client-go:v1.14.13
-
-```
-
-### Running a follower node for an existing network
-
-Edit the `follower-node/.env` file with your needs. The default values are set to connect to Gattaca's devnet. Put your IP or domain in `SELF_HOSTNAME` to enable P2P communication with other follower nodes.
-Then, run:
-
-```
-make run-follower
-```
+> [!IMPORTANT]
+>
+> **The following is experimental**
+>
 
 ## Wallets
 
