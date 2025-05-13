@@ -54,7 +54,7 @@ pub struct PortalServer {
     fallback_client: AuthRpcClient,
     op_node_client: RpcClient,
     registry_client: RpcClient,
-    current_gateway: Option<Arc<Mutex<Gateway>>>,
+    current_gateway: Arc<Mutex<Option<Gateway>>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
     last_fcu: Arc<RwLock<Nanos>>,
@@ -80,8 +80,8 @@ impl PortalServer {
 
         let gateway_timeout = Duration::from_millis(args.gateway_timeout_ms);
 
-        let current_gateway =
-            registry_client.current_gateway().await.ok().and_then(|(_, gateway_url, _, jwt_as_b256)| {
+        let current_gateway = Arc::new(Mutex::new(registry_client.current_gateway().await.ok().and_then(
+            |(_, gateway_url, _, jwt_as_b256)| {
                 create_gateway_client(
                     gateway_url,
                     unsafe {
@@ -90,8 +90,8 @@ impl PortalServer {
                     gateway_timeout,
                 )
                 .ok()
-                .map(|client| Arc::new(Mutex::new(client)))
-            });
+            },
+        )));
 
         let mut gateways = vec![];
         for (gateway_url, _, jwt_as_b256) in registry_client.registered_gateways().await.unwrap_or_else(|_| vec![]) {
@@ -193,15 +193,10 @@ impl PortalServer {
         *self.gateways.write() = gateways;
 
         let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
-        if let Some(current_gateway) = self.current_gateway.as_ref() {
-            if current_gateway.lock().await.id == gateway_url {
+        for g in self.gateways() {
+            if g.id == gateway_url {
+                *self.current_gateway.lock().await = Some(g);
                 return Ok(());
-            }
-            for g in self.gateways() {
-                if g.id == gateway_url {
-                    *current_gateway.lock().await = g;
-                    return Ok(());
-                }
             }
         }
 
@@ -262,15 +257,10 @@ impl EthApiServer for PortalServer {
             .in_current_span(),
         );
 
-        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
+        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
 
-        let gateway_fut = tokio::spawn(
-            {
-                let client = current_gateway.lock().await.clone();
-                async move { client.client.transaction_receipt(hash).await }
-            }
-            .in_current_span(),
-        );
+        let gateway_fut =
+            tokio::spawn({ async move { current_gateway.client.transaction_receipt(hash).await } }.in_current_span());
 
         let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
         // ignore join errors
@@ -294,14 +284,10 @@ impl EthApiServer for PortalServer {
             .in_current_span(),
         );
 
-        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
+        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
 
         let gateway_fut = tokio::spawn(
-            {
-                let client = current_gateway.lock().await.clone();
-                async move { client.client.block_by_number(number, full).await }
-            }
-            .in_current_span(),
+            { async move { current_gateway.client.block_by_number(number, full).await } }.in_current_span(),
         );
 
         let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
@@ -325,14 +311,9 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
-        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
-        let gateway_fut = tokio::spawn(
-            {
-                let client = current_gateway.lock().await.clone();
-                async move { client.client.block_by_hash(hash, full).await }
-            }
-            .in_current_span(),
-        );
+        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
+        let gateway_fut =
+            tokio::spawn({ async move { current_gateway.client.block_by_hash(hash, full).await } }.in_current_span());
 
         let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
         // ignore join errors
@@ -355,14 +336,9 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
-        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
-        let gateway_fut = tokio::spawn(
-            {
-                let client = current_gateway.lock().await.clone();
-                async move { client.client.block_number().await }
-            }
-            .in_current_span(),
-        );
+        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
+        let gateway_fut =
+            tokio::spawn({ async move { current_gateway.client.block_number().await } }.in_current_span());
 
         let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
         // ignore join errors
@@ -385,13 +361,9 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
-        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
+        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
         let gateway_fut = tokio::spawn(
-            {
-                let client = current_gateway.lock().await.clone();
-                async move { client.client.transaction_count(address, block_number).await }
-            }
-            .in_current_span(),
+            { async move { current_gateway.client.transaction_count(address, block_number).await } }.in_current_span(),
         );
 
         let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
@@ -415,13 +387,9 @@ impl EthApiServer for PortalServer {
             }
             .in_current_span(),
         );
-        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
+        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
         let gateway_fut = tokio::spawn(
-            {
-                let client = current_gateway.lock().await.clone();
-                async move { client.client.balance(address, block_number).await }
-            }
-            .in_current_span(),
+            { async move { current_gateway.client.balance(address, block_number).await } }.in_current_span(),
         );
 
         let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
@@ -465,9 +433,8 @@ impl EngineApiServer for PortalServer {
             return Ok(response);
         }
 
-        if let Some(current_gateway) = self.current_gateway.as_ref() {
+        if let Some(current_gateway) = self.current_gateway.as_ref().lock().await.clone() {
             if payload_attributes.is_some() {
-                let current_gateway = current_gateway.lock().await.clone();
                 // pick only one gateway for this block
                 tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, current_gateway).in_current_span());
             } else {
@@ -548,12 +515,11 @@ impl EngineApiServer for PortalServer {
             async move { client.get_payload_v3(payload_id).await }
         });
 
-        let Some(current_gateway) = self.current_gateway.as_ref() else { return Ok(fallback_fut.await??) };
+        let Some(gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
 
         let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV3, _>> = tokio::spawn(
             {
                 // only get payload from previously picked gateway
-                let gateway = current_gateway.lock().await.clone();
                 let fallback_client = self.fallback_client.clone();
 
                 async move {
@@ -590,9 +556,16 @@ impl EngineApiServer for PortalServer {
         let fallback = fallback?;
         let gateway = gateway?;
         if let Ok(gateway) = gateway.as_ref() {
-            info!("block {}: successfully served from based-gateway {:?}", gateway.execution_payload.payload_inner.payload_inner.block_number, self.current_gateway.as_ref().unwrap().lock().await);
+            info!(
+                "block {}: successfully served from based-gateway {:?}",
+                gateway.execution_payload.payload_inner.payload_inner.block_number,
+                self.current_gateway.lock().await.as_ref().unwrap()
+            );
         } else if let Ok(fallback) = fallback.as_ref() {
-            info!("block {}: successfully served from fallback", fallback.execution_payload.payload_inner.payload_inner.block_number);
+            info!(
+                "block {}: successfully served from fallback",
+                fallback.execution_payload.payload_inner.payload_inner.block_number
+            );
         } else {
             error!("couldn't serve a block from fallback or gateway");
         }

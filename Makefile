@@ -78,9 +78,9 @@ ifeq ($(filter start-gateway,$(MAKECMDGOALS)),start-gateway)
            PORTAL=http://… GATEWAY_SEQUENCING_KEY=…`)
   endif
 endif
-GATEWAY_DATA_DIR?=$(realpath .local_gateway_and_follower/data/gateway)
-BASED_OP_NODE_DATA_DIR?=$(realpath .local_gateway_and_follower/data/node)
-BASED_OP_GETH_DATA_DIR?=$(realpath .local_gateway_and_follower/data/geth)
+BASED_GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
+BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
+BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
 start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
@@ -122,18 +122,21 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
 	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
 	fi
-
-	@mkdir -p $(BASED_OP_GETH_DATA_DIR)
-	@mkdir -p $(BASED_OP_NODE_DATA_DIR)
-	@mkdir -p $(GATEWAY_DATA_DIR)
-	@if [ ! -L "$(realpath .local_gateway_and_follower/data/geth)" ] && [ ! -e "$(realpath .local_gateway_and_follower/data/geth)" ] && [ "$$(readlink .local_gateway_and_follower/data/geth)" != "$(BASED_OP_GETH_DATA_DIR)" ]; then \
+	@mkdir -p .local_gateway_and_follower/data
+	@if [ "$(BASED_OP_GETH_DATA_DIR)" != ".local_gateway_and_follower/data/geth" ]; then \
 	    ln -s $(BASED_OP_GETH_DATA_DIR) .local_gateway_and_follower/data/geth; \
+	else \
+	    mkdir -p $(BASED_OP_GETH_DATA_DIR); \
 	fi
-	@if [ ! -L "$(realpath .local_gateway_and_follower/data/node)" ] && [ ! -e "$(realpath .local_gateway_and_follower/data/node)" ] && [ "$$(readlink .local_gateway_and_follower/data/node)" != "$(BASED_OP_NODE_DATA_DIR)" ]; then \
+	@if [ "$(BASED_OP_NODE_DATA_DIR)" != ".local_gateway_and_follower/data/node" ]; then \
 	    ln -s $(BASED_OP_NODE_DATA_DIR) .local_gateway_and_follower/data/node; \
+	else \
+	    mkdir -p $(BASED_OP_NODE_DATA_DIR); \
 	fi
-	@if [ ! -L "$(realpath .local_gateway_and_follower/data/gateway)" ] && [ ! -e "$(realpath .local_gateway_and_follower/data/gateway)" ] && [ "$$(readlink .local_gateway_and_follower/data/gateway)" != "$(GATEWAY_DATA_DIR)" ]; then \
-	    ln -s $(GATEWAY_DATA_DIR) .local_gateway_and_follower/data/gateway; \
+	@if [ "$(BASED_GATEWAY_DATA_DIR)" != ".local_gateway_and_follower/data/gateway" ]; then \
+	    ln -s $(BASED_GATEWAY_DATA_DIR) .local_gateway_and_follower/data/gateway; \
+	else \
+	    mkdir -p $(BASED_GATEWAY_DATA_DIR); \
 	fi
 
 	@wallet=$$(cd based && cargo run --bin key_to_address $(GATEWAY_SEQUENCING_KEY)); \
