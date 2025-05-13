@@ -78,9 +78,9 @@ ifeq ($(filter start-gateway,$(MAKECMDGOALS)),start-gateway)
            PORTAL=http://… GATEWAY_SEQUENCING_KEY=…`)
   endif
 endif
-GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
-BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
-BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
+GATEWAY_DATA_DIR?=$(realpath .local_gateway_and_follower/data/gateway)
+BASED_OP_NODE_DATA_DIR?=$(realpath .local_gateway_and_follower/data/node)
+BASED_OP_GETH_DATA_DIR?=$(realpath .local_gateway_and_follower/data/geth)
 start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
@@ -126,13 +126,13 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	@mkdir -p $(BASED_OP_GETH_DATA_DIR)
 	@mkdir -p $(BASED_OP_NODE_DATA_DIR)
 	@mkdir -p $(GATEWAY_DATA_DIR)
-	@if [ ! -L ".local_gateway_and_follower/data/geth" ] || [ "$$(readlink .local_gateway_and_follower/data/geth)" != "$(BASED_OP_GETH_DATA_DIR)" ]; then \
+	@if [ ! -L "$(realpath .local_gateway_and_follower/data/geth)" ] && [ ! -e "$(realpath .local_gateway_and_follower/data/geth)" ] && [ "$$(readlink .local_gateway_and_follower/data/geth)" != "$(BASED_OP_GETH_DATA_DIR)" ]; then \
 	    ln -s $(BASED_OP_GETH_DATA_DIR) .local_gateway_and_follower/data/geth; \
 	fi
-	@if [ ! -L ".local_gateway_and_follower/data/node" ] || [ "$$(readlink .local_gateway_and_follower/data/node)" != "$(BASED_OP_NODE_DATA_DIR)" ]; then \
+	@if [ ! -L "$(realpath .local_gateway_and_follower/data/node)" ] && [ ! -e "$(realpath .local_gateway_and_follower/data/node)" ] && [ "$$(readlink .local_gateway_and_follower/data/node)" != "$(BASED_OP_NODE_DATA_DIR)" ]; then \
 	    ln -s $(BASED_OP_NODE_DATA_DIR) .local_gateway_and_follower/data/node; \
 	fi
-	@if [ ! -L ".local_gateway_and_follower/data/gateway" ] || [ "$$(readlink .local_gateway_and_follower/data/gateway)" != "$(GATEWAY_DATA_DIR)" ]; then \
+	@if [ ! -L "$(realpath .local_gateway_and_follower/data/gateway)" ] && [ ! -e "$(realpath .local_gateway_and_follower/data/gateway)" ] && [ "$$(readlink .local_gateway_and_follower/data/gateway)" != "$(GATEWAY_DATA_DIR)" ]; then \
 	    ln -s $(GATEWAY_DATA_DIR) .local_gateway_and_follower/data/gateway; \
 	fi
 
