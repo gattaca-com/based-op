@@ -124,11 +124,11 @@ where
                         MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
                     }
                     Err(_)
-                        if req.method_name() == "eth_getBlockByNumber"
-                            && req.params.as_ref().is_some_and(|p| {
-                                p.to_string().contains("finalized")
-                                    || p.to_string().contains("latest")
-                                    || p.to_string().contains("safe")
+                        if req.method_name() == "eth_getBlockByNumber" &&
+                            req.params.as_ref().is_some_and(|p| {
+                                p.to_string().contains("finalized") ||
+                                    p.to_string().contains("latest") ||
+                                    p.to_string().contains("safe")
                             }) =>
                     {
                         let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =

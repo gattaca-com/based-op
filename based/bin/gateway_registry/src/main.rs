@@ -161,12 +161,12 @@ impl RegistryApiServer for RegistryServer {
         if n_gateways == 0 {
             return Err(RpcError::NoReturn);
         }
-        let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)?
-            + n_blocks_into_the_future;
+        let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)? +
+            n_blocks_into_the_future;
 
         let id = (target_block / self.gateway_update_blocks) as usize;
         let (url, address, jwt_in_b256) = gateways[id % n_gateways].clone();
-        info!("serving future gateway for block {target_block}: url={url}, address={address}", );
+        info!("serving future gateway for block {target_block}: url={url}, address={address}",);
         Ok((target_block, url, address, jwt_in_b256))
     }
 

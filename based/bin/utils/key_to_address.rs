@@ -9,6 +9,7 @@ fn main() {
         eprintln!("Usage: {} <private-key>", args[0]);
         std::process::exit(1);
     }
-    let address = ECDSASigner::new(B256::from_str(&args[1]).expect("wrong key format")).expect("wrong key format").address;
+    let address =
+        ECDSASigner::new(B256::from_str(&args[1]).expect("wrong key format")).expect("wrong key format").address;
     println!("{}", address)
 }
