@@ -7,11 +7,12 @@ use alloy_rpc_types::engine::{
 };
 use bop_common::{
     communication::{
-        SendersSpine, TrackedSenders,
+        Producer, SendersSpine, TrackedSenders,
         messages::{BlockSyncMessage, EvmBlockParams},
     },
     p2p::{FragV0, SealV0},
     shared::SharedState,
+    telemetry::{TelemetryUpdate, system::SystemNotification, system_notificiations_queue, telemetry_queue},
     time::Timer,
     transaction::Transaction,
 };
@@ -73,6 +74,8 @@ pub struct SequencerContext<Db> {
     pub payload_attributes: Box<OpPayloadAttributes>,
     pub system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
     pub timers: SequencerTimers,
+    pub telemetry: Producer<TelemetryUpdate>,
+    pub notifications: Producer<SystemNotification>,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -94,6 +97,8 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             block_env: Default::default(),
             base_fee: Default::default(),
             timers: Default::default(),
+            telemetry: telemetry_queue().into(),
+            notifications: system_notificiations_queue().into(),
         }
     }
 }
@@ -144,6 +149,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
+        sorting_data.send_finished_telemetry();
         info!(
             frag_id = frag_seq.next_seq,
             txs = sorting_data.txs.len(),
@@ -151,7 +157,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
             "sealing frag"
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
-        self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
+        self.tx_pool.remove_mined_txs(sorting_data.txs.iter(), &mut self.telemetry);
         (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
     }
 }
@@ -162,6 +168,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             self.deposits.push_back(tx);
             return;
         }
+        TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
         self.tx_pool.handle_new_tx(
             tx.clone(),
             self.shared_state.as_ref(),
@@ -193,7 +200,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 
         // Apply must include
         sorting.apply_block_start_to_state(self, env_with_handler_cfg.clone()).expect("shouldn't fail");
-        self.tx_pool.remove_mined_txs(sorting.txs.iter());
+        self.tx_pool.remove_mined_txs(sorting.txs.iter(), &mut self.telemetry);
 
         (seq, sorting)
     }
@@ -299,17 +306,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
-        (seal, OpExecutionPayloadEnvelopeV3 {
-            execution_payload: ExecutionPayloadV3 {
-                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                blob_gas_used: 0,
-                excess_blob_gas: 0,
+        (
+            seal,
+            OpExecutionPayloadEnvelopeV3 {
+                execution_payload: ExecutionPayloadV3 {
+                    payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                    blob_gas_used: 0,
+                    excess_blob_gas: 0,
+                },
+                block_value: frag_seq.payment.to(),
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
             },
-            block_value: frag_seq.payment.to(),
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-        })
+        )
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
@@ -339,6 +349,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
                 self.shared_state.as_ref(),
                 false,
                 None,
+                &mut self.telemetry,
             );
         }
 

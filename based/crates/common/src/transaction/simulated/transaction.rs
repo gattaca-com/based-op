@@ -8,8 +8,13 @@ use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use reth_optimism_primitives::{OpReceipt, transaction::TransactionSenderInfo};
 use reth_primitives::ReceiptWithBloom;
 use revm_primitives::{Address, EvmState, ResultAndState};
+use uuid::Uuid;
 
-use crate::transaction::Transaction;
+use crate::{
+    telemetry::{Telemetry, Tx, order::IncludedInFrag},
+    time::Nanos,
+    transaction::Transaction,
+};
 
 #[derive(Clone, Debug)]
 pub struct SimulatedTx {
@@ -22,6 +27,7 @@ pub struct SimulatedTx {
     /// Cache the depositor account prior to the state transition for the deposit nonce.
     /// Note: this is only used for deposit transactions.
     pub deposit_nonce: Option<u64>,
+    pub sim_time: Nanos,
 }
 
 impl SimulatedTx {
@@ -30,8 +36,9 @@ impl SimulatedTx {
         result_and_state: ResultAndState,
         payment: U256,
         deposit_nonce: Option<u64>,
+        simtime: Nanos,
     ) -> Self {
-        Self { tx, result_and_state, payment, deposit_nonce }
+        Self { tx, result_and_state, payment, deposit_nonce, sim_time: simtime }
     }
 
     pub fn take_state(&mut self) -> EvmState {
@@ -67,6 +74,7 @@ impl SimulatedTx {
                 deposit_receipt_version: (self.tx.is_deposit() && canyon_active).then_some(1),
             }),
         };
+
         receipt.into_with_bloom()
     }
 
@@ -139,6 +147,17 @@ impl SimulatedTx {
     pub fn gas_used(&self) -> u64 {
         self.result_and_state.result.gas_used()
     }
+
+    pub fn to_included_telemetry(&self, frag: Uuid, id_in_frag: usize) -> Telemetry {
+        Telemetry::Tx(Tx::Included(IncludedInFrag {
+            frag,
+            id_in_frag: id_in_frag as u16,
+            payment: self.payment.into(),
+            sim_time: self.sim_time,
+            gas_used: self.gas_used()
+        }))
+    }
+
 }
 
 impl AsRef<ResultAndState> for SimulatedTx {

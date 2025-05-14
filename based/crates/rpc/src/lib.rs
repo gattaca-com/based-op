@@ -5,11 +5,12 @@ use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
     api::{EngineApiServer, MinimalEthApiServer},
     communication::{
-        Sender, Spine,
+        Producer, Sender, Spine,
         messages::{EngineApi, RpcResult},
     },
     config::GatewayArgs,
     db::DatabaseRead,
+    telemetry::{TelemetryUpdate, telemetry_queue},
     time::Duration,
     transaction::Transaction,
 };
@@ -35,11 +36,18 @@ struct RpcServer {
     engine_timeout: Duration,
     engine_rpc_tx: Sender<EngineApi>,
     jwt: JwtSecret,
+    telemetry_producer: Producer<TelemetryUpdate>,
 }
 
 impl RpcServer {
     pub fn new<Db>(spine: &Spine<Db>, jwt: JwtSecret) -> Self {
-        Self { new_order_tx: spine.into(), engine_rpc_tx: spine.into(), engine_timeout: Duration::from_secs(1), jwt }
+        Self {
+            new_order_tx: spine.into(),
+            engine_rpc_tx: spine.into(),
+            engine_timeout: Duration::from_secs(1),
+            jwt,
+            telemetry_producer: telemetry_queue(),
+        }
     }
 
     #[tracing::instrument(skip_all, name = "rpc")]
@@ -83,6 +91,7 @@ impl MinimalEthApiServer for RpcServer {
         trace!(?bytes, "new request");
 
         let tx = Arc::new(Transaction::decode(bytes)?);
+        TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
         let hash = tx.tx_hash();
         let _ = self.new_order_tx.send(tx.into());
 

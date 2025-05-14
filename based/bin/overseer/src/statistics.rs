@@ -1,14 +1,16 @@
 use std::{
     fmt::{Debug, Display},
     marker::PhantomData,
+    ops::{Add, AddAssign, Div},
 };
 
+use alloy_primitives::U256;
 use bop_common::{
-    communication::Consumer,
-    time::{Duration, Instant, Nanos},
+    communication::Consumer, eth::{scientific_notation_from_micro, to_micro_eth}, time::{Duration, Instant, Nanos}
 };
+use serde::{Deserialize, Serialize};
 
-use crate::{circular_buffer::CircularBuffer, tui::RenderFlags};
+use crate::{collections::CircularBuffer, ui::plot::RenderFlags};
 
 pub trait Statisticable: Into<u64> + From<u64> + Display + Clone + Copy + PartialEq {
     fn to_plotpoint(&self) -> f64 {
@@ -22,7 +24,7 @@ impl Statisticable for Nanos {}
 
 impl Statisticable for MsgPer10Sec {}
 
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MsgPer10Sec(pub u64);
 
 impl Display for MsgPer10Sec {
@@ -41,15 +43,68 @@ impl From<u64> for MsgPer10Sec {
         Self(value)
     }
 }
+// TODO: all of this should really be cleaned up.
+// Something along the lines of Unit + prefixes + absolute or percentage etc
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct MicroEth(pub u32);
+
+impl Statisticable for MicroEth {}
+
+impl From<MicroEth> for u64 {
+    fn from(value: MicroEth) -> Self {
+        value.0 as u64
+    }
+}
+
+impl From<u64> for MicroEth {
+    fn from(value: u64) -> Self {
+        Self(value as u32)
+    }
+}
+
+impl From<U256> for MicroEth {
+    fn from(value: U256) -> Self {
+        Self(to_micro_eth(value))
+    }
+}
+
+impl std::fmt::Display for MicroEth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", scientific_notation_from_micro(self.0 as u64))
+    }
+}
+
+impl Add for MicroEth {
+    type Output = MicroEth;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        MicroEth(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign for MicroEth {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
+    }
+}
+
+impl Div<usize> for MicroEth {
+    type Output = MicroEth;
+
+    fn div(self, rhs: usize) -> Self::Output {
+        MicroEth(self.0 / rhs as u32)
+    }
+}
 
 /// Keep track of msg latencies
 /// All in nanos
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct DataPoint<T: Statisticable> {
     pub avg: u64,
     pub min: u64,
     pub max: u64,
     pub median: u64,
+    pub tot: u64,
     pub n_samples: usize,
     pub vline: bool,
     pub rate: MsgPer10Sec,
@@ -73,11 +128,12 @@ impl<T: Statisticable> Default for DataPoint<T> {
             vline: false,
             rate: Default::default(),
             _p: PhantomData {},
+            tot: 0,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Statistics<T: Statisticable> {
     pub title: String,
     // These are updated when Start
@@ -88,6 +144,7 @@ pub struct Statistics<T: Statisticable> {
     avg: u64,
     min: u64,
     max: u64,
+    tot: u64,
     samples: usize,
 
     // tot_count does not necessarily need to be equal to the sum of the samples
@@ -104,12 +161,14 @@ pub struct Statistics<T: Statisticable> {
 
     // This will be subtracted from each measurement, useful for e.g. clock overhead
     offset: u64,
-    samples_per_median: usize,
     pub flags: RenderFlags,
     got_one: bool,
 }
 
 impl<T: Statisticable> Statistics<T> {
+    pub fn bytesize(&self) -> usize {
+        std::mem::size_of::<Self>() + self.datapoints.len() * std::mem::size_of::<DataPoint<T>>()
+    }
     pub fn new(title: String, samples_per_median: usize, n_datapoints: usize, offset: T) -> Self {
         let measurements = CircularBuffer::new(samples_per_median);
 
@@ -120,8 +179,8 @@ impl<T: Statisticable> Statistics<T> {
             min: u64::MAX,
             max: 0,
             avg: 0,
+            tot: 0,
             offset: offset.into(),
-            samples_per_median,
             samples: 0,
             tot_count: 0,
             flags: RenderFlags::ShowAverages,
@@ -132,6 +191,10 @@ impl<T: Statisticable> Statistics<T> {
 
     fn corrected_or_zero(&self, t: u64) -> u64 {
         t.saturating_sub(self.offset)
+    }
+
+    pub fn set_measurements_len(&mut self, len: usize) {
+        self.measurements = CircularBuffer::new(len);
     }
 
     pub fn register_datapoint(&mut self, mut tot_count: usize, block_start: bool) {
@@ -161,7 +224,9 @@ impl<T: Statisticable> Statistics<T> {
             avg: self.corrected_or_zero(self.avg),
             min: self.corrected_or_zero(self.min),
             max: self.corrected_or_zero(self.max),
+            tot: self.corrected_or_zero(self.tot),
             median: self.corrected_or_zero(median),
+
             n_samples: self.samples,
             vline: block_start,
             rate,
@@ -170,14 +235,27 @@ impl<T: Statisticable> Statistics<T> {
         self.tot_count = tot_count;
         self.reset();
     }
+    pub fn tot(&self) -> u64 {
+        self.tot
+    }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.measurements.clear();
         self.min = u64::MAX;
         self.max = 0;
         self.samples = 0;
         self.got_one = true;
+        self.tot = 0;
         self.last_t = Instant::now();
+    }
+
+    pub fn clear(&mut self) {
+        self.reset();
+        self.datapoints.clear();
+    }
+
+    pub fn last(&self) -> Option<u64> {
+        self.datapoints.last().and_then(|t| (t.avg != 0).then_some(t.avg))
     }
 
     // returns true if full datapoint is captured
@@ -196,6 +274,7 @@ impl<T: Statisticable> Statistics<T> {
 
         self.samples += 1;
         self.avg = (avg + el) / self.samples as u64;
+        self.tot += el;
 
         self.measurements.push(el);
     }
@@ -209,17 +288,18 @@ impl<T: Statisticable> Statistics<T> {
     }
 
     pub fn handle_messages<M: 'static + Copy + Default + Into<T>>(&mut self, consumer: &mut Consumer<M>) {
-        let mut captured_one = false;
-        let mut done = false;
-        let mut c = 0;
+        let curt = Instant::now();
+        let max = Duration::from_millis(1);
         // loops until either a full datapoint was captured or no messages are pending
-        while !done {
-            done |= consumer.try_consume().is_none_or(|msg| {
-                captured_one = true;
+        let mut n_read = 0;
+        while n_read < 4096 {
+            if !consumer.consume(|&mut msg| {
+                n_read += 1;
                 self.track(msg.into());
-                c += 1;
-                c == self.samples_per_median
-            });
+            }) || curt.elapsed() > max
+            {
+                break;
+            }
         }
     }
 
