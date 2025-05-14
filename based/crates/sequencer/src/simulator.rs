@@ -6,13 +6,12 @@ use std::{
 use bop_common::{
     actor::Actor,
     communication::{
-        SpineConnections, TrackedSenders,
         messages::{
             EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg,
-        },
+        }, SpineConnections, TrackedSenders
     },
     db::{DBFrag, DBSorting, DatabaseRead, State},
-    time::{Duration, Instant},
+    time::{Duration, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
     utils::last_part_of_typename,
 };
@@ -93,6 +92,7 @@ where
     Db: Database,
     Db::Error: std::fmt::Debug,
 {
+    let sim_start = Nanos::now();
     let coinbase = evm.block().coinbase;
     // Cache some values pre-simulation.
     let start_balance = balance_from_db(evm.db_mut(), coinbase);
@@ -114,7 +114,7 @@ where
         return Err(SimulationError::ZeroPayment);
     }
 
-    Ok(SimulatedTx::new(tx, result_and_state, payment, deposit_nonce))
+    Ok(SimulatedTx::new(tx, result_and_state, payment, deposit_nonce, sim_start.elapsed()))
 }
 
 #[inline]

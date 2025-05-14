@@ -1,7 +1,7 @@
 use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use bop_common::{p2p::FragV0, time::Instant, transaction::SimulatedTx};
+use bop_common::{p2p::FragV0, telemetry::TelemetryUpdate, time::Instant, transaction::SimulatedTx};
 use revm_primitives::{B256, Bytes};
 
 use super::{SortingData, sorting_data::SortingTelemetry};
@@ -48,21 +48,19 @@ impl FragSequence {
         let gas_used = in_sort.gas_used();
         self.gas_remaining -= gas_used;
         self.payment += in_sort.payment();
+        let uuid = in_sort.uuid;
 
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
-            let receipt = tx.op_tx_receipt(
-                self.gas_used,
-                self.block_number,
-                self.block_timestamp,
-                ctx.base_fee(),
-                self.txs.len() as u64,
-            );
-            ctx.shared_state.insert_confirmed_tx(tx.tx.tx.clone(), receipt);
             self.txs.push(tx);
         }
 
+        TelemetryUpdate::send(
+            uuid,
+            bop_common::telemetry::Telemetry::Frag(bop_common::telemetry::Frag::Commit { seq: self.next_seq }),
+            &mut ctx.telemetry,
+        );
         self.next_seq += 1;
         self.sorting_telemetry += in_sort.telemetry;
         msg
@@ -104,8 +102,7 @@ mod tests {
     use alloy_provider::ProviderBuilder;
     use alloy_rpc_types::engine::PayloadAttributes;
     use bop_common::{
-        communication::Spine, db::DBFrag, shared::SharedState, time::Duration, transaction::Transaction,
-        utils::initialize_test_tracing,
+        communication::Spine, db::DBFrag, time::Duration, transaction::Transaction, utils::initialize_test_tracing,
     };
     use bop_db::AlloyDB;
     use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
@@ -165,13 +162,11 @@ mod tests {
         let db_frag: DBFrag<AlloyDB> = alloy_db.clone().into();
         let sim_db = db_frag.clone();
 
-        let shared_state = SharedState::new(db_frag.clone());
-
         // Setup channels for sim messaging
         let spine = Spine::default();
         let sim_connections = spine.to_connections("sim");
 
-        let mut ctx: SequencerContext<AlloyDB> = SequencerContext::new(alloy_db.clone(), shared_state, config);
+        let mut ctx: SequencerContext<AlloyDB> = SequencerContext::new(alloy_db.clone(), config);
         ctx.parent_header = previous_header.clone();
         ctx.parent_hash = previous_block.hash_slow();
         ctx.base_fee = block.base_fee_per_gas.unwrap();

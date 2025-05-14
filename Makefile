@@ -252,14 +252,14 @@ deploy-chain: build-key_to_address
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
-	@docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
     > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
 	@blockNumber=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.genesis.l1.number' /config/rollup.json); \
 	 hex=$$(printf "0x%x" $$blockNumber); \
 	 hash=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	   --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["'"$$hex"'",false]}' \
 	   $(L1_RPC_URL) | docker run -i imega/jq -r '.result.hash'); \
-	 docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq --arg h "$$hash" '.genesis.l1.hash = $$h' /config/rollup.json > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/rollup.json
+	 docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq --arg h "$$hash" '.genesis.l1.hash = $$h' /config/rollup.json > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/rollup.json
 
 	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
 	@echo "...Done deploying. See chain config in"
@@ -353,8 +353,8 @@ start-main-node: build-portal build-registry
 	  $(MAKE) fix-compose; \
 	  echo "Initializing all components of a main sequencing node in ./.local_main_node ..."; \
 	  { \
-	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.implementationsDeployment.disputeGameFactoryImplAddress' /config/state.json)"; \
-	    echo "NETWORK_ID=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.l2_chain_id' /config/rollup.json)"; \
+	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i --rm imega/jq -r '.implementationsDeployment.disputeGameFactoryImplAddress' /config/state.json)"; \
+	    echo "NETWORK_ID=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i --rm imega/jq -r '.l2_chain_id' /config/rollup.json)"; \
 	    echo "L1_RPC_URL=$(L1_RPC_URL)"; \
 	    echo "L1_BEACON_RPC_URL=$(L1_BEACON_RPC_URL)"; \
 	    echo "OP_NODE_SEQUENCER_KEY=$(MAIN_KEY)"; \

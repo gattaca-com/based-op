@@ -1,0 +1,19 @@
+[package]
+edition.workspace = true
+name = "overseer"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+alloy-primitives.workspace = true
+bitflags.workspace = true
+bop-common.workspace = true
+crossterm = "0.28.1"
+ratatui = "0.29.0"
+serde.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+strum_macros.workspace = true
+strum.workspace = true
+auto_impl.workspace = true
