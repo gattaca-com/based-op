@@ -36,3 +36,4 @@ follower_node/.env
 .local/
 .local_gateway_and_follower
 .local_main_node
+based/.envrc
