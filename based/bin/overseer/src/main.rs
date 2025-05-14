@@ -10,17 +10,21 @@ mod utils;
 use std::io::stdout;
 
 use bop_common::{
+    api::{OpNodeApiClient, RollupConfig},
     communication::Consumer,
+    config::{LoggingConfig, LoggingFlags},
     telemetry::{TelemetryUpdate, system::SystemNotification, system_notificiations_queue, telemetry_queue},
-    time::Timer,
-    time::{Nanos, utils::renderloop_60_fps},
+    time::{Nanos, Timer, utils::renderloop_60_fps},
+    utils::init_tracing,
 };
+use clap::Parser;
 use crossterm::{
     ExecutableCommand,
     event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use data::{BuiltBlocksMode, Data};
+use data::{Data, UIData};
+use jsonrpsee::http_client::HttpClient;
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -29,9 +33,19 @@ use ratatui::{
     text::Line,
     widgets::{Block, Borders, Clear, Tabs},
 };
+use reqwest::Url;
+use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, FromRepr};
 use timekeeper::{TimeKeeper, TimeKeeperMode};
 use tracing::warn;
+use ui::plot::RenderFlags;
+
+#[derive(Parser, Debug, Clone)]
+#[command(version, about, name = "based-portal")]
+pub struct OverseerArgs {
+    #[arg(short, long)]
+    pub portal_url: Url,
+}
 
 #[derive(Copy, Clone, Debug, Default, Display, FromRepr, EnumIter)]
 enum Mode {
@@ -84,36 +98,52 @@ impl Default for OverseerConsumers {
     }
 }
 
-struct OverseerTimers {
-    total: Timer,
-    render: Timer,
+struct Overseer {
+    runtime: tokio::runtime::Runtime,
+    portal_client: HttpClient,
+    data: Data,
+    ui_data: UIData,
+    mode: Mode,
+    rollup_config: RollupConfig,
 }
-impl Default for OverseerTimers {
-    fn default() -> Self {
-        Self { total: Timer::new("Overseer"), render: Timer::new("Overseer-render") }
+impl From<OverseerArgs> for Overseer {
+    fn from(value: OverseerArgs) -> Self {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Couldn't initialize tokio runtime");
+        let portal_client =
+            HttpClient::builder().build(value.portal_url).expect("Couldn't initialize portal rpc client");
+        let rollup_config = runtime
+            .block_on(portal_client.rollup_config())
+            .expect("Couldn't get the rollup config. Is the portal url set correctly?");
+
+        Self {
+            runtime,
+            portal_client,
+            data: Default::default(),
+            mode: Default::default(),
+            rollup_config,
+            ui_data: UIData::default(),
+        }
     }
 }
 
-const BLOCK_TSTAMP: Nanos = Nanos::from_secs(1729699211);
-const SLOT_DURATION: Nanos = Nanos::from_secs(12);
-
-#[derive(Default)]
-struct Overseer {
-    timers: OverseerTimers,
-    data: Data,
-    mode: Mode,
-    search_string: Option<String>,
-    prev_selected_slot: Option<u64>,
-}
-
 impl Overseer {
+    pub fn block_duration(&self) -> Nanos {
+        Nanos::from_secs(self.rollup_config.block_time)
+    }
+    pub fn genesis_time(&self) -> Nanos {
+        Nanos::from_secs(self.rollup_config.genesis.l2_time)
+    }
     pub fn update(&mut self, consumers: &mut OverseerConsumers, slot_time: bool) {
-        self.data.new_slot = false;
         self.data.update(consumers, slot_time);
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
-        self.timers.render.start();
+        if self.data.is_empty() {
+            return;
+        }
         use Constraint::{Length, Min};
         let vertical = Layout::vertical([Length(1), Min(0), Length(1)]);
         let [tabs_area, inner_area, footer_area] = vertical.areas(frame.area());
@@ -121,33 +151,20 @@ impl Overseer {
         self.render_tabs(tabs_area, frame);
         self.render_footer(footer_area, frame);
 
-        let layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(22), Constraint::Fill(1)])
-            .split(inner_area);
         match self.mode {
-            Mode::Overview if !self.data.is_empty() => {
-                self.data.strat_toggles_visible = false;
-                SlotInfoSidebar {}.render(&mut self.data, frame, layout[0]);
-                StrategiesOverview {}.render(&self.data, frame, layout[1]);
+            Mode::Overview => {
+                self.ui_data.render_overview(&self.data, frame);
             }
 
             Mode::TimekeeperRealtime => {
                 self.data.timekeeper.set_mode(TimeKeeperMode::RealTime);
                 TimeKeeper::render(&mut self.data, inner_area, frame)
             }
-            Mode::TimekeeperFlameGraph if self.data.last_slot != 0 => {
+            Mode::TimekeeperFlameGraph => {
                 self.data.timekeeper.set_mode(TimeKeeperMode::FlameGraph);
                 TimeKeeper::render(&mut self.data, inner_area, frame)
             }
-            _ => {}
         }
-
-        if let Some(string) = &self.search_string {
-            self.render_search(frame, string);
-        }
-
-        self.timers.render.stop();
     }
 
     fn next_tab(&mut self) {
@@ -168,100 +185,26 @@ impl Overseer {
         );
     }
 
-    fn render_search(&self, frame: &mut Frame, string: &str) {
-        let style = if string.parse::<u64>().ok().is_some_and(|parsed| self.data.has_slot_data(parsed)) {
-            Style::default().fg(Color::Green)
-        } else {
-            Style::default().fg(Color::Red)
-        };
-        let modal_area = modal_area(frame.area(), 40, 4);
-        let block = Block::new()
-            .title("Enter slot number")
-            .borders(Borders::all())
-            .style(style)
-            .title_bottom("<Enter>: select")
-            .title_bottom(format!("<Esc>: slot {}", self.prev_selected_slot.unwrap()));
-        let inner = block.inner(modal_area);
-        frame.render_widget(Clear, modal_area);
-        frame.render_widget(block, modal_area);
-        let line = Line::styled(string, style);
-        frame.render_widget(line, inner);
-    }
-
     pub fn handle_key_events(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         match (code, modifiers, &self.mode) {
             (KeyCode::Right, _, _) => self.next_tab(),
             (KeyCode::Left, _, _) => self.previous_tab(),
-            (KeyCode::Esc, _, Mode::Overview) if self.search_string.is_some() => {
-                self.search_string = None;
-                self.data.display_slot(self.prev_selected_slot.take().unwrap());
-            }
-            (KeyCode::Char(' '), _, Mode::Overview | Mode::TimekeeperRealtime | Mode::TimekeeperFlameGraph) => {
-                self.data.display_last_slot()
-            }
-            (KeyCode::Up, _, Mode::Overview) => self.data.strat_toggle_list_state.select_previous(),
-            (KeyCode::Down, _, Mode::Overview) => self.data.strat_toggle_list_state.select_next(),
-            (KeyCode::Enter, _, Mode::Overview) if self.search_string.is_some() => {
-                let Some(parsed) = self.search_string.as_ref().and_then(|s| s.parse::<u64>().ok()) else {
-                    self.search_string = None;
-                    return;
-                };
-                self.data.display_slot(parsed);
-                self.search_string = None;
-                self.prev_selected_slot = None;
-            }
-            (KeyCode::Enter, _, Mode::Overview) => {
-                self.data.toggle_strat_visibility(modifiers.contains(KeyModifiers::ALT))
-            }
-
-            (KeyCode::Tab, _, Mode::Overview) => self.data.toggle_strat_toggles_visibility(),
             (KeyCode::Char('m'), _, Mode::TimekeeperRealtime) => {
-                self.data.displayed_mut().time_datas.toggle_render_options(RenderFlags::ShowMin)
+                self.data.time_datas.toggle_render_options(RenderFlags::ShowMin)
             }
             (KeyCode::Char('M'), _, Mode::TimekeeperRealtime) => {
-                self.data.displayed_mut().time_datas.toggle_render_options(RenderFlags::ShowMax)
+                self.data.time_datas.toggle_render_options(RenderFlags::ShowMax)
             }
             (KeyCode::Char('e'), _, Mode::TimekeeperRealtime) => {
-                self.data.displayed_mut().time_datas.toggle_render_options(RenderFlags::ShowMedian)
+                self.data.time_datas.toggle_render_options(RenderFlags::ShowMedian)
             }
             (KeyCode::Char('t'), _, Mode::TimekeeperRealtime) => {
-                self.data.displayed_mut().time_datas.toggle_render_options(RenderFlags::ShowTotal)
+                self.data.time_datas.toggle_render_options(RenderFlags::ShowTotal)
             }
             (KeyCode::Char('a'), _, Mode::TimekeeperRealtime) => {
-                self.data.displayed_mut().time_datas.toggle_render_options(RenderFlags::ShowAverages)
+                self.data.time_datas.toggle_render_options(RenderFlags::ShowAverages)
             }
             (c, _, Mode::TimekeeperRealtime | Mode::TimekeeperFlameGraph) => self.data.timekeeper.handle_key_events(c),
-            (KeyCode::Char(c), _, _) if self.search_string.is_some() => {
-                let s = self.search_string.as_mut().unwrap();
-                s.push(c);
-                if let Some(parsed) = s.parse::<u64>().ok().filter(|parsed| self.data.has_slot_data(*parsed)) {
-                    self.data.display_slot(parsed);
-                }
-            }
-            (KeyCode::Backspace, _, _) if self.search_string.is_some() => {
-                let s = self.search_string.as_mut().unwrap();
-                s.pop();
-                if let Some(parsed) = s.parse::<u64>().ok().filter(|parsed| self.data.has_slot_data(*parsed)) {
-                    self.data.display_slot(parsed);
-                }
-            }
-            (KeyCode::Char('f'), _, Mode::Overview) => {
-                let curslot = self.data.displayed_slot();
-                self.search_string = Some(curslot.to_string());
-                self.prev_selected_slot = Some(curslot);
-            }
-            (KeyCode::Char('f'), _, Mode::BlocksBuilt)
-                if matches!(self.data.built_blocks_tab.mode, BuiltBlocksMode::BlocksTable(_)) =>
-            {
-                let curslot = self.data.displayed_slot();
-                self.search_string = Some(curslot.to_string());
-                self.prev_selected_slot = Some(curslot);
-            }
-            (KeyCode::Char('f'), _, Mode::CexDex) if matches!(self.data.cex_dex_tab.mode, CexDexMode::Table(_)) => {
-                let curslot = self.data.displayed_slot();
-                self.search_string = Some(curslot.to_string());
-                self.prev_selected_slot = Some(curslot);
-            }
             _ => {}
         }
     }
@@ -277,36 +220,26 @@ impl Overseer {
     }
 }
 
-fn modal_area(area: Rect, width_x: u16, width_y: u16) -> Rect {
-    let vertical = Layout::vertical([Constraint::Length(width_y)]).flex(ratatui::layout::Flex::Center);
-    let horizontal = Layout::horizontal([Constraint::Length(width_x)]).flex(ratatui::layout::Flex::Center);
-    let [area] = vertical.areas(area);
-    let [area] = horizontal.areas(area);
-    area
-}
-
 fn main() {
     stdout().execute(EnterAlternateScreen).unwrap();
     enable_raw_mode().unwrap();
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout())).unwrap();
     let _ = terminal.clear();
-
-    let enable_logging = std::env::var("ENABLE_LOGGING").map(|val| val.to_lowercase() == "true").unwrap_or(true);
-    if enable_logging {
-        let _guard = initialise_tracing_log("overseer.log", 100, None);
-    }
+    let mut logging_config = LoggingConfig::default_with_prefix("overseer.log".to_string());
+    logging_config.flags = LoggingFlags::File;
+    let _guard = init_tracing(logging_config);
     tracing::info!("Overseer starting");
     let mut consumers = OverseerConsumers::default();
+    let mut overseer: Overseer = OverseerArgs::parse().into();
+    let genesis_time = overseer.genesis_time();
+    let block_duration = overseer.block_duration();
 
-    let mut overseer = Overseer::default();
-
-    let mut cur_t_stamp = BLOCK_TSTAMP + ((Nanos::now() - BLOCK_TSTAMP) / SLOT_DURATION) * SLOT_DURATION;
+    let mut cur_t_stamp = genesis_time + ((Nanos::now() - genesis_time) / block_duration) * block_duration;
 
     renderloop_60_fps(|| {
-        overseer.timers.total.start();
-        let slot_time = cur_t_stamp.elapsed() > SLOT_DURATION;
+        let slot_time = cur_t_stamp.elapsed() > block_duration;
         if slot_time {
-            cur_t_stamp += SLOT_DURATION;
+            cur_t_stamp += block_duration;
         }
         overseer.update(&mut consumers, slot_time);
         if let Err(e) = terminal.draw(|frame| {
@@ -325,7 +258,6 @@ fn main() {
             }
             overseer.handle_key_events(code, modifiers);
         }
-        overseer.timers.total.stop();
         true
     });
     stdout().execute(LeaveAlternateScreen).unwrap();

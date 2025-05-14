@@ -1,4 +1,4 @@
-use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
+use std::{fs::read_dir, marker::PhantomData, path::{Path, PathBuf}, sync::Arc};
 
 use messages::{
     BlockFetch, BlockSyncMessage, EngineApi, EvmBlockParams, SequencerToExternal, SequencerToSimulator,
@@ -499,9 +499,8 @@ pub fn clear_shmem<P: AsRef<Path>>(path: P) {
     std::fs::remove_file(path).expect("couldn't remove file");
 }
 
-pub fn queues_dir_string() -> String {
-    let queues_dir = directories::BaseDirs::new().expect("Couldn't retrieve home dir").data_dir().join("bop/queues");
-    queues_dir.to_string_lossy().to_string()
+pub fn queues_dir() -> PathBuf {
+    "/tmp/bop_queues".into()
 }
 
 pub fn verify_or_remove_queue_files() {

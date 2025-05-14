@@ -195,7 +195,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
         // send new block params to simulators
         senders.send(simulator_evm_block_params).expect("should never fail");
         let n_force_include_txs = self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
-        let seq = FragSequence::new(self.gas_limit(), self.block_number(), self.timestamp(), n_force_include_txs);
+        let seq = FragSequence::new(self.gas_limit(), self.block_number(), n_force_include_txs);
         let mut sorting = SortingData::new(&seq, self);
 
         // Apply must include

@@ -123,6 +123,7 @@ impl<Db> SortingData<Db> {
         TelemetryUpdate::send(
             uuid,
             Telemetry::Frag(bop_common::telemetry::Frag::SorterStart {
+                seq: seq.next_seq,
                 block: data.block_number(),
                 available_value: tof_snapshot.available_value().into(),
             }),
@@ -212,7 +213,7 @@ impl<Db> SortingData<Db> {
             self.uuid,
             Telemetry::Frag(bop_common::telemetry::Frag::SorterFinish {
                 success: true,
-                value: self.payment.into(),
+                payment: self.payment.into(),
                 best_order_value: self.txs.iter().map(|t| t.payment).max().unwrap_or_default().into(),
                 n_txs: self.txs.len(),
                 gas_used: self.gas_used(),

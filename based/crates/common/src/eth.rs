@@ -23,6 +23,18 @@ impl std::fmt::Display for MicroEth {
     }
 }
 
+impl From<u64> for MicroEth {
+    fn from(value: u64) -> Self {
+        Self(value as u32)
+    }
+}
+
+impl From<MicroEth> for u64 {
+    fn from(value: MicroEth) -> Self {
+        value.0 as u64
+    }
+}
+
 impl Add for MicroEth {
     type Output = MicroEth;
 

@@ -6,7 +6,7 @@ use std::{
 
 use alloy_primitives::U256;
 use bop_common::{
-    communication::Consumer, eth::{scientific_notation_from_micro, to_micro_eth}, time::{Duration, Instant, Nanos}
+    communication::Consumer, eth::{scientific_notation_from_micro, to_micro_eth, MicroEth}, time::{Duration, Instant, Nanos}
 };
 use serde::{Deserialize, Serialize};
 
@@ -43,58 +43,9 @@ impl From<u64> for MsgPer10Sec {
         Self(value)
     }
 }
-// TODO: all of this should really be cleaned up.
-// Something along the lines of Unit + prefixes + absolute or percentage etc
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct MicroEth(pub u32);
 
 impl Statisticable for MicroEth {}
 
-impl From<MicroEth> for u64 {
-    fn from(value: MicroEth) -> Self {
-        value.0 as u64
-    }
-}
-
-impl From<u64> for MicroEth {
-    fn from(value: u64) -> Self {
-        Self(value as u32)
-    }
-}
-
-impl From<U256> for MicroEth {
-    fn from(value: U256) -> Self {
-        Self(to_micro_eth(value))
-    }
-}
-
-impl std::fmt::Display for MicroEth {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", scientific_notation_from_micro(self.0 as u64))
-    }
-}
-
-impl Add for MicroEth {
-    type Output = MicroEth;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        MicroEth(self.0 + rhs.0)
-    }
-}
-
-impl AddAssign for MicroEth {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0;
-    }
-}
-
-impl Div<usize> for MicroEth {
-    type Output = MicroEth;
-
-    fn div(self, rhs: usize) -> Self::Output {
-        MicroEth(self.0 / rhs as u32)
-    }
-}
 
 /// Keep track of msg latencies
 /// All in nanos
@@ -293,12 +244,14 @@ impl<T: Statisticable> Statistics<T> {
         // loops until either a full datapoint was captured or no messages are pending
         let mut n_read = 0;
         while n_read < 4096 {
-            if !consumer.consume(|&mut msg| {
+            if let Some(msg) = consumer.try_consume() {
                 n_read += 1;
                 self.track(msg.into());
-            }) || curt.elapsed() > max
-            {
-                break;
+                if curt.elapsed() > max {
+                    break;
+                }
+            } else {
+                break
             }
         }
     }

@@ -94,4 +94,12 @@ services:
     volumes: 
       - ./config:/config
       - ./data/gateway:/data/gateway
+      - /tmp/bop_queues:/tmp/bop_queues
 
+  overseer:
+    image: based_overseer_local
+    container_name: based-overseer
+    network_mode: "host"
+    volumes: 
+      - .data/queues:/root/.local/share/bop/qeueues
+      - /tmp/bop_queues:/tmp/bop_queues

@@ -7,6 +7,6 @@ use crate::eth::MicroEth;
 #[repr(u8)]
 pub enum Frag {
     SorterStart { block: u64, seq: u64, available_value: MicroEth },
-    SorterFinish { success: bool, value: MicroEth, best_order_value: MicroEth, n_txs: usize, gas_used: u64 },
+    SorterFinish { success: bool, payment: MicroEth, best_order_value: MicroEth, n_txs: usize, gas_used: u64 },
     Commit,
 }

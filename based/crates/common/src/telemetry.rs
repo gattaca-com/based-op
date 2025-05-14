@@ -5,7 +5,7 @@ use system::SystemNotification;
 use uuid::Uuid;
 
 use crate::{
-    communication::{Producer, Queue, queue::QueueType, queues_dir_string},
+    communication::{Producer, Queue, queue::QueueType, queues_dir},
     time::Nanos,
 };
 
@@ -16,13 +16,13 @@ pub use order::Tx;
 pub mod system;
 
 pub fn telemetry_queue() -> Queue<TelemetryUpdate> {
-    Queue::create_or_open_shared(format!("{}/telemetry", queues_dir_string()), 2usize.pow(18), QueueType::MPMC)
-        .expect("Can't create or open block stats queue")
+    Queue::create_or_open_shared(queues_dir().join("telemetry"), 2usize.pow(18), QueueType::MPMC)
+        .expect("Can't create or open telemetry queue")
 }
 
 pub fn system_notificiations_queue() -> Queue<SystemNotification> {
-    Queue::create_or_open_shared(format!("{}/system_notificiation", queues_dir_string()), 1024, QueueType::MPMC)
-        .expect("Can't create or open block stats queue")
+    Queue::create_or_open_shared(queues_dir().join("system_notification"), 1024, QueueType::MPMC)
+        .expect("Can't create or open notification queue")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

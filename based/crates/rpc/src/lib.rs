@@ -46,7 +46,7 @@ impl RpcServer {
             engine_rpc_tx: spine.into(),
             engine_timeout: Duration::from_secs(1),
             jwt,
-            telemetry_producer: telemetry_queue(),
+            telemetry_producer: telemetry_queue().into(),
         }
     }
 

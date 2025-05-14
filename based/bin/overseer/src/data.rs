@@ -1,11 +1,7 @@
-use crate::{
-    collections::KeyedCircularBuffer,
-    statistics::Statistics,
-    ui::{CyclingListState, plot::RenderFlags},
-};
+use crate::{collections::KeyedCircularBuffer, statistics::Statistics, ui::plot::RenderFlags};
 use block::BlockData;
 use bop_common::{
-    communication::{Consumer, Queue, queues_dir_string},
+    communication::{Consumer, Queue, queues_dir},
     telemetry::{Telemetry, frag::Frag, order::Tx, system::SystemNotification},
     time::Duration,
     time::TimingMessage,
@@ -14,7 +10,7 @@ use frag::FragData;
 use transaction::TransactionData;
 
 use crate::{
-    OverseerConsumers, SLOT_DURATION,
+    OverseerConsumers,
     prelude::*,
     timekeeper::{TimeKeeper, TimerDataState, clock_overhead},
 };
@@ -23,103 +19,39 @@ pub mod block;
 pub mod frag;
 pub mod transaction;
 
-#[derive(Clone, Debug, AsRefStr)]
-pub enum BuiltBlocksMode {
-    BlocksTable(CyclingTableState<B256>),
-    DetailsTable(B256, CyclingTableState<B256>, Box<Self>),
-    Order(B256, CyclingTableState<B256>, Box<Self>),
-}
-
-impl Default for BuiltBlocksMode {
-    fn default() -> Self {
-        Self::BlocksTable(Default::default())
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct BuiltBlocksTab {
-    pub mode: BuiltBlocksMode,
-}
-
-impl BuiltBlocksTab {
-    pub(crate) fn select_previous(&mut self) {
-        match &mut self.mode {
-            BuiltBlocksMode::BlocksTable(state)
-            | BuiltBlocksMode::DetailsTable(_, state, _)
-            | BuiltBlocksMode::Order(_, state, _) => state.select_previous(),
-        }
-    }
-
-    pub(crate) fn select_next(&mut self) {
-        match &mut self.mode {
-            BuiltBlocksMode::BlocksTable(state)
-            | BuiltBlocksMode::DetailsTable(_, state, _)
-            | BuiltBlocksMode::Order(_, state, _) => state.select_next(),
-        }
-    }
-
-    pub fn on_enter(&mut self, data: &SlotData) {
-        match &self.mode {
-            BuiltBlocksMode::BlocksTable(state) => {
-                let Some(uuid) = state.selected() else {
-                    return;
-                };
-                self.mode = BuiltBlocksMode::DetailsTable(uuid, Default::default(), Box::new(self.mode.clone()));
-            }
-            BuiltBlocksMode::DetailsTable(uuid, state, _) => {
-                let Some(selected_order) = state.selected() else {
-                    return;
-                };
-                let order_state = CyclingTableState::default().with_prev_slected(*uuid);
-                self.mode = BuiltBlocksMode::Order(selected_order, order_state, Box::new(self.mode.clone()));
-            }
-            BuiltBlocksMode::Order(order_hash, state, _) => {
-                let Some(block_uuid) = state.selected() else {
-                    return;
-                };
-                if block_uuid == B256::ZERO {
-                    return;
-                }
-                let mut block_state = CyclingTableState::default().with_prev_slected(*order_hash);
-                let block = data.blocks.get(&block_uuid).expect("selected unknown block");
-                block_state.select(block.orders.iter().position(|o| o == order_hash));
-
-                self.mode = BuiltBlocksMode::DetailsTable(block_uuid, block_state, Box::new(self.mode.clone()));
-            }
-        }
-    }
-
-    pub fn on_esc(&mut self) {
-        match std::mem::take(&mut self.mode) {
-            BuiltBlocksMode::BlocksTable(_) => {}
-            BuiltBlocksMode::DetailsTable(_, _, prev_mode) | BuiltBlocksMode::Order(_, _, prev_mode) => {
-                self.mode = *prev_mode;
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct UIData {
-    slot_on_display: Option<u64>,
-    pub last_slot: u64,
-    pub new_slot: bool,
-    pub strat_toggle_list_state: CyclingListState,
-    pub built_blocks_tab: BuiltBlocksTab,
-    pub strat_toggles_visible: bool,
+    pub table_blocks: TableState,
+    pub table_frags: TableState,
+    pub table_pool: TableState,
 }
 
 impl UIData {
-    pub fn displayed_slot(&self) -> u64 {
-        self.slot_on_display.unwrap_or(self.last_slot)
-    }
-
-    pub fn update_last_slot(&mut self, slot: u64) {
-        self.last_slot = self.last_slot.max(slot);
-    }
-
-    pub fn is_current_slot_displayed(&self) -> bool {
-        self.slot_on_display.is_none()
+    pub fn render_overview(&mut self, data: &Data, frame: &mut Frame) {
+        let [left, middle, right] =
+            Layout::vertical([Constraint::Percentage(33), Constraint::Percentage(33), Constraint::Fill(1)])
+                .areas(frame.area());
+        self.table_blocks.render(
+            Some("Blocks".to_string()),
+            BlockData::header(),
+            data.blocks.iter().map(|b| b.to_row()),
+            frame,
+            left,
+        );
+        self.table_frags.render(
+            Some("Frags in block".to_string()),
+            FragData::block_table_header(),
+            data.frags.iter().map(|b| b.to_block_table_row()),
+            frame,
+            middle,
+        );
+        self.table_pool.render(
+            Some("Tx Pool".to_string()),
+            TransactionData::pool_header(),
+            data.transactions.iter().map(|b| b.to_pool_row()),
+            frame,
+            right,
+        )
     }
 }
 
@@ -179,12 +111,13 @@ impl TimerData {
 }
 
 pub struct Data {
-    block_number: u64,
+    pub block_number: u64,
     pub transactions: KeyedCircularBuffer<TransactionData>,
     pub blocks: KeyedCircularBuffer<BlockData>,
     pub frags: KeyedCircularBuffer<FragData>,
-    pub ui_data: UIData,
     pub data_gatherer: Repeater,
+    pub queue_checker: Repeater,
+    pub flamegraph_resetter: Repeater,
     pub timekeeper: TimeKeeper,
     pub time_datas: TimeDatas,
 }
@@ -193,13 +126,14 @@ impl Default for Data {
     fn default() -> Self {
         Self {
             block_number: Default::default(),
-            transactions: Default::default(),
-            frags: Default::default(),
-            blocks: Default::default(),
-            ui_data: UIData::default(),
+            transactions: KeyedCircularBuffer::new(30_000),
+            frags: KeyedCircularBuffer::new(30_000),
+            blocks: KeyedCircularBuffer::new(30_000),
             timekeeper: Default::default(),
             time_datas: Default::default(),
             data_gatherer: Repeater::every(Duration::from_secs(6) / 256u64),
+            queue_checker: Repeater::every(Duration::from_secs(10)),
+            flamegraph_resetter: Repeater::every(Duration::from_secs(60)),
         }
     }
 }
@@ -209,206 +143,110 @@ impl Data {
     const SAMPLES_PER_MEDIAN: usize = 128;
 
     pub fn is_empty(&self) -> bool {
-        self.data_last.strats.is_empty()
+        self.transactions.is_empty() && self.blocks.is_empty() && self.frags.is_empty()
     }
 
-    pub fn insert_block(&mut self, key: Uuid, t: Nanos, block: Frag, building: bool, build_start_t: Nanos) {
-        let slot = if let Frag::SorterStart { block, .. } = block { block } else { 0 };
-        if slot != 0 {
-            if self.slot_number != slot {
-                self.new_block_t = Nanos::now();
-            }
-            self.slot_number = slot;
+    pub fn insert_frag(&mut self, t: Nanos, frag: Uuid, update: Frag) {
+        if let Frag::SorterStart { block, .. } = update {
+            self.block_number = block;
+        }
+        if !self.blocks.contains_key(&self.block_number) {
+            self.blocks.insert(BlockData::new(self.block_number, true, t));
         }
 
-        if let Some(cur) = self.blocks.get_mut(&key) {
-            if let Frag::Submission { .. } = block {
-                for o in &cur.orders {
-                    if let Some(transaction) = self.transactions.get_mut(o) {
-                        transaction.submitted.push((t, key))
-                    } else {
-                        tracing::warn!("Got submitted order that wasn't found in bundles or transactions ")
-                    }
-                }
+        let add_to_block = matches!(update, Frag::Commit);
+
+        let frag = if !self.frags.contains_key(&frag) {
+            self.frags.insert(FragData::new(t, frag, update));
+            self.frags.get_mut(&frag).unwrap()
+        } else {
+            let f = self.frags.get_mut(&frag).unwrap();
+            f.push(t, update);
+            f
+        };
+
+        if add_to_block {
+            if let Some((payment, gas_used, n_txs)) = frag.frag_stats() {
+                self.blocks.get_mut(&self.block_number).unwrap().push(frag.uuid, payment, gas_used, n_txs);
             }
-            cur.push(t, block);
-        }
-        if let Frag::SorterStart { .. } = &block {
-            let block = BlockData::new(key, t, block);
-            self.blocks.insert(block);
         }
     }
 
-    /// Inserts bundle and Optionally returns slot of update
-    fn insert_transaction(&mut self, hash: B256, t: Nanos, update: Tx) {
+    /// Inserts bundle and Optionally returns block of update
+    fn insert_transaction(&mut self, uuid: Uuid, t: Nanos, update: Tx) {
         match &update {
-            Tx::Included(included_in_block) => {
-                if let Some(block) = self.blocks.get_mut(&included_in_block.block) {
-                    block.orders.push(hash)
+            Tx::Included(included_in_frag) => {
+                if let Some(frag) = self.frags.get_mut(&included_in_frag.frag) {
+                    frag.txs.push(uuid)
                 } else {
                     tracing::warn!("weid, got an included message for a block we don't know")
                 }
             }
-            Tx::AddedToPool { .. } => self.strats.available_txs += 1,
-            Tx::Removed { .. } => self.strats.available_txs = self.strats.available_txs.saturating_sub(1),
             _ => {}
         }
 
-        if let Some(data) = self.transactions.get_mut(&hash) {
+        if let Some(data) = self.transactions.get_mut(&uuid) {
             data.push(t, update);
             return;
         }
 
-        self.transactions.insert(TransactionData::new(hash, t, update));
+        self.transactions.insert(TransactionData::new(uuid, t, update));
     }
 
-    pub fn update(&mut self, consumers: &mut OverseerConsumers, slot_time: bool) {
-        self.timers.total.start();
-        self.timers.orders.start();
-        let mut got_one = false;
-
-        while consumers.telemetry.consume(|&mut update| {
+    pub fn update(&mut self, consumers: &mut OverseerConsumers, block_time: bool) {
+        while let Some(update) = consumers.telemetry.try_consume() {
+            tracing::info!("got a message");
             let (key, t, update) = update.into();
-            got_one = true;
             match update {
                 Telemetry::Tx(tx_update) => {
-                    self.data_last.insert_transaction(key, t, tx_update);
+                    self.insert_transaction(key, t, tx_update);
                 }
-                Telemetry::Frag(block_update @ bop_common::telemetry::frag::Frag::SorterStart { .. }) => {
-                    self.insert_block(key, t, block_update, self.building, self.build_start_t);
-                }
-                Telemetry::Frag(block_update) => {
-                    self.insert_block(key, t, block_update, self.building, self.build_start_t);
+                Telemetry::Frag(update) => {
+                    self.insert_frag(t, key, update);
                 }
             }
-        }) {}
-        if got_one {
-            self.timers.orders.stop();
         }
-
-        if self.data_gatherer.fired() || slot_time {
-            self.data_last.strats.register_datapoint(slot_time);
-            self.data_last.bundle_statistics.register_datapoint(slot_time);
-
-            for timer_data in self.data_last.time_datas.data.iter_mut() {
-                if let Some(view) = self.ui_data.timekeeper.timers.get_mut(&timer_data.name) {
+        if self.data_gatherer.fired() || block_time {
+            for timer_data in self.time_datas.data.iter_mut() {
+                if let Some(view) = self.timekeeper.timers.get_mut(&timer_data.name) {
                     timer_data.register_datapoint(
-                        slot_time,
-                        self.building,
+                        block_time,
+                        true,
                         view.latency_consumer.tot_published(),
                         view.processing_consumer.tot_published(),
                     );
                     timer_data.handle_messages(&mut view.latency_consumer, &mut view.processing_consumer);
                 }
             }
-            self.data_last.set_block_linregs();
         }
 
-        while consumers.system_notifications.consume(|&mut notification| match notification {
-            SystemNotification::BuildStop(curslot) => {
-                self.building = false;
-                self.data_last.slot_number = curslot;
-                self.data_last.persist();
-                self.update_last_slot(curslot + 1);
+        while let Some(notification) = consumers.system_notifications.try_consume() {
+            match notification {
+                SystemNotification::BuildStop(curblock) => {
+                    self.block_number = curblock;
+                }
+                SystemNotification::BlockSync(block_number, gas_used) => {
+                    if !self.blocks.contains_key(&block_number) {
+                        let mut block = BlockData::new(block_number, false, Nanos::now());
+                        block.gas_used = gas_used;
+                        self.blocks.insert(block);
+                    }
+                    self.block_number = block_number;
+                }
+                _ => {}
             }
-            SystemNotification::BuildStart(new_slot) => {
-                self.new_slot = true;
-                self.building = true;
-                self.build_start_t = Nanos::now();
-                self.update_last_slot(new_slot);
-            }
-            _ => {}
-        }) {}
-
-        if self.new_slot {
-            self.maybe_cleanup_persistent_data();
-
-            for td in self.data_last.time_datas.data.iter_mut().filter(|td| !td.is_empty()) {
-                td.reset()
-            }
+        }
+        if self.queue_checker.fired() {
             self.check_new_queues();
         }
-
-        self.timers.total.stop();
-    }
-
-    pub fn displayed(&self) -> &SlotData {
-        if self.displayed_slot() == self.last_slot { &self.data_last } else { &self.data_selected }
-    }
-
-    pub fn on_enter_built_blocks(&mut self) {
-        let d = if self.displayed_slot() == self.last_slot { &self.data_last } else { &self.data_selected };
-        self.ui_data.built_blocks_tab.on_enter(d);
-    }
-
-    pub fn on_enter_cex_dex(&mut self) {
-        let d = if self.displayed_slot() == self.last_slot { &self.data_last } else { &self.data_selected };
-        self.ui_data.cex_dex_tab.on_enter(d);
-    }
-
-    pub fn displayed_mut(&mut self) -> &mut SlotData {
-        if self.displayed_slot() == self.last_slot { &mut self.data_last } else { &mut self.data_selected }
-    }
-
-    pub fn blocks_visible(&self) -> impl Iterator<Item = &BlockData> {
-        self.displayed().blocks.iter().filter(|b| self.is_strat_visible(b.strategy_id()) && b.updates.len() > 1)
-    }
-
-    fn clear_stale_data(&mut self) {
-        self.bundles.retain(|b| self.slot_number.saturating_sub(b.oldest_slot()) < 100, |_| {});
-        self.transactions.retain(|b| self.slot_number.saturating_sub(b.oldest_slot()) < 100, |_| {});
-        self.blocks.retain(|b| self.slot_number.saturating_sub(b.slot()) < 100, |_| {});
-    }
-
-    pub fn toggle_strat_visibility(&mut self, exclusive: bool) {
-        let Some(selected_strat) = self.strat_toggle_list_state.selected() else {
-            return;
-        };
-        if exclusive {
-            let is_only = self.strategies[selected_strat].visible
-                && !self.strategies.iter().enumerate().any(|(i, s)| i != selected_strat && s.visible);
-            for (i, s) in self.strategies.iter_mut().enumerate() {
-                s.visible = i == selected_strat || is_only;
-            }
-        } else {
-            self.strategies[selected_strat].visible = !self.strategies[selected_strat].visible;
+        if self.flamegraph_resetter.fired() {
+            self.time_datas.reset()
         }
-    }
-
-    pub fn display_next_slot(&mut self) {
-        if let Some(displayed) = self.slot_on_display {
-            let slot = displayed + 1;
-            if slot == self.last_slot { self.slot_on_display = None } else { self.slot_on_display = Some(slot) }
-        }
-        self.built_blocks_tab.mode = Default::default();
-        self.load()
-    }
-
-    pub(crate) fn display_prev_slot(&mut self) {
-        let displayed = self.slot_on_display.unwrap_or(self.last_slot);
-        if displayed == 0 {
-            return;
-        }
-        self.slot_on_display = Some(displayed - 1);
-        self.built_blocks_tab.mode = Default::default();
-        self.load();
-    }
-
-    pub(crate) fn display_slot(&mut self, parsed: u64) {
-        self.slot_on_display = Some(parsed);
-        self.built_blocks_tab.mode = Default::default();
-        self.load();
-    }
-
-    pub fn display_last_slot(&mut self) {
-        self.ui_data.slot_on_display = None;
-        self.built_blocks_tab.mode = Default::default();
-        self.load();
     }
 
     fn check_new_queues(&mut self) {
-        let queues_dir: &str = &queues_dir_string();
-        let Ok(entries) = std::fs::read_dir(queues_dir) else {
+        let queues_dir = queues_dir();
+        let Ok(entries) = std::fs::read_dir(&queues_dir) else {
             return;
         };
         for entry in entries.filter_map(|e| e.ok()) {
@@ -417,9 +255,9 @@ impl Data {
                 let (_dir, real_name) = name.split_once("latency-").unwrap();
 
                 if !self.time_datas.contains(real_name) {
-                    let latency_q = Queue::open_shared(format!("{queues_dir}/latency-{real_name}"))
+                    let latency_q = Queue::open_shared(queues_dir.join(format!("latency-{real_name}")))
                         .expect("couldn't open latency queue");
-                    let processing_q = Queue::open_shared(format!("{queues_dir}/timing-{real_name}"))
+                    let processing_q = Queue::open_shared(queues_dir.join(format!("timing-{real_name}")))
                         .expect("couldn't open timing queue");
                     let view = TimerDataState::new(latency_q.into(), processing_q.into());
                     let data = TimerData::new(
@@ -434,19 +272,6 @@ impl Data {
                 }
             }
         }
-    }
-}
-
-impl Deref for Data {
-    type Target = UIData;
-
-    fn deref(&self) -> &Self::Target {
-        &self.ui_data
-    }
-}
-impl DerefMut for Data {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.ui_data
     }
 }
 
@@ -465,12 +290,11 @@ impl TimeDatas {
         self.data.iter().any(|d| d.name == name)
     }
 
-    pub fn clear(&mut self) {
-        self.data.clear();
-    }
-
     pub fn toggle_render_options(&mut self, options: RenderFlags) {
         self.data.iter_mut().for_each(|d| d.toggle_render_options(options))
     }
-}
 
+    pub fn reset(&mut self) {
+        self.data.iter_mut().for_each(|t| t.reset())
+    }
+}

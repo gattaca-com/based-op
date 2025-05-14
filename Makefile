@@ -47,21 +47,23 @@ docs: ## 📚 Build local docs
 	npm run build && \
 	npm run start
 
-build: build-portal build-gateway build-op-node build-op-geth build-registry ## 🏗️ Build
+build: build-portal build-gateway build-op-node build-op-geth build-registry build-overseer## 🏗️ Build
 
 build-no-gateway: build-portal build-op-node build-op-geth ## 🏗️ Build without gateway
 
-build-portal: ## 🏗️ Build based portal from based directory
+build-portal: ## 🏗️ Build based portal
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
-build-registry: ## 🏗️ Build based registry from based directory
+build-registry: ## 🏗️ Build based registry
 	docker build -t based_registry_local -f ./based/registry.Dockerfile --build-context reth=./reth ./based
 
-build-gateway: ## 🏗️ Build based gateway from based directory
+build-gateway: ## 🏗️ Build based gateway
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-key_to_address: ## 🏗️ Build based gateway from based directory
 	docker build -t key_to_address -f ./based/key_to_address.Dockerfile --build-context reth=./reth ./based
+build-overseer: ## 🏗️ Build based overseer
+	docker build -t based_overseer_local -f ./based/overseer.Dockerfile --build-context reth=./reth ./based
 
 build-follower-op-node: ## 🏗️ Build OP node from optimism directory
 	cd optimism && \

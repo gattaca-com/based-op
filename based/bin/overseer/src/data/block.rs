@@ -1,9 +1,9 @@
-use bop_common::time::Nanos;
+use bop_common::{eth::MicroEth, time::Nanos};
 use ratatui::text::Text;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{collections::HasKey, statistics::MicroEth};
+use crate::collections::HasKey;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BlockData {

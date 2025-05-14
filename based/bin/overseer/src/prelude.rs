@@ -13,4 +13,4 @@ pub use serde::{Deserialize, Serialize};
 pub use strum_macros::AsRefStr;
 pub use uuid::Uuid;
 
-pub use crate::ui::CyclingTableState;
+pub use crate::ui::TableState;

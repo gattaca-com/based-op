@@ -17,7 +17,11 @@ use bop_common::{
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
     shared::SharedState,
-    telemetry::{self, TelemetryUpdate, order::IncludedInFrag, system::SystemNotification},
+    telemetry::{
+        self, TelemetryUpdate,
+        order::{IncludedInFrag, Ingested},
+        system::SystemNotification,
+    },
     time::{Duration, Repeater},
     transaction::Transaction,
 };
@@ -282,14 +286,6 @@ where
     ) -> SequencerState<Db> {
         use SequencerState::*;
         ctx.notifications.produce(&SystemNotification::ForkChoiceUpdate(fork_choice_state.head_block_hash));
-        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
-        if fork_choice_state.head_block_hash != head_block_hash {
-            // We are on the wrong head. Switch to syncing and request the head block.
-            let head_block_number = ctx.db.head_block_number().expect("couldn't get db head block number");
-            ctx.shared_state.reset();
-            return Self::sync_until(head_block_number, head_block_number, senders);
-        }
-
         match self {
             // Waiting for new payload should not happen, but while testing
             // we can basically keep sequencing based on the same db state
@@ -299,6 +295,13 @@ where
                         // Don't start sequencing until we have a parent hash.
                         if ctx.parent_header.parent_hash == B256::ZERO {
                             return self;
+                        }
+                        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
+                        if fork_choice_state.head_block_hash != head_block_hash {
+                            // We are on the wrong head. Switch to syncing and request the head block.
+                            let head_block_number = ctx.db.head_block_number().expect("couldn't get db head block number");
+                            ctx.shared_state.reset();
+                            return Self::sync_until(head_block_number, head_block_number, senders);
                         }
 
                         ctx.notifications.produce(&SystemNotification::Sorting(ctx.parent_header.number() + 1));
@@ -426,11 +429,11 @@ where
                 let sender = Address::ZERO;
                 TelemetryUpdate::send(
                     uuid,
-                    telemetry::Telemetry::Tx(telemetry::Tx::Ingested {
+                    telemetry::Telemetry::Tx(telemetry::Tx::Ingested(Ingested {
                         sender,
                         nonce: tx.nonce(),
                         hash: *tx.tx_hash(),
-                    }),
+                    })),
                     &mut ctx.telemetry,
                 );
 

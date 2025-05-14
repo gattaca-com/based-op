@@ -1,13 +1,17 @@
 use std::fmt::Debug;
 
-use alloy_primitives::map::rustc_hash::FxHashMap;
-use bop_common::{Duration, Instant, communication::Consumer, time::TimingMessage};
+use bop_common::{
+    communication::Consumer,
+    time::TimingMessage,
+    time::{Duration, Instant},
+};
 use crossterm::event::KeyCode;
 use ratatui::{
     prelude::*,
     widgets::{Block, Borders, HighlightSpacing, LineGauge, List, ListItem, ListState, Paragraph},
 };
-use strum::AsRefStr;
+use std::collections::HashMap;
+use strum_macros::AsRefStr;
 use style::palette::tailwind;
 
 use crate::data::{Data, TimerData};
@@ -47,7 +51,7 @@ pub struct TimeKeeper {
     paused: bool,
     mode: TimeKeeperMode,
     pub timers_list_state: ListState,
-    pub timers: FxHashMap<String, TimerDataState>,
+    pub timers: HashMap<String, TimerDataState>,
 }
 
 impl TimeKeeper {
@@ -56,8 +60,7 @@ impl TimeKeeper {
             return;
         }
 
-        let slot_data = if data.ui_data.is_current_slot_displayed() { &data.data_last } else { &data.data_selected };
-        let slot_time_data = slot_data.time_datas.data.iter().filter(|d| !d.is_empty());
+        let slot_time_data = data.time_datas.data.iter().filter(|d| !d.is_empty());
 
         let mut max = 0;
         let namelist: Vec<ListItem> = slot_time_data
@@ -69,10 +72,12 @@ impl TimeKeeper {
             })
             .collect();
 
-        let layout =
-            Layout::default().direction(Direction::Horizontal).constraints([Constraint::Length(max as u16 + 4), Constraint::Fill(1)]).split(area);
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(max as u16 + 4), Constraint::Fill(1)])
+            .split(area);
 
-        let block = Block::new().title(format!("Slot {}", data.displayed_slot())).borders(Borders::ALL);
+        let block = Block::new().title(format!("Block {}", data.block_number)).borders(Borders::ALL);
         let selected_style = Style::default().bold();
         let list = List::new(namelist)
             .block(block)
@@ -81,20 +86,21 @@ impl TimeKeeper {
             .highlight_spacing(HighlightSpacing::Always)
             .scroll_padding(2);
 
-        frame.render_stateful_widget(list, layout[0], &mut data.ui_data.timekeeper.timers_list_state);
-        if let Some(time_data) = data.timekeeper.timers_list_state.selected().and_then(|curid| slot_time_data.clone().nth(curid)) {
+        frame.render_stateful_widget(list, layout[0], &mut data.timekeeper.timers_list_state);
+        if let Some(time_data) =
+            data.timekeeper.timers_list_state.selected().and_then(|curid| slot_time_data.clone().nth(curid))
+        {
             let timer = data.timekeeper.timers.get(&time_data.name).unwrap();
             timer.report(time_data, frame, layout[1]);
         }
     }
 
     fn render_flamegraph(data: &Data, area: Rect, frame: &mut Frame<'_>) {
-        let b = Block::new().title(format!("Slot {}", data.displayed_slot())).borders(Borders::all());
+        let b = Block::new().title(format!("Block {}", data.block_number)).borders(Borders::all());
         frame.render_widget(b.clone(), area);
         let area = b.inner(area);
 
-        let slot_data = if data.ui_data.is_current_slot_displayed() { &data.data_last } else { &data.data_selected };
-        let time_datas = slot_data.time_datas.data.iter().filter(|d| !d.is_empty());
+        let time_datas = data.time_datas.data.iter().filter(|d| !d.is_empty());
         let n_time_datas = time_datas.clone().count();
 
         let layout = Layout::vertical(vec![Constraint::Length(1); n_time_datas]);
@@ -109,7 +115,10 @@ impl TimeKeeper {
         for (td, area) in time_datas.zip(areas.iter()) {
             let label = format!("{:width1$} {:width2$}", format!("{}: ", td.name), td.tot_processing.to_string());
             let ratio = if max_t.0 == 0 { 1 } else { td.tot_processing.0 * 100 / max_t.0 };
-            frame.render_widget(LineGauge::default().filled_style(tailwind::BLUE.c800).ratio(ratio as f64 / 100.0).label(label), *area);
+            frame.render_widget(
+                LineGauge::default().filled_style(tailwind::BLUE.c800).ratio(ratio as f64 / 100.0).label(label),
+                *area,
+            );
         }
     }
 
@@ -150,7 +159,12 @@ pub struct TimerDataState {
 
 impl TimerDataState {
     pub fn new(latency_consumer: Consumer<TimingMessage>, processing_consumer: Consumer<TimingMessage>) -> Self {
-        Self { latency_consumer, processing_consumer, direction: Direction::Vertical, flags: PaneFlags::ShowBusiness | PaneFlags::ShowLatency }
+        Self {
+            latency_consumer,
+            processing_consumer,
+            direction: Direction::Vertical,
+            flags: PaneFlags::ShowBusiness | PaneFlags::ShowLatency,
+        }
     }
 
     pub fn report(&self, data: &TimerData, frame: &mut Frame, rect: Rect) {
@@ -160,18 +174,23 @@ impl TimerDataState {
         ) {
             (true, true) => frame.render_widget(Paragraph::new("No timing data to display"), rect),
             (false, true) => {
-                let layout = Layout::new(self.direction, [Constraint::Percentage(80), Constraint::Percentage(20)]).split(rect);
+                let layout =
+                    Layout::new(self.direction, [Constraint::Percentage(80), Constraint::Percentage(20)]).split(rect);
                 data.latency_data.report(&data.name, frame, layout[0]);
                 data.latency_data.report_msg_per_sec(frame, layout[1]);
             }
             (true, false) => {
-                let layout = Layout::new(self.direction, [Constraint::Percentage(80), Constraint::Percentage(20)]).split(rect);
+                let layout =
+                    Layout::new(self.direction, [Constraint::Percentage(80), Constraint::Percentage(20)]).split(rect);
                 data.processing_data.report(&data.name, frame, layout[0]);
                 data.processing_data.report_msg_per_sec(frame, layout[1])
             }
             (false, false) => {
-                let layout =
-                    Layout::new(self.direction, [Constraint::Percentage(40), Constraint::Percentage(40), Constraint::Percentage(20)]).split(rect);
+                let layout = Layout::new(
+                    self.direction,
+                    [Constraint::Percentage(40), Constraint::Percentage(40), Constraint::Percentage(20)],
+                )
+                .split(rect);
                 data.latency_data.report(&data.name, frame, layout[0]);
                 data.processing_data.report(&data.name, frame, layout[1]);
                 data.processing_data.report_msg_per_sec(frame, layout[2]);
