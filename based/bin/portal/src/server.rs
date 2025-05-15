@@ -46,7 +46,7 @@ impl fmt::Debug for Gateway {
 
 /// If we get fcus faster than this threshold we assume that we are in sync mode and will
 /// not propagate anything to the gateways
-const SYNC_FCU_DT_THRESHOLD: Nanos = Nanos::from_millis(1500);
+const SYNC_FCU_DT_THRESHOLD: Nanos = Nanos::from_millis(999);
 
 #[derive(Clone)]
 pub struct PortalServer {
@@ -506,6 +506,7 @@ impl EngineApiServer for PortalServer {
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         debug!(%payload_id, "new request");
         if self.syncing() {
+            error!("syncing");
             return Ok(self.fallback_client.clone().get_payload_v3(payload_id).await?);
         }
 
