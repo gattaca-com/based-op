@@ -28,13 +28,11 @@ impl SupervisorValidator {
         }
 
         let descriptor = ExecutingDescriptor::new(timestamp, None);
-        let res = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(
-            self.validate_messages(
-                inbox_entries.as_slice(),
-                self.safety,
-                descriptor,
-            ),
-        );
+        let res = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(self.validate_messages(inbox_entries.as_slice(), self.safety, descriptor));
         match res {
             Ok(()) => true,
             Err(err) => {

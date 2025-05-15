@@ -1,6 +1,7 @@
 use std::sync::Arc;
-use bop_common::typedefs::*;
+
 use alloy_primitives::{Address, B256, U256};
+use bop_common::typedefs::*;
 use moka::sync::{Cache, CacheBuilder};
 use reth_db::{
     PlainAccountState, PlainStorageState,

@@ -45,6 +45,4 @@ impl From<Error> for ProviderError {
     }
 }
 
-impl DBErrorMarker for Error {
-    
-}
+impl DBErrorMarker for Error {}

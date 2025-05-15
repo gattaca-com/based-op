@@ -9,9 +9,8 @@ use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use op_revm::OpHaltReason;
 use reth_optimism_primitives::OpReceipt;
 use reth_primitives::ReceiptWithBloom;
-use reth_primitives_traits::SignedTransaction;
 use revm::{context::result::ResultAndState, state::EvmState};
-use revm_primitives::{Address, B256, Bytes, TxKind};
+use revm_primitives::{B256, Bytes, TxKind};
 
 use crate::transaction::Transaction;
 

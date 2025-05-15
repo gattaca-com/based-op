@@ -116,7 +116,10 @@ mod tests {
     use tracing::level_filters::LevelFilter;
 
     use crate::{
-        block_sync::{fetch_blocks::fetch_block, AlloyProvider}, context::SequencerContext, simulator::simulate_tx_inner, SequencerConfig, Simulator
+        SequencerConfig, Simulator,
+        block_sync::{AlloyProvider, fetch_blocks::fetch_block},
+        context::SequencerContext,
+        simulator::simulate_tx_inner,
     };
 
     const ENV_RPC_URL: &str = "BASE_RPC_URL";

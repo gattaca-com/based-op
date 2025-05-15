@@ -3,19 +3,16 @@ pub mod tx_list;
 
 use std::{ops::Deref, sync::Arc};
 
-use alloy_consensus::{SignableTransaction, Transaction as TransactionTrait, TxEip1559};
 use alloy_eips::eip2718::{Decodable2718, Encodable2718};
-use alloy_primitives::{Address, B256, Bytes, U256};
-use op_alloy_consensus::{DepositTransaction, OpTxEnvelope};
+use alloy_primitives::{Address, Bytes};
+use op_alloy_consensus::OpTxEnvelope;
 use op_revm::OpTransaction;
-use reth_evm::IntoTxEnv;
 use reth_optimism_primitives::OpTransactionSigned;
-use reth_primitives_traits::SignedTransaction;
 use revm::context::TxEnv;
 pub use simulated::{SimulatedTx, SimulatedTxList};
 pub use tx_list::TxList;
 
-use crate::{signing::ECDSASigner, typedefs::BlockSyncMessage};
+use crate::typedefs::BlockSyncMessage;
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
@@ -49,7 +46,6 @@ impl Transaction {
             OpTxEnvelope::Eip1559(tx) => &tx.tx().nonce,
             OpTxEnvelope::Eip7702(tx) => &tx.tx().nonce,
             OpTxEnvelope::Deposit(_) => &0,
-            _ => unreachable!(),
         }
     }
 
@@ -64,7 +60,6 @@ impl Transaction {
             OpTxEnvelope::Eip1559(tx) => Some(tx.tx().max_fee_per_gas),
             OpTxEnvelope::Eip7702(tx) => Some(tx.tx().max_fee_per_gas),
             OpTxEnvelope::Deposit(_) => None,
-            _ => unreachable!(),
         }
     }
 
@@ -193,7 +188,6 @@ impl Transaction {
             OpTxEnvelope::Eip1559(signed) => signed.recover_signer().unwrap(),
             OpTxEnvelope::Eip7702(signed) => signed.recover_signer().unwrap(),
             OpTxEnvelope::Deposit(sealed) => sealed.from,
-            _ => panic!("invalid tx type"),
         };
 
         Ok(Self { sender, tx, envelope: bytes })

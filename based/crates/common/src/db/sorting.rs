@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::typedefs::*;
 use parking_lot::RwLock;
 
 use super::{DBFrag, State};
+use crate::typedefs::*;
 
 /// DB That is used when sorting a new frag
 /// Thread safe

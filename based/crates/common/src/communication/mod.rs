@@ -1,12 +1,12 @@
-use crate::typedefs::*;
-use messages::{
-    BlockFetch, EngineApi, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer,
-};
+use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
+
+use messages::{BlockFetch, EngineApi, SequencerToExternal, SequencerToSimulator, SimulatorToSequencer};
 use op_revm::OpSpecId;
 use reth_evm::EvmEnv;
 use shared_memory::ShmemError;
-use std::{fs::read_dir, marker::PhantomData, path::Path, sync::Arc};
 use thiserror::Error;
+
+use crate::typedefs::*;
 
 pub mod queue;
 pub mod seqlock;

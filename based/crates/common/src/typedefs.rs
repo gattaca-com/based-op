@@ -1,10 +1,11 @@
 pub use alloy_primitives::{Address, B256, U256, map::HashMap};
 pub use reth_optimism_primitives::{OpBlock, OpReceipt};
-pub use reth_primitives::Account as RethAccount;
-pub use reth_primitives::RecoveredBlock;
-pub use revm::context::BlockEnv;
-pub use revm::database::{BundleState, CacheDB};
-pub use revm::database_interface::{Database, DatabaseRef, DatabaseCommit};
-pub use revm::state::{AccountInfo, EvmState, Bytecode, Account as StateAccount};
+pub use reth_primitives::{Account as RethAccount, RecoveredBlock};
+pub use revm::{
+    context::BlockEnv,
+    database::{BundleState, CacheDB},
+    database_interface::{Database, DatabaseCommit, DatabaseRef},
+    state::{Account as StateAccount, AccountInfo, Bytecode, EvmState},
+};
 pub use revm_primitives::hardfork::SpecId;
 pub type BlockSyncMessage = RecoveredBlock<OpBlock>;

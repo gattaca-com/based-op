@@ -84,17 +84,6 @@ reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
 reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = ["test-utils"] }
 reth-node-types = { path = "../reth/crates/node/types" }
 reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
-# <<<<<<< HEAD
-# reth-optimism-cli = { path = "../reth/crates/optimism/cli", features = [
-#   "optimism",
-# ] }
-# reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
-# reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
-# reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
-# reth-optimism-node = { path = "../reth/crates/optimism/node", features = [
-#   "optimism",
-# ] }
-# =======
 reth-optimism-cli = { path = "../reth/crates/optimism/cli" }
 reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
 reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
