@@ -10,6 +10,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(unused)]
 extern crate alloc;
+use reth_primitives as _;
+use revm_primitives as _;
 
 pub mod bedrock;
 

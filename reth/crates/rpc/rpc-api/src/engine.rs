@@ -233,16 +233,6 @@ pub trait EngineApi<Engine: EngineTypes> {
         versioned_hashes: Vec<B256>,
     ) -> RpcResult<Vec<Option<BlobAndProofV1>>>;
 
-    /// TODO
-    // TODO: Add docs and corresponding parameters
-    #[method(name = "newFragV0")]
-    async fn new_frag_v0(&self) -> RpcResult<()>;
-
-    /// TODO
-    // TODO: Add docs and corresponding parameters
-    #[method(name = "sealFragV0")]
-    async fn seal_frag_v0(&self) -> RpcResult<()>;
-
     /// Fetch blobs for the consensus layer from the blob store.
     #[method(name = "getBlobsV2")]
     async fn get_blobs_v2(

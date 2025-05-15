@@ -1,6 +1,10 @@
+use std::{
+    fmt::{Debug, Formatter},
+    sync::Arc,
+};
+
 use alloy_consensus::BlockHeader;
-use bop_common::time::BlockSyncTimers;
-use bop_common::typedefs::*;
+use bop_common::{time::BlockSyncTimers, typedefs::*};
 use parking_lot::RwLock;
 use reth_db::{
     Bytecodes, CanonicalHeaders, DatabaseEnv,
@@ -23,10 +27,6 @@ use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
 use reth_trie_parallel::root::ParallelStateRoot;
 use revm_primitives::{Address, B256, U256};
-use std::{
-    fmt::{Debug, Formatter},
-    sync::Arc,
-};
 
 mod alloy_db;
 mod cache;

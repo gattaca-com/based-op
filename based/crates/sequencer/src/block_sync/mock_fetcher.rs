@@ -1,8 +1,9 @@
+use std::{ops::Deref, sync::Arc};
+
 use alloy_consensus::{BlockHeader, TxEip1559};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_provider::Provider;
 use alloy_rpc_types::engine::{ForkchoiceState, PayloadId};
-use bop_common::typedefs::BlockSyncMessage;
 use bop_common::{
     actor::Actor,
     communication::{
@@ -14,6 +15,7 @@ use bop_common::{
     signing::ECDSASigner,
     time::{Duration, Instant, utils::vsync_busy},
     transaction::Transaction,
+    typedefs::BlockSyncMessage,
 };
 use futures::future::join_all;
 use op_alloy_consensus::OpTxEnvelope;
@@ -21,7 +23,6 @@ use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use rand::seq::{IndexedMutRandom, IndexedRandom};
 use reqwest::Url;
 use revm_primitives::{Address, B256, TxKind, U256, b256};
-use std::{ops::Deref, sync::Arc};
 use tokio::{runtime::Runtime, sync::oneshot};
 use tracing::{info, warn};
 
@@ -228,7 +229,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             self.handle_fetch(msg);
         }) {}
         if self.next_block < self.sync_until {
-            let mut block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
+            let block = self.executor.block_on(fetch_block(self.next_block, &self.provider));
 
             let (new_payload, fcu_1, mut fcu) = messages::EngineApi::messages_from_block(&block, true, None);
 

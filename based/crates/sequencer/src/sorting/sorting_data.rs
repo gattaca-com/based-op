@@ -17,13 +17,13 @@ use bop_common::{
 use bop_db::DatabaseRead;
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
+    ConfigureEvm, Evm,
     block::StateChangeSource,
-    execute::{BlockExecutionError, ProviderError}, ConfigureEvm, 
+    execute::{BlockExecutionError, ProviderError},
 };
 use reth_optimism_evm::OpBlockExecutionError;
 use revm_primitives::{Address, U256};
 use tracing::trace;
-use reth_evm::Evm;
 
 use super::FragSequence;
 use crate::{context::SequencerContext, simulator::simulate_tx_inner, sorting::ActiveOrders};
@@ -170,8 +170,8 @@ impl<Db> SortingData<Db> {
         }
         self.telemetry.n_sims_succesful += 1;
 
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining
-            && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
+        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
@@ -298,14 +298,13 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         let parent_beacon_block_root = context.parent_beacon_block_root();
         let parent_hash = context.parent_hash();
 
-        let state_clear_flag =
-            context.config.evm_config.chain_spec().is_spurious_dragon_active_at_block(block_number);
+        let state_clear_flag = context.config.evm_config.chain_spec().is_spurious_dragon_active_at_block(block_number);
 
         let regolith_active = context.regolith_active(timestamp);
 
         let evm_config = context.config.evm_config.clone();
         let chain_spec = context.config.evm_config.chain_spec().clone();
-        
+
         // Configure new EVM to apply pre-execution and must include txs.
         let mut evm = evm_config.evm_with_env(context.shared_state.as_mut(), env_with_handler_cfg);
 
@@ -313,13 +312,11 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         evm.db_mut().db.write().set_state_clear_flag(state_clear_flag);
 
         context.system_caller.apply_blockhashes_contract_call(parent_hash, &mut evm)?;
-        context.system_caller
-            .apply_beacon_root_contract_call(parent_beacon_block_root, &mut evm)?;
-        
+        context.system_caller.apply_beacon_root_contract_call(parent_beacon_block_root, &mut evm)?;
+
         ensure_create2_deployer(chain_spec, timestamp, &mut evm.db_mut().db.write())
             .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
 
-        
         // Apply must include txs.
         let Some(forced_inclusion_txs) = context.payload_attributes.transactions.as_ref() else {
             return Ok(());

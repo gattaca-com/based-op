@@ -1,12 +1,12 @@
 use std::time::Duration;
 
-use alloy_consensus::{Block, BlockHeader, EthBlock};
+use alloy_consensus::Block;
 use alloy_provider::Provider;
 use alloy_rpc_types::Block as RpcBlock;
 use bop_common::communication::{SendersSpine, TrackedSenders, messages::BlockSyncError};
 use bop_db::DatabaseRead;
 use futures::future::join_all;
-use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
+use reth_optimism_primitives::OpBlock;
 use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::SignedTransaction;
 use tracing::{info, warn};

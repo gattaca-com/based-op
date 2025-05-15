@@ -20,7 +20,6 @@ use core::{
     mem,
     ops::Deref,
 };
-
 use op_alloy_consensus::{OpPooledTransaction, OpTxEnvelope, OpTypedTransaction, TxDeposit};
 #[cfg(any(test, feature = "reth-codec"))]
 use reth_primitives_traits::{
@@ -29,8 +28,6 @@ use reth_primitives_traits::{
     transaction::{error::TransactionConversionError, signed::RecoveryError},
     InMemorySize, SignedTransaction,
 };
-use revm_context::TxEnv;
-use revm_primitives::U256;
 
 /// Signed transaction.
 #[cfg_attr(any(test, feature = "reth-codec"), reth_codecs::add_arbitrary_tests(rlp))]
@@ -44,18 +41,6 @@ pub struct OpTransactionSigned {
     signature: Signature,
     /// Raw transaction info
     transaction: OpTypedTransaction,
-}
-
-impl TransactionSenderInfo for OpTransactionSigned {
-    #[inline]
-    fn sender(&self) -> Address {
-        self.recover_signer().unwrap()
-    }
-
-    #[inline]
-    fn nonce(&self) -> u64 {
-        self.transaction.nonce()
-    }
 }
 
 impl Deref for OpTransactionSigned {
@@ -137,7 +122,6 @@ impl OpTransactionSigned {
         };
         Self::new(t, signature, hash)
     }
-
     /// Splits the transaction into parts.
     pub fn into_parts(self) -> (OpTypedTransaction, Signature, B256) {
         let hash = *self.hash.get_or_init(|| self.recalculate_hash());

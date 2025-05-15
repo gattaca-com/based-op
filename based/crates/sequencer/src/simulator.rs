@@ -1,42 +1,42 @@
-use bop_common::typedefs::*;
-use bop_common::{
-    actor::Actor,
-    communication::{
-        SpineConnections, TrackedSenders,
-        messages::{
-            EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg,
-        },
-    },
-    db::{DBFrag, DBSorting, DatabaseRead, State},
-    time::{Duration, Instant},
-    transaction::{SimulatedTx, Transaction},
-    utils::last_part_of_typename,
-};
-use op_revm::{OpContext, OpSpecId};
-use reth_db::Database as RethDatabase;
-use revm_handler::ExecuteEvm;
-use reth_evm::Evm;
-use reth_evm::{ConfigureEvm, EvmEnv, execute::ProviderError};
-use reth_optimism_evm::{OpEvm, OpEvmConfig};
-use reth_optimism_forks::OpHardfork;
-use revm::context::{Block, DBErrorMarker};
-use revm::context::{BlockEnv, CfgEnv, TxEnv};
-use revm_inspector::NoOpInspector;
-use revm_primitives::{Address, U256};
 use std::{
     fmt::{Debug, Display},
     sync::Arc,
 };
 
-pub trait SimulationDatabase: 
-    DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display> + 
-    Database<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display>
-{}
+use bop_common::{
+    actor::Actor,
+    communication::{
+        SpineConnections, TrackedSenders,
+        messages::{SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
+    },
+    db::{DBFrag, DBSorting, DatabaseRead, State},
+    time::{Duration, Instant},
+    transaction::{SimulatedTx, Transaction},
+    typedefs::*,
+    utils::last_part_of_typename,
+};
+use op_revm::OpSpecId;
+use reth_evm::{ConfigureEvm, Evm, EvmEnv, execute::ProviderError};
+use reth_optimism_evm::{OpEvm, OpEvmConfig};
+use reth_optimism_forks::OpHardfork;
+use revm::context::{Block, DBErrorMarker};
+use revm_inspector::NoOpInspector;
+use revm_primitives::{Address, U256};
 
-impl<T> SimulationDatabase for T where 
-    T: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display> +
-    Database<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display>
-{}
+pub trait SimulationDatabase: DatabaseRef<
+        Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
+    > + Database<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display>
+{
+}
+
+impl<T> SimulationDatabase for T where
+    T: DatabaseRef<
+            Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
+        > + Database<
+            Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
+        >
+{
+}
 
 /// Simulator thread.
 pub struct Simulator<Db: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error>> {
@@ -86,7 +86,7 @@ impl<
     #[inline]
     pub fn update_evm_environments(&mut self, evm_block_params: EvmEnv<OpSpecId>) {
         let timestamp = evm_block_params.block_env.timestamp();
-        self.evm_tof.modify_block(|b| *b = evm_block_params.block_env.clone());  // TODO: re-use mem
+        self.evm_tof.modify_block(|b| *b = evm_block_params.block_env.clone()); // TODO: re-use mem
         self.evm_tof.modify_cfg(|c| c.spec = evm_block_params.spec_id().clone());
 
         self.regolith_active = self.evm_config.chain_spec().fork(OpHardfork::Regolith).active_at_timestamp(timestamp);
@@ -108,7 +108,8 @@ pub fn simulate_tx_inner<Db: SimulationDatabase>(
     let deposit_nonce = (tx.is_deposit() && regolith_active).then(|| nonce_from_db(evm.db_mut(), tx.sender()));
 
     // Prepare and execute the tx.
-    let result_and_state = evm.transact_raw(tx.to_op_tx_env()).map_err(|e| SimulationError::EvmError(format!("{e:?}")))?;
+    let result_and_state =
+        evm.transact_raw(tx.to_op_tx_env()).map_err(|e| SimulationError::EvmError(format!("{e:?}")))?;
 
     if !allow_revert && !result_and_state.result.is_success() {
         return Err(SimulationError::RevertWithDisallowedRevert);

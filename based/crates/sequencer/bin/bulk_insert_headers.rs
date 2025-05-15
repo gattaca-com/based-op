@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use bop_db::init_database;
-use bop_sequencer::block_sync::{fetch_blocks::fetch_block, AlloyProvider};
+use bop_sequencer::block_sync::{AlloyProvider, fetch_blocks::fetch_block};
 use clap::Parser;
 use reqwest::Url;
 use reth_db::{

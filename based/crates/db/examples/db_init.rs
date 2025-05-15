@@ -1,9 +1,9 @@
+use std::{collections::HashMap, str::FromStr};
+
 use alloy_primitives::{Address, U256};
-use bop_common::db::state_changes_to_bundle_state;
-use bop_common::typedefs::*;
+use bop_common::{db::state_changes_to_bundle_state, typedefs::*};
 use bop_db::DatabaseRead;
 use reth_optimism_chainspec::BASE_SEPOLIA;
-use std::{collections::HashMap, str::FromStr};
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();

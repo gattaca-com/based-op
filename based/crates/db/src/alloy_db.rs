@@ -15,8 +15,7 @@ use alloy_provider::{
     network::{BlockResponse, primitives::HeaderResponse},
 };
 use alloy_transport::TransportError;
-use bop_common::time::BlockSyncTimers;
-use bop_common::typedefs::*;
+use bop_common::{time::BlockSyncTimers, typedefs::*};
 use op_alloy_network::Optimism;
 use reth_db::DatabaseError;
 use reth_optimism_primitives::{OpBlock, OpReceipt};

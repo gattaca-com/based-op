@@ -4,11 +4,12 @@ use std::{
 };
 
 use alloy_primitives::{B256, map::HashMap};
-use crate::typedefs::*;
 use auto_impl::auto_impl;
 use reth_provider::BlockExecutionOutput;
 use reth_storage_errors::provider::ProviderError;
 use reth_trie_common::updates::TrieUpdates;
+
+use crate::typedefs::*;
 
 pub mod error;
 pub use error::Error;
@@ -41,7 +42,12 @@ pub trait DatabaseWrite:
 /// Database read functions
 #[auto_impl(&, Arc)]
 pub trait DatabaseRead:
-    DatabaseRef<Error: Debug + Display + Into<ProviderError> + Send + Sync + 'static> + Send + Sync + 'static + Clone + Debug
+    DatabaseRef<Error: Debug + Display + Into<ProviderError> + Send + Sync + 'static>
+    + Send
+    + Sync
+    + 'static
+    + Clone
+    + Debug
 {
     /// Calculate the state root with the provided `BundleState` overlaid on the latest DB state.
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error>;

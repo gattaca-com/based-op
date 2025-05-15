@@ -6,7 +6,7 @@ use alloy_rpc_types::engine::{
     BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
 };
 use bop_common::{
-    communication::{SendersSpine, TrackedSenders, messages::EvmBlockParams},
+    communication::{SendersSpine, TrackedSenders},
     p2p::{FragV0, SealV0},
     shared::SharedState,
     time::Timer,
@@ -17,7 +17,7 @@ use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use op_revm::OpSpecId;
-use reth_evm::{block::SystemCaller, env::EvmEnv, execute::ProviderError, ConfigureEvm, NextBlockEnvAttributes};
+use reth_evm::{ConfigureEvm, block::SystemCaller, env::EvmEnv, execute::ProviderError};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
@@ -295,20 +295,17 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
-        (
-            seal,
-            OpExecutionPayloadEnvelopeV3 {
-                execution_payload: ExecutionPayloadV3 {
-                    payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                    blob_gas_used: 0,
-                    excess_blob_gas: 0,
-                },
-                block_value: frag_seq.payment.to(),
-                blobs_bundle: BlobsBundleV1::new(vec![]),
-                should_override_builder: false,
-                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+        (seal, OpExecutionPayloadEnvelopeV3 {
+            execution_payload: ExecutionPayloadV3 {
+                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                blob_gas_used: 0,
+                excess_blob_gas: 0,
             },
-        )
+            block_value: frag_seq.payment.to(),
+            blobs_bundle: BlobsBundleV1::new(vec![]),
+            should_override_builder: false,
+            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+        })
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
@@ -332,7 +329,13 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
 
-            self.tx_pool.handle_new_block(block.transactions_with_sender(), base_fee, self.shared_state.as_ref(), false, None);
+            self.tx_pool.handle_new_block(
+                block.transactions_with_sender(),
+                base_fee,
+                self.shared_state.as_ref(),
+                false,
+                None,
+            );
         }
 
         blocks_to_fetch
