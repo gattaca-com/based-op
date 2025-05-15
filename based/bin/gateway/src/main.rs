@@ -114,7 +114,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 let connections = spine.to_connections(format!("Simulator-{id}"));
                 let db_frag = (&shared_state).into();
                 move || {
-                    let simulator = Simulator::new(db_frag, &evm_config, id);
+                    let simulator = Simulator::new(db_frag, evm_config, id);
                     simulator.run(connections, ActorConfig::default());
                 }
             });

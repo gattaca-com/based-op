@@ -17,7 +17,7 @@ use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
 use op_revm::OpSpecId;
-use reth_evm::{ConfigureEvm, NextBlockEnvAttributes, env::EvmEnv, execute::ProviderError, system_calls::SystemCaller};
+use reth_evm::{block::SystemCaller, env::EvmEnv, execute::ProviderError, ConfigureEvm, NextBlockEnvAttributes};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
@@ -115,6 +115,10 @@ impl<Db> SequencerContext<Db> {
 
     pub fn parent_beacon_block_root(&self) -> Option<B256> {
         self.payload_attributes.payload_attributes.parent_beacon_block_root
+    }
+
+    pub fn parent_hash(&self) -> B256 {
+        self.parent_hash
     }
 
     pub fn gas_limit(&self) -> u64 {

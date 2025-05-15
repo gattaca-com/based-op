@@ -28,12 +28,22 @@ use std::{
     sync::Arc,
 };
 
+pub trait SimulationDatabase: 
+    DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display> + 
+    Database<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display>
+{}
+
+impl<T> SimulationDatabase for T where 
+    T: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display> +
+    Database<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display>
+{}
+
 /// Simulator thread.
 pub struct Simulator<Db: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error>> {
     /// Top of frag evm.
-    evm_tof: OpEvm<DBFrag<Db>, NoOpInspector>,
+    evm_tof: OpEvm<State<DBFrag<Db>>, NoOpInspector>,
     /// Evm on top of partially built frag
-    pub evm_sorting: OpEvm<DBSorting<Db>, NoOpInspector>,
+    pub evm_sorting: OpEvm<State<DBSorting<Db>>, NoOpInspector>,
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
     /// How to create an EVM.
@@ -51,46 +61,24 @@ impl<
     pub fn new(db: DBFrag<Db>, evm_config: OpEvmConfig, id: usize) -> Self {
         // Initialise with default evms. These will be overridden before the first sim by
         // `set_evm_for_new_block`.
-        let db_tof = db.clone();
-
-        let evm_env = CfgEnv::new();
+        let db_tof = State::new(db.clone());
         let evm_tof = evm_config.evm_with_env(db_tof, EvmEnv::default());
-        let db_sorting = DBSorting::new(db);
+        let db_sorting = State::new(DBSorting::new(db));
         let evm_sorting = evm_config.evm_with_env(db_sorting, EvmEnv::default());
 
         Self { evm_sorting, evm_tof, evm_config: evm_config.clone(), id, regolith_active: true }
     }
 
     /// Simulates a transaction at the state of the `db` parameter.
-    pub fn simulate_transaction<
-        SimulateTxDb: DatabaseRef<
-                Error: Send
-                           + Sync
-                           + 'static
-                           + DBErrorMarker
-                           + std::error::Error
-                           + Into<ProviderError>
-                           + Debug
-                           + Display,
-            > + Database<
-                Error: Send
-                           + Sync
-                           + 'static
-                           + DBErrorMarker
-                           + std::error::Error
-                           + Into<ProviderError>
-                           + Debug
-                           + Display,
-            >,
-    >(
+    pub fn simulate_transaction<SimulateTxDb: SimulationDatabase>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
-        evm: &mut OpEvm<SimulateTxDb, NoOpInspector>,
+        evm: &mut OpEvm<State<SimulateTxDb>, NoOpInspector>,
         regolith_active: bool,
         allow_zero_payment: bool,
         allow_revert: bool,
     ) -> Result<SimulatedTx, SimulationError> {
-        let _ = std::mem::replace(evm.db_mut(), db);
+        let _ = std::mem::replace(evm.db_mut(), State::new(db));
         simulate_tx_inner(tx, evm, regolith_active, allow_zero_payment, allow_revert)
     }
 
@@ -98,7 +86,7 @@ impl<
     #[inline]
     pub fn update_evm_environments(&mut self, evm_block_params: EvmEnv<OpSpecId>) {
         let timestamp = evm_block_params.block_env.timestamp();
-        self.evm_tof.modify_block(|b| *b = evm_block_params.block_env.clone());
+        self.evm_tof.modify_block(|b| *b = evm_block_params.block_env.clone());  // TODO: re-use mem
         self.evm_tof.modify_cfg(|c| c.spec = evm_block_params.spec_id().clone());
 
         self.regolith_active = self.evm_config.chain_spec().fork(OpHardfork::Regolith).active_at_timestamp(timestamp);
@@ -107,13 +95,7 @@ impl<
 
 /// Simulates a transaction at the passed in EVM's state.
 /// Will not modify the db state after the simulation is complete.
-pub fn simulate_tx_inner<
-    Db: Database<
-            Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
-        > + DatabaseRef<
-            Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
-        >,
->(
+pub fn simulate_tx_inner<Db: SimulationDatabase>(
     tx: Arc<Transaction>,
     evm: &mut OpEvm<Db, NoOpInspector>,
     regolith_active: bool,
@@ -125,11 +107,8 @@ pub fn simulate_tx_inner<
     let start_balance = balance_from_db(evm.db_mut(), coinbase);
     let deposit_nonce = (tx.is_deposit() && regolith_active).then(|| nonce_from_db(evm.db_mut(), tx.sender()));
 
-    evm.modify_tx(|t| {
-        tx.fill_tx_env(t);
-    });
     // Prepare and execute the tx.
-    let result_and_state = evm.replay().map_err(|e| SimulationError::EvmError(format!("{e:?}")))?;
+    let result_and_state = evm.transact_raw(tx.to_op_tx_env()).map_err(|e| SimulationError::EvmError(format!("{e:?}")))?;
 
     if !allow_revert && !result_and_state.result.is_success() {
         return Err(SimulationError::RevertWithDisallowedRevert);
