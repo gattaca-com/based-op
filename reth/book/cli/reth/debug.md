@@ -13,19 +13,9 @@ Commands:
   merkle            Debug the clean & incremental state root calculations
   in-memory-merkle  Debug in-memory state root calculation
   build-block       Debug block building
-  replay-engine     Debug engine API by replaying stored messages
   help              Print this message or the help of the given subcommand(s)
 
 Options:
-      --chain <CHAIN_OR_PATH>
-          The chain this node is running.
-          Possible values are either a built-in chain or the path to a chain specification file.
-
-          Built-in chains:
-              mainnet, sepolia, holesky, dev
-
-          [default: mainnet]
-
       --instance <INSTANCE>
           Add a new instance of a node.
 
