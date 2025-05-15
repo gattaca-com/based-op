@@ -15,15 +15,15 @@ use bop_common::{
     typedefs::{Database, DatabaseRef},
 };
 use bop_db::DatabaseRead;
-use op_revm::{DefaultOp, OpContext};
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
     block::StateChangeSource,
-    execute::{BlockExecutionError, ProviderError},
+    execute::{BlockExecutionError, ProviderError}, ConfigureEvm, 
 };
 use reth_optimism_evm::OpBlockExecutionError;
 use revm_primitives::{Address, U256};
 use tracing::trace;
+use reth_evm::Evm;
 
 use super::FragSequence;
 use crate::{context::SequencerContext, simulator::simulate_tx_inner, sorting::ActiveOrders};
@@ -295,31 +295,36 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
     ) -> Result<(), BlockExecutionError> {
         let timestamp = env_with_handler_cfg.block_env.timestamp;
         let block_number = env_with_handler_cfg.block_env.number;
-
-        let should_set_state_clear_flag =
-            context.config.evm_config.chain_spec().is_spurious_dragon_active_at_block(block_number);
-
         let parent_beacon_block_root = context.parent_beacon_block_root();
+        let parent_hash = context.parent_hash();
+
+        let state_clear_flag =
+            context.config.evm_config.chain_spec().is_spurious_dragon_active_at_block(block_number);
 
         let regolith_active = context.regolith_active(timestamp);
 
         let evm_config = context.config.evm_config.clone();
         let chain_spec = context.config.evm_config.chain_spec().clone();
+        
         // Configure new EVM to apply pre-execution and must include txs.
-        let mut evm = OpContext::op().with_cfg(evm_config);
+        let mut evm = evm_config.evm_with_env(context.shared_state.as_mut(), env_with_handler_cfg);
 
         // Apply pre-execution changes.
-        evm.db_mut().db.write().set_state_clear_flag(should_set_state_clear_flag);
+        evm.db_mut().db.write().set_state_clear_flag(state_clear_flag);
 
-        context.system_caller.apply_beacon_root_contract_call(parent_beacon_block_root, &mut evm)?;
+        context.system_caller.apply_blockhashes_contract_call(parent_hash, &mut evm)?;
+        context.system_caller
+            .apply_beacon_root_contract_call(parent_beacon_block_root, &mut evm)?;
+        
         ensure_create2_deployer(chain_spec, timestamp, &mut evm.db_mut().db.write())
             .map_err(|_| OpBlockExecutionError::ForceCreate2DeployerFail)?;
 
+        
+        // Apply must include txs.
         let Some(forced_inclusion_txs) = context.payload_attributes.transactions.as_ref() else {
             return Ok(());
         };
 
-        // Apply must include txs.
         for (i, tx) in forced_inclusion_txs.iter().enumerate() {
             let tx = Arc::new(Transaction::decode(tx.clone()).unwrap());
 

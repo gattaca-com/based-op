@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
-use alloy_provider::ProviderBuilder;
 use bop_db::init_database;
-use bop_sequencer::block_sync::fetch_blocks::fetch_block;
+use bop_sequencer::block_sync::{fetch_blocks::fetch_block, AlloyProvider};
 use clap::Parser;
 use reqwest::Url;
 use reth_db::{
@@ -39,7 +38,7 @@ async fn main() -> eyre::Result<()> {
     let db = init_database(&args.db_path, 0, 0, BASE_SEPOLIA.clone())?;
 
     // Initialize HTTP client
-    let provider = ProviderBuilder::new().network().on_http(args.rpc_url);
+    let provider = AlloyProvider::new_http(args.rpc_url);
 
     // Fetch and wait for all blocks
     let mut batch_futures = Vec::with_capacity((args.end_block - args.start_block + 1) as usize);
@@ -55,16 +54,16 @@ async fn main() -> eyre::Result<()> {
 
     let tx = db.factory.provider_rw()?;
     for block in blocks.drain(..) {
-        let hash = block.header.hash_slow();
-        println!("Inserting block. Number: {}, Hash: {}", block.header.number, hash);
+        let hash = block.header().hash_slow();
+        println!("Inserting block. Number: {}, Hash: {}", block.header().number, hash);
         tx.tx_ref()
-            .put::<tables::CanonicalHeaders>(block.header.number, hash)
+            .put::<tables::CanonicalHeaders>(block.header().number, hash)
             .map_err(|e| eyre::eyre!("Failed to insert header: {e}"))?;
 
         // Now get the inserted header to check it's correct
         let inserted_header = tx
             .tx_ref()
-            .get::<tables::CanonicalHeaders>(block.header.number)
+            .get::<tables::CanonicalHeaders>(block.header().number)
             .map_err(|e| eyre::eyre!("Failed to get inserted header: {e}"))?;
         if inserted_header != Some(hash) {
             return Err(eyre::eyre!("Inserted header is incorrect. Got: {:?}, Expected: {:?}", inserted_header, hash));

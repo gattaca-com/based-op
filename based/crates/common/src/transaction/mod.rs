@@ -207,6 +207,12 @@ impl Transaction {
     pub fn from_block(block: &BlockSyncMessage) -> Vec<Arc<Transaction>> {
         block.transactions_with_sender().map(|(_, t)| Arc::new(t.clone().into())).collect()
     }
+
+    pub fn to_op_tx_env(&self) -> OpTransaction<TxEnv> {
+        let mut op_env = OpTransaction::default();
+        self.fill_tx_env(&mut op_env);
+        op_env
+    }
 }
 
 impl Deref for Transaction {
