@@ -112,6 +112,7 @@ mod tests {
     use reth_optimism_chainspec::BASE_SEPOLIA;
     use reth_optimism_evm::OpEvmConfig;
     use reth_primitives_traits::{Block, SignedTransaction};
+    use revm::context::ContextTr;
     use tracing::level_filters::LevelFilter;
 
     use crate::{
@@ -215,7 +216,7 @@ mod tests {
             let db = sorting_db.state();
 
             let new_state = bop_common::db::State::new(db);
-            let _ = std::mem::replace(evm.db_mut(), new_state);
+            let _ = std::mem::replace(evm.ctx_mut().db(), new_state);
             let result = simulate_tx_inner(tx, evm, true, true, true).unwrap();
             sorting_db.apply_tx(result);
         }
