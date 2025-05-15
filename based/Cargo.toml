@@ -53,7 +53,6 @@ directories = "5.0.1"
 ethereum_ssz = "0.9.0"
 eyre = "0.6.12"
 futures = "0.3.31"
-hickory-resolver = "=0.25.0-alpha.5"
 hyper = "1.5.2"
 jsonrpsee = { version = "0.24", features = ["http-client", "macros", "server"] }
 kona-interop = { git = "https://github.com/op-rs/kona", rev = "88c80aa46975d196c711de203cd7610a15879f58" }
@@ -63,20 +62,6 @@ kona-rpc = { git = "https://github.com/op-rs/kona", rev = "88c80aa46975d196c711d
   "jsonrpsee",
 ] }
 moka = "0.12.10"
-# <<<<<<< HEAD
-# op-alloy-consensus = { version = "=0.9.0", default-features = false, features = [
-#   "k256",
-# ] }
-# op-alloy-network = "0.9.0"
-# op-alloy-rpc-types = "0.9.0"
-# op-alloy-rpc-types-engine = { version = "0.9.0", default-features = false }
-# =======
-# hickory-resolver = "=0.25.0-alpha.5"
-# op-alloy-consensus = { version = "=0.12.0", default-features = false, features = ["k256"] }
-# op-alloy-network = "0.12.0"
-# op-alloy-rpc-types = "0.12.0"
-# op-alloy-rpc-types-engine = { version = "0.12.0", default-features = false }
-# =======
 op-alloy-consensus = { version = "=0.14.1", default-features = false, features = ["k256"] }
 op-alloy-network = "0.14.1"
 op-alloy-rpc-types = "0.14.1"
