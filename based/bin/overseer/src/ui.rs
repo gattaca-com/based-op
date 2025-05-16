@@ -52,7 +52,7 @@ impl TableState {
         let n_cols = self.colwidths.len() + 1;
         let drawable_header = Row::new(drawable_header).height(header_height).underlined();
         let mut drawable_rows = vec![];
-        for row in rows.into_iter() {
+        for row in rows.into_iter().filter(|r| !r.is_empty()) {
             let mut row_height = row.iter().map(|l| l.lines.len()).max().unwrap();
             let mut cells = vec![];
             for (ic, column) in row.into_iter().enumerate() {
