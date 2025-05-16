@@ -4,6 +4,19 @@ logs op-node-logs op-geth-logs \
 test-frag test-seal \
 docs
 
+# ──────────────────────────────────────────────
+# Cross-platform networking shim
+# ──────────────────────────────────────────────
+OS := $(shell uname -s)
+
+.PHONY: fix-compose
+fix-compose:           ## normalise compose.yml for macOS & Linux
+ifeq ($(OS),Darwin)    # Docker Desktop ignores network_mode:host  publish the port instead
+	@sed -i.bak -e '/network_mode: *"host"/c\
+\  ports:\n\    - "$${PORTAL_HOST_PORT:-8080}:8080"\n\  extra_hosts:\n\    - "host.docker.internal:host-gateway"' \
+	      .local_main_node/compose.yml
+endif
+
 .DEFAULT_GOAL := help
 
 # Variables
@@ -47,6 +60,9 @@ build-registry: ## 🏗️ Build based registry from based directory
 build-gateway: ## 🏗️ Build based gateway from based directory
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
+build-key_to_address: ## 🏗️ Build based gateway from based directory
+	docker build -t key_to_address -f ./based/key_to_address.Dockerfile --build-context reth=./reth ./based
+
 build-follower-op-node: ## 🏗️ Build OP node from optimism directory
 	cd ../based-optimism && \
 	IMAGE_TAGS=develop \
@@ -81,7 +97,7 @@ endif
 BASED_GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
 BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
 BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
-start-gateway: build-follower-op-node build-follower-op-geth build-gateway
+start-gateway: build-follower-op-node build-follower-op-geth build-gateway build-key_to_address
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
 		exit 1; \
@@ -120,22 +136,7 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
-	    $(PORTAL) | docker run --rm -i imega/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
-	else \
-	  NEW_GOSSIP=$$(curl -s -X POST -H 'Content-Type: application/json' \
-	    --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
-	    $(PORTAL) | docker run --rm -i imega/jq -r '.result'); \
-	  NEW_ENR=$$(curl -s -X POST -H 'Content-Type: application/json' \
-	    --data '{"jsonrpc":"2.0","method":"portal_opNodeBootnodeEnr","params":[],"id":1}' \
-	    $(PORTAL) | docker run --rm -i imega/jq -r '.result'); \
-	  NEW_GETH=$$(curl -s -X POST -H 'Content-Type: application/json' \
-	    --data '{"jsonrpc":"2.0","method":"portal_opGethBootnodeEnode","params":[],"id":1}' \
-	    $(PORTAL) | docker run --rm -i imega/jq -r '.result'); \
-	  sed -i -E \
-	    -e "s#^MAIN_OP_NODE_GOSSIP_STATIC=.*#MAIN_OP_NODE_GOSSIP_STATIC=$${NEW_GOSSIP}#" \
-	    -e "s#^MAIN_OP_NODE_ENR=.*#MAIN_OP_NODE_ENR=$${NEW_ENR}#" \
-	    -e "s#^MAIN_OP_GETH_ENODE=.*#MAIN_OP_GETH_ENODE=$${NEW_GETH}#" \
-	    .local_gateway_and_follower/.env; \
+	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
 	fi
 	@mkdir -p .local_gateway_and_follower/data
 	@if [ "$(BASED_OP_GETH_DATA_DIR)" != ".local_gateway_and_follower/data/geth" ] && [ -d "$(BASED_OP_GETH_DATA_DIR)" ] && [ ! -d ".local_gateway_and_follower/data/geth" ]; then \
@@ -154,7 +155,7 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 	    mkdir -p $(BASED_GATEWAY_DATA_DIR); \
 	fi
 
-	@wallet=$$(cd based && cargo run --bin key_to_address $(GATEWAY_SEQUENCING_KEY)); \
+	@wallet=$$(docker run -i key_to_address $(GATEWAY_SEQUENCING_KEY)); \
       echo "...Done"; \
       echo; \
       echo "Starting with the following generated .env:"; \
@@ -179,13 +180,11 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway
 
 
 L1_CHAIN_ID?=11155111
-L2_CHAIN_ID?=$(shell \
-    RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
-    echo $$((RAW % 50000 + 1)); \
-)
+L2_CHAIN_ID?=2151908
 L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
 L1_RPC_URL?=https://ethereum-sepolia-rpc.publicnode.com
 L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Only perform these parse-time checks if the user asked for deploy-chain
@@ -211,17 +210,16 @@ endif
 endif
 # ────────────────────────────────────────────────────────────────────────────────
 
-deploy-chain:
+deploy-chain: build-key_to_address
 	@if [ -d .local_main_node/config ]; then \
 		echo "❌  Seems like information of a previous chain is already present. Please remove .local_main_node to deploy a new one."; \
 		exit 1; \
 	fi
-	@echo "Deploying new Chain with id: $(L2_CHAIN_ID)"
 	@mkdir -p .local_main_node/config
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
-	@wallet_batcher=$$(cd based && cargo run --bin key_to_address $(OP_BATCHER_KEY)); \
-	wallet_proposer=$$(cd based && cargo run --bin key_to_address $(OP_PROPOSER_KEY)); \
-	wallet_main=$$(cd based && cargo run --bin key_to_address $(MAIN_KEY)); \
+	@wallet_batcher=$$(docker run -i key_to_address $(OP_BATCHER_KEY)); \
+	wallet_proposer=$$(docker run -i key_to_address $(OP_PROPOSER_KEY)); \
+	wallet_main=$$(docker run -i key_to_address $(MAIN_KEY)); \
 	sed -E \
 		  -e "s@L1_CHAIN_ID@$(L1_CHAIN_ID)@g" \
 		  -e "s@L2_CHAIN_ID@$(L2_CHAIN_ID_HEX)@g" \
@@ -232,8 +230,8 @@ deploy-chain:
 		  > .local_main_node/config/intent.toml
 
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY) 
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/genesis.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/rollup.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
 	@docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
     > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
@@ -333,6 +331,7 @@ start-main-node: build-portal build-registry
 	@if [ ! -f .local_main_node/.env ]; then \
 	  cp main_node/env_example .local_main_node/.env; \
 	  cp main_node/compose.yml .local_main_node/compose.yml; \
+	  $(MAKE) fix-compose; \
 	  echo "Initializing all components of a main sequencing node in ./.local_main_node ..."; \
 	  { \
 	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.implementationsDeployment.disputeGameFactoryImplAddress' /config/state.json)"; \
@@ -363,6 +362,7 @@ start-portal: build-portal
 		echo ".local_main_node/config does not seem to have been started. run make start-main-node."; \
 		exit 1; \
 	fi
+	$(MAKE) fix-compose
 	docker compose -f .local_main_node/compose.yml up -d based-portal 
 	$(MAKE) logs-portal
 	
@@ -371,6 +371,7 @@ start-registry: build-registry
 		echo ".local_main_node/config does not seem to have been started. run make start-main-node."; \
 		exit 1; \
 	fi
+	$(MAKE) fix-compose
 	docker compose -f .local_main_node/compose.yml up -d based-registry 
 	$(MAKE) logs-registry
 	
@@ -441,7 +442,7 @@ DUMMY_TX=$(shell cast mktx --rpc-url  $(FOLLOWER_NODE_HOST):$(BOP_EL_PORT) --pri
 PORTAL_PORT?=8080
 
 test-tx:
-	cast send --rpc-url  http://0.0.0.0:$(PORTAL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a
+	cast send --rpc-url  http://127.0.0.1:$(PORTAL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a
 
 test-frag:
 	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
@@ -514,7 +515,7 @@ test-env:
 	}'
 
 follower-node-proxy:
-	docker run --rm --network kt-based-op -p 8545:8545 cars10/simprox simprox --skip-ssl-verify=true -l 0.0.0.0:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545
+	docker run --rm --network kt-based-op -p 8545:8545 cars10/simprox simprox --skip-ssl-verify=true -l 127.0.0.1:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545
 
 spam: ## 🚀 Run the gateway
 	PORTAL_PORT=$(PORTAL_PORT) BOP_EL_PORT=$(BOP_EL_PORT) cargo test --manifest-path ./based/Cargo.toml --release -- tx_spammer --ignored --nocapture
