@@ -119,24 +119,39 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway build
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
 	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
-	      $(PORTAL) | docker run -i imega/jq -r '.result')"; \
+	      $(PORTAL) | docker run --rm -i imega/jq -r '.result')"; \
 	    echo "MAIN_OP_NODE_ENR=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeBootnodeEnr","params":[],"id":1}' \
-	      $(PORTAL) | docker run -i imega/jq -r '.result')"; \
+	      $(PORTAL) | docker run --rm -i imega/jq -r '.result')"; \
 	    echo "MAIN_OP_GETH_ENODE=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opGethBootnodeEnode","params":[],"id":1}' \
-	      $(PORTAL) | docker run -i imega/jq -r '.result')"; \
+	      $(PORTAL) | docker run --rm -i imega/jq -r '.result')"; \
 	    echo "NETWORK_ID=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_l2ChainId","params":[],"id":1}' \
-	      $(PORTAL) | docker run -i imega/jq -r '.result')"; \
+	      $(PORTAL) | docker run --rm -i imega/jq -r '.result')"; \
 	  } >> .local_gateway_and_follower/.env; \
 	  \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileRollup","params":[],"id":1}' \
-	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
+	    $(PORTAL) | docker run --rm -i imega/jq -r '.result' > .local_gateway_and_follower/config/rollup.json; \
 	  curl -s -X POST -H "Content-Type: application/json" \
 	    --data '{"jsonrpc":"2.0","method":"portal_fileGenesis","params":[],"id":1}' \
-	    $(PORTAL) | docker run -i imega/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
+	    $(PORTAL) | docker run --rm -i imega/jq -r '.result' > .local_gateway_and_follower/config/genesis.json; \
+	else \
+	  NEW_GOSSIP=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	    --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
+	    $(PORTAL) | docker run --rm -i imega/jq -r '.result'); \
+	  NEW_ENR=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	    --data '{"jsonrpc":"2.0","method":"portal_opNodeBootnodeEnr","params":[],"id":1}' \
+	    $(PORTAL) | docker run --rm -i imega/jq -r '.result'); \
+	  NEW_GETH=$$(curl -s -X POST -H 'Content-Type: application/json' \
+	    --data '{"jsonrpc":"2.0","method":"portal_opGethBootnodeEnode","params":[],"id":1}' \
+	    $(PORTAL) | docker run --rm -i imega/jq -r '.result'); \
+	  sed -i -E \
+	    -e "s#^MAIN_OP_NODE_GOSSIP_STATIC=.*#MAIN_OP_NODE_GOSSIP_STATIC=$${NEW_GOSSIP}#" \
+	    -e "s#^MAIN_OP_NODE_ENR=.*#MAIN_OP_NODE_ENR=$${NEW_ENR}#" \
+	    -e "s#^MAIN_OP_GETH_ENODE=.*#MAIN_OP_GETH_ENODE=$${NEW_GETH}#" \
+	    .local_gateway_and_follower/.env; \
 	fi
 	@mkdir -p .local_gateway_and_follower/data
 	@if [ "$(BASED_OP_GETH_DATA_DIR)" != ".local_gateway_and_follower/data/geth" ] && [ -d "$(BASED_OP_GETH_DATA_DIR)" ] && [ ! -d ".local_gateway_and_follower/data/geth" ]; then \
@@ -180,7 +195,10 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway build
 
 
 L1_CHAIN_ID?=11155111
-L2_CHAIN_ID?=2151908
+L2_CHAIN_ID?=$(shell \
+    RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
+    echo $$((RAW % 50000 + 1)); \
+)
 L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
 L1_RPC_URL?=https://ethereum-sepolia-rpc.publicnode.com
 L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
@@ -211,6 +229,7 @@ endif
 # ────────────────────────────────────────────────────────────────────────────────
 
 deploy-chain: build-key_to_address
+	@echo "Deploying new Chain with id: $(L2_CHAIN_ID)"
 	@if [ -d .local_main_node/config ]; then \
 		echo "❌  Seems like information of a previous chain is already present. Please remove .local_main_node to deploy a new one."; \
 		exit 1; \
@@ -230,8 +249,8 @@ deploy-chain: build-key_to_address
 		  > .local_main_node/config/intent.toml
 
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY) 
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/genesis.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID) > $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
 	@docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
     > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
