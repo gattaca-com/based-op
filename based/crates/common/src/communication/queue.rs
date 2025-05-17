@@ -426,6 +426,10 @@ pub struct Consumer<T: 'static> {
 }
 
 impl<T: 'static + Clone> Consumer<T> {
+    pub fn new<Q: Into<ConsumerBare<T>>>(queue: Q, should_log: bool) -> Self {
+        Self { consumer: queue.into(), should_log }
+    }
+
     #[inline]
     pub fn try_consume(&mut self) -> Option<T> {
         match self.consumer.try_consume_clone() {

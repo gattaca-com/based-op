@@ -299,7 +299,8 @@ where
                         let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
                         if fork_choice_state.head_block_hash != head_block_hash {
                             // We are on the wrong head. Switch to syncing and request the head block.
-                            let head_block_number = ctx.db.head_block_number().expect("couldn't get db head block number");
+                            let head_block_number =
+                                ctx.db.head_block_number().expect("couldn't get db head block number");
                             ctx.shared_state.reset();
                             return Self::sync_until(head_block_number, head_block_number, senders);
                         }
@@ -548,10 +549,11 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
 
             Sorting(seq, mut sorting_data) if sorting_data.should_send_next_sims() => {
                 sorting_data.maybe_apply(base_fee);
-
-                data.timers.handle_deposits.start();
-                sorting_data.handle_deposits(&mut data.deposits, connections);
-                data.timers.handle_deposits.stop();
+                if !data.deposits.is_empty() {
+                    data.timers.handle_deposits.start();
+                    sorting_data.handle_deposits(&mut data.deposits, connections);
+                    data.timers.handle_deposits.stop();
+                }
 
                 data.timers.send_next.start();
                 sorting_data.send_next(data.config.n_per_loop, connections);

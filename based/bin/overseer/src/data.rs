@@ -29,26 +29,26 @@ pub struct UIData {
 impl UIData {
     pub fn render_overview(&mut self, data: &Data, frame: &mut Frame) {
         let [left, middle, right] =
-            Layout::vertical([Constraint::Percentage(33), Constraint::Percentage(33), Constraint::Fill(1)])
+            Layout::horizontal([Constraint::Percentage(33), Constraint::Percentage(33), Constraint::Fill(1)])
                 .areas(frame.area());
         self.table_blocks.render(
             Some("Blocks".to_string()),
             BlockData::header(),
-            data.blocks.iter().map(|b| b.to_row()),
+            data.blocks.iter().map(|b| b.to_row()).rev(),
             frame,
             left,
         );
         self.table_frags.render(
             Some("Frags in block".to_string()),
             FragData::block_table_header(),
-            data.frags.iter().map(|b| b.to_block_table_row()),
+            data.frags.iter().map(|b| b.to_block_table_row()).rev(),
             frame,
             middle,
         );
         self.table_pool.render(
             Some("Tx Pool".to_string()),
             TransactionData::pool_header(),
-            data.transactions.iter().map(|b| b.to_pool_row()),
+            data.transactions.iter().map(|b| b.to_pool_row()).rev(),
             frame,
             right,
         )
@@ -259,7 +259,7 @@ impl Data {
                         .expect("couldn't open latency queue");
                     let processing_q = Queue::open_shared(queues_dir.join(format!("timing-{real_name}")))
                         .expect("couldn't open timing queue");
-                    let view = TimerDataState::new(latency_q.into(), processing_q.into());
+                    let view = TimerDataState::new(Consumer::new(latency_q, false), Consumer::new(processing_q, false));
                     let data = TimerData::new(
                         real_name.to_string().clone(),
                         Self::SAMPLES_PER_MEDIAN,

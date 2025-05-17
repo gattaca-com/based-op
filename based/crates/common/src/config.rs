@@ -73,8 +73,8 @@ pub struct GatewayArgs {
     #[arg(long = "log.enable_file_logging", default_value_t = true)]
     pub file_logging: bool,
     /// Prefix of log files
-    #[arg(long = "log.prefix")]
-    pub log_prefix: Option<String>,
+    #[arg(long = "log.prefix", default_value = "bop-gateway.log")]
+    pub log_prefix: String,
     /// Maximum number of log files
     #[arg(long = "log.max_files", default_value_t = 30)]
     pub log_max_files: usize,
@@ -152,7 +152,7 @@ impl From<&GatewayArgs> for LoggingConfig {
                 .or(args.debug.then_some(LevelFilter::DEBUG))
                 .unwrap_or(LevelFilter::INFO),
             flags: if args.file_logging { LoggingFlags::all() } else { LoggingFlags::StdOut },
-            prefix: args.log_prefix.clone(),
+            prefix: args.file_logging.then(|| args.log_prefix.clone()),
             max_files: args.log_max_files,
             path: args.log_path.clone(),
             filters: args.log_filters.clone(),
