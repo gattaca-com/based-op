@@ -46,6 +46,7 @@ pub fn build_env_filter(default_level: LevelFilter, env_filters: Option<String>)
 pub fn init_tracing(config: LoggingConfig) -> Option<WorkerGuard> {
     let format = tracing_subscriber::fmt::format().with_level(true).with_thread_ids(false).with_target(false);
     if config.flags == LoggingFlags::File | LoggingFlags::StdOut {
+        let _ = std::fs::create_dir_all(&config.path);
         let mut builder =
             tracing_appender::rolling::Builder::new().rotation(Rotation::DAILY).max_log_files(config.max_files);
 
@@ -80,6 +81,7 @@ pub fn init_tracing(config: LoggingConfig) -> Option<WorkerGuard> {
         tracing_subscriber::registry().with(stdout_layer).init();
         Some(guard)
     } else if config.flags == LoggingFlags::File {
+        let _ = std::fs::create_dir_all(&config.path);
         let mut builder =
             tracing_appender::rolling::Builder::new().rotation(Rotation::DAILY).max_log_files(config.max_files);
 

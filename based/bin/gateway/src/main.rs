@@ -27,7 +27,6 @@ fn main() {
 
     let args = GatewayArgs::parse();
     let _guards = init_tracing((&args).into());
-    #[cfg(feature = "shmem")]
     bop_common::communication::verify_or_remove_queue_files();
 
     match run(args) {

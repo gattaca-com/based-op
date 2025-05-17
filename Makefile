@@ -99,7 +99,7 @@ endif
 BASED_GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
 BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
 BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
-start-gateway: build-follower-op-node build-follower-op-geth build-gateway build-key_to_address
+start-gateway: build-follower-op-node build-follower-op-geth build-gateway build-key_to_address build-overseer
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
 		exit 1; \
@@ -193,8 +193,18 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway build
       echo; echo
 
 	@cd .local_gateway_and_follower && docker compose up -d
-	$(MAKE) logs-follower-node
+	$(MAKE) start-overseer
 
+
+ifeq ($(filter start-overseer,$(MAKECMDGOALS)),start-gateway)
+  ifeq ($(strip $(PORTAL)),)
+    $(error PORTAL is undefined! \
+           Please invoke like `make start-gateway \
+           PORTAL=http://… GATEWAY_SEQUENCING_KEY=…`)
+  endif
+endif
+start-overseer: build-overseer
+	docker run -e RUST_BACKTRACE=1 -v /tmp:/tmp based_overseer_local --portal.url $(PORTAL)
 
 L1_CHAIN_ID?=11155111
 L2_CHAIN_ID?=$(shell \

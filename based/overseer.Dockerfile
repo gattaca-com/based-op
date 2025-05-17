@@ -23,3 +23,4 @@ RUN apt-get update
 RUN apt-get install -y openssl ca-certificates libssl3 libssl-dev
 
 COPY --from=builder /app/target/release/overseer /usr/local/bin
+ENTRYPOINT ["/usr/local/bin/overseer"]

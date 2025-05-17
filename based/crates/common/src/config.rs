@@ -79,8 +79,8 @@ pub struct GatewayArgs {
     #[arg(long = "log.max_files", default_value_t = 30)]
     pub log_max_files: usize,
     /// Path for log files
-    #[arg(long = "log.path", default_value = "/tmp")]
-    pub log_path: PathBuf,
+    #[arg(long = "log.dir", default_value = "/tmp")]
+    pub log_dir: PathBuf,
     /// Add additional filters for logging
     #[arg(long = "log.filters")]
     pub log_filters: Option<String>,
@@ -154,7 +154,7 @@ impl From<&GatewayArgs> for LoggingConfig {
             flags: if args.file_logging { LoggingFlags::all() } else { LoggingFlags::StdOut },
             prefix: args.file_logging.then(|| args.log_prefix.clone()),
             max_files: args.log_max_files,
-            path: args.log_path.clone(),
+            path: args.log_dir.clone(),
             filters: args.log_filters.clone(),
         }
     }
