@@ -68,9 +68,13 @@ impl TransactionData {
     }
 
     pub fn to_pool_row(&self) -> Vec<Text<'_>> {
+        if !self.active() {
+            return vec![];
+        }
         let Some(ingested) = self.ingested() else {
             return vec![];
         };
+
         vec![
             ingested.hash.to_string()[0..6].to_string().into(),
             ingested.sender.to_string()[0..6].to_string().into(),

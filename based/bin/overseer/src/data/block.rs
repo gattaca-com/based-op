@@ -16,6 +16,7 @@ pub struct BlockData {
     pub gas_used: u64,
     pub payment: MicroEth,
     pub n_txs: usize,
+    pub sealed: bool
 }
 
 impl BlockData {
@@ -23,6 +24,9 @@ impl BlockData {
         Self { number, frags: vec![], we_sequenced, timestamp, ..Default::default() }
     }
     pub fn push(&mut self, frag: Uuid, payment: MicroEth, gas_used: u64, n_txs: usize) {
+        if self.sealed {
+            return
+        }
         self.frags.push(frag);
         self.payment += payment;
         self.gas_used += gas_used;

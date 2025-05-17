@@ -15,6 +15,7 @@ use bop_common::{
         },
     },
     db::DatabaseWrite,
+    eth::MicroEth,
     p2p::{EnvV0, VersionedMessage},
     shared::SharedState,
     telemetry::{
@@ -102,8 +103,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0
-                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0 &&
+                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -334,6 +335,7 @@ where
                     "received FCU when Sorting. Sending already Fragged txs back to the pools and syncing to the new head."
                 );
                 for tx in frag_seq.txs.into_iter().skip(frag_seq.n_force_include_txs) {
+                    panic!("shouldn't put any txs now {}", frag_seq.n_force_include_txs);
                     ctx.handle_tx(tx.tx, senders);
                 }
                 let start = ctx.db.head_block_number().expect("couldn't get db head block number");
@@ -414,41 +416,7 @@ where
     ) -> Self {
         use SequencerState::*;
         ctx.notifications.produce(&SystemNotification::BlockSync(block.number, block.gas_used));
-        if block.number > ctx.block_number() {
-            let frag = Uuid::new_v4();
-            TelemetryUpdate::send(
-                frag,
-                telemetry::Telemetry::Frag(telemetry::Frag::SorterStart {
-                    block: block.number,
-                    seq: 0,
-                    available_value: Default::default(),
-                }),
-                &mut ctx.telemetry,
-            );
-            for (id, tx) in block.body.transactions().enumerate() {
-                let uuid = Uuid::new_v4();
-                let sender = Address::ZERO;
-                TelemetryUpdate::send(
-                    uuid,
-                    telemetry::Telemetry::Tx(telemetry::Tx::Ingested(Ingested {
-                        sender,
-                        nonce: tx.nonce(),
-                        hash: *tx.tx_hash(),
-                    })),
-                    &mut ctx.telemetry,
-                );
-
-                TelemetryUpdate::send(
-                    uuid,
-                    telemetry::Telemetry::Tx(telemetry::Tx::Included(IncludedInFrag {
-                        frag,
-                        id_in_frag: id as u16,
-                        ..Default::default()
-                    })),
-                    &mut ctx.telemetry,
-                );
-            }
-        }
+        if block.number > ctx.block_number() {}
 
         match self {
             Syncing { last_block_number } => {

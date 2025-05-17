@@ -144,7 +144,6 @@ impl Overseer {
         if self.data.is_empty() {
             return;
         }
-        tracing::info!("rendering");
         use Constraint::{Length, Min};
         let vertical = Layout::vertical([Length(1), Min(0), Length(1)]);
         let [tabs_area, inner_area, footer_area] = vertical.areas(frame.area());

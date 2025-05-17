@@ -1,8 +1,13 @@
 use std::{fmt::Display, sync::Arc};
 
 use bop_common::{
-    communication::messages::BlockSyncError,
+    communication::{Producer, messages::BlockSyncError},
     db::{DatabaseRead, DatabaseWrite},
+    eth::MicroEth,
+    telemetry::{
+        self, TelemetryUpdate,
+        order::{IncludedInFrag, Ingested},
+    },
     time::BlockSyncTimers,
 };
 use reth_consensus::ConsensusError;
@@ -12,11 +17,14 @@ use reth_evm::execute::{
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::OpExecutionStrategyFactory;
-use reth_optimism_primitives::{OpBlock, OpReceipt};
+use reth_optimism_primitives::{OpBlock, OpReceipt, transaction::TransactionSenderInfo};
 use reth_primitives::{BlockWithSenders, GotExpected};
+use reth_primitives_traits::SignedTransaction;
 use reth_trie_common::updates::TrieUpdates;
 use revm::Database;
+use revm_primitives::Address;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 pub mod block_fetcher;
 pub mod fetch_blocks;
@@ -49,6 +57,7 @@ impl BlockSync {
         block: &BlockWithSenders<OpBlock>,
         db: &DB,
         commit_block: bool,
+        telemetry_producer: &mut Producer<TelemetryUpdate>,
     ) -> Result<Option<(u64, u64)>, BlockSyncError>
     where
         DB: DatabaseWrite + DatabaseRead,
@@ -102,7 +111,7 @@ impl BlockSync {
             return Ok(Some((head_block_number, block.header.number)));
         }
 
-        self.execute_and_maybe_commit(block, db, commit_block)?;
+        self.execute_and_maybe_commit(block, db, commit_block, telemetry_producer)?;
 
         // Process any pending blocks that can now be applied
         while let Some(last_pending) = self.pending_blocks.last() {
@@ -127,7 +136,7 @@ impl BlockSync {
                 return Ok(Some((pending_block.header.number - 1, pending_block.header.number)));
             }
 
-            self.execute_and_maybe_commit(&pending_block, db, commit_block)?;
+            self.execute_and_maybe_commit(&pending_block, db, commit_block, telemetry_producer)?;
         }
         self.timers.total.stop();
         info!(
@@ -152,6 +161,7 @@ impl BlockSync {
         block: &BlockWithSenders<OpBlock>,
         db: &DB,
         commit: bool,
+        telemetry_producer: &mut Producer<TelemetryUpdate>,
     ) -> Result<(), BlockSyncError>
     where
         DB: DatabaseWrite + DatabaseRead + Database<Error: Into<ProviderError> + Display>,
@@ -161,6 +171,60 @@ impl BlockSync {
         self.timers.execution.stop();
         if commit {
             self.timers.db_commit.start();
+
+            let frag = Uuid::new_v4();
+            TelemetryUpdate::send(
+                frag,
+                telemetry::Telemetry::Frag(telemetry::Frag::SorterStart {
+                    block: block.number,
+                    seq: 0,
+                    available_value: Default::default(),
+                }),
+                telemetry_producer,
+            );
+
+            let mut n_txs = 0;
+
+            for (id, tx) in block.body.transactions().enumerate() {
+                n_txs += 1;
+                let uuid = Uuid::new_v4();
+                let sender = Address::ZERO;
+                TelemetryUpdate::send(
+                    uuid,
+                    telemetry::Telemetry::Tx(telemetry::Tx::Ingested(Ingested {
+                        sender,
+                        nonce: tx.nonce(),
+                        hash: *tx.tx_hash(),
+                    })),
+                    telemetry_producer,
+                );
+
+                TelemetryUpdate::send(
+                    uuid,
+                    telemetry::Telemetry::Tx(telemetry::Tx::Included(IncludedInFrag {
+                        frag,
+                        id_in_frag: id as u16,
+                        ..Default::default()
+                    })),
+                    telemetry_producer,
+                );
+                TelemetryUpdate::send(
+                    uuid,
+                    telemetry::Telemetry::Tx(telemetry::Tx::RemovedFromPool),
+                    telemetry_producer,
+                );
+            }
+            TelemetryUpdate::send(
+                frag,
+                telemetry::Telemetry::Frag(telemetry::Frag::SorterFinish {
+                    success: true,
+                    payment: MicroEth(0),
+                    best_order_value: MicroEth(0),
+                    n_txs,
+                    gas_used: block.gas_used,
+                }),
+                telemetry_producer,
+            );
             db.commit_block_unchecked(block, execution_output, trie_updates, &mut self.timers)?;
             self.timers.db_commit.stop();
         }
@@ -234,6 +298,7 @@ mod tests {
     use bop_db::{AlloyDB, init_database};
     use reqwest::Url;
     use reth_optimism_chainspec::{BASE_SEPOLIA, OpChainSpecBuilder};
+    use telemetry::telemetry_queue;
     use tracing::level_filters::LevelFilter;
 
     use super::*;
@@ -263,7 +328,7 @@ mod tests {
         let alloydb = AlloyDB::new(provider, block.header.number, rt);
 
         // Execute the block.
-        let res = block_sync.commit_block(&block, &alloydb, false);
+        let res = block_sync.commit_block(&block, &alloydb, false, &mut telemetry_queue().into());
         info!("res: {:?}", res);
     }
 
@@ -291,7 +356,7 @@ mod tests {
         let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &provider).await });
 
         // Execute the block.
-        assert!(block_sync.commit_block(&block, &db, true).is_ok());
+        assert!(block_sync.commit_block(&block, &db, true, &mut telemetry_queue().into()).is_ok());
     }
 
     #[ignore = "Requires manual setup with local database"]
@@ -336,7 +401,7 @@ mod tests {
         {
             // Apply first block normally
             let block = blocks.get(&(start_block + 1)).unwrap();
-            let result = block_sync.commit_block(block, &db, true);
+            let result = block_sync.commit_block(block, &db, true, &mut telemetry_queue().into());
             tracing::info!("Result: {:?}", result);
             assert!(result.is_ok());
             assert!(result.unwrap().is_none());
@@ -346,7 +411,7 @@ mod tests {
             competing_block.header.parent_hash = B256::random(); // Force different parent hash - we don't commit the header to the db so this won't affect the db.
 
             // Apply competing block - should trigger reorg but won't ask for new blocks as the height is the same.
-            let result = block_sync.commit_block(&competing_block, &db, true);
+            let result = block_sync.commit_block(&competing_block, &db, true, &mut telemetry_queue().into());
             assert!(result.is_ok());
             let (from, to) = result.unwrap().expect("should request reorg blocks");
 
@@ -367,12 +432,12 @@ mod tests {
             // Apply blocks from head_block+1 to head_block + 3, skipping head_block + 2
             let block1 = blocks.get(&(head_block + 1)).unwrap();
             tracing::info!("Block 1: {:?}", block1.header.number);
-            let result = block_sync.commit_block(block1, &db, true);
+            let result = block_sync.commit_block(block1, &db, true, &mut telemetry_queue().into());
             tracing::info!("Result: {:?}", result);
             assert!(result.is_ok());
 
             let block3 = blocks.get(&(head_block + 3)).unwrap();
-            let result = block_sync.commit_block(block3, &db, true);
+            let result = block_sync.commit_block(block3, &db, true, &mut telemetry_queue().into());
             assert!(result.is_ok());
             let (from, to) = result.unwrap().expect("should request missing blocks");
 
@@ -388,7 +453,7 @@ mod tests {
         // Test Case 3: Apply pending blocks after gap is filled
         {
             let block2 = blocks.get(&(head_block + 2)).unwrap();
-            let result = block_sync.commit_block(block2, &db, true);
+            let result = block_sync.commit_block(block2, &db, true, &mut telemetry_queue().into());
             assert!(result.is_ok());
             assert!(result.unwrap().is_none()); // No more blocks needed
 

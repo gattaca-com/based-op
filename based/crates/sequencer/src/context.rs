@@ -10,6 +10,7 @@ use bop_common::{
         Producer, SendersSpine, TrackedSenders,
         messages::{BlockSyncMessage, EvmBlockParams},
     },
+    debug_panic,
     p2p::{FragV0, SealV0},
     shared::SharedState,
     telemetry::{TelemetryUpdate, system::SystemNotification, system_notificiations_queue, telemetry_queue},
@@ -328,10 +329,10 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// and clear the existing pool based on that
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
     pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
-        let blocks_to_fetch = match self.block_executor.commit_block(block, &self.db, true) {
+        let blocks_to_fetch = match self.block_executor.commit_block(block, &self.db, true, &mut self.telemetry) {
             Ok(blocks_to_fetch) => blocks_to_fetch,
             Err(e) => {
-                tracing::error!("couldn't commit block: {e}");
+                debug_panic!("couldn't commit block: {e}");
                 let bn = block.number();
                 return Some((bn, bn));
             }

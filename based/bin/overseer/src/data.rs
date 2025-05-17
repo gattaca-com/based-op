@@ -179,7 +179,7 @@ impl Data {
                 if let Some(frag) = self.frags.get_mut(&included_in_frag.frag) {
                     frag.txs.push(uuid)
                 } else {
-                    tracing::warn!("weid, got an included message for a block we don't know")
+                    tracing::warn!("weird, got an included message for a block we don't know")
                 }
             }
             _ => {}
@@ -187,6 +187,9 @@ impl Data {
 
         if let Some(data) = self.transactions.get_mut(&uuid) {
             data.push(t, update);
+            return;
+        }
+        if matches!(update, Tx::RemovedFromPool) {
             return;
         }
 
@@ -224,6 +227,9 @@ impl Data {
             match notification {
                 SystemNotification::BuildStop(curblock) => {
                     self.block_number = curblock;
+                    if let Some(block) = self.blocks.get_mut(&curblock) {
+                        block.sealed = true;
+                    }
                 }
                 SystemNotification::BlockSync(block_number, gas_used) => {
                     if !self.blocks.contains_key(&block_number) {
