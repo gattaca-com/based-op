@@ -224,9 +224,11 @@ impl Transaction {
     pub fn from_block(block: &BlockSyncMessage) -> Vec<Arc<Transaction>> {
         block.body.transactions.iter().map(|t| Arc::new(t.clone().into())).collect()
     }
+
     pub fn to_added_to_pool_telemetry(&self) -> Telemetry {
         Telemetry::Tx(Tx::AddedToPool)
     }
+
     pub fn to_ingested_telemetry(&self) -> Telemetry {
         Telemetry::Tx(Tx::Ingested(Ingested { sender: self.sender, nonce: self.nonce(), hash: self.tx_hash() }))
     }

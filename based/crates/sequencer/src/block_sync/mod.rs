@@ -225,11 +225,7 @@ impl BlockSync {
                 }),
                 telemetry_producer,
             );
-            TelemetryUpdate::send(
-                frag,
-                telemetry::Telemetry::Frag(telemetry::Frag::Commit),
-                telemetry_producer,
-            );
+            TelemetryUpdate::send(frag, telemetry::Telemetry::Frag(telemetry::Frag::Commit), telemetry_producer);
             TelemetryUpdate::send(
                 Uuid::nil(),
                 telemetry::Telemetry::System(telemetry::system::SystemNotification::BuildStop(block.number)),

@@ -1,5 +1,6 @@
-use crate::statistics::Statisticable;
 use serde::{Deserialize, Serialize};
+
+use crate::statistics::Statisticable;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Ords(pub u64);

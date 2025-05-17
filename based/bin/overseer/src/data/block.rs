@@ -23,6 +23,7 @@ impl BlockData {
     pub fn new(number: u64, we_sequenced: bool, timestamp: Nanos) -> Self {
         Self { number, frags: vec![], we_sequenced, timestamp, ..Default::default() }
     }
+
     pub fn push(&mut self, frag: Uuid, payment: MicroEth, gas_used: u64, n_txs: usize) {
         if self.sealed {
             tracing::info!("already sealed {}", self.number);

@@ -154,10 +154,9 @@ impl SimulatedTx {
             id_in_frag: id_in_frag as u16,
             payment: self.payment.into(),
             sim_time: self.sim_time,
-            gas_used: self.gas_used()
+            gas_used: self.gas_used(),
         }))
     }
-
 }
 
 impl AsRef<ResultAndState> for SimulatedTx {

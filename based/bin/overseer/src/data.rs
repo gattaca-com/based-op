@@ -1,11 +1,5 @@
 use std::io::Write;
 
-use crate::{
-    collections::{CircularBuffer, KeyedCircularBuffer},
-    statistics::Statistics,
-    ui::plot::RenderFlags,
-    utils::empty_if_default,
-};
 use block::BlockData;
 use bop_common::{
     api::{RollupConfig, SyncStatus},
@@ -23,8 +17,12 @@ use transaction::TransactionData;
 
 use crate::{
     OverseerConsumers,
+    collections::{CircularBuffer, KeyedCircularBuffer},
     prelude::*,
+    statistics::Statistics,
     timekeeper::{TimeKeeper, TimerDataState, clock_overhead},
+    ui::plot::RenderFlags,
+    utils::empty_if_default,
 };
 
 pub mod block;
@@ -288,15 +286,12 @@ impl Data {
 
     /// Inserts bundle and Optionally returns block of update
     fn insert_transaction(&mut self, uuid: Uuid, t: Nanos, update: Tx) {
-        match &update {
-            Tx::Included(included_in_frag) => {
-                if let Some(frag) = self.frags.get_mut(&included_in_frag.frag) {
-                    frag.txs.push(uuid)
-                } else {
-                    tracing::warn!("weird, got an included message for a block we don't know")
-                }
+        if let Tx::Included(included_in_frag) = &update {
+            if let Some(frag) = self.frags.get_mut(&included_in_frag.frag) {
+                frag.txs.push(uuid)
+            } else {
+                tracing::warn!("weird, got an included message for a block we don't know")
             }
-            _ => {}
         }
 
         if let Some(data) = self.transactions.get_mut(&uuid) {
@@ -339,7 +334,8 @@ impl Data {
                         self.blocks.insert(block);
                     } else {
                         let block = self.blocks.get_mut(&block_number).unwrap();
-                        // This happens because we got an fcu with a different block than ours at some point and are now resyncing
+                        // This happens because we got an fcu with a different block than ours at some point and are now
+                        // resyncing
                         if !block.sealed {
                             block.reset();
                         }
@@ -446,6 +442,7 @@ impl Data {
             .rev()
             .find_map(|(t, s)| if let SystemNotification::StateChanged(state) = s { Some((*t, *state)) } else { None })
     }
+
     fn last_state(&self) -> Option<(Nanos, SequencerState)> {
         self.system
             .iter()

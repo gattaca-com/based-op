@@ -1,4 +1,4 @@
-pub use bop_common::{time::Nanos, time::Repeater};
+pub use bop_common::time::{Nanos, Repeater};
 pub use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},

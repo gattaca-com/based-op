@@ -86,7 +86,3 @@ impl TableState {
         frame.render_stateful_widget(table, area, &mut self.state)
     }
 }
-
-
-
-

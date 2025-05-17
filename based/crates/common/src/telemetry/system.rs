@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use revm_primitives::B256;
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
@@ -13,9 +15,9 @@ pub enum SequencerState {
     Sorting,
 }
 
-impl ToString for SequencerState {
-    fn to_string(&self) -> String {
-        format!("{}", self.as_ref())
+impl Display for SequencerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
     }
 }
 

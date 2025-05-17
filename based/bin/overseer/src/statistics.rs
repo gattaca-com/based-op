@@ -174,6 +174,7 @@ impl<T: Statisticable> Statistics<T> {
         self.tot_count = tot_count;
         self.reset();
     }
+
     pub fn tot(&self) -> u64 {
         self.tot
     }

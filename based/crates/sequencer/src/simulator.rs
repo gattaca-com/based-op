@@ -6,9 +6,10 @@ use std::{
 use bop_common::{
     actor::Actor,
     communication::{
+        SpineConnections, TrackedSenders,
         messages::{
             EvmBlockParams, SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg,
-        }, SpineConnections, TrackedSenders
+        },
     },
     db::{DBFrag, DBSorting, DatabaseRead, State},
     time::{Duration, Instant, Nanos},

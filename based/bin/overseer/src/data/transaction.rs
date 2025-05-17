@@ -15,7 +15,7 @@ pub struct TransactionData {
 
 impl TransactionData {
     pub fn new(uuid: Uuid, t: Nanos, update: Tx) -> Self {
-        Self { uuid, updates: vec![(t, update)], ..Default::default() }
+        Self { uuid, updates: vec![(t, update)] }
     }
 
     pub fn push(&mut self, t: Nanos, update: Tx) {

@@ -69,5 +69,3 @@ pub fn scientific_notation_from_micro(mut v: u64) -> String {
     }
     format!("{v}M")
 }
-
-

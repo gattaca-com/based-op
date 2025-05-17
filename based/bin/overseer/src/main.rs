@@ -105,9 +105,11 @@ impl OverseerConsumers {
         let portal_client = HttpClient::builder().build(portal_url).expect("Couldn't initialize portal rpc client");
         Self { telemetry: telemetry_queue().into(), runtime, portal_client }
     }
+
     pub fn rollup_config(&self) -> Result<RollupConfig, ClientError> {
         self.runtime.block_on(self.portal_client.rollup_config())
     }
+
     pub fn sync_status(&self) -> Result<SyncStatus, ClientError> {
         self.runtime.block_on(self.portal_client.sync_status())
     }
@@ -129,9 +131,11 @@ impl Overseer {
     pub fn block_duration(&self) -> Nanos {
         Nanos::from_secs(self.data.rollup_config.block_time)
     }
+
     pub fn genesis_time(&self) -> Nanos {
         Nanos::from_secs(self.data.rollup_config.genesis.l2_time)
     }
+
     pub fn update(&mut self, consumers: &mut OverseerConsumers, slot_time: bool) {
         self.data.update(consumers, slot_time);
     }
@@ -207,6 +211,7 @@ impl Overseer {
             _ => {}
         }
     }
+
     fn render_footer(&self, area: Rect, frame: &mut Frame) {
         let txt = match self.mode {
             Mode::Overview | Mode::ChainInfo => "◄ ► change tab | Q to quit",

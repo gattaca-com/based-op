@@ -1,16 +1,14 @@
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug};
 
 use bop_common::{
     communication::Consumer,
-    time::TimingMessage,
-    time::{Duration, Instant},
+    time::{Duration, Instant, TimingMessage},
 };
 use crossterm::event::KeyCode;
 use ratatui::{
     prelude::*,
     widgets::{Block, Borders, HighlightSpacing, LineGauge, List, ListItem, ListState, Paragraph},
 };
-use std::collections::HashMap;
 use strum_macros::AsRefStr;
 use style::palette::tailwind;
 
@@ -186,10 +184,11 @@ impl TimerDataState {
                 data.processing_data.report_msg_per_sec(frame, layout[1])
             }
             (false, false) => {
-                let layout = Layout::new(
-                    self.direction,
-                    [Constraint::Percentage(40), Constraint::Percentage(40), Constraint::Percentage(20)],
-                )
+                let layout = Layout::new(self.direction, [
+                    Constraint::Percentage(40),
+                    Constraint::Percentage(40),
+                    Constraint::Percentage(20),
+                ])
                 .split(rect);
                 data.latency_data.report(&data.name, frame, layout[0]);
                 data.processing_data.report(&data.name, frame, layout[1]);

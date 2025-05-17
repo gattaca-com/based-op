@@ -100,6 +100,7 @@ impl<T: Statisticable + Default> Plot<T> {
     pub fn new<S: ToString>(title: S) -> Self {
         Self { title: title.to_string(), y_min: u64::MAX, y_max: 0, plot_series: Default::default() }
     }
+
     pub fn push(&mut self, series: PlotSeries<T>) {
         if !(series.y_min == 0 && series.y_max == 0) {
             self.y_min = self.y_min.min(series.y_min);

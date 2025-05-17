@@ -1,4 +1,9 @@
-use std::{fs::read_dir, marker::PhantomData, path::{Path, PathBuf}, sync::Arc};
+use std::{
+    fs::read_dir,
+    marker::PhantomData,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use messages::{
     BlockFetch, BlockSyncMessage, EngineApi, EvmBlockParams, SequencerToExternal, SequencerToSimulator,
