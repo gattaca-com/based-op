@@ -20,11 +20,12 @@ pub struct FragSequence {
     /// Block number and timestamp shared by all frags of this sequence
     block_number: u64,
     block_timestamp: u64,
+    pub n_force_include_txs: usize,
 
     pub sorting_telemetry: SortingTelemetry,
 }
 impl FragSequence {
-    pub fn new(gas_remaining: u64, block_number: u64, block_timestamp: u64) -> Self {
+    pub fn new(gas_remaining: u64, block_number: u64, block_timestamp: u64, n_force_include_txs: usize) -> Self {
         Self {
             start_t: Instant::now(),
             gas_remaining,
@@ -34,6 +35,7 @@ impl FragSequence {
             block_number,
             block_timestamp,
             next_seq: 0,
+            n_force_include_txs,
             sorting_telemetry: Default::default(),
         }
     }

@@ -89,8 +89,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0 &&
-                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0
+                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -302,7 +302,7 @@ where
                 warn!(
                     "received FCU when Sorting. Sending already Fragged txs back to the pools and syncing to the new head."
                 );
-                for tx in frag_seq.txs.into_iter().skip(data.n_force_include) {
+                for tx in frag_seq.txs.into_iter().skip(frag_seq.n_force_include_txs) {
                     ctx.handle_tx(tx.tx, senders);
                 }
                 let start = ctx.db.head_block_number().expect("couldn't get db head block number");
