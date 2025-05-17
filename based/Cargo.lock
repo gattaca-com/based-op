@@ -5075,6 +5075,7 @@ dependencies = [
  "bop-common",
  "clap",
  "crossterm",
+ "either",
  "jsonrpsee",
  "ratatui 0.29.0",
  "reqwest",

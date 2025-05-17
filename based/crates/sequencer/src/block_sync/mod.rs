@@ -225,6 +225,16 @@ impl BlockSync {
                 }),
                 telemetry_producer,
             );
+            TelemetryUpdate::send(
+                frag,
+                telemetry::Telemetry::Frag(telemetry::Frag::Commit),
+                telemetry_producer,
+            );
+            TelemetryUpdate::send(
+                Uuid::nil(),
+                telemetry::Telemetry::System(telemetry::system::SystemNotification::BuildStop(block.number)),
+                telemetry_producer,
+            );
             db.commit_block_unchecked(block, execution_output, trie_updates, &mut self.timers)?;
             self.timers.db_commit.stop();
         }

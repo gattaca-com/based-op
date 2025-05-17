@@ -27,21 +27,21 @@ pub struct UIData {
 }
 
 impl UIData {
-    pub fn render_overview(&mut self, data: &Data, frame: &mut Frame) {
+    pub fn render_overview(&mut self, data: &Data, area: Rect, frame: &mut Frame) {
         let [left, middle, right] =
-            Layout::horizontal([Constraint::Percentage(33), Constraint::Percentage(33), Constraint::Fill(1)])
-                .areas(frame.area());
+            Layout::horizontal([Constraint::Percentage(35), Constraint::Percentage(35), Constraint::Fill(1)])
+                .areas(area);
         self.table_blocks.render(
             Some("Blocks".to_string()),
             BlockData::header(),
-            data.blocks.iter().map(|b| b.to_row()).rev(),
+            data.sealed_blocks().map(|b| b.to_row()),
             frame,
             left,
         );
         self.table_frags.render(
             Some("Frags in block".to_string()),
             FragData::block_table_header(),
-            data.frags.iter().map(|b| b.to_block_table_row()).rev(),
+            data.current_block_frags().map(|b| b.to_block_table_row()),
             frame,
             middle,
         );
@@ -207,6 +207,41 @@ impl Data {
                 Telemetry::Frag(update) => {
                     self.insert_frag(t, key, update);
                 }
+                Telemetry::System(SystemNotification::BuildStop(curblock)) => {
+                    self.block_number = curblock;
+                    if let Some(block) = self.blocks.get_mut(&curblock) {
+                        block.sealed = true;
+                    }
+                }
+                Telemetry::System(SystemNotification::BlockSync(block_number, gas_used)) => {
+                    if !self.blocks.contains_key(&block_number) {
+                        let mut block = BlockData::new(block_number, false, Nanos::now());
+                        block.gas_used = gas_used;
+                        self.blocks.insert(block);
+                    } else {
+                        let mut block = self.blocks.get_mut(&block_number).unwrap();
+                        // This happens because we got an fcu with a different block than ours at some point and are now resyncing 
+                        if !block.sealed {
+                            block.reset();
+                        }
+                    }
+                    self.block_number = block_number;
+                }
+                Telemetry::System(SystemNotification::NewPayload(block_number)) => {
+                    if !self.blocks.contains_key(&block_number) {
+                        let block = BlockData::new(block_number, false, Nanos::now());
+                        self.blocks.insert(block);
+                    }
+                    self.block_number = block_number;
+                }
+                Telemetry::System(SystemNotification::Sorting(block_number)) => {
+                    if !self.blocks.contains_key(&block_number) {
+                        let block = BlockData::new(block_number, true, Nanos::now());
+                        self.blocks.insert(block);
+                    }
+                    self.block_number = block_number;
+                }
+                m => tracing::warn!("not handling {m:?}"),
             }
         }
         if self.data_gatherer.fired() || block_time {
@@ -223,25 +258,6 @@ impl Data {
             }
         }
 
-        while let Some(notification) = consumers.system_notifications.try_consume() {
-            match notification {
-                SystemNotification::BuildStop(curblock) => {
-                    self.block_number = curblock;
-                    if let Some(block) = self.blocks.get_mut(&curblock) {
-                        block.sealed = true;
-                    }
-                }
-                SystemNotification::BlockSync(block_number, gas_used) => {
-                    if !self.blocks.contains_key(&block_number) {
-                        let mut block = BlockData::new(block_number, false, Nanos::now());
-                        block.gas_used = gas_used;
-                        self.blocks.insert(block);
-                    }
-                    self.block_number = block_number;
-                }
-                _ => {}
-            }
-        }
         if self.queue_checker.fired() {
             self.check_new_queues();
         }
@@ -278,6 +294,19 @@ impl Data {
                 }
             }
         }
+    }
+
+    fn current_block_frags(&self) -> impl Iterator<Item = &FragData> {
+        if self.blocks.get(&self.block_number).is_some_and(|b| b.sealed) {
+            return either::Either::Left(std::iter::empty());
+        }
+        either::Either::Right(
+            self.frags.iter().rev().take_while(|f| f.block_number().is_some_and(|n| n == self.block_number)),
+        )
+    }
+
+    fn sealed_blocks(&self) -> impl Iterator<Item = &BlockData> {
+        self.blocks.iter().rev().filter(|f| f.sealed)
     }
 }
 

@@ -64,7 +64,7 @@ impl TransactionData {
     }
 
     pub fn pool_header() -> impl ExactSizeIterator<Item = Text<'static>> {
-        ["Hash", "Sender", "Nonce", "Timestamp"].into_iter().map(|t| t.into())
+        ["Timestamp", "Hash", "Sender", "Nonce", ].into_iter().map(|t| t.into())
     }
 
     pub fn to_pool_row(&self) -> Vec<Text<'_>> {
@@ -76,15 +76,15 @@ impl TransactionData {
         };
 
         vec![
+            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
             ingested.hash.to_string()[0..6].to_string().into(),
             ingested.sender.to_string()[0..6].to_string().into(),
             ingested.nonce.to_string().into(),
-            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
         ]
     }
 
     pub fn frag_table_header() -> impl ExactSizeIterator<Item = Text<'static>> {
-        ["Hash", "Sender", "Nonce", "Payment", "Gas Used", "Simtime", "Timestamp"].into_iter().map(|t| t.into())
+        ["Timestamp", "Hash", "Sender", "Nonce", "Payment", "Gas", "Simtime"].into_iter().map(|t| t.into())
     }
 
     pub fn to_frag_row(&self) -> Vec<Text<'_>> {
@@ -96,13 +96,13 @@ impl TransactionData {
             return vec![];
         };
         vec![
+            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
             ingested.hash.to_string()[0..6].to_string().into(),
             ingested.sender.to_string()[0..6].to_string().into(),
             ingested.nonce.to_string().into(),
             included.payment.to_string().into(),
             included.gas_used.to_string().into(),
             included.sim_time.to_string().into(),
-            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
         ]
     }
 }

@@ -13,7 +13,7 @@ use bop_common::{
     debug_panic,
     p2p::{FragV0, SealV0},
     shared::SharedState,
-    telemetry::{TelemetryUpdate, system::SystemNotification, system_notificiations_queue, telemetry_queue},
+    telemetry::{TelemetryUpdate, telemetry_queue},
     time::Timer,
     transaction::Transaction,
 };
@@ -76,7 +76,6 @@ pub struct SequencerContext<Db> {
     pub system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
     pub timers: SequencerTimers,
     pub telemetry: Producer<TelemetryUpdate>,
-    pub notifications: Producer<SystemNotification>,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -99,7 +98,6 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             base_fee: Default::default(),
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
-            notifications: system_notificiations_queue().into(),
         }
     }
 }

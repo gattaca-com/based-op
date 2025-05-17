@@ -10,7 +10,7 @@ pub enum SequencerState {
     Sorting
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum SystemNotification {
     StateChanged(SequencerState),

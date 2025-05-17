@@ -1,9 +1,9 @@
 use bop_common::{eth::MicroEth, time::Nanos};
-use ratatui::text::Text;
+use ratatui::{style::Style, text::Text};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::collections::HasKey;
+use crate::{collections::HasKey, utils::empty_if_default};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BlockData {
@@ -16,7 +16,7 @@ pub struct BlockData {
     pub gas_used: u64,
     pub payment: MicroEth,
     pub n_txs: usize,
-    pub sealed: bool
+    pub sealed: bool,
 }
 
 impl BlockData {
@@ -25,7 +25,8 @@ impl BlockData {
     }
     pub fn push(&mut self, frag: Uuid, payment: MicroEth, gas_used: u64, n_txs: usize) {
         if self.sealed {
-            return
+            tracing::info!("already sealed {}", self.number);
+            return;
         }
         self.frags.push(frag);
         self.payment += payment;
@@ -34,19 +35,34 @@ impl BlockData {
     }
 
     pub fn header() -> impl ExactSizeIterator<Item = Text<'static>> {
-        ["Number", "# Frags", "# Txs", "Gas Used", "Payment", "Timestamp"].into_iter().map(|t| t.into())
+        ["Us", "Number", "# F", "# T", "Gas", "Payment", "Timestamp"].into_iter().map(|t| t.into())
     }
 
     pub fn to_row(&self) -> Vec<Text<'_>> {
         let t_start = self.timestamp;
+        // we remove the first frag which is anyway the one with all the force inclusion
+        let frags = self.frags.len().saturating_sub(1);
+        let (style, us_str) = if self.we_sequenced {
+            (Style::new().fg(ratatui::style::Color::Green), "X".to_string())
+        } else {
+            (Style::default(), "".to_string())
+        };
         vec![
-            self.number.to_string().into(),
-            self.frags.len().to_string().into(),
-            self.n_txs.to_string().into(),
-            self.gas_used.to_string().into(),
-            self.payment.to_string().into(),
-            t_start.with_fmt("%d %H:%M:%S%.3f").into(),
+            Text::from(us_str).style(style),
+            Text::from(self.number.to_string()).style(style),
+            Text::from(empty_if_default(frags)).style(style),
+            Text::from(empty_if_default(self.n_txs)).style(style),
+            Text::from(empty_if_default(self.gas_used)).style(style),
+            Text::from(empty_if_default(self.payment)).style(style),
+            Text::from(t_start.with_fmt("%d %H:%M:%S%.3f")).style(style),
         ]
+    }
+
+    pub fn reset(&mut self) {
+        self.frags.clear();
+        self.payment = MicroEth(0);
+        self.gas_used = 0;
+        self.n_txs = 0;
     }
 }
 

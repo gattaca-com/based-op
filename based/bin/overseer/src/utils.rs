@@ -10,3 +10,11 @@ pub fn fmt_with_pre_pad_till_9<T: ToString>(duration: &T) -> String {
     s.push_str(&dur_str);
     s
 }
+
+pub fn empty_if_default<T: Default + ToString + PartialEq>(t: T) -> String {
+    if t == Default::default() {
+        "".to_string()
+    } else {
+        t.to_string()
+    }
+}

@@ -33,7 +33,7 @@ impl FragData {
         self.sim_time += included.sim_time;
     }
     pub fn block_table_header() -> impl ExactSizeIterator<Item = Text<'static>> {
-        ["Seq", "# Txs", "Payment", "Gas Used", "Simtime", "Timestamp"].into_iter().map(|t| t.into())
+        ["Timestamp", "Seq", "# T", "Payment", "Gas", "Simtime"].into_iter().map(|t| t.into())
     }
 
     pub fn to_block_table_row(&self) -> Vec<Text<'_>> {
@@ -43,12 +43,12 @@ impl FragData {
         let (payment, gas_used, n_txs) = self.frag_stats().unwrap_or_default();
 
         vec![
+            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
             seq.to_string().into(),
             n_txs.to_string().into(),
             payment.to_string().into(),
             gas_used.to_string().into(),
             self.sim_time.to_string().into(),
-            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
         ]
     }
 

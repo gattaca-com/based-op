@@ -1,7 +1,6 @@
 use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
-use system::SystemNotification;
 use uuid::Uuid;
 
 use crate::{
@@ -20,16 +19,13 @@ pub fn telemetry_queue() -> Queue<TelemetryUpdate> {
         .expect("Can't create or open telemetry queue")
 }
 
-pub fn system_notificiations_queue() -> Queue<SystemNotification> {
-    Queue::create_or_open_shared(queues_dir().join("system_notification"), 1024, QueueType::MPMC)
-        .expect("Can't create or open notification queue")
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Telemetry {
     Tx(order::Tx),
     Frag(frag::Frag),
+    System(system::SystemNotification)
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]

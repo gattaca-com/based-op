@@ -13,7 +13,7 @@ use bop_common::{
     api::{OpNodeApiClient, RollupConfig},
     communication::Consumer,
     config::{LoggingConfig, LoggingFlags},
-    telemetry::{TelemetryUpdate, system::SystemNotification, system_notificiations_queue, telemetry_queue},
+    telemetry::{TelemetryUpdate, telemetry_queue},
     time::{Nanos, Timer, utils::renderloop_60_fps},
     utils::init_tracing,
 };
@@ -89,12 +89,11 @@ impl Mode {
 
 struct OverseerConsumers {
     telemetry: Consumer<TelemetryUpdate>,
-    system_notifications: Consumer<SystemNotification>,
 }
 
 impl Default for OverseerConsumers {
     fn default() -> Self {
-        Self { telemetry: telemetry_queue().into(), system_notifications: system_notificiations_queue().into() }
+        Self { telemetry: telemetry_queue().into() }
     }
 }
 
@@ -153,7 +152,7 @@ impl Overseer {
 
         match self.mode {
             Mode::Overview => {
-                self.ui_data.render_overview(&self.data, frame);
+                self.ui_data.render_overview(&self.data, inner_area, frame);
             }
 
             Mode::TimekeeperRealtime => {

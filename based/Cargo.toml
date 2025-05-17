@@ -53,6 +53,7 @@ chrono = "0.4.23"
 clap = { version = "4.5.27", features = ["derive", "env"] }
 crossbeam-channel = "0.5.14"
 directories = "5.0.1"
+either = "1.15.0"
 ethereum_ssz = "0.8.3"
 eyre = "0.6.12"
 futures = "0.3.31"
