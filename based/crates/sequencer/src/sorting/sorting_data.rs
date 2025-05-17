@@ -79,6 +79,7 @@ pub struct SortingData<Db> {
     pub gas_remaining: u64,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
+    pub n_force_include: usize,
     /// Sort frag until, and then commit
     pub until: Instant,
     /// We wait until these are back before we apply the next
@@ -123,6 +124,7 @@ impl<Db> SortingData<Db> {
             tof_snapshot,
             gas_remaining: seq.gas_remaining,
             txs: vec![],
+            n_force_include: 0,
             start_t: Instant::now(),
             telemetry: Default::default(),
         }
@@ -319,8 +321,10 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
 
         // Apply must include txs.
         let Some(forced_inclusion_txs) = context.payload_attributes.transactions.as_ref() else {
+            self.n_force_include = 0;
             return Ok(());
         };
+        self.n_force_include = forced_inclusion_txs.len();
 
         for (i, tx) in forced_inclusion_txs.iter().enumerate() {
             let tx = Arc::new(Transaction::decode(tx.clone()).unwrap());
