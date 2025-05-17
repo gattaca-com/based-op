@@ -296,7 +296,7 @@ where
                 warn!(
                     "received FCU when Sorting. Sending already Fragged txs back to the pools and syncing to the new head."
                 );
-                for tx in frag_seq.txs.into_iter() {
+                for tx in frag_seq.txs.into_iter().skip(if frag_seq.next_seq == 0 { data.n_force_include } else { 0 }) {
                     ctx.handle_tx(tx.tx, senders);
                 }
                 let start = ctx.db.head_block_number().expect("couldn't get db head block number");
