@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    panic,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::level_filters::LevelFilter;
@@ -189,4 +192,3 @@ pub fn utcnow_sec() -> u64 {
 macro_rules! debug_panic {
     ($($arg:tt)*) => (if cfg!(debug_assertions) { panic!($($arg)*); } else {tracing::error!($($arg)*)})
 }
-

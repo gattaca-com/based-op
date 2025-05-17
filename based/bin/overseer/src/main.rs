@@ -10,11 +10,11 @@ mod utils;
 use std::io::stdout;
 
 use bop_common::{
-    api::{OpNodeApiClient, RollupConfig},
+    api::{OpNodeApiClient, RollupConfig, SyncStatus},
     communication::Consumer,
     config::{LoggingConfig, LoggingFlags},
     telemetry::{TelemetryUpdate, telemetry_queue},
-    time::{Nanos, Timer, utils::renderloop_60_fps},
+    time::{Nanos, utils::renderloop_60_fps},
     utils::init_tracing,
 };
 use clap::Parser;
@@ -24,14 +24,14 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use data::{Data, UIData};
-use jsonrpsee::http_client::HttpClient;
+use jsonrpsee::{core::ClientError, http_client::HttpClient};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Stylize, palette::tailwind},
+    layout::{Constraint, Layout, Rect},
+    style::{Color, Stylize, palette::tailwind},
     text::Line,
-    widgets::{Block, Borders, Clear, Tabs},
+    widgets::Tabs,
 };
 use reqwest::Url;
 use strum::IntoEnumIterator;
@@ -56,6 +56,8 @@ enum Mode {
     TimekeeperRealtime,
     #[strum(to_string = "Timing FlameGraph")]
     TimekeeperFlameGraph,
+    #[strum(to_string = "General Chain Info")]
+    ChainInfo,
 }
 
 impl Mode {
@@ -83,57 +85,52 @@ impl Mode {
             Self::Overview => tailwind::NEUTRAL,
             Self::TimekeeperRealtime => tailwind::FUCHSIA,
             Self::TimekeeperFlameGraph => tailwind::BLUE,
+            Self::ChainInfo => tailwind::AMBER,
         }
     }
 }
 
 struct OverseerConsumers {
     telemetry: Consumer<TelemetryUpdate>,
-}
-
-impl Default for OverseerConsumers {
-    fn default() -> Self {
-        Self { telemetry: telemetry_queue().into() }
-    }
-}
-
-struct Overseer {
     runtime: tokio::runtime::Runtime,
     portal_client: HttpClient,
-    data: Data,
-    ui_data: UIData,
-    mode: Mode,
-    rollup_config: RollupConfig,
 }
-impl From<OverseerArgs> for Overseer {
-    fn from(value: OverseerArgs) -> Self {
+
+impl OverseerConsumers {
+    pub fn new(portal_url: Url) -> Self {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("Couldn't initialize tokio runtime");
-        let portal_client =
-            HttpClient::builder().build(value.portal_url).expect("Couldn't initialize portal rpc client");
-        let rollup_config = runtime
-            .block_on(portal_client.rollup_config())
-            .expect("Couldn't get the rollup config. Is the portal url set correctly?");
+        let portal_client = HttpClient::builder().build(portal_url).expect("Couldn't initialize portal rpc client");
+        Self { telemetry: telemetry_queue().into(), runtime, portal_client }
+    }
+    pub fn rollup_config(&self) -> Result<RollupConfig, ClientError> {
+        self.runtime.block_on(self.portal_client.rollup_config())
+    }
+    pub fn sync_status(&self) -> Result<SyncStatus, ClientError> {
+        self.runtime.block_on(self.portal_client.sync_status())
+    }
+}
 
-        Self {
-            runtime,
-            portal_client,
-            data: Default::default(),
-            mode: Default::default(),
-            rollup_config,
-            ui_data: UIData::default(),
-        }
+struct Overseer {
+    data: Data,
+    ui_data: UIData,
+    mode: Mode,
+}
+
+impl From<RollupConfig> for Overseer {
+    fn from(rollup_config: RollupConfig) -> Self {
+        Self { ui_data: Default::default(), data: Data::new(rollup_config.clone()), mode: Default::default() }
     }
 }
 
 impl Overseer {
     pub fn block_duration(&self) -> Nanos {
-        Nanos::from_secs(self.rollup_config.block_time)
+        Nanos::from_secs(self.data.rollup_config.block_time)
     }
     pub fn genesis_time(&self) -> Nanos {
-        Nanos::from_secs(self.rollup_config.genesis.l2_time)
+        Nanos::from_secs(self.data.rollup_config.genesis.l2_time)
     }
     pub fn update(&mut self, consumers: &mut OverseerConsumers, slot_time: bool) {
         self.data.update(consumers, slot_time);
@@ -162,6 +159,9 @@ impl Overseer {
             Mode::TimekeeperFlameGraph => {
                 self.data.timekeeper.set_mode(TimeKeeperMode::FlameGraph);
                 TimeKeeper::render(&mut self.data, inner_area, frame)
+            }
+            Mode::ChainInfo => {
+                self.ui_data.render_chain_info(&self.data, inner_area, frame);
             }
         }
     }
@@ -209,7 +209,7 @@ impl Overseer {
     }
     fn render_footer(&self, area: Rect, frame: &mut Frame) {
         let txt = match self.mode {
-            Mode::Overview => "◄ ► change tab | ▲ ▼ to select | Enter toggle | Q to quit",
+            Mode::Overview | Mode::ChainInfo => "◄ ► change tab | Q to quit",
             Mode::TimekeeperRealtime => {
                 "◄ ► change tab | ▲ ▼ to select | m: min, a: avg, e: med, M: max | l: latency, b: business | f/PageUp/Down/Space to change slot | Q to quit"
             }
@@ -228,8 +228,9 @@ fn main() {
     logging_config.flags = LoggingFlags::File;
     let _guard = init_tracing(logging_config);
     tracing::info!("Overseer starting");
-    let mut consumers = OverseerConsumers::default();
-    let mut overseer: Overseer = OverseerArgs::parse().into();
+    let args = OverseerArgs::parse();
+    let mut consumers = OverseerConsumers::new(args.portal_url);
+    let mut overseer: Overseer = consumers.rollup_config().expect("couldn't connect to portal").into();
     let genesis_time = overseer.genesis_time();
     let block_duration = overseer.block_duration();
 

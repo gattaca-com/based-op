@@ -7,7 +7,6 @@ use ratatui::{
 };
 
 use crate::prelude::*;
-pub mod block;
 pub mod plot;
 
 #[derive(Debug, Clone, Default)]

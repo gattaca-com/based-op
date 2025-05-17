@@ -1,10 +1,22 @@
-use crate::{collections::KeyedCircularBuffer, statistics::Statistics, ui::plot::RenderFlags};
+use std::io::Write;
+
+use crate::{
+    collections::{CircularBuffer, KeyedCircularBuffer},
+    statistics::Statistics,
+    ui::plot::RenderFlags,
+    utils::empty_if_default,
+};
 use block::BlockData;
 use bop_common::{
+    api::{RollupConfig, SyncStatus},
     communication::{Consumer, Queue, queues_dir},
-    telemetry::{Telemetry, frag::Frag, order::Tx, system::SystemNotification},
-    time::Duration,
-    time::TimingMessage,
+    telemetry::{
+        Telemetry,
+        frag::Frag,
+        order::Tx,
+        system::{SequencerState, SystemNotification},
+    },
+    time::{Duration, TimingMessage},
 };
 use frag::FragData;
 use transaction::TransactionData;
@@ -24,13 +36,24 @@ pub struct UIData {
     pub table_blocks: TableState,
     pub table_frags: TableState,
     pub table_pool: TableState,
+    pub table_system: TableState,
 }
 
 impl UIData {
     pub fn render_overview(&mut self, data: &Data, area: Rect, frame: &mut Frame) {
+        let [top, bottom] = Layout::vertical([Constraint::Length(12), Constraint::Fill(1)]).areas(area);
+        let [top_left, top_middle] = Layout::horizontal([Constraint::Percentage(35), Constraint::Fill(1)]).areas(top);
+
+        self.render_system_overview(data, top_left, frame);
+        self.render_sync_status(data, top_middle, frame);
+
         let [left, middle, right] =
             Layout::horizontal([Constraint::Percentage(35), Constraint::Percentage(35), Constraint::Fill(1)])
-                .areas(area);
+                .areas(bottom);
+
+        self.render_system_messages(data, right, frame);
+
+        let [left, bottom_left] = Layout::vertical([Constraint::Percentage(50), Constraint::Fill(1)]).areas(left);
         self.table_blocks.render(
             Some("Blocks".to_string()),
             BlockData::header(),
@@ -39,19 +62,103 @@ impl UIData {
             left,
         );
         self.table_frags.render(
-            Some("Frags in block".to_string()),
+            Some(format!("Frags in currently sequenced Block {}", data.block_number)),
             FragData::block_table_header(),
             data.current_block_frags().map(|b| b.to_block_table_row()),
             frame,
-            middle,
+            bottom_left,
         );
         self.table_pool.render(
             Some("Tx Pool".to_string()),
             TransactionData::pool_header(),
             data.transactions.iter().map(|b| b.to_pool_row()).rev(),
             frame,
-            right,
+            middle,
         )
+    }
+
+    pub fn render_chain_info(&mut self, data: &Data, area: Rect, frame: &mut Frame) {
+        frame.render_widget(Paragraph::new(format!("{:#?}", data.rollup_config)), area);
+    }
+
+    fn render_system_overview(&mut self, data: &Data, area: Rect, frame: &mut Frame) {
+        let mut tw = tabwriter::TabWriter::new(vec![]);
+        let _ = writeln!(
+            &mut tw,
+            "Last Update:\t{}",
+            data.system.last().map(|(t, _)| t.with_fmt("%d %H:%M:%S%.3f")).unwrap_or_default()
+        );
+
+        let (t, cur_state) = data.current_state().unwrap_or_default();
+
+        let _ = writeln!(&mut tw, "Current Block:\t{}", data.block_number);
+        let _ = writeln!(&mut tw, "Current State:\t{}", cur_state.as_ref());
+        let (_, last_state) = data.last_state().unwrap_or_default();
+        let _ = writeln!(&mut tw, "Prev State:\t{}", empty_if_default(last_state));
+        let _ = writeln!(&mut tw, "Last State Transition:\t{}", empty_if_default(t));
+        tw.flush().unwrap();
+        let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
+        let info = Paragraph::new(txt).block(Block::new().title("Local Gateway Status").borders(Borders::all()));
+
+        frame.render_widget(info, area);
+    }
+
+    fn render_sync_status(&mut self, data: &Data, area: Rect, frame: &mut Frame) {
+        let mut tw = tabwriter::TabWriter::new(vec![]);
+        let _ = writeln!(&mut tw, "Last Update:\t{}", data.sync_status.0.with_fmt("%d %H:%M:%S%.3f"));
+
+        let _ = writeln!(
+            &mut tw,
+            "Unsafe L2:\t{}\t{}",
+            data.sync_status.1.unsafe_l2.number, data.sync_status.1.unsafe_l2.hash
+        );
+        let _ =
+            writeln!(&mut tw, "Safe L2:\t{}\t{}", data.sync_status.1.safe_l2.number, data.sync_status.1.safe_l2.hash);
+        let _ = writeln!(
+            &mut tw,
+            "Finalized L2:\t{}\t{}",
+            data.sync_status.1.finalized_l2.number, data.sync_status.1.finalized_l2.hash
+        );
+        let _ = writeln!(
+            &mut tw,
+            "Pending Safe L2:\t{}\t{}",
+            data.sync_status.1.pending_safe_l2.number, data.sync_status.1.pending_safe_l2.hash
+        );
+        let _ = writeln!(
+            &mut tw,
+            "Queued Un Safe L2:\t{}\t{}",
+            empty_if_default(data.sync_status.1.queued_unsafe_l2.as_ref().map(|t| t.number).unwrap_or_default()),
+            empty_if_default(data.sync_status.1.queued_unsafe_l2.as_ref().map(|t| t.hash).unwrap_or_default())
+        );
+        let _ =
+            writeln!(&mut tw, "L1:\t{}\t{}", data.sync_status.1.current_l1.number, data.sync_status.1.current_l1.hash);
+        let _ =
+            writeln!(&mut tw, "Safe L1:\t{}\t{}", data.sync_status.1.safe_l1.number, data.sync_status.1.safe_l1.hash);
+        let _ = writeln!(
+            &mut tw,
+            "Finalized L1:\t{}\t{}",
+            data.sync_status.1.current_l1_finalized.number, data.sync_status.1.current_l1_finalized.hash
+        );
+        let _ =
+            writeln!(&mut tw, "Head L1:\t{}\t{}", data.sync_status.1.head_l1.number, data.sync_status.1.head_l1.hash);
+        tw.flush().unwrap();
+        let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
+        let info = Paragraph::new(txt).block(Block::new().title("Chain Sync Status").borders(Borders::all()));
+
+        frame.render_widget(info, area);
+    }
+
+    fn render_system_messages(&mut self, data: &Data, right: Rect, frame: &mut Frame<'_>) {
+        self.table_system.render(
+            Some("System Messages".to_string()),
+            vec![Text::from("Timestamp"), Text::from("Message")].into_iter(),
+            data.system
+                .iter()
+                .rev()
+                .map(|(t, b)| vec![t.with_fmt("%d %H:%M:%S%.3f").into(), format!("{:?}", b).into()]),
+            frame,
+            right,
+        );
     }
 }
 
@@ -115,25 +222,32 @@ pub struct Data {
     pub transactions: KeyedCircularBuffer<TransactionData>,
     pub blocks: KeyedCircularBuffer<BlockData>,
     pub frags: KeyedCircularBuffer<FragData>,
+    pub system: CircularBuffer<(Nanos, SystemNotification)>,
     pub data_gatherer: Repeater,
     pub queue_checker: Repeater,
+    pub syncstatus_poller: Repeater,
     pub flamegraph_resetter: Repeater,
     pub timekeeper: TimeKeeper,
     pub time_datas: TimeDatas,
+    pub rollup_config: RollupConfig,
+    pub sync_status: (Nanos, SyncStatus),
 }
-
-impl Default for Data {
-    fn default() -> Self {
+impl Data {
+    pub fn new(rollup_config: RollupConfig) -> Self {
         Self {
             block_number: Default::default(),
-            transactions: KeyedCircularBuffer::new(30_000),
-            frags: KeyedCircularBuffer::new(30_000),
-            blocks: KeyedCircularBuffer::new(30_000),
+            transactions: KeyedCircularBuffer::new(10_000),
+            frags: KeyedCircularBuffer::new(10_000),
+            blocks: KeyedCircularBuffer::new(10_000),
+            system: CircularBuffer::new(10_000),
             timekeeper: Default::default(),
             time_datas: Default::default(),
             data_gatherer: Repeater::every(Duration::from_secs(6) / 256u64),
             queue_checker: Repeater::every(Duration::from_secs(10)),
+            syncstatus_poller: Repeater::every(Duration::from_secs(1)),
             flamegraph_resetter: Repeater::every(Duration::from_secs(60)),
+            rollup_config,
+            sync_status: Default::default(),
         }
     }
 }
@@ -198,50 +312,60 @@ impl Data {
 
     pub fn update(&mut self, consumers: &mut OverseerConsumers, block_time: bool) {
         while let Some(update) = consumers.telemetry.try_consume() {
-            tracing::info!("got a message");
             let (key, t, update) = update.into();
             match update {
                 Telemetry::Tx(tx_update) => {
+                    if let Tx::Included(included) = &tx_update {
+                        if let Some(frag) = self.frags.get_mut(&included.frag) {
+                            frag.add_tx(key, *included);
+                        }
+                    }
                     self.insert_transaction(key, t, tx_update);
                 }
                 Telemetry::Frag(update) => {
                     self.insert_frag(t, key, update);
                 }
-                Telemetry::System(SystemNotification::BuildStop(curblock)) => {
+                Telemetry::System(system @ SystemNotification::BuildStop(curblock)) => {
                     self.block_number = curblock;
                     if let Some(block) = self.blocks.get_mut(&curblock) {
                         block.sealed = true;
                     }
+                    self.system.push((t, system));
                 }
-                Telemetry::System(SystemNotification::BlockSync(block_number, gas_used)) => {
+                Telemetry::System(system @ SystemNotification::BlockSync(block_number, gas_used)) => {
                     if !self.blocks.contains_key(&block_number) {
                         let mut block = BlockData::new(block_number, false, Nanos::now());
                         block.gas_used = gas_used;
                         self.blocks.insert(block);
                     } else {
-                        let mut block = self.blocks.get_mut(&block_number).unwrap();
-                        // This happens because we got an fcu with a different block than ours at some point and are now resyncing 
+                        let block = self.blocks.get_mut(&block_number).unwrap();
+                        // This happens because we got an fcu with a different block than ours at some point and are now resyncing
                         if !block.sealed {
                             block.reset();
                         }
                     }
+                    self.system.push((t, system));
                     self.block_number = block_number;
                 }
-                Telemetry::System(SystemNotification::NewPayload(block_number)) => {
+                Telemetry::System(system @ SystemNotification::NewPayload(block_number)) => {
                     if !self.blocks.contains_key(&block_number) {
                         let block = BlockData::new(block_number, false, Nanos::now());
                         self.blocks.insert(block);
                     }
                     self.block_number = block_number;
+                    self.system.push((t, system));
                 }
-                Telemetry::System(SystemNotification::Sorting(block_number)) => {
+                Telemetry::System(system @ SystemNotification::Sorting(block_number)) => {
                     if !self.blocks.contains_key(&block_number) {
                         let block = BlockData::new(block_number, true, Nanos::now());
                         self.blocks.insert(block);
                     }
                     self.block_number = block_number;
+                    self.system.push((t, system));
                 }
-                m => tracing::warn!("not handling {m:?}"),
+                Telemetry::System(system) => {
+                    self.system.push((t, system));
+                }
             }
         }
         if self.data_gatherer.fired() || block_time {
@@ -263,6 +387,13 @@ impl Data {
         }
         if self.flamegraph_resetter.fired() {
             self.time_datas.reset()
+        }
+        if self.syncstatus_poller.fired() {
+            if let Ok(sync_status) =
+                consumers.sync_status().inspect_err(|e| tracing::warn!("couldn't get SyncStatus from portal: {e}"))
+            {
+                self.sync_status = (Nanos::now(), sync_status)
+            }
         }
     }
 
@@ -307,6 +438,22 @@ impl Data {
 
     fn sealed_blocks(&self) -> impl Iterator<Item = &BlockData> {
         self.blocks.iter().rev().filter(|f| f.sealed)
+    }
+
+    fn current_state(&self) -> Option<(Nanos, SequencerState)> {
+        self.system
+            .iter()
+            .rev()
+            .find_map(|(t, s)| if let SystemNotification::StateChanged(state) = s { Some((*t, *state)) } else { None })
+    }
+    fn last_state(&self) -> Option<(Nanos, SequencerState)> {
+        self.system
+            .iter()
+            .rev()
+            .filter_map(
+                |(t, s)| if let SystemNotification::StateChanged(state) = s { Some((*t, *state)) } else { None },
+            )
+            .nth(1)
     }
 }
 

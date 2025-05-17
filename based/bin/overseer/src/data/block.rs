@@ -59,6 +59,7 @@ impl BlockData {
     }
 
     pub fn reset(&mut self) {
+        self.we_sequenced = false;
         self.frags.clear();
         self.payment = MicroEth(0);
         self.gas_used = 0;

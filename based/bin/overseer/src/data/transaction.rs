@@ -22,15 +22,6 @@ impl TransactionData {
         self.updates.push((t, update))
     }
 
-    pub fn in_block(&self, uuid: Uuid) -> Option<(usize, Uuid)> {
-        self.updates.iter().find_map(|(_, u)| match u {
-            Tx::Included(IncludedInFrag { frag, id_in_frag, .. }) if *frag == uuid => {
-                Some((*id_in_frag as usize, self.uuid))
-            }
-            _ => None,
-        })
-    }
-
     pub fn ingested(&self) -> Option<&Ingested> {
         self.updates.iter().find_map(|(_, u)| match u {
             Tx::Ingested(ingested) => Some(ingested),
@@ -59,12 +50,8 @@ impl TransactionData {
         active
     }
 
-    pub fn included(&self) -> impl Iterator<Item = (&Nanos, &IncludedInFrag)> {
-        self.updates.iter().filter_map(|(n, u)| if let Tx::Included(included) = u { Some((n, included)) } else { None })
-    }
-
     pub fn pool_header() -> impl ExactSizeIterator<Item = Text<'static>> {
-        ["Timestamp", "Hash", "Sender", "Nonce", ].into_iter().map(|t| t.into())
+        ["Timestamp", "Hash", "Sender", "Nonce"].into_iter().map(|t| t.into())
     }
 
     pub fn to_pool_row(&self) -> Vec<Text<'_>> {
@@ -83,10 +70,12 @@ impl TransactionData {
         ]
     }
 
+    #[allow(dead_code)]
     pub fn frag_table_header() -> impl ExactSizeIterator<Item = Text<'static>> {
         ["Timestamp", "Hash", "Sender", "Nonce", "Payment", "Gas", "Simtime"].into_iter().map(|t| t.into())
     }
 
+    #[allow(dead_code)]
     pub fn to_frag_row(&self) -> Vec<Text<'_>> {
         let Some(ingested) = self.ingested() else {
             return vec![];

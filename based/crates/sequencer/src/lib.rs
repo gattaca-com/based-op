@@ -15,24 +15,18 @@ use bop_common::{
         },
     },
     db::DatabaseWrite,
-    eth::MicroEth,
     p2p::{EnvV0, VersionedMessage},
     shared::SharedState,
-    telemetry::{
-        self, Telemetry, TelemetryUpdate,
-        order::{IncludedInFrag, Ingested},
-        system::SystemNotification,
-    },
+    telemetry::{self, Telemetry, TelemetryUpdate, system::SystemNotification},
     time::{Duration, Repeater},
     transaction::Transaction,
 };
 use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_optimism_primitives::{OpTransactionSigned, transaction::TransactionSenderInfo};
+use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::BlockWithSenders;
 use reth_primitives_traits::SignedTransaction;
 use revm::DatabaseRef;
-use revm_primitives::Address;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;

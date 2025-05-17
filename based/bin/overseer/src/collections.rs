@@ -31,7 +31,7 @@ pub struct CircularBuffer<T> {
 impl<T: Default + Clone> CircularBuffer<T> {
     pub fn new(size: usize) -> Self {
         let realsize = size.next_power_of_two();
-        Self { data: vec![T::default(); size], mask: realsize - 1, filled: false, pos: 0 }
+        Self { data: vec![T::default(); realsize], mask: realsize - 1, filled: false, pos: 0 }
     }
 }
 impl<T> CircularBuffer<T> {
@@ -239,7 +239,8 @@ impl<'a, T> Iterator for Iter<'a, T> {
         if self.count == self.buffer.len() {
             return None;
         }
-        let out = unsafe { self.buffer.data.get_unchecked(self.pos & self.buffer.mask) };
+
+        let out = unsafe { self.buffer.data.get_unchecked(self.pos) };
         self.pos = (self.pos + 1) & self.buffer.mask;
         self.count += 1;
         Some(out)
@@ -256,7 +257,7 @@ impl<T> DoubleEndedIterator for Iter<'_, T> {
         if self.buffer.is_empty() || self.count == self.buffer.len() {
             None
         } else {
-            let out = unsafe { self.buffer.data.get_unchecked(self.back & self.buffer.mask) };
+            let out = unsafe { self.buffer.data.get_unchecked(self.back) };
             self.back = if self.back == 0 { self.buffer.mask } else { self.back - 1 };
             self.count += 1;
             Some(out)
@@ -275,7 +276,7 @@ where
             return None;
         }
 
-        let out = unsafe { self.buffer.data.get_unchecked_mut(self.pos & self.buffer.mask) };
+        let out = unsafe { self.buffer.data.get_unchecked_mut(self.pos) };
         self.pos = (self.pos + 1) & self.buffer.mask;
         self.count += 1;
         unsafe { Some(&mut *(out as *mut T)) }
@@ -345,6 +346,19 @@ mod tests {
 
         buf.iter_mut().for_each(|v| *v = 2);
         assert_eq!(buf.iter().sum::<u64>(), 4u64);
+        assert_eq!(buf.iter().rev().sum::<u64>(), 4u64);
+        let mut buf = CircularBuffer::new(2);
+        buf.push(2u64);
+        buf.push(2u64);
+        buf.push(1u64);
+        assert_eq!(buf.iter().sum::<u64>(), 3u64);
+        assert_eq!(buf.iter().next(), Some(&2u64));
+        assert_eq!(buf.iter().rev().next(), Some(&1u64));
+        assert_eq!(buf.iter().rev().sum::<u64>(), 3u64);
+
+        buf.iter_mut().for_each(|v| *v = 2);
+        assert_eq!(buf.iter().sum::<u64>(), 4u64);
+        assert_eq!(buf.iter().rev().sum::<u64>(), 4u64);
     }
 }
 /// CircularBuffer which can be accessed with hashed keys as well.
@@ -387,35 +401,8 @@ impl<T: HasKey> KeyedCircularBuffer<T> {
     }
 
     #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
-        self.data.iter_mut()
-    }
-
-    #[inline]
-    pub fn clear(&mut self) {
-        self.ids.clear();
-        self.data.clear();
-        self.count = 0;
-    }
-
-    #[inline]
     pub fn is_empty(&self) -> bool {
         self.count == 0
-    }
-
-    #[inline]
-    pub fn last(&self) -> Option<&T> {
-        self.data.last()
-    }
-
-    #[inline]
-    pub fn first(&self) -> Option<&T> {
-        self.data.first()
-    }
-
-    #[inline]
-    pub fn last_mut(&mut self) -> Option<&mut T> {
-        self.data.last_mut()
     }
 
     #[inline]
@@ -424,18 +411,8 @@ impl<T: HasKey> KeyedCircularBuffer<T> {
     }
 
     #[inline]
-    pub fn get_id(&self, k: &T::Key) -> Option<&T> {
-        self.ids.get(k).map(|id| self.data.get(*id % self.data.n_slots()))
-    }
-
-    #[inline]
     pub fn get_mut(&mut self, k: &T::Key) -> Option<&mut T> {
         self.ids.get(k).map(|id| self.data.get_mut(*id % self.data.n_slots()))
-    }
-
-    #[inline]
-    pub fn filled(&self) -> bool {
-        self.data.filled()
     }
 
     #[inline]

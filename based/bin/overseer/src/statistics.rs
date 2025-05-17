@@ -1,22 +1,18 @@
 use std::{
     fmt::{Debug, Display},
     marker::PhantomData,
-    ops::{Add, AddAssign, Div},
 };
 
-use alloy_primitives::U256;
 use bop_common::{
-    communication::Consumer, eth::{scientific_notation_from_micro, to_micro_eth, MicroEth}, time::{Duration, Instant, Nanos}
+    communication::Consumer,
+    eth::MicroEth,
+    time::{Duration, Instant, Nanos},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{collections::CircularBuffer, ui::plot::RenderFlags};
 
-pub trait Statisticable: Into<u64> + From<u64> + Display + Clone + Copy + PartialEq {
-    fn to_plotpoint(&self) -> f64 {
-        Into::<u64>::into(*self) as f64
-    }
-}
+pub trait Statisticable: Into<u64> + From<u64> + Display + Clone + Copy + PartialEq {}
 
 impl Statisticable for Duration {}
 
@@ -45,7 +41,6 @@ impl From<u64> for MsgPer10Sec {
 }
 
 impl Statisticable for MicroEth {}
-
 
 /// Keep track of msg latencies
 /// All in nanos
@@ -117,9 +112,6 @@ pub struct Statistics<T: Statisticable> {
 }
 
 impl<T: Statisticable> Statistics<T> {
-    pub fn bytesize(&self) -> usize {
-        std::mem::size_of::<Self>() + self.datapoints.len() * std::mem::size_of::<DataPoint<T>>()
-    }
     pub fn new(title: String, samples_per_median: usize, n_datapoints: usize, offset: T) -> Self {
         let measurements = CircularBuffer::new(samples_per_median);
 
@@ -142,10 +134,6 @@ impl<T: Statisticable> Statistics<T> {
 
     fn corrected_or_zero(&self, t: u64) -> u64 {
         t.saturating_sub(self.offset)
-    }
-
-    pub fn set_measurements_len(&mut self, len: usize) {
-        self.measurements = CircularBuffer::new(len);
     }
 
     pub fn register_datapoint(&mut self, mut tot_count: usize, block_start: bool) {
@@ -200,15 +188,6 @@ impl<T: Statisticable> Statistics<T> {
         self.last_t = Instant::now();
     }
 
-    pub fn clear(&mut self) {
-        self.reset();
-        self.datapoints.clear();
-    }
-
-    pub fn last(&self) -> Option<u64> {
-        self.datapoints.last().and_then(|t| (t.avg != 0).then_some(t.avg))
-    }
-
     // returns true if full datapoint is captured
     pub fn track(&mut self, el: T) {
         let el = el.into();
@@ -230,10 +209,6 @@ impl<T: Statisticable> Statistics<T> {
         self.measurements.push(el);
     }
 
-    pub fn tot_samples(&self) -> usize {
-        self.datapoints.iter().map(|d| d.n_samples).sum()
-    }
-
     pub fn is_empty(&self) -> bool {
         !self.got_one
     }
@@ -251,7 +226,7 @@ impl<T: Statisticable> Statistics<T> {
                     break;
                 }
             } else {
-                break
+                break;
             }
         }
     }

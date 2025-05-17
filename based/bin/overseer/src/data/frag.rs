@@ -26,12 +26,14 @@ impl FragData {
     pub fn push(&mut self, t: Nanos, update: Frag) {
         self.updates.push((t, update))
     }
+
     pub fn add_tx(&mut self, uuid: Uuid, included: IncludedInFrag) {
         self.txs.push(uuid);
         self.payment += included.payment;
         self.gas_used += included.gas_used;
         self.sim_time += included.sim_time;
     }
+
     pub fn block_table_header() -> impl ExactSizeIterator<Item = Text<'static>> {
         ["Timestamp", "Seq", "# T", "Payment", "Gas", "Simtime"].into_iter().map(|t| t.into())
     }

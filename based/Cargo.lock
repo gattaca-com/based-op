@@ -1397,6 +1397,7 @@ dependencies = [
  "alloy-transport",
  "alloy-transport-http",
  "auto_impl",
+ "backtrace",
  "bitflags 2.9.0",
  "chrono",
  "clap",
@@ -5082,6 +5083,7 @@ dependencies = [
  "serde",
  "strum 0.24.1",
  "strum_macros 0.24.3",
+ "tabwriter",
  "tokio",
  "tracing",
  "uuid",
@@ -9635,6 +9637,15 @@ checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "tabwriter"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fce91f2f0ec87dff7e6bcbbeb267439aa1188703003c6055193c821487400432"
+dependencies = [
+ "unicode-width 0.2.0",
 ]
 
 [[package]]
