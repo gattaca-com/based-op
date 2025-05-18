@@ -4,7 +4,7 @@ use std::{
 };
 
 use bop_common::transaction::{SimulatedTx, SimulatedTxList};
-use revm_primitives::Address;
+use revm_primitives::{Address, U256};
 
 pub(crate) mod sorting_data;
 pub(crate) use sorting_data::SortingData;
@@ -32,6 +32,10 @@ impl ActiveOrders {
 
     fn len(&self) -> usize {
         self.orders.len()
+    }
+
+    pub fn available_value(&self) -> U256 {
+        self.orders.iter().map(|t| t.current.as_ref().map(|tx| tx.payment).unwrap_or_default()).sum()
     }
 
     /// Removes all pending txs for a sender list.

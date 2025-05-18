@@ -9,7 +9,7 @@ use alloy_primitives::{Address, B256, U256};
 use bop_common::{
     api::{EthApiClient, RegistryApiServer},
     communication::messages::{RpcError, RpcResult},
-    config::LoggingConfig,
+    config::{LoggingConfig, LoggingFlags},
     utils::{init_tracing, wait_for_signal},
 };
 use clap::Parser;
@@ -50,6 +50,12 @@ pub struct RegistryArgs {
     /// Each gateway gets selected for this number of consecutive L2 blocks
     #[arg(long = "gateway.update_interval_blocks", default_value_t = 30)]
     pub gateway_update_blocks: u64,
+    /// Enable file logging
+    #[arg(long = "log.enable_file_logging", default_value_t = true)]
+    pub file_logging: bool,
+    /// Prefix of log files
+    #[arg(long = "log.prefix", default_value = "bop-portal.log")]
+    pub log_prefix: String,
 }
 
 impl From<&RegistryArgs> for LoggingConfig {
@@ -60,8 +66,8 @@ impl From<&RegistryArgs> for LoggingConfig {
                 .then_some(LevelFilter::TRACE)
                 .or(args.debug.then_some(LevelFilter::DEBUG))
                 .unwrap_or(LevelFilter::INFO),
-            enable_file_logging: false,
-            prefix: None,
+            flags: if args.file_logging { LoggingFlags::all() } else { LoggingFlags::StdOut },
+            prefix: args.file_logging.then(|| args.log_prefix.clone()),
             max_files: 100,
             path: PathBuf::from("/tmp"),
             filters: None,
@@ -178,7 +184,7 @@ impl RegistryApiServer for RegistryServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()> {
         let mut gateways = self.gateway_clients.read().clone();
-        if !gateways.iter().any(|g| g.0.host() == gateway.0.host()) {
+        if !gateways.iter().any(|g| g.0.host() == gateway.0.host() || g.2 == gateway.2) {
             gateways.push(gateway);
             write_gateway_clients(self.registry_path.clone(), &gateways);
             *self.gateway_clients.write() = gateways;

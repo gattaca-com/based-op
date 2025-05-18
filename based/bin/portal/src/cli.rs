@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use bop_common::config::LoggingConfig;
+use bop_common::config::{LoggingConfig, LoggingFlags};
 use clap::{Parser, command};
 use reqwest::Url;
 use reth_rpc_layer::JwtSecret;
@@ -55,6 +55,12 @@ pub struct PortalArgs {
 
     #[arg(long = "registry.timeout_ms", default_value_t = 100)]
     pub registry_timeout_ms: u64,
+    /// Enable file logging
+    #[arg(long = "log.enable_file_logging", default_value_t = true)]
+    pub file_logging: bool,
+    /// Prefix of log files
+    #[arg(long = "log.prefix", default_value = "bop-portal.log")]
+    pub log_prefix: String,
 }
 
 impl PortalArgs {
@@ -74,8 +80,8 @@ impl From<&PortalArgs> for LoggingConfig {
                 .then_some(LevelFilter::TRACE)
                 .or(args.debug.then_some(LevelFilter::DEBUG))
                 .unwrap_or(LevelFilter::INFO),
-            enable_file_logging: false,
-            prefix: None,
+            flags: if args.file_logging { LoggingFlags::all() } else { LoggingFlags::StdOut },
+            prefix: args.file_logging.then(|| args.log_prefix.clone()),
             max_files: 100,
             path: PathBuf::from("/tmp"),
             filters: None,

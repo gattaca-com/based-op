@@ -70,17 +70,17 @@ pub struct GatewayArgs {
     #[arg(long = "trace")]
     pub trace: bool,
     /// Enable file logging
-    #[arg(long = "log.enable_file_logging")]
+    #[arg(long = "log.enable_file_logging", default_value_t = true)]
     pub file_logging: bool,
     /// Prefix of log files
-    #[arg(long = "log.prefix")]
-    pub log_prefix: Option<String>,
+    #[arg(long = "log.prefix", default_value = "bop-gateway.log")]
+    pub log_prefix: String,
     /// Maximum number of log files
     #[arg(long = "log.max_files", default_value_t = 30)]
     pub log_max_files: usize,
     /// Path for log files
-    #[arg(long = "log.path", default_value = "/tmp")]
-    pub log_path: PathBuf,
+    #[arg(long = "log.dir", default_value = "/tmp")]
+    pub log_dir: PathBuf,
     /// Add additional filters for logging
     #[arg(long = "log.filters")]
     pub log_filters: Option<String>,
@@ -106,14 +106,41 @@ impl GatewayArgs {
     }
 }
 
+bitflags::bitflags! {
+    #[repr(transparent)]
+    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord, Eq)]
+    pub struct LoggingFlags: u8 {
+        const File   = 0b00000001;
+        const StdOut = 0b00000010;
+    }
+}
+impl Default for LoggingFlags {
+    fn default() -> Self {
+        Self::StdOut | Self::File
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LoggingConfig {
     pub level: LevelFilter,
-    pub enable_file_logging: bool,
+    pub flags: LoggingFlags,
     pub prefix: Option<String>,
     pub max_files: usize,
     pub path: PathBuf,
     pub filters: Option<String>,
+}
+
+impl LoggingConfig {
+    pub fn default_with_prefix(prefix: String) -> Self {
+        Self {
+            prefix: Some(prefix),
+            level: LevelFilter::INFO,
+            flags: LoggingFlags::default(),
+            max_files: 100,
+            path: PathBuf::from("/tmp"),
+            filters: None,
+        }
+    }
 }
 
 impl From<&GatewayArgs> for LoggingConfig {
@@ -124,10 +151,10 @@ impl From<&GatewayArgs> for LoggingConfig {
                 .then_some(LevelFilter::TRACE)
                 .or(args.debug.then_some(LevelFilter::DEBUG))
                 .unwrap_or(LevelFilter::INFO),
-            enable_file_logging: args.file_logging,
-            prefix: args.log_prefix.clone(),
+            flags: if args.file_logging { LoggingFlags::all() } else { LoggingFlags::StdOut },
+            prefix: args.file_logging.then(|| args.log_prefix.clone()),
             max_files: args.log_max_files,
-            path: args.log_path.clone(),
+            path: args.log_dir.clone(),
             filters: args.log_filters.clone(),
         }
     }
