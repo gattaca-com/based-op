@@ -6,10 +6,11 @@ use std::{
 
 use bop_common::{
     communication::{
-        SpineConnections,
+        Producer, SpineConnections,
         messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
     db::{DBSorting, state::ensure_create2_deployer},
+    telemetry::{Telemetry, TelemetryUpdate},
     time::{Duration, Instant},
     transaction::{SimulatedTx, Transaction},
     typedefs::{Database, DatabaseRef},
@@ -24,6 +25,7 @@ use reth_evm::{
 use reth_optimism_evm::OpBlockExecutionError;
 use revm_primitives::{Address, U256};
 use tracing::trace;
+use uuid::Uuid;
 
 use super::FragSequence;
 use crate::{context::SequencerContext, simulator::simulate_tx_inner, sorting::ActiveOrders};
@@ -74,7 +76,9 @@ impl fmt::Debug for SortingTelemetry {
 /// Data of a being sorted frag
 #[derive(Clone, Debug)]
 pub struct SortingData<Db> {
-    /// Current frag being sorted
+    /// identifier for each frag that is sorted
+    pub uuid: Uuid,
+    /// Frag state with applied txs
     pub db: DBSorting<Db>,
     pub gas_remaining: u64,
     pub payment: U256,
@@ -99,6 +103,7 @@ pub struct SortingData<Db> {
     pub start_t: Instant,
 
     pub telemetry: SortingTelemetry,
+    pub telemetry_producer: Producer<TelemetryUpdate>,
 }
 
 impl<Db> SortingData<Db> {
@@ -113,6 +118,17 @@ impl<Db> SortingData<Db> {
         };
         let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
+        let uuid = Uuid::new_v4();
+        let mut telemetry_producer = data.telemetry;
+        TelemetryUpdate::send(
+            uuid,
+            Telemetry::Frag(bop_common::telemetry::Frag::SorterStart {
+                seq: seq.next_seq,
+                block: data.block_number(),
+                available_value: tof_snapshot.available_value().into(),
+            }),
+            &mut telemetry_producer,
+        );
 
         Self {
             db,
@@ -125,6 +141,8 @@ impl<Db> SortingData<Db> {
             txs: vec![],
             start_t: Instant::now(),
             telemetry: Default::default(),
+            uuid: Uuid::new_v4(),
+            telemetry_producer,
         }
     }
 
@@ -170,8 +188,8 @@ impl<Db> SortingData<Db> {
         }
         self.telemetry.n_sims_succesful += 1;
 
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining
-            && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
+        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
@@ -188,6 +206,20 @@ impl<Db> SortingData<Db> {
 
     pub fn should_send_next_sims(&self) -> bool {
         self.in_flight_sims == 0
+    }
+
+    pub fn send_finished_telemetry(&mut self) {
+        TelemetryUpdate::send(
+            self.uuid,
+            Telemetry::Frag(bop_common::telemetry::Frag::SorterFinish {
+                success: true,
+                payment: self.payment.into(),
+                best_order_value: self.txs.iter().map(|t| t.payment).max().unwrap_or_default().into(),
+                n_txs: self.txs.len(),
+                gas_used: self.gas_used(),
+            }),
+            &mut self.telemetry_producer,
+        );
     }
 }
 
@@ -229,7 +261,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
     }
 
     pub fn send_next(&mut self, n_sims_per_loop: usize, senders: &mut SpineConnections<Db>) {
-        if self.tof_snapshot.len() == 0 {
+        if self.tof_snapshot.is_empty() {
             return;
         }
         let mut i = self.tof_snapshot.len() - 1;
@@ -264,6 +296,11 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
 impl<Db: DatabaseRef> SortingData<Db> {
     pub fn apply_tx(&mut self, tx: SimulatedTx) {
         self.db.commit_ref(&tx.result_and_state.state);
+        TelemetryUpdate::send(
+            tx.uuid,
+            tx.to_included_telemetry(self.uuid, self.txs.len()),
+            &mut self.telemetry_producer,
+        );
 
         let gas_used = tx.as_ref().result.gas_used();
         debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");

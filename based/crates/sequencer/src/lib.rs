@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use alloy_consensus::BlockHeader;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
     CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
@@ -13,6 +14,7 @@ use bop_common::{
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
     shared::SharedState,
+    telemetry::{self, Telemetry, TelemetryUpdate, system::SystemNotification},
     time::{Duration, Repeater},
     transaction::Transaction,
     typedefs::{BlockSyncMessage, DatabaseRef},
@@ -38,6 +40,7 @@ use context::SequencerContext;
 pub use simulator::Simulator;
 use sorting::SortingData;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 pub fn payload_to_block(
     payload: ExecutionPayload,
@@ -78,13 +81,22 @@ where
         // handle block sync
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
             let state = std::mem::take(&mut self.state);
+            let cur_seq_state = telemetry::system::SequencerState::from(&state);
             self.state = state.handle_block_sync(msg, &mut self.data, senders);
+            let new_state = telemetry::system::SequencerState::from(&self.state);
+            if cur_seq_state != new_state {
+                TelemetryUpdate::send(
+                    Uuid::nil(),
+                    telemetry::Telemetry::System(SystemNotification::StateChanged(new_state)),
+                    &mut self.data.telemetry,
+                );
+            }
         });
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0
-                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0 &&
+                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -95,18 +107,45 @@ where
         // handle sim results
         connections.receive_for(Duration::from_millis(10), |msg, _| {
             let state = std::mem::take(&mut self.state);
+            let cur_seq_state = telemetry::system::SequencerState::from(&state);
             self.state = state.handle_sim_result(msg, &mut self.data);
+            let new_state = telemetry::system::SequencerState::from(&self.state);
+            if cur_seq_state != new_state {
+                TelemetryUpdate::send(
+                    Uuid::nil(),
+                    telemetry::Telemetry::System(SystemNotification::StateChanged(new_state)),
+                    &mut self.data.telemetry,
+                );
+            }
         });
 
         // handle engine API messages from rpc
         connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
             let state = std::mem::take(&mut self.state);
+            let cur_seq_state = telemetry::system::SequencerState::from(&state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
+            let new_state = telemetry::system::SequencerState::from(&self.state);
+            if cur_seq_state != new_state {
+                TelemetryUpdate::send(
+                    Uuid::nil(),
+                    telemetry::Telemetry::System(SystemNotification::StateChanged(new_state)),
+                    &mut self.data.telemetry,
+                );
+            }
         });
 
         // Check for passive state changes. e.g., sealing frags, sending sims, etc.
         let state = std::mem::take(&mut self.state);
+        let cur_seq_state = telemetry::system::SequencerState::from(&state);
         self.state = state.tick(&mut self.data, connections);
+        let new_state = telemetry::system::SequencerState::from(&self.state);
+        if cur_seq_state != new_state {
+            TelemetryUpdate::send(
+                Uuid::nil(),
+                telemetry::Telemetry::System(SystemNotification::StateChanged(new_state)),
+                &mut self.data.telemetry,
+            );
+        }
 
         if self.heartbeat.fired() {
             info!("in state {}", self.state.as_ref())
@@ -193,6 +232,11 @@ where
         parent_beacon_block_root: B256,
     ) -> SequencerState<Db> {
         use SequencerState::*;
+        TelemetryUpdate::send(
+            Uuid::nil(),
+            Telemetry::System(SystemNotification::NewPayload(payload.payload_inner.payload_inner.block_number)),
+            &mut ctx.telemetry,
+        );
         if matches!(self, Sorting(_, _)) {
             warn!("Received NewPayload when state is Sorting. This is normally not a problem, but rare nonetheless.");
             return self;
@@ -250,14 +294,11 @@ where
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
-        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
-        if fork_choice_state.head_block_hash != head_block_hash {
-            // We are on the wrong head. Switch to syncing and request the head block.
-            let head_block_number = ctx.db.head_block_number().expect("couldn't get db head block number");
-            ctx.shared_state.reset();
-            return Self::sync_until(head_block_number, head_block_number, senders);
-        }
-
+        TelemetryUpdate::send(
+            Uuid::nil(),
+            Telemetry::System(SystemNotification::ForkChoiceUpdate(fork_choice_state.head_block_hash)),
+            &mut ctx.telemetry,
+        );
         match self {
             // Waiting for new payload should not happen, but while testing
             // we can basically keep sequencing based on the same db state
@@ -268,6 +309,19 @@ where
                         if ctx.parent_header.parent_hash == B256::ZERO {
                             return self;
                         }
+                        let head_block_hash = ctx.db.head_block_hash().expect("couldn't get db head block hash");
+                        if fork_choice_state.head_block_hash != head_block_hash {
+                            // We are on the wrong head. Switch to syncing and request the head block.
+                            let head_block_number =
+                                ctx.db.head_block_number().expect("couldn't get db head block number");
+                            ctx.shared_state.reset();
+                            return Self::sync_until(head_block_number, head_block_number, senders);
+                        }
+                        TelemetryUpdate::send(
+                            Uuid::nil(),
+                            Telemetry::System(SystemNotification::Sorting(ctx.parent_header.number() + 1)),
+                            &mut ctx.telemetry,
+                        );
 
                         ctx.timers.start_sequencing.start();
                         let (seq, first_frag) = ctx.start_sequencing(attributes, senders);
@@ -321,6 +375,11 @@ where
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
         use SequencerState::*;
+        TelemetryUpdate::send(
+            Uuid::nil(),
+            Telemetry::System(SystemNotification::GetPayload(ctx.block_number())),
+            &mut ctx.telemetry,
+        );
 
         match self {
             Sorting(mut seq, sorting_data) => {
@@ -354,6 +413,11 @@ where
                     info!("committing to db");
                     return WaitingForForkChoiceWithAttributes;
                 }
+                TelemetryUpdate::send(
+                    Uuid::nil(),
+                    Telemetry::System(SystemNotification::BuildStop(ctx.block_number())),
+                    &mut ctx.telemetry,
+                );
                 WaitingForNewPayload
             }
             s => s,
@@ -374,6 +438,11 @@ where
         senders: &SendersSpine<Db>,
     ) -> Self {
         use SequencerState::*;
+        TelemetryUpdate::send(
+            Uuid::nil(),
+            Telemetry::System(SystemNotification::BlockSync(block.number, block.gas_used)),
+            &mut ctx.telemetry,
+        );
 
         match self {
             Syncing { last_block_number } => {
@@ -388,6 +457,7 @@ where
             }
 
             WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
+                ctx.parent_header.number = block.number;
                 ctx.commit_block(&block);
                 WaitingForNewPayload
             }
@@ -439,7 +509,7 @@ where
                         // We would have already re-sent the tx for sim on the correct fragment.
                     }
                     Err(_e) => {
-                        data.tx_pool.remove(&sender, nonce);
+                        data.tx_pool.remove(&sender, nonce, &mut data.telemetry);
                     }
                 }
             }
@@ -462,7 +532,7 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
                 // Reset the tx pool.
-                data.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)));
+                data.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut data.telemetry);
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
 
@@ -473,10 +543,11 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
 
             Sorting(seq, mut sorting_data) if sorting_data.should_send_next_sims() => {
                 sorting_data.maybe_apply(base_fee);
-
-                data.timers.handle_deposits.start();
-                sorting_data.handle_deposits(&mut data.deposits, connections);
-                data.timers.handle_deposits.stop();
+                if !data.deposits.is_empty() {
+                    data.timers.handle_deposits.start();
+                    sorting_data.handle_deposits(&mut data.deposits, connections);
+                    data.timers.handle_deposits.stop();
+                }
 
                 data.timers.send_next.start();
                 sorting_data.send_next(data.config.n_per_loop, connections);
@@ -489,6 +560,19 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
             }
 
             _ => self,
+        }
+    }
+}
+
+impl<Db> From<&SequencerState<Db>> for telemetry::system::SequencerState {
+    fn from(value: &SequencerState<Db>) -> Self {
+        match value {
+            SequencerState::Syncing { .. } => telemetry::system::SequencerState::Syncing,
+            SequencerState::WaitingForNewPayload => telemetry::system::SequencerState::WaitingForNewPayload,
+            SequencerState::WaitingForForkChoiceWithAttributes => {
+                telemetry::system::SequencerState::WaitingForForkChoiceWithAttributes
+            }
+            SequencerState::Sorting(_, _) => telemetry::system::SequencerState::Sorting,
         }
     }
 }

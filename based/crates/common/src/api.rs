@@ -169,10 +169,10 @@ pub struct RollupConfig {
     pub l2_chain_id: u64,
     pub regolith_time: u64,
     pub canyon_time: u64,
-    pub batch_inbox_address: String,
-    pub deposit_contract_address: String,
-    pub l1_system_config_address: String,
-    pub protocol_versions_address: String,
+    pub batch_inbox_address: Address,
+    pub deposit_contract_address: Address,
+    pub l1_system_config_address: Address,
+    pub protocol_versions_address: Address,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -183,22 +183,22 @@ pub struct Genesis {
     pub system_config: SystemConfig,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct BlockRef {
-    pub hash: String,
+    pub hash: B256,
     pub number: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemConfig {
-    pub batcher_addr: String,
+    pub batcher_addr: Address,
     pub overhead: String,
     pub scalar: String,
     pub gas_limit: u64,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct SyncStatus {
     pub current_l1: L1Block,
     pub current_l1_finalized: L1Block,
@@ -209,25 +209,25 @@ pub struct SyncStatus {
     pub safe_l2: L2Block,
     pub finalized_l2: L2Block,
     pub pending_safe_l2: L2Block,
-    pub queued_unsafe_l2: L2Block,
-    pub engine_sync_target: L2Block,
+    pub queued_unsafe_l2: Option<L2Block>,
+    pub engine_sync_target: Option<L2Block>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct L1Block {
-    pub hash: String,
+    pub hash: B256,
     pub number: u64,
-    pub parent_hash: String,
+    pub parent_hash: B256,
     pub timestamp: u64,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct L2Block {
-    pub hash: String,
+    pub hash: B256,
     pub number: u64,
-    pub parent_hash: String,
+    pub parent_hash: B256,
     pub timestamp: u64,
     #[serde(rename = "l1origin")]
     pub l1_origin: BlockRef,
