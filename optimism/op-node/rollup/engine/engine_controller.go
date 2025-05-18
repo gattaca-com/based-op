@@ -141,7 +141,8 @@ func (e *EngineController) BackupUnsafeL2Head() eth.L2BlockRef {
 }
 
 func (e *EngineController) IsEngineSyncing() bool {
-	return e.syncStatus == syncStatusWillStartEL || e.syncStatus == syncStatusStartedEL || e.syncStatus == syncStatusFinishedELButNotFinalized
+	// return e.syncStatus == syncStatusWillStartEL || e.syncStatus == syncStatusStartedEL || e.syncStatus == syncStatusFinishedELButNotFinalized
+	return true
 }
 
 // Setters
