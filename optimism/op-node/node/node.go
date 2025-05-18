@@ -263,6 +263,7 @@ func (n *OpNode) initRegistry(ctx context.Context, cfg *Config) error {
 			if err := n.registrySource.FetchNextNGateways(fetchCtx, 2, 3); err != nil {
 				n.log.Warn("registry fetch error", "err", err)
 			}
+			time.Sleep(time.Second)
 		}
 	}()
 
