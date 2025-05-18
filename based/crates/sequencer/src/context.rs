@@ -167,14 +167,15 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             self.deposits.push_back(tx);
             return;
         }
-        TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
-        self.tx_pool.handle_new_tx(
+        if self.tx_pool.handle_new_tx(
             tx.clone(),
             self.shared_state.as_ref(),
             self.as_ref().basefee.to(),
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
-        );
+        ) {
+            TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
+        }
     }
 
     /// Processes a new block from the sequencer by:
@@ -337,17 +338,14 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();
 
+        // Completely wipe active txs as they may contain valid nonces with out of date sim results.
+        self.tx_pool.active_txs.clear();
+        self.tx_pool.remove_mined_txs(block.body.transactions.iter(), &mut self.telemetry);
+
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
 
-            self.tx_pool.handle_new_block(
-                block.body.transactions.iter(),
-                base_fee,
-                self.shared_state.as_ref(),
-                false,
-                None,
-                &mut self.telemetry,
-            );
+            self.tx_pool.handle_new_block(base_fee, self.shared_state.as_ref(), false, None);
         }
 
         blocks_to_fetch
