@@ -141,7 +141,7 @@ impl<Db> SortingData<Db> {
             txs: vec![],
             start_t: Instant::now(),
             telemetry: Default::default(),
-            uuid: Uuid::new_v4(),
+            uuid,
             telemetry_producer,
         }
     }

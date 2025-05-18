@@ -18,7 +18,7 @@ pub struct TxPool {
     /// maps an eoa to all pending txs
     pool_data: HashMap<Address, TxList>,
     /// Current list of all simulated mineable txs in the pool
-    active_txs: Active,
+    pub active_txs: Active,
 }
 
 impl TxPool {
@@ -39,12 +39,12 @@ impl TxPool {
         base_fee: u64,
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
-    ) {
+    ) -> bool {
         let state_nonce = db.get_nonce(new_tx.sender()).expect("handle failed db");
         let nonce = new_tx.nonce();
         // check nonce is valid
         if nonce < state_nonce {
-            return;
+            return false;
         }
 
         let is_next_nonce = nonce == state_nonce;
@@ -57,7 +57,7 @@ impl TxPool {
                 // above where we didn't return
                 if tx_list.get_effective_price_for_nonce(&nonce, base_fee) > new_tx.effective_gas_price(Some(base_fee))
                 {
-                    return;
+                    return false;
                 }
                 tx_list.put(new_tx.clone());
 
@@ -92,6 +92,7 @@ impl TxPool {
                 self.pool_data.insert(tx_list.sender(), tx_list);
             }
         }
+        true
     }
 
     /// Validates simualted tx. If valid, fetch its TxList and save the new [SimulatedTxList] to `active_txs`.
@@ -152,19 +153,13 @@ impl TxPool {
     /// This gets called in two places:
     /// 1) When we sync a new block.
     /// 2) When we commit a new Frag.
-    pub fn handle_new_block<'a, Db: DatabaseRead, T: TransactionSenderInfo + 'a>(
+    pub fn handle_new_block<'a, Db: DatabaseRead>(
         &mut self,
-        mined_txs: impl Iterator<Item = &'a T>,
         base_fee: u64,
         db: &DBFrag<Db>,
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
-        telemetry_producer: &mut Producer<TelemetryUpdate>,
     ) {
-        // Completely wipe active txs as they may contain valid nonces with out of date sim results.
-        self.active_txs.clear();
-        self.remove_mined_txs(mined_txs, telemetry_producer);
-
         // If enabled, fill the active list with non-simulated txs and send off the first tx for each sender to
         // simulator.
         if !syncing {

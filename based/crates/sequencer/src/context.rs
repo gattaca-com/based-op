@@ -167,14 +167,15 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             self.deposits.push_back(tx);
             return;
         }
-        TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
-        self.tx_pool.handle_new_tx(
+        if self.tx_pool.handle_new_tx(
             tx.clone(),
             self.shared_state.as_ref(),
             self.as_ref().basefee.to(),
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
-        );
+        ) {
+            TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
+        }
     }
 
     /// Processes a new block from the sequencer by:
@@ -306,17 +307,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
-        (seal, OpExecutionPayloadEnvelopeV3 {
-            execution_payload: ExecutionPayloadV3 {
-                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                blob_gas_used: 0,
-                excess_blob_gas: 0,
+        (
+            seal,
+            OpExecutionPayloadEnvelopeV3 {
+                execution_payload: ExecutionPayloadV3 {
+                    payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                    blob_gas_used: 0,
+                    excess_blob_gas: 0,
+                },
+                block_value: frag_seq.payment.to(),
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
             },
-            block_value: frag_seq.payment.to(),
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-        })
+        )
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
@@ -337,17 +341,14 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         self.parent_header = block.header.clone();
         self.parent_hash = block.hash_slow();
 
+        // Completely wipe active txs as they may contain valid nonces with out of date sim results.
+        self.tx_pool.active_txs.clear();
+        self.tx_pool.remove_mined_txs(block.body.transactions.iter(), &mut self.telemetry);
+
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
 
-            self.tx_pool.handle_new_block(
-                block.body.transactions.iter(),
-                base_fee,
-                self.shared_state.as_ref(),
-                false,
-                None,
-                &mut self.telemetry,
-            );
+            self.tx_pool.handle_new_block(base_fee, self.shared_state.as_ref(), false, None);
         }
 
         blocks_to_fetch

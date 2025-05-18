@@ -373,6 +373,7 @@ impl<T: Default + Clone + HasKey> KeyedCircularBuffer<T> {
     pub fn new(size: usize) -> Self {
         Self { data: CircularBuffer::new(size), ids: HashMap::new(), count: 0 }
     }
+
 }
 
 impl<T: HasKey> KeyedCircularBuffer<T> {
@@ -400,6 +401,10 @@ impl<T: HasKey> KeyedCircularBuffer<T> {
         self.data.iter()
     }
 
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.count == 0
