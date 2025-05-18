@@ -92,6 +92,10 @@ impl Nanos {
         let curt = Self::now();
         Nanos(curt.0 - self.0)
     }
+
+    pub fn with_fmt(&self, fmt: &str) -> String {
+        chrono::DateTime::<Utc>::from(*self).format(fmt).to_string()
+    }
 }
 
 impl From<Nanos> for chrono::DateTime<Utc> {

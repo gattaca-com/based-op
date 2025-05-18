@@ -1,4 +1,4 @@
-# Makes sure the nightly-2024-10-01 toolchain is installed
+# Makes sure the nightly-2025-02-26 toolchain is installed
 toolchain := "nightly-2025-02-26"
 
 fmt:
@@ -10,4 +10,5 @@ fmt-check:
   cargo +{{toolchain}} fmt --check
 
 clippy:
-  cargo clippy --all-features --no-deps -- -D warnings
+  rustup toolchain install {{toolchain}} > /dev/null 2>&1 && \
+  cargo +{{toolchain}} clippy --all-features --no-deps -- -D warnings

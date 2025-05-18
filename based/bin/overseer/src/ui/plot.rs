@@ -4,18 +4,20 @@ use ratatui::{
     prelude::*,
     widgets::{Axis, Block, Borders, Chart, Dataset, GraphType},
 };
+use serde::{Deserialize, Serialize};
 use symbols::Marker;
 
 use crate::statistics::{DataPoint, MsgPer10Sec, Statisticable, Statistics};
 
 bitflags::bitflags! {
     #[repr(transparent)]
-    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord, Eq, Default)]
+    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord, Eq, Default, Serialize, Deserialize)]
     pub struct RenderFlags: u8 {
         const ShowMin      = 0b00000001;
         const ShowMax      = 0b00000010;
         const ShowMedian   = 0b00000100;
-        const ShowAverages = 0b0001000;
+        const ShowAverages = 0b00001000;
+        const ShowTotal    = 0b00010000;
     }
 }
 
@@ -68,10 +70,6 @@ impl<T: Display + Into<u64> + Default + Clone> PlotSeries<T> {
         self.data.len()
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     #[allow(clippy::wrong_self_convention)]
     fn to_dataset(&mut self, y_min: f64, y_max: f64) -> Dataset {
         if self.len() == 2 && self.data[0].1 == 0.0 && self.data[1].1 == 0.0 {
@@ -91,14 +89,14 @@ impl<T: Display + Into<u64> + Default + Clone> PlotSeries<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct StatsPlot<T> {
+pub struct Plot<T> {
     title: String,
     y_min: u64,
     y_max: u64,
     plot_series: Vec<PlotSeries<T>>,
 }
 
-impl<T: Statisticable + Default> StatsPlot<T> {
+impl<T: Statisticable + Default> Plot<T> {
     pub fn new<S: ToString>(title: S) -> Self {
         Self { title: title.to_string(), y_min: u64::MAX, y_max: 0, plot_series: Default::default() }
     }
@@ -152,7 +150,10 @@ impl<T: Statisticable + Default> StatsPlot<T> {
         let datasets = self.plot_series.iter_mut().map(|d| d.to_dataset(y_min, y_max)).collect();
         let yaxis = Axis::default().bounds([y_min, y_max]).style(Style::default().fg(Color::LightBlue)).labels(ylabels);
 
-        let chart = Chart::new(datasets).x_axis(xaxis).y_axis(yaxis);
+        let chart = Chart::new(datasets)
+            .x_axis(xaxis)
+            .y_axis(yaxis)
+            .legend_position(Some(ratatui::widgets::LegendPosition::TopLeft));
         frame.render_widget(text, sub_layout[0]);
         frame.render_widget(chart, sub_layout[1]);
     }
@@ -160,7 +161,7 @@ impl<T: Statisticable + Default> StatsPlot<T> {
 
 impl<T: Statisticable> Statistics<T> {
     #[allow(clippy::filter_map_bool_then)]
-    pub fn add_block_starts<D: Default + Statisticable>(&self, plot: &mut StatsPlot<D>) {
+    pub fn add_block_starts<D: Default + Statisticable>(&self, plot: &mut Plot<D>) {
         let block_starts =
             self.datapoints.iter().enumerate().filter_map(move |(i, d)| d.vline.then(|| vec![(i, 0), (i, 0)]));
         for d in block_starts {
@@ -181,6 +182,7 @@ impl<T: Statisticable> Statistics<T> {
         self.datapoints.iter().enumerate().filter(|(_, t)| t.n_samples != 0).map(move |(i, t)| (i, f(t)))
     }
 
+    #[allow(clippy::filter_map_bool_then)]
     pub fn report(&self, name: &str, frame: &mut Frame, rect: Rect)
     where
         T: Default,
@@ -196,8 +198,34 @@ impl<T: Statisticable> Statistics<T> {
         }
 
         let title = if name.is_empty() { self.title.to_string() } else { format!("{} report for {name}", self.title) };
-        let mut plot = StatsPlot::<T>::new(title);
+        let mut plot = Plot::<T>::new(title);
 
+        if self.flags.contains(RenderFlags::ShowTotal) {
+            let mut data = self
+                .datapoints
+                .iter()
+                .enumerate()
+                .filter_map(move |(i, d)| (d.tot != 0).then(|| vec![(i, d.tot), (i, 0)]));
+            if let Some(d) = data.next() {
+                plot.push(
+                    PlotSeries::default()
+                        .label("tot")
+                        .color(Color::Magenta)
+                        .marker(Marker::Block)
+                        .graph_type(GraphType::Line)
+                        .data(d.into_iter()),
+                );
+            }
+            for d in data {
+                plot.push(
+                    PlotSeries::default()
+                        .color(Color::Magenta)
+                        .marker(Marker::Block)
+                        .graph_type(GraphType::Line)
+                        .data(d.into_iter()),
+                );
+            }
+        }
         if self.flags.contains(RenderFlags::ShowAverages) {
             plot.push(
                 PlotSeries::default().label("avg").graph_type(GraphType::Line).data(self.to_plot_data(|t| t.avg)),
@@ -239,7 +267,7 @@ impl<T: Statisticable> Statistics<T> {
     }
 
     pub fn report_msg_per_sec(&self, frame: &mut Frame, rect: Rect) {
-        let mut plot = StatsPlot::<MsgPer10Sec>::new("");
+        let mut plot = Plot::<MsgPer10Sec>::new("");
 
         plot.push(
             PlotSeries::default()

@@ -13,7 +13,6 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN --mount=from=reth,target=/reth cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
-RUN --mount=from=reth,target=/reth cargo build --release --bin bop-gateway
 RUN --mount=from=reth,target=/reth cargo build --release --bin overseer
 
 
@@ -23,6 +22,5 @@ WORKDIR /app
 RUN apt-get update
 RUN apt-get install -y openssl ca-certificates libssl3 libssl-dev
 
-COPY --from=builder /app/target/release/bop-gateway /usr/local/bin
 COPY --from=builder /app/target/release/overseer /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/bop-gateway"]
+ENTRYPOINT ["/usr/local/bin/overseer"]

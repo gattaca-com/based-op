@@ -5,16 +5,14 @@ use std::{
 
 use bop_common::{
     communication::Consumer,
+    eth::MicroEth,
     time::{Duration, Instant, Nanos},
 };
+use serde::{Deserialize, Serialize};
 
-use crate::{circular_buffer::CircularBuffer, tui::RenderFlags};
+use crate::{collections::CircularBuffer, ui::plot::RenderFlags};
 
-pub trait Statisticable: Into<u64> + From<u64> + Display + Clone + Copy + PartialEq {
-    fn to_plotpoint(&self) -> f64 {
-        Into::<u64>::into(*self) as f64
-    }
-}
+pub trait Statisticable: Into<u64> + From<u64> + Display + Clone + Copy + PartialEq {}
 
 impl Statisticable for Duration {}
 
@@ -22,7 +20,7 @@ impl Statisticable for Nanos {}
 
 impl Statisticable for MsgPer10Sec {}
 
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MsgPer10Sec(pub u64);
 
 impl Display for MsgPer10Sec {
@@ -42,14 +40,17 @@ impl From<u64> for MsgPer10Sec {
     }
 }
 
+impl Statisticable for MicroEth {}
+
 /// Keep track of msg latencies
 /// All in nanos
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct DataPoint<T: Statisticable> {
     pub avg: u64,
     pub min: u64,
     pub max: u64,
     pub median: u64,
+    pub tot: u64,
     pub n_samples: usize,
     pub vline: bool,
     pub rate: MsgPer10Sec,
@@ -73,11 +74,12 @@ impl<T: Statisticable> Default for DataPoint<T> {
             vline: false,
             rate: Default::default(),
             _p: PhantomData {},
+            tot: 0,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Statistics<T: Statisticable> {
     pub title: String,
     // These are updated when Start
@@ -88,6 +90,7 @@ pub struct Statistics<T: Statisticable> {
     avg: u64,
     min: u64,
     max: u64,
+    tot: u64,
     samples: usize,
 
     // tot_count does not necessarily need to be equal to the sum of the samples
@@ -104,7 +107,6 @@ pub struct Statistics<T: Statisticable> {
 
     // This will be subtracted from each measurement, useful for e.g. clock overhead
     offset: u64,
-    samples_per_median: usize,
     pub flags: RenderFlags,
     got_one: bool,
 }
@@ -120,8 +122,8 @@ impl<T: Statisticable> Statistics<T> {
             min: u64::MAX,
             max: 0,
             avg: 0,
+            tot: 0,
             offset: offset.into(),
-            samples_per_median,
             samples: 0,
             tot_count: 0,
             flags: RenderFlags::ShowAverages,
@@ -161,7 +163,9 @@ impl<T: Statisticable> Statistics<T> {
             avg: self.corrected_or_zero(self.avg),
             min: self.corrected_or_zero(self.min),
             max: self.corrected_or_zero(self.max),
+            tot: self.corrected_or_zero(self.tot),
             median: self.corrected_or_zero(median),
+
             n_samples: self.samples,
             vline: block_start,
             rate,
@@ -171,12 +175,17 @@ impl<T: Statisticable> Statistics<T> {
         self.reset();
     }
 
-    fn reset(&mut self) {
+    pub fn tot(&self) -> u64 {
+        self.tot
+    }
+
+    pub fn reset(&mut self) {
         self.measurements.clear();
         self.min = u64::MAX;
         self.max = 0;
         self.samples = 0;
         self.got_one = true;
+        self.tot = 0;
         self.last_t = Instant::now();
     }
 
@@ -196,12 +205,9 @@ impl<T: Statisticable> Statistics<T> {
 
         self.samples += 1;
         self.avg = (avg + el) / self.samples as u64;
+        self.tot += el;
 
         self.measurements.push(el);
-    }
-
-    pub fn tot_samples(&self) -> usize {
-        self.datapoints.iter().map(|d| d.n_samples).sum()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -209,17 +215,20 @@ impl<T: Statisticable> Statistics<T> {
     }
 
     pub fn handle_messages<M: 'static + Copy + Default + Into<T>>(&mut self, consumer: &mut Consumer<M>) {
-        let mut captured_one = false;
-        let mut done = false;
-        let mut c = 0;
+        let curt = Instant::now();
+        let max = Duration::from_millis(1);
         // loops until either a full datapoint was captured or no messages are pending
-        while !done {
-            done |= consumer.try_consume().is_none_or(|msg| {
-                captured_one = true;
+        let mut n_read = 0;
+        while n_read < 4096 {
+            if let Some(msg) = consumer.try_consume() {
+                n_read += 1;
                 self.track(msg.into());
-                c += 1;
-                c == self.samples_per_median
-            });
+                if curt.elapsed() > max {
+                    break;
+                }
+            } else {
+                break;
+            }
         }
     }
 

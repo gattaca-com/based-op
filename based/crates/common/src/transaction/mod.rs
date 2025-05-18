@@ -3,6 +3,7 @@ pub mod tx_list;
 
 use std::{ops::Deref, sync::Arc};
 
+use alloy_consensus::Transaction as AlloyTransactionTrait;
 use alloy_eips::eip2718::{Decodable2718, Encodable2718};
 use alloy_primitives::{Address, Bytes};
 use op_alloy_consensus::OpTxEnvelope;
@@ -11,11 +12,16 @@ use reth_optimism_primitives::OpTransactionSigned;
 use revm::context::TxEnv;
 pub use simulated::{SimulatedTx, SimulatedTxList};
 pub use tx_list::TxList;
+use uuid::Uuid;
 
-use crate::typedefs::BlockSyncMessage;
+use crate::{
+    telemetry::{order::Ingested, Telemetry, Tx}, typedefs::BlockSyncMessage,
+};
+
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
+    pub uuid: Uuid,
     pub tx: OpTxEnvelope,
     /// The sender of the transaction.
     /// Recovered from the tx on initialisation.
@@ -25,7 +31,7 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn new(tx: OpTxEnvelope, sender: Address, envelope: Bytes) -> Self {
-        Self { tx, sender, envelope }
+        Self { tx, sender, envelope, uuid: Uuid::new_v4() }
     }
 
     #[inline]
@@ -145,6 +151,7 @@ impl Transaction {
                 tx.deposit.source_hash = deposit_tx.source_hash;
                 tx.deposit.mint = deposit_tx.mint;
                 tx.deposit.is_system_transaction = deposit_tx.is_system_transaction;
+
                 return;
             }
         }
@@ -158,7 +165,6 @@ impl Transaction {
     //     let nonce = 1;
     //     let chain_id = 1000;
     //     let max_priority_fee_per_gas = 1000;
-
     //     let signing_wallet = ECDSASigner::try_from_secret(B256::random().as_ref()).unwrap();
     //     let from = Address::random();
     //     let to = Address::random();
@@ -176,7 +182,7 @@ impl Transaction {
     //     let signed_tx = signing_wallet.sign_tx(tx).unwrap();
     //     let tx = OpTxEnvelope::Eip1559(signed_tx);
     //     let envelope = tx.encoded_2718().into();
-    //     Self { sender: from, tx, envelope }
+    //     Self { sender: from, tx, envelope, uuid: Uuid::new_v4() }
     // }
 
     pub fn decode(bytes: Bytes) -> Result<Self, alloy_rlp::Error> {
@@ -190,7 +196,7 @@ impl Transaction {
             OpTxEnvelope::Deposit(sealed) => sealed.from,
         };
 
-        Ok(Self { sender, tx, envelope: bytes })
+        Ok(Self { sender, tx, envelope: bytes, uuid: Uuid::new_v4() })
     }
 
     pub fn encode(&self) -> Bytes {
@@ -206,6 +212,14 @@ impl Transaction {
         let mut op_env = OpTransaction::default();
         self.fill_tx_env(&mut op_env);
         op_env
+    }
+
+    pub fn to_added_to_pool_telemetry(&self) -> Telemetry {
+        Telemetry::Tx(Tx::AddedToPool)
+    }
+
+    pub fn to_ingested_telemetry(&self) -> Telemetry {
+        Telemetry::Tx(Tx::Ingested(Ingested { sender: self.sender, nonce: self.nonce(), hash: self.tx_hash() }))
     }
 }
 
@@ -237,6 +251,6 @@ impl From<OpTransactionSigned> for Transaction {
     fn from(value: OpTransactionSigned) -> Self {
         let sender = value.recover_signer().expect("could not recover signer");
         let envelope = value.encoded_2718().into();
-        Self { tx: value.into(), sender, envelope }
+        Self { tx: value.into(), sender, envelope, uuid: Uuid::new_v4() }
     }
 }
