@@ -68,7 +68,7 @@ pub fn init_tracing(config: LoggingConfig) -> Option<WorkerGuard> {
             .with_filter(build_env_filter(config.level, config.filters.clone()));
 
         tracing_subscriber::registry().with(stdout_layer.and_then(file_layer)).init();
-        
+
         Some(guard)
     } else if config.flags == LoggingFlags::StdOut {
         let (writer, guard) = tracing_appender::non_blocking(std::io::stdout());
