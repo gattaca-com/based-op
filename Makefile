@@ -204,7 +204,7 @@ ifeq ($(filter start-overseer,$(MAKECMDGOALS)),start-gateway)
   endif
 endif
 start-overseer: build-overseer
-	docker run -e RUST_BACKTRACE=1 -v /tmp:/tmp based_overseer_local --portal.url $(PORTAL)
+	docker exec -it based-op-gateway overseer --portal-url $(PORTAL)
 
 L1_CHAIN_ID?=11155111
 L2_CHAIN_ID?=$(shell \

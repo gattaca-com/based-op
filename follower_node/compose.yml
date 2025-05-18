@@ -95,10 +95,4 @@ services:
       - ./config:/config
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
-
-  overseer:
-    image: based_overseer_local
-    container_name: based-overseer
-    network_mode: "host"
-    volumes: 
-      - /tmp:/tmp
+      - /dev/shm:/dev/shm
