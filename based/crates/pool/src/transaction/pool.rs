@@ -3,8 +3,9 @@ use std::{collections::HashMap, sync::Arc};
 use alloy_consensus::Transaction as TransactionTrait;
 use alloy_primitives::Address;
 use bop_common::{
-    communication::{SendersSpine, TrackedSenders, messages::SequencerToSimulator},
+    communication::{Producer, SendersSpine, TrackedSenders, messages::SequencerToSimulator},
     db::{DBFrag, DatabaseRead},
+    telemetry::TelemetryUpdate,
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
 };
@@ -107,29 +108,42 @@ impl TxPool {
     }
 
     /// Removes a transaction with sender and nonce from the pool.
-    pub fn remove(&mut self, sender: &Address, nonce: u64) {
+    pub fn remove(&mut self, sender: &Address, nonce: u64, telemetry_producer: &mut Producer<TelemetryUpdate>) {
         if let Some(tx_list) = self.pool_data.get_mut(sender) {
-            if tx_list.forward(nonce) {
+            if tx_list.forward(nonce, |t| {
+                TelemetryUpdate::send(
+                    t.uuid,
+                    bop_common::telemetry::Telemetry::Tx(bop_common::telemetry::Tx::RemovedFromPool),
+                    telemetry_producer,
+                )
+            }) {
                 self.pool_data.remove(sender);
             }
         }
 
-        self.active_txs.forward(sender, nonce);
+        self.active_txs.forward(sender, nonce, telemetry_producer);
     }
 
     pub fn remove_mined_txs<'a, T: OpTransaction + TransactionTrait + 'a>(
         &mut self,
         mined_txs: impl Iterator<Item = (&'a Address, &'a T)>,
+        telemetry_producer: &mut Producer<TelemetryUpdate>,
     ) {
         // Clear all mined nonces from the pool
         for (sender, tx) in mined_txs {
             let nonce = tx.nonce();
             if let Some(sender_tx_list) = self.pool_data.get_mut(sender) {
-                if sender_tx_list.forward(nonce) {
+                if sender_tx_list.forward(nonce, |t| {
+                    TelemetryUpdate::send(
+                        t.uuid,
+                        bop_common::telemetry::Telemetry::Tx(bop_common::telemetry::Tx::RemovedFromPool),
+                        telemetry_producer,
+                    )
+                }) {
                     self.pool_data.remove(sender);
                 }
             }
-            self.active_txs.forward(sender, nonce);
+            self.active_txs.forward(sender, nonce, telemetry_producer);
         }
     }
 
@@ -144,10 +158,11 @@ impl TxPool {
         db: &DBFrag<Db>,
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
+        telemetry_producer: &mut Producer<TelemetryUpdate>,
     ) {
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
         self.active_txs.clear();
-        self.remove_mined_txs(mined_txs);
+        self.remove_mined_txs(mined_txs, telemetry_producer);
 
         // If enabled, fill the active list with non-simulated txs and send off the first tx for each sender to
         // simulator.

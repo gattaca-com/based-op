@@ -10,7 +10,7 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
     db::{DBFrag, DBSorting, DatabaseRead, State},
-    time::{Duration, Instant},
+    time::{Duration, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
     typedefs::*,
     utils::last_part_of_typename,
@@ -103,6 +103,7 @@ pub fn simulate_tx_inner<Db: SimulationDatabase>(
     allow_revert: bool,
 ) -> Result<SimulatedTx, SimulationError> {
     let coinbase = evm.block().beneficiary;
+    let sim_start = Nanos::now();
     // Cache some values pre-simulation.
     let start_balance = balance_from_db(evm.db_mut(), coinbase);
     let deposit_nonce = (tx.is_deposit() && regolith_active).then(|| nonce_from_db(evm.db_mut(), tx.sender()));
@@ -123,7 +124,7 @@ pub fn simulate_tx_inner<Db: SimulationDatabase>(
         return Err(SimulationError::ZeroPayment);
     }
 
-    Ok(SimulatedTx::new(tx, result_and_state, payment, deposit_nonce))
+    Ok(SimulatedTx::new(tx, result_and_state, payment, deposit_nonce, sim_start.elapsed()))
 }
 
 #[inline]

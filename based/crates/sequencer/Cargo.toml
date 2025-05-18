@@ -50,6 +50,7 @@ strum_macros.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+uuid.workspace = true
 
 [[bin]]
 name = "bulk-insert-headers"

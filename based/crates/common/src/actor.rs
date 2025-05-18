@@ -57,12 +57,14 @@ pub trait Actor<Db>: Sized {
         let term = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
             .expect("couldn't register signal hook for some reason");
-
+        let time_loop = actor_config.min_loop_duration.is_some();
         loop {
             loop_timer.start();
             if vsync(actor_config.min_loop_duration, || {
                 self.loop_body(&mut connections);
-                loop_timer.stop();
+                if time_loop {
+                    loop_timer.stop();
+                }
                 term.load(Ordering::Relaxed)
             }) {
                 break;

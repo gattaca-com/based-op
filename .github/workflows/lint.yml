@@ -29,10 +29,12 @@ jobs:
           workspaces: based -> target
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly-2025-02-26
+          profile: minimal
           components: clippy, rustfmt
+          override: true
 
       - name: Setup just
         uses: extractions/setup-just@v2

@@ -94,4 +94,5 @@ services:
     volumes: 
       - ./config:/config
       - ./data/gateway:/data/gateway
-
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
