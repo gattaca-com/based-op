@@ -41,8 +41,8 @@ impl TransactionData {
         let mut active = false;
         for (_, u) in &self.updates {
             match u {
-                Tx::AddedToPool { .. } => active = true,
-                Tx::RemovedFromPool { .. } => active = false,
+                Tx::AddedToPool => active = true,
+                Tx::RemovedFromPool => active = false,
                 _ => {}
             }
         }

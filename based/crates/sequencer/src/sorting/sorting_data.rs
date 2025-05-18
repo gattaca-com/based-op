@@ -188,8 +188,8 @@ impl<Db> SortingData<Db> {
         }
         self.telemetry.n_sims_succesful += 1;
 
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
-            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
+        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining
+            && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
@@ -261,7 +261,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
     }
 
     pub fn send_next(&mut self, n_sims_per_loop: usize, senders: &mut SpineConnections<Db>) {
-        if self.tof_snapshot.len() == 0 {
+        if self.tof_snapshot.is_empty() {
             return;
         }
         let mut i = self.tof_snapshot.len() - 1;
