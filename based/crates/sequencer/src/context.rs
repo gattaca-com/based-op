@@ -307,20 +307,17 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
-        (
-            seal,
-            OpExecutionPayloadEnvelopeV3 {
-                execution_payload: ExecutionPayloadV3 {
-                    payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                    blob_gas_used: 0,
-                    excess_blob_gas: 0,
-                },
-                block_value: frag_seq.payment.to(),
-                blobs_bundle: BlobsBundleV1::new(vec![]),
-                should_override_builder: false,
-                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+        (seal, OpExecutionPayloadEnvelopeV3 {
+            execution_payload: ExecutionPayloadV3 {
+                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+                blob_gas_used: 0,
+                excess_blob_gas: 0,
             },
-        )
+            block_value: frag_seq.payment.to(),
+            blobs_bundle: BlobsBundleV1::new(vec![]),
+            should_override_builder: false,
+            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+        })
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {

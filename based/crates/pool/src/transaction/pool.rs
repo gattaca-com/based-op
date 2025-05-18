@@ -153,7 +153,7 @@ impl TxPool {
     /// This gets called in two places:
     /// 1) When we sync a new block.
     /// 2) When we commit a new Frag.
-    pub fn handle_new_block<'a, Db: DatabaseRead>(
+    pub fn handle_new_block<Db: DatabaseRead>(
         &mut self,
         base_fee: u64,
         db: &DBFrag<Db>,
