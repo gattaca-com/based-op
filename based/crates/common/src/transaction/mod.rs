@@ -12,11 +12,17 @@ use reth_primitives_traits::SignedTransaction;
 use revm_primitives::{OptimismFields, TxEnv, TxKind};
 pub use simulated::{SimulatedTx, SimulatedTxList};
 pub use tx_list::TxList;
+use uuid::Uuid;
 
-use crate::{communication::messages::BlockSyncMessage, signing::ECDSASigner};
+use crate::{
+    communication::messages::BlockSyncMessage,
+    signing::ECDSASigner,
+    telemetry::{Telemetry, Tx, order::Ingested},
+};
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
+    pub uuid: Uuid,
     pub tx: OpTxEnvelope,
     /// The sender of the transaction.
     /// Recovered from the tx on initialisation.
@@ -26,7 +32,7 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn new(tx: OpTxEnvelope, sender: Address, envelope: Bytes) -> Self {
-        Self { tx, sender, envelope }
+        Self { tx, sender, envelope, uuid: Uuid::new_v4() }
     }
 
     #[inline]
@@ -153,7 +159,7 @@ impl Transaction {
                     is_system_transaction: Some(tx.is_system_transaction),
                     enveloped_tx: Some(envelope),
                 };
-                return
+                return;
             }
             _ => unreachable!(),
         }
@@ -192,7 +198,7 @@ impl Transaction {
         let signed_tx = signing_wallet.sign_tx(tx).unwrap();
         let tx = OpTxEnvelope::Eip1559(signed_tx);
         let envelope = tx.encoded_2718().into();
-        Self { sender: from, tx, envelope }
+        Self { sender: from, tx, envelope, uuid: Uuid::new_v4() }
     }
 
     pub fn decode(bytes: Bytes) -> Result<Self, alloy_rlp::Error> {
@@ -207,7 +213,7 @@ impl Transaction {
             _ => panic!("invalid tx type"),
         };
 
-        Ok(Self { sender, tx, envelope: bytes })
+        Ok(Self { sender, tx, envelope: bytes, uuid: Uuid::new_v4() })
     }
 
     pub fn encode(&self) -> Bytes {
@@ -217,6 +223,14 @@ impl Transaction {
 
     pub fn from_block(block: &BlockSyncMessage) -> Vec<Arc<Transaction>> {
         block.body.transactions.iter().map(|t| Arc::new(t.clone().into())).collect()
+    }
+
+    pub fn to_added_to_pool_telemetry(&self) -> Telemetry {
+        Telemetry::Tx(Tx::AddedToPool)
+    }
+
+    pub fn to_ingested_telemetry(&self) -> Telemetry {
+        Telemetry::Tx(Tx::Ingested(Ingested { sender: self.sender, nonce: self.nonce(), hash: self.tx_hash() }))
     }
 }
 
@@ -264,7 +278,7 @@ impl From<OpTransactionSigned> for Transaction {
             }
             op_alloy_consensus::OpTypedTransaction::Deposit(tx_deposit) => OpTxEnvelope::Deposit(tx_deposit.seal()),
         };
-        Self { tx, sender, envelope }
+        Self { tx, sender, envelope, uuid: Uuid::new_v4() }
     }
 }
 

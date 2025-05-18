@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    panic,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::level_filters::LevelFilter;
@@ -6,7 +9,7 @@ use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
-use crate::config::LoggingConfig;
+use crate::config::{LoggingConfig, LoggingFlags};
 
 pub const DEFAULT_TRACING_ENV_FILTERS: &[&str] = &[
     "hyper::proto::h1=off",
@@ -40,10 +43,10 @@ pub fn build_env_filter(default_level: LevelFilter, env_filters: Option<String>)
 }
 
 /// Initialises tracing logger that creates daily log files.
-pub fn init_tracing(config: LoggingConfig) -> WorkerGuard {
+pub fn init_tracing(config: LoggingConfig) -> Option<WorkerGuard> {
     let format = tracing_subscriber::fmt::format().with_level(true).with_thread_ids(false).with_target(false);
-
-    if config.enable_file_logging {
+    if config.flags == LoggingFlags::File | LoggingFlags::StdOut {
+        let _ = std::fs::create_dir_all(&config.path);
         let mut builder =
             tracing_appender::rolling::Builder::new().rotation(Rotation::DAILY).max_log_files(config.max_files);
 
@@ -66,8 +69,8 @@ pub fn init_tracing(config: LoggingConfig) -> WorkerGuard {
 
         tracing_subscriber::registry().with(stdout_layer.and_then(file_layer)).init();
 
-        guard
-    } else {
+        Some(guard)
+    } else if config.flags == LoggingFlags::StdOut {
         let (writer, guard) = tracing_appender::non_blocking(std::io::stdout());
 
         let stdout_layer = tracing_subscriber::fmt::layer()
@@ -76,7 +79,30 @@ pub fn init_tracing(config: LoggingConfig) -> WorkerGuard {
             .with_filter(build_env_filter(config.level, config.filters.clone()));
 
         tracing_subscriber::registry().with(stdout_layer).init();
-        guard
+        Some(guard)
+    } else if config.flags == LoggingFlags::File {
+        let _ = std::fs::create_dir_all(&config.path);
+        let mut builder =
+            tracing_appender::rolling::Builder::new().rotation(Rotation::DAILY).max_log_files(config.max_files);
+
+        if let Some(prefix) = config.prefix {
+            builder = builder.filename_prefix(prefix);
+        }
+
+        let appender = builder.build(config.path).expect("failed to create log appender!");
+        let (writer, guard) = tracing_appender::non_blocking(appender);
+
+        let file_layer = tracing_subscriber::fmt::layer()
+            .event_format(format)
+            .with_ansi(false)
+            .with_writer(writer)
+            .with_filter(build_env_filter(config.level, config.filters.clone()));
+
+        tracing_subscriber::registry().with(file_layer).init();
+
+        Some(guard)
+    } else {
+        None
     }
 }
 
@@ -162,4 +188,9 @@ pub fn uuid() -> Uuid {
 
 pub fn utcnow_sec() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+}
+
+#[macro_export]
+macro_rules! debug_panic {
+    ($($arg:tt)*) => (if cfg!(debug_assertions) { panic!($($arg)*); } else {tracing::error!($($arg)*)})
 }

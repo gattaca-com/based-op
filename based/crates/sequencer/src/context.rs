@@ -7,11 +7,13 @@ use alloy_rpc_types::engine::{
 };
 use bop_common::{
     communication::{
-        SendersSpine, TrackedSenders,
+        Producer, SendersSpine, TrackedSenders,
         messages::{BlockSyncMessage, EvmBlockParams},
     },
+    debug_panic,
     p2p::{FragV0, SealV0},
     shared::SharedState,
+    telemetry::{TelemetryUpdate, telemetry_queue},
     time::Timer,
     transaction::Transaction,
 };
@@ -73,6 +75,7 @@ pub struct SequencerContext<Db> {
     pub payload_attributes: Box<OpPayloadAttributes>,
     pub system_caller: SystemCaller<OpEvmConfig, OpChainSpec>,
     pub timers: SequencerTimers,
+    pub telemetry: Producer<TelemetryUpdate>,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -94,6 +97,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             block_env: Default::default(),
             base_fee: Default::default(),
             timers: Default::default(),
+            telemetry: telemetry_queue().into(),
         }
     }
 }
@@ -144,6 +148,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
+        sorting_data.send_finished_telemetry();
         info!(
             frag_id = frag_seq.next_seq,
             txs = sorting_data.txs.len(),
@@ -151,7 +156,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
             "sealing frag"
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
-        self.tx_pool.remove_mined_txs(sorting_data.txs.iter());
+        self.tx_pool.remove_mined_txs(sorting_data.txs.iter(), &mut self.telemetry);
         (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
     }
 }
@@ -162,6 +167,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             self.deposits.push_back(tx);
             return;
         }
+        TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
         self.tx_pool.handle_new_tx(
             tx.clone(),
             self.shared_state.as_ref(),
@@ -187,13 +193,14 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 
         // send new block params to simulators
         senders.send(simulator_evm_block_params).expect("should never fail");
-        let n_force_include_txs = self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
-        let seq = FragSequence::new(self.gas_limit(), self.block_number(), self.timestamp(), n_force_include_txs);
+        let n_force_include_txs =
+            self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
+        let seq = FragSequence::new(self.gas_limit(), self.block_number(), n_force_include_txs);
         let mut sorting = SortingData::new(&seq, self);
 
         // Apply must include
         sorting.apply_block_start_to_state(self, env_with_handler_cfg.clone()).expect("shouldn't fail");
-        self.tx_pool.remove_mined_txs(sorting.txs.iter());
+        self.tx_pool.remove_mined_txs(sorting.txs.iter(), &mut self.telemetry);
 
         (seq, sorting)
     }
@@ -318,10 +325,10 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// and clear the existing pool based on that
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
     pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
-        let blocks_to_fetch = match self.block_executor.commit_block(block, &self.db, true) {
+        let blocks_to_fetch = match self.block_executor.commit_block(block, &self.db, true, &mut self.telemetry) {
             Ok(blocks_to_fetch) => blocks_to_fetch,
             Err(e) => {
-                tracing::error!("couldn't commit block: {e}");
+                debug_panic!("couldn't commit block: {e}");
                 let bn = block.number();
                 return Some((bn, bn));
             }
@@ -339,6 +346,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
                 self.shared_state.as_ref(),
                 false,
                 None,
+                &mut self.telemetry,
             );
         }
 

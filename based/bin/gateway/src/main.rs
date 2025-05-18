@@ -27,7 +27,6 @@ fn main() {
 
     let args = GatewayArgs::parse();
     let _guards = init_tracing((&args).into());
-    #[cfg(feature = "shmem")]
     bop_common::communication::verify_or_remove_queue_files();
 
     match run(args) {
@@ -88,8 +87,10 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         let fragdb_clone = shared_state.as_ref().clone();
         if let Some(mode) = args.mock {
             s.spawn(|| {
-                MockFetcher::new(args.eth_client_url, start_fetch, start_fetch + 100, fragdb_clone, mode)
-                    .run(spine.to_connections("BlockFetch"), ActorConfig::default());
+                MockFetcher::new(args.eth_client_url, start_fetch, start_fetch + 100, fragdb_clone, mode).run(
+                    spine.to_connections("BlockFetch"),
+                    ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
+                );
             });
         } else {
             s.spawn(|| {

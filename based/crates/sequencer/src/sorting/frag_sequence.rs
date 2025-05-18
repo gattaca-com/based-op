@@ -1,7 +1,7 @@
 use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use bop_common::{p2p::FragV0, time::Instant, transaction::SimulatedTx};
+use bop_common::{p2p::FragV0, telemetry::TelemetryUpdate, time::Instant, transaction::SimulatedTx};
 use revm_primitives::{B256, Bytes};
 
 use super::{SortingData, sorting_data::SortingTelemetry};
@@ -19,13 +19,12 @@ pub struct FragSequence {
     pub next_seq: u64,
     /// Block number and timestamp shared by all frags of this sequence
     block_number: u64,
-    block_timestamp: u64,
     pub n_force_include_txs: usize,
 
     pub sorting_telemetry: SortingTelemetry,
 }
 impl FragSequence {
-    pub fn new(gas_remaining: u64, block_number: u64, block_timestamp: u64, n_force_include_txs: usize) -> Self {
+    pub fn new(gas_remaining: u64, block_number: u64, n_force_include_txs: usize) -> Self {
         Self {
             start_t: Instant::now(),
             gas_remaining,
@@ -33,7 +32,6 @@ impl FragSequence {
             payment: U256::ZERO,
             txs: vec![],
             block_number,
-            block_timestamp,
             next_seq: 0,
             n_force_include_txs,
             sorting_telemetry: Default::default(),
@@ -48,21 +46,19 @@ impl FragSequence {
         let gas_used = in_sort.gas_used();
         self.gas_remaining -= gas_used;
         self.payment += in_sort.payment();
+        let uuid = in_sort.uuid;
 
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
-            let receipt = tx.op_tx_receipt(
-                self.gas_used,
-                self.block_number,
-                self.block_timestamp,
-                ctx.base_fee(),
-                self.txs.len() as u64,
-            );
-            ctx.shared_state.insert_confirmed_tx(tx.tx.tx.clone(), receipt);
             self.txs.push(tx);
         }
 
+        TelemetryUpdate::send(
+            uuid,
+            bop_common::telemetry::Telemetry::Frag(bop_common::telemetry::Frag::Commit),
+            &mut ctx.telemetry,
+        );
         self.next_seq += 1;
         self.sorting_telemetry += in_sort.telemetry;
         msg
