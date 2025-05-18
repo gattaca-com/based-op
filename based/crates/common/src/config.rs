@@ -40,8 +40,8 @@ pub struct GatewayArgs {
     #[arg(long = "eth_client.url", default_value = "http://localhost:8545")]
     pub eth_client_url: Url,
     /// Url to the root peer gossip node
-    #[arg(long = "gossip.root_peer_url")]
-    pub gossip_root_peer_url: Option<Url>,
+    #[arg(long = "gossip.root_peer_url", default_value = "http://localhost:8547")]
+    pub gossip_root_peer_url: Url,
     /// Gossip to sign frag messages
     #[arg(long = "gossip.signer_private_key")]
     pub gossip_signer_private_key: Option<B256>,
