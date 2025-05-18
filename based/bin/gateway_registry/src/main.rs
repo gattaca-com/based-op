@@ -184,7 +184,7 @@ impl RegistryApiServer for RegistryServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()> {
         let mut gateways = self.gateway_clients.read().clone();
-        if !gateways.iter().any(|g| g.0.host() == gateway.0.host()) {
+        if !gateways.iter().any(|g| g.0.host() == gateway.0.host() || g.2 == gateway.2) {
             gateways.push(gateway);
             write_gateway_clients(self.registry_path.clone(), &gateways);
             *self.gateway_clients.write() = gateways;
