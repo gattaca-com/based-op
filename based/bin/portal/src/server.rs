@@ -25,6 +25,8 @@ use parking_lot::RwLock;
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
 use tokio::sync::Mutex;
+use tower::ServiceBuilder;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{Instrument, Level, debug, error, info, trace};
 
 use crate::{cli::PortalArgs, middleware::ProxyService};
@@ -136,10 +138,15 @@ impl PortalServer {
             )
         });
 
+        // temp: remove when factoring out the portal
+        let cors = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
+        let cors_middleware = ServiceBuilder::new().layer(cors);
+
         let server = ServerBuilder::default()
             .max_request_body_size(u32::MAX)
             .max_response_body_size(u32::MAX)
             .set_rpc_middleware(rpc_middleware)
+            .set_http_middleware(cors_middleware)
             .build(addr)
             .await?;
 
