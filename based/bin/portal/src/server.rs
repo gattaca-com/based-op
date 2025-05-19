@@ -69,7 +69,7 @@ impl PortalServer {
         let fallback_client = create_auth_client(
             args.fallback_url.clone(),
             fallback_jwt,
-            Duration::from_millis(args.fallback_timeout_ms),
+            Duration::from_secs(60),
         )?;
         let registry_client =
             create_client(args.registry_url.clone(), Duration::from_millis(args.registry_timeout_ms))?;
