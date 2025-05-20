@@ -123,8 +123,7 @@ func StartPreconf(ctx context.Context, e ExecEngine) PreconfChannels {
 // Checks if the state is new or if the previous block is sealed.
 func (s *PreconfState) putEnv(sEnv *eth.SignedEnv) {
 	env := sEnv.Env
-	// if !s.lastSealSent.IsSet() || s.lastSealSent.IsEqual(env.Number-1) || s.lastL2BlockSent.IsEqual(env.Number) {
-	if !s.lastSealSent.IsSet() || s.lastL2BlockSent.IsEqual(env.Number) {
+	if s.lastL2BlockSent.IsEqual(env.Number - 1) {
 		s.lastEnvSent.Set(env.Number)
 		s.e.Env(s.ctx, sEnv)
 		s.prune(env.Number)
@@ -179,11 +178,11 @@ func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
 		s.lastSealSent.Set(seal.BlockNumber)
 		s.e.SealFrag(s.ctx, sSeal)
 		// When we put a seal we should check if the env of the next is present.
-		// nextEnv, ok := s.pendingEnvs[seal.BlockNumber+1]
-		// if ok {
-		// 	delete(s.pendingEnvs, seal.BlockNumber+1)
-		// 	s.putEnv(&nextEnv)
-		// }
+		nextEnv, ok := s.pendingEnvs[seal.BlockNumber+1]
+		if ok {
+			delete(s.pendingEnvs, seal.BlockNumber+1)
+			s.putEnv(&nextEnv)
+		}
 	} else if seal.BlockNumber >= s.lastBlockPruned {
 		s.pendingSeals[seal.BlockNumber] = *sSeal
 	}
@@ -192,9 +191,9 @@ func (s *PreconfState) putSeal(sSeal *eth.SignedSeal) {
 // Checks if there's envs blocked because of gaps and sends them over.
 func (s *PreconfState) putL2Block(block *eth.L2BlockRef) {
 	s.lastL2BlockSent.Set(block.Number)
-	nextEnv, ok := s.pendingEnvs[block.Number]
+	nextEnv, ok := s.pendingEnvs[block.Number+1]
 	if ok {
-		delete(s.pendingEnvs, block.Number)
+		delete(s.pendingEnvs, block.Number+1)
 		s.putEnv(&nextEnv)
 	}
 
