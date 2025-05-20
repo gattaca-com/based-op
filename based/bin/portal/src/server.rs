@@ -11,7 +11,6 @@ use bop_common::{
         OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
     },
     communication::messages::{RpcError, RpcResult},
-    time::Nanos,
     utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
@@ -46,10 +45,6 @@ impl fmt::Debug for Gateway {
     }
 }
 
-/// If we get fcus faster than this threshold we assume that we are in sync mode and will
-/// not propagate anything to the gateways
-const SYNC_FCU_DT_THRESHOLD: Nanos = Nanos::from_millis(999);
-
 #[derive(Clone)]
 pub struct PortalServer {
     fallback_eth_client: RpcClient,
@@ -59,7 +54,6 @@ pub struct PortalServer {
     current_gateway: Arc<Mutex<Option<Gateway>>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
-    last_fcu: Arc<RwLock<Nanos>>,
     args: Arc<PortalArgs>,
 }
 
@@ -116,7 +110,6 @@ impl PortalServer {
             current_gateway,
             gateways,
             gateway_timeout,
-            last_fcu: Default::default(),
             args: Arc::new(args),
         })
     }
@@ -179,10 +172,6 @@ impl PortalServer {
         self.gateways.read().clone()
     }
 
-    fn syncing(&self) -> bool {
-        self.last_fcu.read().elapsed() < SYNC_FCU_DT_THRESHOLD
-    }
-
     pub async fn refresh(&self) -> eyre::Result<()> {
         let mut gateways = vec![];
         for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
@@ -243,7 +232,7 @@ impl EthApiServer for PortalServer {
             let bytes = bytes.clone();
             tokio::spawn(async move {
                 if let Err(err) = gateway.client.send_raw_transaction(bytes).await {
-                    error!(%err, ?gateway, "failed to send to gateway");
+                    error!(%err, ?gateway, "eth_sendRawTransaction: failed to send to gateway");
                 }
             });
         }
@@ -418,10 +407,6 @@ impl EngineApiServer for PortalServer {
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<OpPayloadAttributes>,
     ) -> RpcResult<ForkchoiceUpdated> {
-        let last_fcu_dt = self.last_fcu.read().elapsed();
-        if payload_attributes.is_none() {
-            *self.last_fcu.write() = Nanos::now();
-        }
         let parent_block_hash = fork_choice_state.head_block_hash;
 
         if let Some(payload_attributes) = payload_attributes.as_ref() {
@@ -434,11 +419,6 @@ impl EngineApiServer for PortalServer {
 
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
-
-        if payload_attributes.is_none() && last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
-            debug!("we seem to be in state syncing so only sending fcu to fallback");
-            return Ok(response);
-        }
 
         if let Some(current_gateway) = self.current_gateway.as_ref().lock().await.clone() {
             if payload_attributes.is_some() {
@@ -479,10 +459,6 @@ impl EngineApiServer for PortalServer {
             .new_payload_v3(payload.clone(), versioned_hashes.clone(), parent_beacon_block_root)
             .await?;
 
-        if self.syncing() {
-            return Ok(response);
-        }
-
         // send to all gateways
         for gateway in self.gateways() {
             let payload = payload.clone();
@@ -512,10 +488,6 @@ impl EngineApiServer for PortalServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
         debug!(%payload_id, "new request");
-        if self.syncing() {
-            error!("syncing");
-            return Ok(self.fallback_client.clone().get_payload_v3(payload_id).await?);
-        }
 
         let fallback_fut = tokio::spawn({
             let client = self.fallback_client.clone();
