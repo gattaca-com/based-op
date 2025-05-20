@@ -435,10 +435,10 @@ impl EngineApiServer for PortalServer {
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
-        if payload_attributes.is_none() && last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
-            debug!("we seem to be in state syncing so only sending fcu to fallback");
-            return Ok(response);
-        }
+        // if payload_attributes.is_none() && last_fcu_dt < SYNC_FCU_DT_THRESHOLD {
+        //     debug!("we seem to be in state syncing so only sending fcu to fallback");
+        //     return Ok(response);
+        // }
 
         if let Some(current_gateway) = self.current_gateway.as_ref().lock().await.clone() {
             if payload_attributes.is_some() {
@@ -514,7 +514,7 @@ impl EngineApiServer for PortalServer {
         debug!(%payload_id, "new request");
         if self.syncing() {
             error!("syncing");
-            return Ok(self.fallback_client.clone().get_payload_v3(payload_id).await?);
+            // return Ok(self.fallback_client.clone().get_payload_v3(payload_id).await?);
         }
 
         let fallback_fut = tokio::spawn({
