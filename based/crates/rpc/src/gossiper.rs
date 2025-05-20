@@ -4,13 +4,13 @@ use reqwest::blocking::{Client, ClientBuilder};
 use tracing::{error, info};
 
 pub struct Gossiper {
-    target_rpc: Option<Url>,
+    target_rpc: Url,
     client: Client,
     signer: ECDSASigner,
 }
 
 impl Gossiper {
-    pub fn new(target_rpc: Option<Url>, signer: Option<ECDSASigner>) -> Self {
+    pub fn new(target_rpc: Url, signer: Option<ECDSASigner>) -> Self {
         let client = ClientBuilder::new()
             .timeout(std::time::Duration::from_secs(10))
             .build()
@@ -22,13 +22,9 @@ impl Gossiper {
     }
 
     fn gossip(&self, msg: p2p::VersionedMessage) {
-        let Some(url) = self.target_rpc.as_ref().cloned() else {
-            return;
-        };
-
         let payload = msg.to_json(&self.signer);
 
-        let Ok(res) = self.client.post(url).json(&payload).send() else {
+        let Ok(res) = self.client.post(self.target_rpc.clone()).json(&payload).send() else {
             tracing::error!("couldn't send {}", payload);
             return;
         };
