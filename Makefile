@@ -48,7 +48,7 @@ build-gateway: ## 🏗️ Build based gateway from based directory
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-follower-op-node: ## 🏗️ Build OP node from optimism directory
-	cd optimism && \
+	cd ../based-optimism && \
 	IMAGE_TAGS=develop \
 	docker buildx bake \
 	-f docker-bake.hcl \
@@ -57,7 +57,7 @@ build-follower-op-node: ## 🏗️ Build OP node from optimism directory
 	op-node
 
 build-follower-op-geth: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t based_op_geth ./op-geth
+	docker build -t based_op_geth ../based-op-geth
 
 build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and Firefox
 	cd rabby && \
