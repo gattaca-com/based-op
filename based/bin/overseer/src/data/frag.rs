@@ -40,6 +40,7 @@ impl FragData {
 
     pub fn to_block_table_row(&self) -> Vec<Text<'_>> {
         let Frag::SorterStart { seq, .. } = &self.updates[0].1 else {
+            tracing::warn!("strange frag setup");
             return vec![];
         };
         let (payment, gas_used, n_txs) = self.frag_stats().unwrap_or_default();

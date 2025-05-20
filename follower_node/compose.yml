@@ -73,6 +73,7 @@ services:
       - --rpc.enable-based 
       - --registry=$PORTAL
       - --p2p.bootnodes=$MAIN_OP_NODE_ENR
+      - --syncmode=execution-layer
     volumes:
       - ./data/node:/data/op-node
       - ./config:/config
