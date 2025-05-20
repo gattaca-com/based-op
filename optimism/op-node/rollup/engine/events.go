@@ -437,7 +437,6 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 			"unsafe_timestamp", x.Unsafe.Time)
 		d.emitter.Emit(EngineResetConfirmedEvent(x))
 	case PromoteUnsafeEvent:
-		d.preconfChannels.SendL2Block(&x.Ref)
 		// Backup unsafeHead when new block is not built on original unsafe head.
 		if d.ec.unsafeHead.Number >= x.Ref.Number {
 			d.ec.SetBackupUnsafeL2Head(d.ec.unsafeHead, false)
@@ -449,6 +448,8 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 		if !d.cfg.IsInterop(x.Ref.Time) {
 			d.emitter.Emit(PromoteCrossUnsafeEvent(x))
 		}
+		log.Debug("sending L2Block to preconf", "number", x.Ref.Number)
+		d.preconfChannels.SendL2Block(&x.Ref)
 		// Try to apply the forkchoice changes
 		d.emitter.Emit(TryUpdateEngineEvent{})
 	case PromoteCrossUnsafeEvent:
@@ -499,6 +500,9 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 			d.emitter.Emit(PromoteSafeEvent(x))
 		}
 	case PromoteSafeEvent:
+
+		log.Debug("sending L2Block to preconf", "number", x.Ref.Number)
+		d.preconfChannels.SendL2Block(&x.Ref)
 		d.log.Debug("Updating safe", "safe", x.Ref, "unsafe", d.ec.UnsafeL2Head())
 		d.ec.SetSafeHead(x.Ref)
 		// Finalizer can pick up this safe cross-block now
