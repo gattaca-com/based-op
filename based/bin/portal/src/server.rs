@@ -480,7 +480,7 @@ impl EngineApiServer for PortalServer {
             .await?;
 
         if self.syncing() {
-            return Ok(response);
+            // return Ok(response);
         }
 
         // send to all gateways
