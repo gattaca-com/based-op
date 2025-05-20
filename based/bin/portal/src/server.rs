@@ -232,7 +232,7 @@ impl EthApiServer for PortalServer {
             let bytes = bytes.clone();
             tokio::spawn(async move {
                 if let Err(err) = gateway.client.send_raw_transaction(bytes).await {
-                    error!(%err, ?gateway, "failed to send to gateway");
+                    error!(%err, ?gateway, "eth_sendRawTransaction: failed to send to gateway");
                 }
             });
         }
