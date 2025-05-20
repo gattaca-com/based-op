@@ -11,7 +11,6 @@ use bop_common::{
         OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
     },
     communication::messages::{RpcError, RpcResult},
-    time::Nanos,
     utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
