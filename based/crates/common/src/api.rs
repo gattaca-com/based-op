@@ -386,23 +386,69 @@ pub struct OptimismConfig {
     pub eip1559_denominator_canyon: u64,
 }
 
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+pub struct OpGethPeer {
+    pub enr: String,
+    pub enode: String,
+    pub id: String,
+    pub name: String,
+    pub caps: Vec<String>,
+    pub network: PeerNetwork,
+    pub protocols: PeerProtocols,
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+pub struct PeerNetwork {
+    #[serde(alias="localAddress")]
+    pub local_address: String,
+    #[serde(alias="remoteAddress")]
+    pub remote_address: String,
+    pub inbound: bool,
+    pub trusted: bool,
+    #[serde(alias="static")]
+    pub static_str: bool, // `static` is a reserved keyword in Rust, so we need to use `static_`
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+pub struct PeerProtocols {
+    pub eth: EthVersion,
+    pub snap: SnapVersion,
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+pub struct EthVersion {
+    pub version: u32,
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+pub struct SnapVersion {
+    pub version: Option<u32>,
+}
 #[rpc(client, server, namespace = "admin")]
 pub trait OpGethAdminApi {
     /// The rollup config of the op-node
     #[method(name = "nodeInfo")]
     async fn node_info(&self) -> RpcResult<OpGethInfo>;
+    #[method(name = "peers")]
+    async fn peers(&self) -> RpcResult<Vec<OpGethPeer>>;
 }
 
 #[cfg(test)]
 pub mod test {
     use super::*;
     #[test]
-    fn parse_peerinfo() {
+    fn parse_op_node_peer_info() {
         assert_ne!(serde_json::from_str::<PeerInfo>("{\"ENR\":\"enr:-J-4QKMgVCRicuzgRSXF--kcfNcSb3el3gnK0VTKH5IqfAnjY096UPHcnpeOkYf8Y6hdbhFbjIoRcdMxKgy1QOftlZGGAZavZyU2gmlkgnY0gmlwhKwfGmOHb3BzdGFja4Xkq4MBAIlzZWNwMjU2azGhA38YA_8AH2SrzzVprDUjXbyv88AJION0F_UdgJmIk7v2g3RjcIIjK4N1ZHCCIys\",\"addresses\":[\"/ip4/127.0.0.1/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"/ip4/172.31.26.99/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\"],\"chainID\":0,\"connectedness\":0,\"direction\":0,\"gossipBlocks\":true,\"latency\":0,\"nodeID\":\"ca1451eb9482746566a92fbde4bcb7c646d23bfceb21f66d4d79e1e0f0819cfc\",\"peerID\":\"16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"protected\":false,\"protocolVersion\":\"\",\"protocols\":null,\"scores\":{\"gossip\":{\"IPColocationFactor\":0,\"behavioralPenalty\":0,\"blocks\":{\"firstMessageDeliveries\":0,\"invalidMessageDeliveries\":0,\"meshMessageDeliveries\":0,\"timeInMesh\":0},\"total\":0},\"reqResp\":{\"errorResponses\":0,\"rejectedPayloads\":0,\"validResponses\":0}},\"userAgent\":\"\"}").unwrap().peer_id, "");
     }
 
     #[test]
-    fn parse_gethinfo() {
+    fn parse_geth_info() {
         assert_ne!(serde_json::from_str::<OpGethInfo>("{\"enode\":\"enode://36c3170ea04471fb52a8c0d4f8f06da660e2e7388959089844269d5b790be4215ebc5052892cf40be08ffc19bcd7439db6fdf713c6fb6d0f7960906ce088de52@57.133.217.139:30303?discport=1089\",\"enr\":\"enr:-Ku4QA9W-NTtseU4M0OBXgdVBkpSEKP_D3l-TicPAyBACAdLPVjNRD2oMpBeK8_z-Y7Xl31iovo-O0eoJ4HII6d0CS6GAZbFKQKgg2V0aMfGhBXQ1LeAgmlkgnY0gmlwhDmF2YuJc2VjcDI1NmsxoQI2wxcOoERx-1KowNT48G2mYOLnOIlZCJhEJp1beQvkIYRzbmFwwIN0Y3CCdl-DdWRwggRBhHVkcDaCdl8\",\"id\":\"4b259315183c61074e998c46eec2689f2cc321e81226b4bea0c83ee57a00c96f\",\"ip\":\"57.133.217.139\",\"listenAddr\":\"[::]:30303\",\"name\":\"Geth/v1.101411.8-rc.1-374d61f9-20250211/linux-amd64/go1.23.6\",\"ports\":{\"discovery\":1089,\"listener\":30303},\"protocols\":{\"eth\":{\"config\":{\"arrowGlacierBlock\":0,\"bedrockBlock\":0,\"berlinBlock\":0,\"byzantiumBlock\":0,\"cancunTime\":0,\"canyonTime\":0,\"chainId\":2151908,\"constantinopleBlock\":0,\"depositContractAddress\":\"0x0000000000000000000000000000000000000000\",\"ecotoneTime\":0,\"eip150Block\":0,\"eip155Block\":0,\"eip158Block\":0,\"fjordTime\":0,\"graniteTime\":0,\"grayGlacierBlock\":0,\"holoceneTime\":0,\"homesteadBlock\":0,\"istanbulBlock\":0,\"londonBlock\":0,\"mergeNetsplitBlock\":0,\"muirGlacierBlock\":0,\"optimism\":{\"eip1559Denominator\":50,\"eip1559DenominatorCanyon\":250,\"eip1559Elasticity\":6},\"petersburgBlock\":0,\"regolithTime\":0,\"shanghaiTime\":0,\"terminalTotalDifficulty\":0},\"difficulty\":0,\"genesis\":\"0xf81cfade9797c41a311da5bb09fbc77fa481bfdaff40e9fcc99a4dc43453b1b3\",\"head\":\"0x4469e2e3a10785af7b05b69cbbeae7bd3c3c47b3df81dfb98dfee974918350b5\",\"network\":2151908},\"snap\":{}}}").unwrap().id, "");
+    }
+
+    #[test]
+    fn parse_geth_peers() {
+        assert!(serde_json::from_str::<OpGethPeer>("{\"enr\":\"enr:-KO4QPfDpnj33Qcejr3m7rk8mMA7nXzBrOvm5bpsMfuun09Nfgdv1O8qqGhl9v_e69b2wAogFjUKK8ZXReI8pgPS9ZiGAZbbGWtgg2V0aMfGhFmJ9hSAgmlkgnY0gmlwhBK5xzOJc2VjcDI1NmsxoQI-TZICg15Lqr3j5KRiqSVTVwuV9FQJpvB9GrAMB7w5pYRzbmFwwIN0Y3CCdl-DdWRwgnZf\",\"enode\":\"enode://3e4d9202835e4baabde3e4a462a92553570b95f45409a6f07d1ab00c07bc39a52dd710f098008ae5974aa625edeb46734e3634f0c9d3ab24bb35e37d12f1ac18@18.185.199.51:30303\",\"id\":\"1b83fb2f39f76c9926dd1690b3570e956f3a43e599acb89d28c739022db5d887\",\"name\":\"Geth/v1.101411.8-rc.1-374d61f9-20250211/linux-amd64/go1.23.6\",\"caps\":[\"eth/68\",\"snap/1\"],\"network\":{\"localAddress\":\"192.168.1.33:35502\",\"remoteAddress\":\"18.185.199.51:30303\",\"inbound\":false,\"trusted\":false,\"static\":false},\"protocols\":{\"eth\":{\"version\":68},\"snap\":{\"version\":1}}}").inspect_err(|e| panic!("{e}")).is_ok());
+        
     }
 }
