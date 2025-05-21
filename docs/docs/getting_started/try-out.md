@@ -6,13 +6,74 @@ You can try out a Based OP testnet following the steps below.
 
 | Parameter | Value |
 |-----------|-------|
-| Chain ID | 2151908 |
+| Chain ID | 29866 |
 | Network Name | Based-OP |
-| RPC URL | https://rpc-based.gattaca.com |
-| Currency Symbol | ETH |
-| Block Explorer | https://explorer-based.gattaca.com/ |
+| Currency Symbol | opETH |
+| RPC URL | https://based-rpc.gattaca.com |
+| Block Explorer | https://based-explorer.gattaca.com/ |
+| Break My Frags | https://based-bmf.gattaca.com/ |
 
-To receive funds, send your address to the [faucet](https://t.me/basedoptestnet_bot). 
+## Break My Frags
+
+We have created a tool at [based-bmf](https://based-bmf.gattaca.com/) to experiment with the latencies and throughput of our `Based OP` testnet.
+It interfaces with a `Based OP`/`Frag` enabled `op-geth` rpc using the standard `eth_...` calls. Using one of the rich wallets, a user can get a new wallet
+generated with a small amount of Eth deposited to it. Transactions can then be generated and sent automatically, while the latency for receiving the
+`Receipt`, confirming the success of the transaction, is tracked and displayed. `Auto Send` triggers a spammer that will continuously send transactions.
+
+Our current testnet setup is mainly focused on robustness and thorough testing of different scenarios.
+As such it is structrured as follows:
+- A vanilla `op-node` and `op-geth`, with a `Portal` in between, are driving the chain forward on a box in Europe.
+- Multiple sequencing `Gateways` are setup to take turns sequencing a number of future blocks
+    - On the same box
+    - In the same region
+    - In the US east region
+    - A varying number in the UK on WiFi
+- `Gateways` gossip `Frags`, i.e. ~`200ms` partial blocks that have been committed to
+- The `Gateway` on the same box as the main `op-node` and `op-geth` serves as the main RPC
+- Txs are gossiped around, `Frags` arrive back, and the `Gateway` serves `Receipts` based on those
+
+This setup means that the total latency to receive `Receipts` will vary depending on which `Gateway` is currently sequencing:
+
+- 80-150 ms on the same box
+- 200-350 ms for same region
+- 500-700 ms when in different regions
+- 200-700 ms for the last category of `Gateways`, depending on the WiFi   
+
+## Run a local Gateway
+
+### Prerequisites
+You will need a box with globally open ports:
+- 9997  (tcp)
+- 9103  (tcp/udp)
+- 31303 (tcp/udp)
+
+### Gateway Setup
+In the following, all defaults are set up to target the [`Based OP` testnet](https://based-explorer.gattaca.com), deployed on top of mainnet Sepolia.
+With that default config, a new `private-key` and `wallet` combo will be generated which your `Gateway` will use to sign `Frags`.
+The `wallet` is communicated back to the `Portal` to be gossiped around to the rest of the network for signature verification.
+
+The following single command sets up everything and will start your `Gateway`, `Based OP-node`, `Based OP-geth`:
+`git clone https://github.com/gattaca-com/based-op && cd based-op && make start-gateway`
+
+If everything went well, you should see a terminal UI appear, called the `Overseer`:
+![](./../based_op.gif)
+This shows you the status of your local `Gateway` and a general overview of the chain.
+You can press left and right keys to cycle between the different tabs and explore all the information!
+
+The configuration that was generated can be found in `based-op/.local_gateway_and_follower`, mainly the `.env` and `compose.yml` files.
+
+When you [spam some transactions with `based-bmf`](https://based-bmf.gattaca.com), you should see them appear in the `Transaction Pool` of your `Gateway`.
+
+A couple of commands tend to come in handy (from the top `based-op` directory):
+- `make stop-gateway`
+- `make start-gateway`
+- `make start-overseer`
+- `make logs-gateway`
+- `make logs-based-op-node`
+- `make logs-based-op-geth`
+
+> **⚠️ Experimental**  
+> The following section may not 100% work as described below
 
 ## Connecting a Wallet
 
@@ -47,11 +108,11 @@ To manually add the network, follow these steps:
 ![3](../../static/img/wallet_tutorial/step_3.png)
 
 4. Fill in the form with the following values:
-    - Chain ID: `2151908`
+    - Chain ID: `29866`
     - Network Name: `Based-OP`
-    - RPC URL: `https://rpc-based.gattaca.com`
-    - Currency Symbol: `ETH`
-    - Block Explorer URL: `https://explorer-based.gattaca.com/`
+    - RPC URL: `https://based-rpc.gattaca.com`
+    - Currency Symbol: `opETH`
+    - Block Explorer URL: `https://based-explorer.gattaca.com/`
 
 ![4](../../static/img/wallet_tutorial/step_4.png)
 
@@ -65,22 +126,3 @@ To manually add the network, follow these steps:
 
 You can now use the wallet to interact with the Based-OP devnet.
 
-## Start a Follower Node
-
-You can start a follower node and connect via p2p to receive frags published by the gateway.
-Everything required is in the [follower-node](https://github.com/gattaca-com/based-op/blob/main/follower-node/.env) directory.
-
-After cloning the repository:
-
-1. Fill the `.env` file with the correct `SELF_HOSTNAME`. This is your public IP that peers will see.
-2. Run `make run-follower` to start the follower node.
-3. The node will start syncing and may take a while before it catches up with the tip of the chain.
-4. After it's synced you should see it receiving frags via p2p eg:
-```
-op-node-1  | t=2025-02-25T18:33:14+0000 lvl=info msg="Received new fragment" frag="&{Signature:0xd9ef656efc8d5edd9254509f83d4998bcc3e40e836ba933d6ba0220cea3c1ff10fa85ea0311235400cb5f15f6619daec7ea1adfde0df7c79abe94d5231a359041c Frag:{BlockNumber:33528 Seq:0 IsLast:false Txs:[[126 248 248 160 125 130 181 104 88 150 80 222 45 198 152 126 100 54 255 128 30 64 116 53 62 159 99 108 143 236 136 121 117 238 171 99 148 222 173 222 173 222 173 222 173 222 173 222 173 222 173 222 173 222 173 0 1 148 66 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 21 128 128 131 15 66 64 128 184 164 68 10 94 32 0 0 5 88 0 12 95 197 0 0 0 0 0 0 0 2 0 0 0 0 103 190 12 212 0 0 0 0 0 0 43 174 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 66 82 255 250 107 194 28 121 143 145 28 192 194 12 29 16 106 207 42 191 183 16 23 188 205 96 11 81 143 226 2 152 0 0 0 0 0 0 0 0 0 0 0 0 211 242 197 175 178 215 111 85 121 243 38 176 205 125 165 245 164 18 108 53]]}}"
-op-node-1  | t=2025-02-25T18:33:16+0000 lvl=info msg="Received new seal" seal="&{Signature:0x53a63fb2ef921ed70581c46035daf1e04467e70146f708ab85a8b0541597e9fc2bea4ad9095302b1b79ccba5098420f95a269311ea12aada10cabfc41af6bdf61b Seal:{TotalFrags:2 BlockNumber:33528 GasUsed:43830 GasLimit:60000000 ParentHash:0x97ed1f7195c1ff6af69e37cc7292e4ba725f124bca7cc4ba046094ad12125b20 TransactionsRoot:0x5e3f5af2c510e50d0b8ae87bf7b93a7c00af3e74b93c0982dfc1591590e6b331 ReceiptsRoot:0xd76ade467e3ff4c069369eaa3eb8810d49895272d507daa391b547de60d0e3d0 StateRoot:0xf5bdb61986462c7ab60b284dd798bcfeacd90f518de08fae6e98f309b08ffff9 BlockHash:0x42b88a5169f641a5e0d120edd4172b9e170f435e8a7dc0f738949397a31b6727}}"
-op-node-1  | t=2025-02-25T18:33:16+0000 lvl=info msg="Received new env" env="&{Signature:0x595ce79312a864fa18abcfec1045a741c45053ccc084e048ccab0a2cbabfce262cf0a3c5976e306194992356e525e10219c2451695723e7fa74d1baafd80d3f31b Env:{Number:33529 Beneficiary:0x4200000000000000000000000000000000000011 Timestamp:1740508398 GasLimit:60000000 Basefee:251 Difficulty:+0 Prevrandao:0x6645169f9a75d95507766087e0a3fa33febf94374c546b3cb65256ed0d46f4ed ParentHash:0x42b88a5169f641a5e0d120edd4172b9e170f435e8a7dc0f738949397a31b6727 ParentBeaconBlockRoot:0xc73bff018f1df97b800ac189243a9c5060b03630cdd524539ce3ffcbc6e8f8af ExtraData:[0 0 0 0 250 0 0 0 6]}}"
-op-node-1  | t=2025-02-25T18:33:16+0000 lvl=info msg="Received new fragment" frag="&{Signature:0xc50cde57de7111f0c24b59e1f713471d3b6f1911690f22b05f45ad753594aca13b34a9e9c8407c5ca7485c5d7a2389bc92b8a9dfac565a9da7e447f6b9723cda1c Frag:{BlockNumber:33528 Seq:1 IsLast:true Txs:[]}}"
-```
-5. You can now send transactions via your local node and receive preconfirmations. Note that there may be some delay due to the network latency.
-6. To stop the node and clear the database, run `docker compose down -v`.
