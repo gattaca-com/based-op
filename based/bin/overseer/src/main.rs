@@ -7,11 +7,13 @@ mod types;
 mod ui;
 mod utils;
 
-use std::{collections::HashMap, io::stdout};
+use std::io::stdout;
 
 use alloy_primitives::Address;
 use bop_common::{
-    api::{OpNodeApiClient, OpNodeP2PApiClient, OpPeerInfo, RegistryApiClient, RollupConfig, SyncStatus},
+    api::{
+        self, OpGethPeer, OpNodeApiClient, OpNodeP2PApiClient, OpPeerInfo, RegistryApiClient, RollupConfig, SyncStatus,
+    },
     communication::Consumer,
     config::{LoggingConfig, LoggingFlags},
     telemetry::{TelemetryUpdate, telemetry_queue},
@@ -27,7 +29,12 @@ use crossterm::{
 use data::{Data, UIData};
 use jsonrpsee::{core::ClientError, http_client::HttpClient};
 use ratatui::{
-    backend::CrosstermBackend, layout::{Constraint, Layout, Rect}, style::{palette::tailwind, Color, Style, Stylize}, text::Line, widgets::Tabs, Frame, Terminal
+    Frame, Terminal,
+    backend::CrosstermBackend,
+    layout::{Constraint, Layout, Rect},
+    style::{Color, Stylize, palette::tailwind},
+    text::Line,
+    widgets::Tabs,
 };
 use reqwest::Url;
 use strum::IntoEnumIterator;
@@ -126,6 +133,7 @@ impl OverseerConsumers {
     pub fn sync_status_global(&self) -> Result<SyncStatus, ClientError> {
         self.runtime.block_on(self.client_portal.sync_status())
     }
+
     pub fn sync_status_local(&self) -> Result<SyncStatus, ClientError> {
         self.runtime.block_on(self.client_based_op_node.sync_status())
     }
@@ -136,6 +144,10 @@ impl OverseerConsumers {
 
     pub fn peers_based_op_node(&self) -> Result<Vec<OpPeerInfo>, ClientError> {
         self.runtime.block_on(self.client_based_op_node.peers(true)).map(|p| p.peers.into_values().collect())
+    }
+
+    pub fn peers_based_op_geth(&self) -> Result<Vec<OpGethPeer>, ClientError> {
+        self.runtime.block_on(api::OpGethAdminApiClient::peers(&self.client_based_op_geth))
     }
 }
 

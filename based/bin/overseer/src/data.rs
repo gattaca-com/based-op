@@ -3,7 +3,7 @@ use std::io::Write;
 use alloy_primitives::Address;
 use block::BlockData;
 use bop_common::{
-    api::{OpPeerInfo, RollupConfig, SyncStatus},
+    api::{OpGethPeer, OpPeerInfo, RollupConfig, SyncStatus},
     communication::{Consumer, Queue, queues_dir},
     telemetry::{
         Telemetry,
@@ -89,20 +89,28 @@ impl UIData {
         let rollup_len = rollup_config.lines().count() as u16 + 2;
         let rollup_paragraph = Paragraph::new(rollup_config).block(Block::new().borders(Borders::all()));
 
-        let peers = format!("{:#?}", data.based_op_peers_local);
+        let peers = format!("{:#?}", data.peers_local_op_node);
         let peers_len = peers.lines().count() as u16 + 2;
         let peers_paragraph = Paragraph::new(peers)
             .wrap(Wrap { trim: false })
             .block(Block::new().title("Op Node Peers").borders(Borders::all()));
 
-        let width = if area.height < peers_len + rollup_len { area.width - 1 } else { area.width };
+        let peers_geth = format!("{:#?}", data.peers_local_op_geth);
+        let peers_len_geth = peers_geth.lines().count() as u16 + 2;
+        let peers_paragraph_geth = Paragraph::new(peers_geth)
+            .wrap(Wrap { trim: false })
+            .block(Block::new().title("Op Geth Peers").borders(Borders::all()));
+
+        let width = if area.height < peers_len + rollup_len + peers_len_geth { area.width - 1 } else { area.width };
 
         let mut scroll_view = tui_scrollview::ScrollView::new(Size::new(width, rollup_len + peers_len));
-        let [top, bottom] =
-            Layout::vertical([Constraint::Length(rollup_len), Constraint::Fill(1)]).areas(scroll_view.area());
+        let [top, mid, bottom] =
+            Layout::vertical([Constraint::Length(rollup_len), Constraint::Length(peers_len), Constraint::Fill(1)])
+                .areas(scroll_view.area());
 
         scroll_view.render_widget(rollup_paragraph, top);
-        scroll_view.render_widget(peers_paragraph, bottom);
+        scroll_view.render_widget(peers_paragraph, mid);
+        scroll_view.render_widget(peers_paragraph_geth, bottom);
 
         <tui_scrollview::ScrollView as ratatui::widgets::StatefulWidget>::render(
             scroll_view,
@@ -119,7 +127,8 @@ impl UIData {
 
         tw.flush().unwrap();
         let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
-        let info = Paragraph::new(txt).block(Block::new().title("Key Bindings").borders(Borders::all()).fg(Color::from_u32(0x800080)));
+        let info = Paragraph::new(txt)
+            .block(Block::new().title("Key Bindings").borders(Borders::all()).fg(Color::from_u32(0x800080)));
         let [left, right] = Layout::horizontal([Constraint::Length(20), Constraint::Fill(1)]).areas(area);
         let big_text = tui_big_text::BigText::builder()
             .pixel_size(tui_big_text::PixelSize::Full)
@@ -157,7 +166,8 @@ impl UIData {
         } else {
             let _ = writeln!(&mut tw, "Based Op Node sync:\t{local_op_bn}");
         }
-        let _ = writeln!(&mut tw, "Based Op Node peers:\t{}", data.based_op_peers_local.len());
+        let _ = writeln!(&mut tw, "Based Op Node peers:\t{}", data.peers_local_op_node.len());
+        let _ = writeln!(&mut tw, "Based Op Geth peers:\t{}", data.peers_local_op_geth.len());
 
         tw.flush().unwrap();
         let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
@@ -303,7 +313,8 @@ pub struct Data {
     pub sync_status_global: (Nanos, SyncStatus),
     pub current_gateway: Option<(Url, Address)>,
     pub sync_status_local: (Nanos, SyncStatus),
-    pub based_op_peers_local: Vec<OpPeerInfo>,
+    pub peers_local_op_node: Vec<OpPeerInfo>,
+    pub peers_local_op_geth: Vec<OpGethPeer>,
 }
 impl Data {
     pub fn new(rollup_config: RollupConfig) -> Self {
@@ -323,7 +334,8 @@ impl Data {
             sync_status_global: Default::default(),
             current_gateway: Default::default(),
             sync_status_local: Default::default(),
-            based_op_peers_local: Default::default(),
+            peers_local_op_node: Default::default(),
+            peers_local_op_geth: Default::default(),
         }
     }
 }
@@ -481,12 +493,20 @@ impl Data {
                 .current_gateway()
                 .inspect_err(|e| tracing::warn!("couldn't get current sequencing based-gateway from portal: {e}"))
                 .ok();
+
             if let Ok(mut peers) = consumers
                 .peers_based_op_node()
                 .inspect_err(|e| tracing::warn!("couldn't get peers of local based-op-node: {e}"))
             {
                 peers.sort_unstable_by(|d1, d2| d1.peer_id.cmp(&d2.peer_id));
-                self.based_op_peers_local = peers;
+                self.peers_local_op_node = peers;
+            }
+            if let Ok(mut peers) = consumers
+                .peers_based_op_geth()
+                .inspect_err(|e| tracing::warn!("couldn't get peers of local based-op-node: {e}"))
+            {
+                peers.sort_unstable_by(|d1, d2| d1.id.cmp(&d2.id));
+                self.peers_local_op_geth = peers;
             }
         }
     }

@@ -186,7 +186,7 @@ pub trait OpGethAdminApi {
     #[method(name = "nodeInfo")]
     async fn node_info(&self) -> RpcResult<OpGethInfo>;
     #[method(name = "peers")]
-    async fn peers(&self, _t: bool) -> RpcResult<Vec<OpGethPeer>>;
+    async fn peers(&self) -> RpcResult<Vec<OpGethPeer>>;
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -269,7 +269,7 @@ pub struct L2Block {
 #[serde(rename_all = "camelCase")]
 pub struct OpPeers {
     pub total_connected: u64,
-    pub peers: HashMap<String, OpPeerInfo>,   // map keyed by peer-id strings
+    pub peers: HashMap<String, OpPeerInfo>, // map keyed by peer-id strings
 
     #[serde(rename = "bannedPeers")]
     pub banned_peers: Vec<String>,
@@ -335,7 +335,6 @@ pub struct ReqRespScore {
     pub error_responses: f64,
     pub rejected_payloads: f64,
 }
-
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -416,7 +415,7 @@ pub struct OptimismConfig {
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct OpGethPeer {
-    pub enr: String,
+    pub enr: Option<String>,
     pub enode: String,
     pub id: String,
     pub name: String,
@@ -427,13 +426,13 @@ pub struct OpGethPeer {
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct GethPeerNetwork {
-    #[serde(alias="localAddress")]
+    #[serde(alias = "localAddress")]
     pub local_address: String,
-    #[serde(alias="remoteAddress")]
+    #[serde(alias = "remoteAddress")]
     pub remote_address: String,
     pub inbound: bool,
     pub trusted: bool,
-    #[serde(alias="static")]
+    #[serde(alias = "static")]
     pub static_str: bool, // `static` is a reserved keyword in Rust, so we need to use `static_`
 }
 
@@ -469,6 +468,5 @@ pub mod test {
     #[test]
     fn parse_geth_peers() {
         assert!(serde_json::from_str::<OpGethPeer>("{\"enr\":\"enr:-KO4QPfDpnj33Qcejr3m7rk8mMA7nXzBrOvm5bpsMfuun09Nfgdv1O8qqGhl9v_e69b2wAogFjUKK8ZXReI8pgPS9ZiGAZbbGWtgg2V0aMfGhFmJ9hSAgmlkgnY0gmlwhBK5xzOJc2VjcDI1NmsxoQI-TZICg15Lqr3j5KRiqSVTVwuV9FQJpvB9GrAMB7w5pYRzbmFwwIN0Y3CCdl-DdWRwgnZf\",\"enode\":\"enode://3e4d9202835e4baabde3e4a462a92553570b95f45409a6f07d1ab00c07bc39a52dd710f098008ae5974aa625edeb46734e3634f0c9d3ab24bb35e37d12f1ac18@18.185.199.51:30303\",\"id\":\"1b83fb2f39f76c9926dd1690b3570e956f3a43e599acb89d28c739022db5d887\",\"name\":\"Geth/v1.101411.8-rc.1-374d61f9-20250211/linux-amd64/go1.23.6\",\"caps\":[\"eth/68\",\"snap/1\"],\"network\":{\"localAddress\":\"192.168.1.33:35502\",\"remoteAddress\":\"18.185.199.51:30303\",\"inbound\":false,\"trusted\":false,\"static\":false},\"protocols\":{\"eth\":{\"version\":68},\"snap\":{\"version\":1}}}").inspect_err(|e| panic!("{e}")).is_ok());
-        
     }
 }
