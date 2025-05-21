@@ -1,6 +1,6 @@
 services:
   based-op-geth:
-    image: based_op_geth
+    image: ghcr.io/gattaca-com/based-op/based-op-geth:v0.1.0
     container_name: based-op-geth
     network_mode: "host"
     entrypoint: ["/bin/sh", "-c"]
@@ -40,15 +40,16 @@ services:
           --allow-insecure-unlock \
           --discovery.port=$OP_GETH_GOSSIP_PORT \
           --port=$OP_GETH_GOSSIP_PORT \
-          --bootnodes=$MAIN_OP_GETH_ENODE \
+          --bootnodes=$MAIN_OP_GETH_ENODE,enode://3ce86ecae36ae4bc4197e555b0c518c642602596e66f851090fc7a2686d29924b7baa6c4fcc8ca886f00f51f6951c4b4251d1cb67f61dc491a70cec212fd0498@18.185.199.51:31303 \
           --rollup.sequencerhttp=$PORTAL
 
     volumes:
       - ./data/geth:/data/geth
       - ./config:/config
+    restart: unless-stopped
 
   based-op-node:
-    image: based_op_node
+    image: ghcr.io/gattaca-com/based-op/based-op-node:v0.1.0
     container_name: based-op-node
     network_mode: "host"
     command:
@@ -63,25 +64,27 @@ services:
       - --l1=$L1_RPC_URL
       - --l1.rpckind=standard
       - --l1.beacon=$L1_BEACON_RPC_URL
+      - --p2p.advertise.ip=$OP_NODE_GOSSIP_IP
       - --p2p.advertise.tcp=$OP_NODE_GOSSIP_PORT
       - --p2p.advertise.udp=$OP_NODE_GOSSIP_PORT
       - --p2p.listen.ip=0.0.0.0
       - --p2p.listen.tcp=$OP_NODE_GOSSIP_PORT
       - --p2p.listen.udp=$OP_NODE_GOSSIP_PORT
       - --safedb.path=/data/op-node/op-node-beacon-data
-      - --p2p.static=$MAIN_OP_NODE_GOSSIP_STATIC
+      - --p2p.static=$MAIN_OP_NODE_GOSSIP_STATIC,/ip4/18.185.199.51/tcp/9103/p2p/16Uiu2HAmGJRM532zEVnLKEddAHdxDZaAqMQsrrcrW2bVCZ7cB2F7
       - --rpc.enable-based 
       - --registry=$PORTAL
-      - --p2p.bootnodes=$MAIN_OP_NODE_ENR
+      - --p2p.bootnodes=$MAIN_OP_NODE_ENR,enr:-J64QCaqwDg2mvnfNxIeORF1-e8T48KDnz2e7UQiDd9HN2oXUt4VivwSnriwBbN8LH9b2c8PeoVZjOHh0i8thUIwuLaGAZbzHuCdgmlkgnY0gmlwhBK5xzOHb3BzdGFja4Sq6QEAiXNlY3AyNTZrMaEDNinQZAKKWD_KHcpzgJNtqverEw3NmzKr_g7FwiCViFaDdGNwgiOPg3VkcIIjjw
       - --syncmode=execution-layer
     volumes:
       - ./data/node:/data/op-node
       - ./config:/config
     depends_on:
       - based-op-geth
+    restart: unless-stopped
 
   gateway:
-    image: based_gateway_local
+    image: ghcr.io/gattaca-com/based-op/based-gateway:v0.1.0
     container_name: based-op-gateway
     network_mode: "host"
     command:
@@ -97,3 +100,4 @@ services:
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
       - /dev/shm:/dev/shm
+    restart: unless-stopped

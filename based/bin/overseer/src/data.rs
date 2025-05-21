@@ -151,9 +151,11 @@ impl UIData {
 
         let (t, cur_state) = data.current_state().unwrap_or_default();
         if let Some((url, address)) = data.current_gateway.as_ref() {
-            let _ = writeln!(&mut tw, "Current Gateway:\t{url}\t signing wallet: {address}");
+            let _ = writeln!(&mut tw, "Current Gateway:\t{url}");
+            let _ = writeln!(&mut tw, "Signing wallet:\t{address}");
         } else {
             let _ = writeln!(&mut tw, "Current Gateway:");
+            let _ = writeln!(&mut tw);
         }
 
         let _ = writeln!(&mut tw, "Current Block:\t{}", data.block_number);
