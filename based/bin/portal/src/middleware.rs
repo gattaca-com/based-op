@@ -135,6 +135,7 @@ where
                             fallback_eth_client.clone().request("eth_getBlockByNumber", ("latest", false)).await;
                         match r {
                             Ok(r) => {
+                                tracing::warn!("Serving latest instead of finalized or safe for eth_getBlockByNumber. This should only happen at genesis!");
                                 let payload = ResponsePayload::success(r);
                                 MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
                             }
