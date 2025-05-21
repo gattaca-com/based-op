@@ -47,7 +47,7 @@ pub async fn fetch_block(block_number: u64, client: &AlloyProvider) -> Recovered
     let mut backoff = BACKOFF_STEP;
 
     loop {
-        match client.get_block_by_number(block_number.into()).await {
+        match client.get_block_by_number(block_number.into()).full().await {
             Ok(Some(block)) => match convert_rpc_block(block) {
                 Ok(converted) => return converted,
                 Err(err) => {
