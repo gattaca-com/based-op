@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
@@ -158,6 +160,35 @@ pub trait PortalApi {
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String>;
 }
 
+#[rpc(client, server, namespace = "optimism")]
+pub trait OpNodeApi {
+    /// The rollup config of the op-node
+    #[method(name = "rollupConfig")]
+    async fn rollup_config(&self) -> RpcResult<RollupConfig>;
+
+    /// The syncstatus of the op-node
+    #[method(name = "syncStatus")]
+    async fn sync_status(&self) -> RpcResult<SyncStatus>;
+}
+
+#[rpc(client, server, namespace = "opp2p")]
+pub trait OpNodeP2PApi {
+    /// The rollup config of the op-node
+    #[method(name = "self")]
+    async fn peer_info(&self) -> RpcResult<OpPeerInfo>;
+    #[method(name = "peers")]
+    async fn peers(&self, _t: bool) -> RpcResult<OpPeers>;
+}
+
+#[rpc(client, server, namespace = "admin")]
+pub trait OpGethAdminApi {
+    /// The rollup config of the op-node
+    #[method(name = "nodeInfo")]
+    async fn node_info(&self) -> RpcResult<OpGethInfo>;
+    #[method(name = "peers")]
+    async fn peers(&self, _t: bool) -> RpcResult<Vec<OpGethPeer>>;
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RollupConfig {
     pub genesis: Genesis,
@@ -234,20 +265,23 @@ pub struct L2Block {
     pub sequence_number: u64,
 }
 
-#[rpc(client, server, namespace = "optimism")]
-pub trait OpNodeApi {
-    /// The rollup config of the op-node
-    #[method(name = "rollupConfig")]
-    async fn rollup_config(&self) -> RpcResult<RollupConfig>;
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct OpPeers {
+    pub total_connected: u64,
+    pub peers: HashMap<String, OpPeerInfo>,   // map keyed by peer-id strings
 
-    /// The syncstatus of the op-node
-    #[method(name = "syncStatus")]
-    async fn sync_status(&self) -> RpcResult<SyncStatus>;
+    #[serde(rename = "bannedPeers")]
+    pub banned_peers: Vec<String>,
+    #[serde(rename = "bannedIPS")]
+    pub banned_ips: Vec<String>,
+    #[serde(rename = "bannedSubnets")]
+    pub banned_subnets: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct PeerInfo {
+pub struct OpPeerInfo {
     #[serde(alias = "peerID")]
     pub peer_id: String,
     #[serde(alias = "nodeID")]
@@ -263,7 +297,7 @@ pub struct PeerInfo {
     pub protected: bool,
     #[serde(alias = "chainID")]
     pub chain_id: u64,
-    pub latency: u64,
+    pub latency: f64,
     pub gossip_blocks: bool,
     pub scores: Scores,
 }
@@ -278,36 +312,30 @@ pub struct Scores {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GossipScore {
-    pub total: u64,
+    pub total: f64,
     pub blocks: BlockScores,
     #[serde(rename = "IPColocationFactor")]
-    pub ip_colocation_factor: u64,
-    pub behavioral_penalty: u64,
+    pub ip_colocation_factor: f64,
+    pub behavioral_penalty: f64,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockScores {
-    pub time_in_mesh: u64,
-    pub first_message_deliveries: u64,
-    pub mesh_message_deliveries: u64,
-    pub invalid_message_deliveries: u64,
+    pub time_in_mesh: f64,
+    pub first_message_deliveries: f64,
+    pub mesh_message_deliveries: f64,
+    pub invalid_message_deliveries: f64,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ReqRespScore {
-    pub valid_responses: u64,
-    pub error_responses: u64,
-    pub rejected_payloads: u64,
+    pub valid_responses: f64,
+    pub error_responses: f64,
+    pub rejected_payloads: f64,
 }
 
-#[rpc(client, server, namespace = "opp2p")]
-pub trait OpNodeP2PApi {
-    /// The rollup config of the op-node
-    #[method(name = "self")]
-    async fn peer_info(&self) -> RpcResult<PeerInfo>;
-}
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -393,12 +421,12 @@ pub struct OpGethPeer {
     pub id: String,
     pub name: String,
     pub caps: Vec<String>,
-    pub network: PeerNetwork,
+    pub network: GethPeerNetwork,
     pub protocols: PeerProtocols,
 }
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
-pub struct PeerNetwork {
+pub struct GethPeerNetwork {
     #[serde(alias="localAddress")]
     pub local_address: String,
     #[serde(alias="remoteAddress")]
@@ -424,21 +452,13 @@ pub struct EthVersion {
 pub struct SnapVersion {
     pub version: Option<u32>,
 }
-#[rpc(client, server, namespace = "admin")]
-pub trait OpGethAdminApi {
-    /// The rollup config of the op-node
-    #[method(name = "nodeInfo")]
-    async fn node_info(&self) -> RpcResult<OpGethInfo>;
-    #[method(name = "peers")]
-    async fn peers(&self) -> RpcResult<Vec<OpGethPeer>>;
-}
 
 #[cfg(test)]
 pub mod test {
     use super::*;
     #[test]
     fn parse_op_node_peer_info() {
-        assert_ne!(serde_json::from_str::<PeerInfo>("{\"ENR\":\"enr:-J-4QKMgVCRicuzgRSXF--kcfNcSb3el3gnK0VTKH5IqfAnjY096UPHcnpeOkYf8Y6hdbhFbjIoRcdMxKgy1QOftlZGGAZavZyU2gmlkgnY0gmlwhKwfGmOHb3BzdGFja4Xkq4MBAIlzZWNwMjU2azGhA38YA_8AH2SrzzVprDUjXbyv88AJION0F_UdgJmIk7v2g3RjcIIjK4N1ZHCCIys\",\"addresses\":[\"/ip4/127.0.0.1/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"/ip4/172.31.26.99/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\"],\"chainID\":0,\"connectedness\":0,\"direction\":0,\"gossipBlocks\":true,\"latency\":0,\"nodeID\":\"ca1451eb9482746566a92fbde4bcb7c646d23bfceb21f66d4d79e1e0f0819cfc\",\"peerID\":\"16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"protected\":false,\"protocolVersion\":\"\",\"protocols\":null,\"scores\":{\"gossip\":{\"IPColocationFactor\":0,\"behavioralPenalty\":0,\"blocks\":{\"firstMessageDeliveries\":0,\"invalidMessageDeliveries\":0,\"meshMessageDeliveries\":0,\"timeInMesh\":0},\"total\":0},\"reqResp\":{\"errorResponses\":0,\"rejectedPayloads\":0,\"validResponses\":0}},\"userAgent\":\"\"}").unwrap().peer_id, "");
+        assert_ne!(serde_json::from_str::<OpPeerInfo>("{\"ENR\":\"enr:-J-4QKMgVCRicuzgRSXF--kcfNcSb3el3gnK0VTKH5IqfAnjY096UPHcnpeOkYf8Y6hdbhFbjIoRcdMxKgy1QOftlZGGAZavZyU2gmlkgnY0gmlwhKwfGmOHb3BzdGFja4Xkq4MBAIlzZWNwMjU2azGhA38YA_8AH2SrzzVprDUjXbyv88AJION0F_UdgJmIk7v2g3RjcIIjK4N1ZHCCIys\",\"addresses\":[\"/ip4/127.0.0.1/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"/ip4/172.31.26.99/tcp/9003/p2p/16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\"],\"chainID\":0,\"connectedness\":0,\"direction\":0,\"gossipBlocks\":true,\"latency\":0,\"nodeID\":\"ca1451eb9482746566a92fbde4bcb7c646d23bfceb21f66d4d79e1e0f0819cfc\",\"peerID\":\"16Uiu2HAmMD7NHS98BXCoNuDGuS1zueMF5LQdiexCKyjJ97frMu6M\",\"protected\":false,\"protocolVersion\":\"\",\"protocols\":null,\"scores\":{\"gossip\":{\"IPColocationFactor\":0,\"behavioralPenalty\":0,\"blocks\":{\"firstMessageDeliveries\":0,\"invalidMessageDeliveries\":0,\"meshMessageDeliveries\":0,\"timeInMesh\":0},\"total\":0},\"reqResp\":{\"errorResponses\":0,\"rejectedPayloads\":0,\"validResponses\":0}},\"userAgent\":\"\"}").unwrap().peer_id, "");
     }
 
     #[test]
