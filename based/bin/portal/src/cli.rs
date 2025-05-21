@@ -17,8 +17,8 @@ pub struct PortalArgs {
     #[arg(long = "port", default_value_t = 8080)]
     pub portal_port: u16,
 
-    /// TEMP: the URL to the main op-node's RPC-API
-    #[arg(long = "op_node.url", default_value = "http://0.0.0.0:9545")]
+    /// TEMP: the URL to the based-op-node's RPC-API
+    #[arg(long = "op_node.url", default_value = "http://0.0.0.0:8547")]
     pub op_node_url: Url,
 
     /// TEMP: the URL to the fallback EthAPI

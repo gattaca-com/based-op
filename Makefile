@@ -2,7 +2,10 @@
 build build-portal build-op-node build-op-geth \
 logs op-node-logs op-geth-logs \
 test-frag test-seal \
-docs
+docs \
+build-key_to_address
+
+%: build-key_to_address
 
 # ──────────────────────────────────────────────
 # Cross-platform networking shim
@@ -84,22 +87,30 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro:mv2
 
 
-ifeq ($(filter start-gateway,$(MAKECMDGOALS)),start-gateway)
-  ifeq ($(strip $(PORTAL)),)
-    $(error PORTAL is undefined! \
-           Please invoke like `make start-gateway \
-           PORTAL=http://… GATEWAY_SEQUENCING_KEY=…`)
-  endif
-  ifeq ($(strip $(GATEWAY_SEQUENCING_KEY)),)
-    $(error GATEWAY_SEQUENCING_KEY is undefined! \
-           Please invoke like `make start-gateway \
-           PORTAL=http://… GATEWAY_SEQUENCING_KEY=…`)
-  endif
-endif
+L1_CHAIN_ID?=11155111
+L2_CHAIN_ID?=$(shell \
+    RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
+    echo $$((RAW % 50000 + 1)); \
+)
+L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
+
+PORTAL?=http://18.185.199.51:8080
+L1_RPC_URL?=http://34.194.193.217:8545
+L1_BEACON_RPC_URL?=http://34.194.193.217:5052
+# if GATEWAY_SEQUENCING_KEY is set, use that one, otherwise key_to_address will generate a new one
+GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
+  [ -f .local_gateway_and_follower/.env ] &&                        \
+  grep -m1 '^GATEWAY_SEQUENCING_KEY=' .local_gateway_and_follower/.env \
+    | cut -d= -f2                                                   \
+)
+_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i key_to_address $(GATEWAY_SEQUENCING_KEY))
+GATEWAY_SEQUENCING_KEY:=$(word 1,$(_GATEWAY_KEY_AND_WALLET))
+GATEWAY_SEQUENCING_ADDRESS:=$(word 2,$(_GATEWAY_KEY_AND_WALLET))
+
 BASED_GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
 BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
 BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
-start-gateway: build-follower-op-node build-follower-op-geth build-gateway build-key_to_address build-overseer
+start-gateway: 
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
 		exit 1; \
@@ -116,8 +127,11 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway build
 	  cp follower_node/env_example .local_gateway_and_follower/.env; \
 	  cp follower_node/compose.yml .local_gateway_and_follower/compose.yml; \
 	  echo "Initializing gateway and follower op-node in ./.local_gateway_and_follower ..."; \
+	  echo "Gateway Sequencing Private Key: $(GATEWAY_SEQUENCING_KEY)"; \
+	  echo "Gateway Sequencing Wallet:      $(GATEWAY_SEQUENCING_ADDRESS)"; \
 	  { \
 	    echo "PORTAL=$(PORTAL)"; \
+	    echo "OP_NODE_GOSSIP_IP=$$(curl ifconfig.me)"; \
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
 	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
@@ -172,7 +186,7 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway build
 	    mkdir -p $(BASED_GATEWAY_DATA_DIR); \
 	fi
 
-	@wallet=$$(docker run -i key_to_address $(GATEWAY_SEQUENCING_KEY)); \
+	@wallet=$$(docker run --rm -i key_to_address $(GATEWAY_SEQUENCING_KEY)); \
       echo "...Done"; \
       echo; \
       echo "Starting with the following generated .env:"; \
@@ -182,12 +196,12 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway build
       GATEWAY_URL=http://$$(curl -s ifconfig.me):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2); \
       GATEWAY_ADDRESS=$$wallet; \
       JWT=$$(cat .local_gateway_and_follower/config/jwt); \
-      curl -X POST $$PORTAL \
+      curl -X POST "$(PORTAL)" \
         -H "Content-Type: application/json" \
         -d "{\"jsonrpc\":\"2.0\", \
              \"method\":\"registry_registerGateway\", \
              \"params\":[ \
-               [\"$$GATEWAY_URL\", \"$$GATEWAY_ADDRESS\", \"$$JWT\"] \
+               [\"$$GATEWAY_URL\", \"$(GATEWAY_SEQUENCING_ADDRESS)\", \"$$JWT\"] \
              ], \
              \"id\":1}"; \
       echo; echo
@@ -196,24 +210,8 @@ start-gateway: build-follower-op-node build-follower-op-geth build-gateway build
 	$(MAKE) start-overseer
 
 
-ifeq ($(filter start-overseer,$(MAKECMDGOALS)),start-gateway)
-  ifeq ($(strip $(PORTAL)),)
-    $(error PORTAL is undefined! \
-           Please invoke like `make start-gateway \
-           PORTAL=http://… GATEWAY_SEQUENCING_KEY=…`)
-  endif
-endif
-start-overseer: build-overseer
+start-overseer: 
 	docker exec -it based-op-gateway overseer --portal-url $(PORTAL)
-
-L1_CHAIN_ID?=11155111
-L2_CHAIN_ID?=$(shell \
-    RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
-    echo $$((RAW % 50000 + 1)); \
-)
-L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
-L1_RPC_URL?=https://ethereum-sepolia-rpc.publicnode.com
-L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -444,19 +442,25 @@ logs-follower-node:
 	fi
 	docker compose -f .local_gateway_and_follower/compose.yml logs --tail 100 -f
 
-logs-portal: ## 📜 Show portal logs
+logs-portal: ## 📜 Show portal logs (only for main sequencing node)
 	docker logs based-portal --tail 100 -f
 
-logs-registry: ## 📜 Show registry logs
+logs-registry: ## 📜 Show registry logs (only for main sequencing node)
 	docker logs based-registry --tail 100 -f
 
 logs-gateway: ## 📜 Show gateway logs
 	docker logs based-op-gateway --tail 100 -f
+
+logs-based-op-node: ## 📜 Show based op-node logs
+	docker logs based-op-node --tail 100 -f
+
+logs-based-op-geth: ## 📜 Show based op-geth logs
+	docker logs based-op-node --tail 100 -f
 	
-logs-op-node: ## 📜 Show main op-node logs (when on main box)
+logs-op-node: ## 📜 Show main op-node logs (only for main sequencing node)
 	docker logs op-node --tail 100 -f
 	
-logs-op-geth: ## 📜 Show main op-geth logs (when on main box)
+logs-op-geth: ## 📜 Show main op-geth logs (only for main sequencing node)
 	docker logs op-geth --tail 100 -f
 	
 logs-batcher:
