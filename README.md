@@ -21,7 +21,7 @@ The following steps have been tested on Sepolia, with a previously deployed L2 c
 1. locate your `rollup.json`, `genesis.json` and `state.json` files
 2. run `make config-main-node OP_NODE_DATA_DIR=<path/to/op-node/data> OP_GETH_DATA_DIR=<path/to/op-geth/data> ROLLUP_JSON=<path/to/rollup.json> GENESIS_JSON=<path/to/genesis.json> STATE_JSON=<path/to/state.json>`
 3. there should be some files set up in `.local_main_node`
-4. start sequencing the main chain with `make start-main-node OP_BATCHER_KEY=<op-batcher-private-key> OP_PROPOSER_KEY=<op-proposer-private-key> MAIN_KEY=<vault-key/main-sequencing key> L1_RPC_URL=<sepolia rpc url> L1_BEACON_RPC_URL=<sepolia beacon rpc url>`
+4. start sequencing the main chain with `make start-main-node OP_BATCHER_KEY=<op-batcher-private-key> OP_PROPOSER_KEY=<op-proposer-private-key> MAIN_KEY=<vault-key/main-sequencing key>`
 5. Normally you should see some logs starting
 6. `blockscout` should be up and running at `http://0.0.0.0:4000` 
 7a. `make stop-main-node` to stop all the sequencing services
@@ -30,17 +30,41 @@ The following steps have been tested on Sepolia, with a previously deployed L2 c
 ### Deploy a new l2 chain on Sepolia
 1. To deploy a new chain on l2, make sure to have an address on Sepolia with some funds. This will be used as the `MAIN`/`vault` address.
 2. create 2 more accounts, deposit ~0.2 eth in them. One will be used for the `op-batcher` one for the `op-proposer.
-3. run `make deploy-chain OP_BATCHER_KEY=<op-batcher private key> OP_PROPOSER_KEY=<op-proposer private key> MAIN_KEY=<vault key> L1_RPC_URL=<l1 sepolia rpc url> L1_BEACON_RPC_URL=<l1 sepolia beacon rpc url>`
+3. run `make deploy-chain OP_BATCHER_KEY=<op-batcher private key> OP_PROPOSER_KEY=<op-proposer private key> MAIN_KEY=<vault key>`
 4. start sequencing the main chain with `make start-main-node OP_BATCHER_KEY=<op-batcher-private-key> OP_PROPOSER_KEY=<op-proposer-private-key> MAIN_KEY=<vault-key/main-sequencing key> L1_RPC_URL=<sepolia rpc url> L1_BEACON_RPC_URL=<sepolia beacon rpc url>`
 5. Normally you should see some logs starting
 6. `blockscout` should be up and running at `http://0.0.0.0:4000` 
 7a. `make stop-main-node` to stop all the sequencing services
 7b. `make logs-main-node` to output logs of all the main services
 
-### Run a based-gateway
-1. run `make start-gateway PORTAL=<portal rpc url> GATEWAY_SEQUENCING_KEY=<private key used to sequence with>`
-2. to stop the based gateway run `make stop-gateway`
-3. for logs `make logs-gateway`
+### Run a Based Gateway
+
+In the following, all defaults are set up to target the [`Based OP` testnet](https://based-explorer.gattaca.com), deployed on top of mainnet Sepolia.
+With that default config, a new `private-key` and `wallet` combo will be generated which your `Gateway` will use to sign `Frags`.
+The `wallet` is communicated back to the `Portal` to be gossiped around to the rest of the network for signature verification.
+
+The following single command sets up everything and will start your `Gateway`, `Based OP-node`, `Based OP-geth`:
+`git clone https://github.com/gattaca-com/based-op && cd based-op && make start-gateway`
+
+If everything went well, you should see a terminal UI appear, called the `Overseer`:
+
+![ ](./docs/docs/based_op.gif)
+
+This shows you the status of your local `Gateway` and a general overview of the chain.
+You can press left and right keys to cycle between the different tabs and explore all the information!
+
+The configuration that was generated can be found in `based-op/.local_gateway_and_follower`, mainly the `.env` and `compose.yml` files.
+
+When you [spam some transactions with `based-bmf`](https://based-bmf.gattaca.com), you should see them appear in the `Transaction Pool` of your `Gateway`.
+
+A couple of commands tend to come in handy (from the top `based-op` directory):
+- `make stop-gateway`
+- `make start-gateway`
+- `make start-overseer`
+- `make logs-gateway`
+- `make logs-based-op-node`
+- `make logs-based-op-geth`
+
 
 ### Add/Update based-gateways to Registry
 When a based-gateway is started with `make start-gateway`, it will register itself to the Registry behind the `PORTAL`. For now, the Registry is kept in a simple json file in `.local_main_node/config/registry.json`. You can add/update/remove gateways there, the Registry and Portal will pick up on the changes every minute.
@@ -51,6 +75,7 @@ your url.
 ### Send your first tx
 You can now test sending a transaction with `make test-tx`.
 The transaction will be sent to the Portal, and forwarded to the gateway, which will sequence the transaction in a new Frag, and broacast it via p2p to follower nodes.
+
 
 > [!IMPORTANT]
 >
