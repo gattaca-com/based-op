@@ -1,8 +1,9 @@
 use std::io::Write;
 
+use alloy_primitives::Address;
 use block::BlockData;
 use bop_common::{
-    api::{RollupConfig, SyncStatus},
+    api::{OpGethPeer, OpPeerInfo, RollupConfig, SyncStatus},
     communication::{Consumer, Queue, queues_dir},
     telemetry::{
         Telemetry,
@@ -13,7 +14,10 @@ use bop_common::{
     time::{Duration, TimingMessage},
 };
 use frag::FragData;
+use ratatui::{buffer::Buffer, layout::Size, widgets::Wrap};
+use reqwest::Url;
 use transaction::TransactionData;
+use tui_scrollview::ScrollViewState;
 
 use crate::{
     OverseerConsumers,
@@ -35,6 +39,7 @@ pub struct UIData {
     pub table_frags: TableState,
     pub table_pool: TableState,
     pub table_system: TableState,
+    pub scroll_view_state: ScrollViewState,
 }
 
 impl UIData {
@@ -48,6 +53,10 @@ impl UIData {
         let [left, middle, right] =
             Layout::horizontal([Constraint::Percentage(35), Constraint::Percentage(35), Constraint::Fill(1)])
                 .areas(bottom);
+
+        let [middle_top, middle_bottom] = Layout::vertical([Constraint::Length(8), Constraint::Fill(1)]).areas(middle);
+
+        self.render_keybindings_and_branding(data, middle_top, frame);
 
         self.render_system_messages(data, right, frame);
 
@@ -71,12 +80,65 @@ impl UIData {
             TransactionData::pool_header(),
             data.transactions.iter().map(|b| b.to_pool_row()).rev(),
             frame,
-            middle,
+            middle_bottom,
         )
     }
 
-    pub fn render_chain_info(&mut self, data: &Data, area: Rect, frame: &mut Frame) {
-        frame.render_widget(Paragraph::new(format!("{:#?}", data.rollup_config)), area);
+    pub fn render_chain_info(&mut self, data: &Data, area: Rect, buf: &mut Buffer) {
+        let rollup_config = format!("{:#?}", data.rollup_config);
+        let rollup_len = rollup_config.lines().count() as u16 + 2;
+        let rollup_paragraph = Paragraph::new(rollup_config).block(Block::new().borders(Borders::all()));
+
+        let peers = format!("{:#?}", data.peers_local_op_node);
+        let peers_len = peers.lines().count() as u16 + 2;
+        let peers_paragraph = Paragraph::new(peers)
+            .wrap(Wrap { trim: false })
+            .block(Block::new().title("Op Node Peers").borders(Borders::all()));
+
+        let peers_geth = format!("{:#?}", data.peers_local_op_geth);
+        let peers_len_geth = peers_geth.lines().count() as u16 + 2;
+        let peers_paragraph_geth = Paragraph::new(peers_geth)
+            .wrap(Wrap { trim: false })
+            .block(Block::new().title("Op Geth Peers").borders(Borders::all()));
+
+        let width = if area.height < peers_len + rollup_len + peers_len_geth { area.width - 1 } else { area.width };
+
+        let mut scroll_view =
+            tui_scrollview::ScrollView::new(Size::new(width, rollup_len + peers_len + peers_len_geth));
+        let [top, mid, bottom] =
+            Layout::vertical([Constraint::Length(rollup_len), Constraint::Length(peers_len), Constraint::Fill(1)])
+                .areas(scroll_view.area());
+
+        scroll_view.render_widget(rollup_paragraph, top);
+        scroll_view.render_widget(peers_paragraph, mid);
+        scroll_view.render_widget(peers_paragraph_geth, bottom);
+
+        <tui_scrollview::ScrollView as ratatui::widgets::StatefulWidget>::render(
+            scroll_view,
+            area,
+            buf,
+            &mut self.scroll_view_state,
+        );
+    }
+
+    fn render_keybindings_and_branding(&mut self, _data: &Data, area: Rect, frame: &mut Frame) {
+        let mut tw = tabwriter::TabWriter::new(vec![]);
+        let _ = writeln!(&mut tw, "Q:\tQuit");
+        let _ = writeln!(&mut tw, "◄ ►:\tChange Tab");
+
+        tw.flush().unwrap();
+        let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
+        let info = Paragraph::new(txt)
+            .block(Block::new().title("Key Bindings").borders(Borders::all()).fg(Color::from_u32(0x800080)));
+        let [left, right] = Layout::horizontal([Constraint::Length(20), Constraint::Fill(1)]).areas(area);
+        let big_text = tui_big_text::BigText::builder()
+            .pixel_size(tui_big_text::PixelSize::Full)
+            .style(Style::new().blue())
+            .centered()
+            .lines(vec!["Based Op".fg(Color::from_u32(0x800080)).into()])
+            .build();
+        frame.render_widget(big_text, right);
+        frame.render_widget(info, left);
     }
 
     fn render_system_overview(&mut self, data: &Data, area: Rect, frame: &mut Frame) {
@@ -88,60 +150,81 @@ impl UIData {
         );
 
         let (t, cur_state) = data.current_state().unwrap_or_default();
+        if let Some((url, address)) = data.current_gateway.as_ref() {
+            let _ = writeln!(&mut tw, "Current Gateway:\t{url}\t signing wallet: {address}");
+        } else {
+            let _ = writeln!(&mut tw, "Current Gateway:");
+        }
 
         let _ = writeln!(&mut tw, "Current Block:\t{}", data.block_number);
         let _ = writeln!(&mut tw, "Current State:\t{}", cur_state.as_ref());
         let (_, last_state) = data.last_state().unwrap_or_default();
         let _ = writeln!(&mut tw, "Prev State:\t{}", empty_if_default(last_state));
         let _ = writeln!(&mut tw, "Last State Transition:\t{}", empty_if_default(t));
+        let local_op_bn = data.sync_status_local.1.unsafe_l2.number;
+        if local_op_bn == 0 {
+            let _ = writeln!(&mut tw, "Based Op Node sync:\tUnreachable/Is Down");
+        } else {
+            let _ = writeln!(&mut tw, "Based Op Node sync:\t{local_op_bn}");
+        }
+        let _ = writeln!(&mut tw, "Based Op Node peers:\t{}", data.peers_local_op_node.len());
+        let _ = writeln!(&mut tw, "Based Op Geth peers:\t{}", data.peers_local_op_geth.len());
+
         tw.flush().unwrap();
         let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
-        let info = Paragraph::new(txt).block(Block::new().title("Local Gateway Status").borders(Borders::all()));
+        let info = Paragraph::new(txt).block(Block::new().title("Based-Gateway Status").borders(Borders::all()));
 
         frame.render_widget(info, area);
     }
 
     fn render_sync_status(&mut self, data: &Data, area: Rect, frame: &mut Frame) {
         let mut tw = tabwriter::TabWriter::new(vec![]);
-        let _ = writeln!(&mut tw, "Last Update:\t{}", data.sync_status.0.with_fmt("%d %H:%M:%S%.3f"));
+        let _ = writeln!(&mut tw, "Last Update:\t{}", data.sync_status_global.0.with_fmt("%d %H:%M:%S%.3f"));
 
         let _ = writeln!(
             &mut tw,
             "Unsafe L2:\t{}\t{}",
-            data.sync_status.1.unsafe_l2.number, data.sync_status.1.unsafe_l2.hash
+            data.sync_status_global.1.unsafe_l2.number, data.sync_status_global.1.unsafe_l2.hash
         );
-        let _ =
-            writeln!(&mut tw, "Safe L2:\t{}\t{}", data.sync_status.1.safe_l2.number, data.sync_status.1.safe_l2.hash);
+        let _ = writeln!(
+            &mut tw,
+            "Safe L2:\t{}\t{}",
+            data.sync_status_global.1.safe_l2.number, data.sync_status_global.1.safe_l2.hash
+        );
         let _ = writeln!(
             &mut tw,
             "Finalized L2:\t{}\t{}",
-            data.sync_status.1.finalized_l2.number, data.sync_status.1.finalized_l2.hash
+            data.sync_status_global.1.finalized_l2.number, data.sync_status_global.1.finalized_l2.hash
         );
         let _ = writeln!(
             &mut tw,
             "Pending Safe L2:\t{}\t{}",
-            data.sync_status.1.pending_safe_l2.number, data.sync_status.1.pending_safe_l2.hash
+            data.sync_status_global.1.pending_safe_l2.number, data.sync_status_global.1.pending_safe_l2.hash
         );
         let _ = writeln!(
             &mut tw,
-            "Queued Un Safe L2:\t{}\t{}",
-            empty_if_default(data.sync_status.1.queued_unsafe_l2.as_ref().map(|t| t.number).unwrap_or_default()),
-            empty_if_default(data.sync_status.1.queued_unsafe_l2.as_ref().map(|t| t.hash).unwrap_or_default())
+            "L1:\t{}\t{}",
+            data.sync_status_global.1.current_l1.number, data.sync_status_global.1.current_l1.hash
         );
-        let _ =
-            writeln!(&mut tw, "L1:\t{}\t{}", data.sync_status.1.current_l1.number, data.sync_status.1.current_l1.hash);
-        let _ =
-            writeln!(&mut tw, "Safe L1:\t{}\t{}", data.sync_status.1.safe_l1.number, data.sync_status.1.safe_l1.hash);
+        let _ = writeln!(
+            &mut tw,
+            "Safe L1:\t{}\t{}",
+            data.sync_status_global.1.safe_l1.number, data.sync_status_global.1.safe_l1.hash
+        );
         let _ = writeln!(
             &mut tw,
             "Finalized L1:\t{}\t{}",
-            data.sync_status.1.current_l1_finalized.number, data.sync_status.1.current_l1_finalized.hash
+            data.sync_status_global.1.current_l1_finalized.number, data.sync_status_global.1.current_l1_finalized.hash
         );
-        let _ =
-            writeln!(&mut tw, "Head L1:\t{}\t{}", data.sync_status.1.head_l1.number, data.sync_status.1.head_l1.hash);
+        let _ = writeln!(
+            &mut tw,
+            "Head L1:\t{}\t{}",
+            data.sync_status_global.1.head_l1.number, data.sync_status_global.1.head_l1.hash
+        );
+
         tw.flush().unwrap();
         let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
-        let info = Paragraph::new(txt).block(Block::new().title("Chain Sync Status").borders(Borders::all()));
+        let info = Paragraph::new(txt).block(Block::new().title("Global Chain Status").borders(Borders::all()));
 
         frame.render_widget(info, area);
     }
@@ -228,7 +311,11 @@ pub struct Data {
     pub timekeeper: TimeKeeper,
     pub time_datas: TimeDatas,
     pub rollup_config: RollupConfig,
-    pub sync_status: (Nanos, SyncStatus),
+    pub sync_status_global: (Nanos, SyncStatus),
+    pub current_gateway: Option<(Url, Address)>,
+    pub sync_status_local: (Nanos, SyncStatus),
+    pub peers_local_op_node: Vec<OpPeerInfo>,
+    pub peers_local_op_geth: Vec<OpGethPeer>,
 }
 impl Data {
     pub fn new(rollup_config: RollupConfig) -> Self {
@@ -245,7 +332,11 @@ impl Data {
             syncstatus_poller: Repeater::every(Duration::from_secs(1)),
             flamegraph_resetter: Repeater::every(Duration::from_secs(60)),
             rollup_config,
-            sync_status: Default::default(),
+            sync_status_global: Default::default(),
+            current_gateway: Default::default(),
+            sync_status_local: Default::default(),
+            peers_local_op_node: Default::default(),
+            peers_local_op_geth: Default::default(),
         }
     }
 }
@@ -385,10 +476,38 @@ impl Data {
             self.time_datas.reset()
         }
         if self.syncstatus_poller.fired() {
-            if let Ok(sync_status) =
-                consumers.sync_status().inspect_err(|e| tracing::warn!("couldn't get SyncStatus from portal: {e}"))
+            if let Ok(sync_status_global) = consumers
+                .sync_status_global()
+                .inspect_err(|e| tracing::warn!("couldn't get SyncStatus from portal: {e}"))
             {
-                self.sync_status = (Nanos::now(), sync_status)
+                self.sync_status_global = (Nanos::now(), sync_status_global)
+            }
+
+            if let Ok(sync_status_local) = consumers
+                .sync_status_local()
+                .inspect_err(|e| tracing::warn!("couldn't get SyncStatus from local based-op-node: {e}"))
+            {
+                self.sync_status_local = (Nanos::now(), sync_status_local)
+            }
+
+            self.current_gateway = consumers
+                .current_gateway()
+                .inspect_err(|e| tracing::warn!("couldn't get current sequencing based-gateway from portal: {e}"))
+                .ok();
+
+            if let Ok(mut peers) = consumers
+                .peers_based_op_node()
+                .inspect_err(|e| tracing::warn!("couldn't get peers of local based-op-node: {e}"))
+            {
+                peers.sort_unstable_by(|d1, d2| d1.peer_id.cmp(&d2.peer_id));
+                self.peers_local_op_node = peers;
+            }
+            if let Ok(mut peers) = consumers
+                .peers_based_op_geth()
+                .inspect_err(|e| tracing::warn!("couldn't get peers of local based-op-node: {e}"))
+            {
+                peers.sort_unstable_by(|d1, d2| d1.id.cmp(&d2.id));
+                self.peers_local_op_geth = peers;
             }
         }
     }
