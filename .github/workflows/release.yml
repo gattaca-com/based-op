@@ -64,7 +64,7 @@ jobs:
           file: ${{ matrix.image.file }}
           target: ${{ matrix.image.target }}
           push: true
-          tags: >
+          tags: |
             ${{ env.IMAGE_REG }}/${{ matrix.image.name }}:${{ github.ref_name }}
             ${{ !contains(github.ref_name, 'rc') && format('{0}/{1}:latest', env.IMAGE_REG, matrix.image.name) }}
           cache-from: type=registry,ref=${{ env.IMAGE_REG }}/${{ matrix.image.name }}:buildcache
