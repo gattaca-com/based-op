@@ -9,8 +9,11 @@ mod utils;
 
 use std::io::stdout;
 
+use alloy_primitives::Address;
 use bop_common::{
-    api::{OpNodeApiClient, RollupConfig, SyncStatus},
+    api::{
+        self, OpGethPeer, OpNodeApiClient, OpNodeP2PApiClient, OpPeerInfo, RegistryApiClient, RollupConfig, SyncStatus,
+    },
     communication::Consumer,
     config::{LoggingConfig, LoggingFlags},
     telemetry::{TelemetryUpdate, telemetry_queue},
@@ -41,10 +44,17 @@ use tracing::warn;
 use ui::plot::RenderFlags;
 
 #[derive(Parser, Debug, Clone)]
-#[command(version, about, name = "based-portal")]
+#[command(version, about, name = "based-overseer")]
 pub struct OverseerArgs {
+    /// The url of the portal that is connected to the main sequencer node
     #[arg(short, long)]
     pub portal_url: Url,
+    /// The url of the based-op-node running next to the based-gateway
+    #[arg(long, default_value = "http://0.0.0.0:8547")]
+    pub based_op_node_url: Url,
+    /// The url of the based-op-geth running next to the based-gateway
+    #[arg(long, default_value = "http://0.0.0.0:8645")]
+    pub based_op_geth_url: Url,
 }
 
 #[derive(Copy, Clone, Debug, Default, Display, FromRepr, EnumIter)]
@@ -93,25 +103,51 @@ impl Mode {
 struct OverseerConsumers {
     telemetry: Consumer<TelemetryUpdate>,
     runtime: tokio::runtime::Runtime,
-    portal_client: HttpClient,
+    client_portal: HttpClient,
+    client_based_op_node: HttpClient,
+    client_based_op_geth: HttpClient,
 }
 
 impl OverseerConsumers {
-    pub fn new(portal_url: Url) -> Self {
+    pub fn new(args: &OverseerArgs) -> Self {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("Couldn't initialize tokio runtime");
-        let portal_client = HttpClient::builder().build(portal_url).expect("Couldn't initialize portal rpc client");
-        Self { telemetry: telemetry_queue().into(), runtime, portal_client }
+        let client_portal =
+            HttpClient::builder().build(args.portal_url.clone()).expect("Couldn't initialize portal rpc client");
+        let client_based_op_node = HttpClient::builder()
+            .build(args.based_op_node_url.clone())
+            .expect("Couldn't initialize based-op-node rpc client");
+        let client_based_op_geth = HttpClient::builder()
+            .build(args.based_op_geth_url.clone())
+            .expect("Couldn't initialize based-op-geth rpc client");
+
+        Self { telemetry: telemetry_queue().into(), runtime, client_portal, client_based_op_node, client_based_op_geth }
     }
 
     pub fn rollup_config(&self) -> Result<RollupConfig, ClientError> {
-        self.runtime.block_on(self.portal_client.rollup_config())
+        self.runtime.block_on(self.client_portal.rollup_config())
     }
 
-    pub fn sync_status(&self) -> Result<SyncStatus, ClientError> {
-        self.runtime.block_on(self.portal_client.sync_status())
+    pub fn sync_status_global(&self) -> Result<SyncStatus, ClientError> {
+        self.runtime.block_on(self.client_portal.sync_status())
+    }
+
+    pub fn sync_status_local(&self) -> Result<SyncStatus, ClientError> {
+        self.runtime.block_on(self.client_based_op_node.sync_status())
+    }
+
+    pub fn current_gateway(&self) -> Result<(Url, Address), ClientError> {
+        self.runtime.block_on(self.client_portal.current_gateway()).map(|(_, url, address, _)| (url, address))
+    }
+
+    pub fn peers_based_op_node(&self) -> Result<Vec<OpPeerInfo>, ClientError> {
+        self.runtime.block_on(self.client_based_op_node.peers(true)).map(|p| p.peers.into_values().collect())
+    }
+
+    pub fn peers_based_op_geth(&self) -> Result<Vec<OpGethPeer>, ClientError> {
+        self.runtime.block_on(api::OpGethAdminApiClient::peers(&self.client_based_op_geth))
     }
 }
 
@@ -165,7 +201,7 @@ impl Overseer {
                 TimeKeeper::render(&mut self.data, inner_area, frame)
             }
             Mode::ChainInfo => {
-                self.ui_data.render_chain_info(&self.data, inner_area, frame);
+                self.ui_data.render_chain_info(&self.data, inner_area, frame.buffer_mut());
             }
         }
     }
@@ -192,6 +228,10 @@ impl Overseer {
         match (code, modifiers, &self.mode) {
             (KeyCode::Right, _, _) => self.next_tab(),
             (KeyCode::Left, _, _) => self.previous_tab(),
+            (KeyCode::Up | KeyCode::Char('k'), _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_up(),
+            (KeyCode::Down | KeyCode::Char('j'), _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_down(),
+            (KeyCode::PageUp, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_up(),
+            (KeyCode::PageDown, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_down(),
             (KeyCode::Char('m'), _, Mode::TimekeeperRealtime) => {
                 self.data.time_datas.toggle_render_options(RenderFlags::ShowMin)
             }
@@ -234,7 +274,7 @@ fn main() {
     let _guard = init_tracing(logging_config);
     tracing::info!("Overseer starting");
     let args = OverseerArgs::parse();
-    let mut consumers = OverseerConsumers::new(args.portal_url);
+    let mut consumers = OverseerConsumers::new(&args);
     let mut overseer: Overseer = consumers.rollup_config().expect("couldn't connect to portal").into();
     let genesis_time = overseer.genesis_time();
     let block_duration = overseer.block_duration();

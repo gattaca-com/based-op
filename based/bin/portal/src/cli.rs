@@ -30,7 +30,7 @@ pub struct PortalArgs {
     pub fallback_url: Url,
 
     /// Timeout for fallback requests in milliseconds
-    #[arg(long = "fallback.timeout_ms", default_value_t = 100)]
+    #[arg(long = "fallback.timeout_ms", default_value_t = 60_000)]
     pub fallback_timeout_ms: u64,
 
     /// The JWT token to use for the fallback
