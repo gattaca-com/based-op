@@ -54,6 +54,10 @@ impl UIData {
             Layout::horizontal([Constraint::Percentage(35), Constraint::Percentage(35), Constraint::Fill(1)])
                 .areas(bottom);
 
+        let [middle_top, middle_bottom] = Layout::vertical([Constraint::Length(8), Constraint::Fill(1)]).areas(middle);
+
+        self.render_keybindings_and_branding(data, middle_top, frame);
+
         self.render_system_messages(data, right, frame);
 
         let [left, bottom_left] = Layout::vertical([Constraint::Percentage(50), Constraint::Fill(1)]).areas(left);
@@ -76,7 +80,7 @@ impl UIData {
             TransactionData::pool_header(),
             data.transactions.iter().map(|b| b.to_pool_row()).rev(),
             frame,
-            middle,
+            middle_bottom,
         )
     }
 
@@ -106,6 +110,25 @@ impl UIData {
             buf,
             &mut self.scroll_view_state,
         );
+    }
+
+    fn render_keybindings_and_branding(&mut self, _data: &Data, area: Rect, frame: &mut Frame) {
+        let mut tw = tabwriter::TabWriter::new(vec![]);
+        let _ = writeln!(&mut tw, "Q:\tQuit");
+        let _ = writeln!(&mut tw, "◄ ►:\tChange Tab");
+
+        tw.flush().unwrap();
+        let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
+        let info = Paragraph::new(txt).block(Block::new().title("Key Bindings").borders(Borders::all()).fg(Color::from_u32(0x800080)));
+        let [left, right] = Layout::horizontal([Constraint::Length(20), Constraint::Fill(1)]).areas(area);
+        let big_text = tui_big_text::BigText::builder()
+            .pixel_size(tui_big_text::PixelSize::Full)
+            .style(Style::new().blue())
+            .centered()
+            .lines(vec!["Based Op".fg(Color::from_u32(0x800080)).into()])
+            .build();
+        frame.render_widget(big_text, right);
+        frame.render_widget(info, left);
     }
 
     fn render_system_overview(&mut self, data: &Data, area: Rect, frame: &mut Frame) {

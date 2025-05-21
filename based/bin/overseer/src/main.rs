@@ -27,12 +27,7 @@ use crossterm::{
 use data::{Data, UIData};
 use jsonrpsee::{core::ClientError, http_client::HttpClient};
 use ratatui::{
-    Frame, Terminal,
-    backend::CrosstermBackend,
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Stylize, palette::tailwind},
-    text::Line,
-    widgets::Tabs,
+    backend::CrosstermBackend, layout::{Constraint, Layout, Rect}, style::{palette::tailwind, Color, Style, Stylize}, text::Line, widgets::Tabs, Frame, Terminal
 };
 use reqwest::Url;
 use strum::IntoEnumIterator;
