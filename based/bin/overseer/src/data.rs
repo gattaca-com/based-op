@@ -103,7 +103,7 @@ impl UIData {
 
         let width = if area.height < peers_len + rollup_len + peers_len_geth { area.width - 1 } else { area.width };
 
-        let mut scroll_view = tui_scrollview::ScrollView::new(Size::new(width, rollup_len + peers_len));
+        let mut scroll_view = tui_scrollview::ScrollView::new(Size::new(width, rollup_len + peers_len + peers_len_geth));
         let [top, mid, bottom] =
             Layout::vertical([Constraint::Length(rollup_len), Constraint::Length(peers_len), Constraint::Fill(1)])
                 .areas(scroll_view.area());
