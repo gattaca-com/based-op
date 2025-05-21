@@ -4,7 +4,7 @@ pub mod tx_list;
 use std::{ops::Deref, sync::Arc};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
-use alloy_eips::eip2718::{Decodable2718, Encodable2718};
+use alloy_eips::{eip2718::{Decodable2718, Encodable2718}, Typed2718};
 use alloy_primitives::{Address, Bytes};
 use op_alloy_consensus::OpTxEnvelope;
 use op_revm::OpTransaction;
@@ -76,81 +76,88 @@ impl Transaction {
     }
 
     #[inline]
-    pub fn fill_tx_env(&self, tx: &mut OpTransaction<TxEnv>) {
-        tx.enveloped_tx = Some(self.encode());
-        let tx_env = &mut tx.base;
-        tx_env.caller = self.sender;
+    pub fn fill_tx_env(&self, tx_env: &mut OpTransaction<TxEnv>) {
+        tx_env.enveloped_tx = Some(self.encode());
+        tx_env.deposit = Default::default();
+        let inner_tx_env = &mut tx_env.base;
+        inner_tx_env.caller = self.sender;
         match &self.tx {
             OpTxEnvelope::Legacy(tx) => {
-                tx_env.gas_limit = tx.tx().gas_limit;
-                tx_env.gas_price = tx.tx().gas_price;
-                tx_env.gas_priority_fee = None;
-                tx_env.value = tx.tx().value;
-                tx_env.kind = tx.tx().to;
-                tx_env.data = tx.tx().input.clone();
-                tx_env.chain_id = tx.tx().chain_id;
-                tx_env.nonce = tx.tx().nonce;
-                tx_env.access_list.0.clear();
-                tx_env.blob_hashes.clear();
-                tx_env.max_fee_per_blob_gas = 0;
-                tx_env.authorization_list = vec![];
+                inner_tx_env.gas_limit = tx.tx().gas_limit;
+                inner_tx_env.gas_price = tx.tx().gas_price;
+                inner_tx_env.gas_priority_fee = None;
+                inner_tx_env.value = tx.tx().value;
+                inner_tx_env.kind = tx.tx().to;
+                inner_tx_env.data = tx.tx().input.clone();
+                inner_tx_env.chain_id = tx.tx().chain_id;
+                inner_tx_env.nonce = tx.tx().nonce;
+                inner_tx_env.access_list.0.clear();
+                inner_tx_env.blob_hashes.clear();
+                inner_tx_env.max_fee_per_blob_gas = 0;
+                inner_tx_env.authorization_list = vec![];
+                inner_tx_env.tx_type = tx.ty();
             }
             OpTxEnvelope::Eip2930(tx) => {
-                tx_env.gas_limit = tx.tx().gas_limit;
-                tx_env.gas_price = tx.tx().gas_price;
-                tx_env.gas_priority_fee = None;
-                tx_env.kind = tx.tx().to;
-                tx_env.value = tx.tx().value;
-                tx_env.data = tx.tx().input.clone();
-                tx_env.chain_id = Some(tx.tx().chain_id);
-                tx_env.nonce = tx.tx().nonce;
-                tx_env.access_list = tx.tx().access_list.clone();
-                tx_env.blob_hashes.clear();
-                tx_env.max_fee_per_blob_gas = 0;
-                tx_env.authorization_list = vec![];
+                inner_tx_env.gas_limit = tx.tx().gas_limit;
+                inner_tx_env.gas_price = tx.tx().gas_price;
+                inner_tx_env.gas_priority_fee = None;
+                inner_tx_env.kind = tx.tx().to;
+                inner_tx_env.value = tx.tx().value;
+                inner_tx_env.data = tx.tx().input.clone();
+                inner_tx_env.chain_id = Some(tx.tx().chain_id);
+                inner_tx_env.nonce = tx.tx().nonce;
+                inner_tx_env.access_list = tx.tx().access_list.clone();
+                inner_tx_env.blob_hashes.clear();
+                inner_tx_env.max_fee_per_blob_gas = 0;
+                inner_tx_env.authorization_list = vec![];
+                inner_tx_env.tx_type = tx.ty();
             }
             OpTxEnvelope::Eip1559(tx) => {
-                tx_env.gas_limit = tx.tx().gas_limit;
-                tx_env.gas_price = tx.tx().max_fee_per_gas;
-                tx_env.gas_priority_fee = Some(tx.tx().max_priority_fee_per_gas);
-                tx_env.kind = tx.tx().to;
-                tx_env.value = tx.tx().value;
-                tx_env.data = tx.tx().input.clone();
-                tx_env.chain_id = Some(tx.tx().chain_id);
-                tx_env.nonce = tx.tx().nonce;
-                tx_env.access_list = tx.tx().access_list.clone();
-                tx_env.blob_hashes.clear();
-                tx_env.max_fee_per_blob_gas = 0;
-                tx_env.authorization_list = vec![];
+                inner_tx_env.gas_limit = tx.tx().gas_limit;
+                inner_tx_env.gas_price = tx.tx().max_fee_per_gas;
+                inner_tx_env.gas_priority_fee = Some(tx.tx().max_priority_fee_per_gas);
+                inner_tx_env.kind = tx.tx().to;
+                inner_tx_env.value = tx.tx().value;
+                inner_tx_env.data = tx.tx().input.clone();
+                inner_tx_env.chain_id = Some(tx.tx().chain_id);
+                inner_tx_env.nonce = tx.tx().nonce;
+                inner_tx_env.access_list = tx.tx().access_list.clone();
+                inner_tx_env.blob_hashes.clear();
+                inner_tx_env.max_fee_per_blob_gas = 0;
+                inner_tx_env.authorization_list = vec![];
+                inner_tx_env.tx_type = tx.ty();
             }
             OpTxEnvelope::Eip7702(tx) => {
-                tx_env.gas_limit = tx.tx().gas_limit;
-                tx_env.gas_price = tx.tx().max_fee_per_gas;
-                tx_env.gas_priority_fee = Some(tx.tx().max_priority_fee_per_gas);
-                tx_env.kind = tx.tx().to.into();
-                tx_env.value = tx.tx().value;
-                tx_env.data = tx.tx().input.clone();
-                tx_env.chain_id = Some(tx.tx().chain_id);
-                tx_env.nonce = tx.tx().nonce;
-                tx_env.access_list = tx.tx().access_list.clone();
-                tx_env.blob_hashes.clear();
-                tx_env.max_fee_per_blob_gas = 0;
-                tx_env.authorization_list = tx.tx().authorization_list.clone();
+                inner_tx_env.gas_limit = tx.tx().gas_limit;
+                inner_tx_env.gas_price = tx.tx().max_fee_per_gas;
+                inner_tx_env.gas_priority_fee = Some(tx.tx().max_priority_fee_per_gas);
+                inner_tx_env.kind = tx.tx().to.into();
+                inner_tx_env.value = tx.tx().value;
+                inner_tx_env.data = tx.tx().input.clone();
+                inner_tx_env.chain_id = Some(tx.tx().chain_id);
+                inner_tx_env.nonce = tx.tx().nonce;
+                inner_tx_env.access_list = tx.tx().access_list.clone();
+                inner_tx_env.blob_hashes.clear();
+                inner_tx_env.max_fee_per_blob_gas = 0;
+                inner_tx_env.authorization_list = tx.tx().authorization_list.clone();
+                inner_tx_env.tx_type = tx.ty();
             }
             OpTxEnvelope::Deposit(deposit_tx) => {
-                tx_env.access_list.0.clear();
-                tx_env.gas_limit = deposit_tx.gas_limit;
-                tx_env.gas_price = 0;
-                tx_env.gas_priority_fee = None;
-                tx_env.kind = deposit_tx.to;
-                tx_env.value = deposit_tx.value;
-                tx_env.data = deposit_tx.input.clone();
-                tx_env.chain_id = None;
-                tx_env.nonce = 0;
-                tx_env.authorization_list = vec![];
-                tx.deposit.source_hash = deposit_tx.source_hash;
-                tx.deposit.mint = deposit_tx.mint;
-                tx.deposit.is_system_transaction = deposit_tx.is_system_transaction;
+                inner_tx_env.access_list.0.clear();
+                inner_tx_env.gas_limit = deposit_tx.gas_limit;
+                inner_tx_env.gas_price = 0;
+                inner_tx_env.gas_priority_fee = None;
+                inner_tx_env.kind = deposit_tx.to;
+                inner_tx_env.value = deposit_tx.value;
+                inner_tx_env.data = deposit_tx.input.clone();
+                inner_tx_env.chain_id = None;
+                inner_tx_env.nonce = 0;
+                inner_tx_env.authorization_list = vec![];
+                inner_tx_env.tx_type = deposit_tx.ty();
+
+                tx_env.deposit.source_hash = deposit_tx.source_hash;
+                tx_env.deposit.mint = deposit_tx.mint;
+                tx_env.deposit.is_system_transaction = deposit_tx.is_system_transaction;
 
                 return;
             }
