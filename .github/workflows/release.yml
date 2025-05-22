@@ -39,10 +39,6 @@ jobs:
             context: based
             file: based/key_to_address.Dockerfile
             build-contexts: 'reth=./reth'
-          - name: based-overseer
-            context: based
-            file: based/overseer.Dockerfile
-            build-contexts: 'reth=./reth'
       fail-fast: false
 
     steps:
