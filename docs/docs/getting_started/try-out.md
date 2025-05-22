@@ -56,7 +56,7 @@ The following single command sets up everything and will start your `Gateway`, `
 `git clone https://github.com/gattaca-com/based-op && cd based-op && make start-gateway`
 
 If everything went well, you should see a terminal UI appear, called the `Overseer`:
-![](./../based_op.gif)
+![](../../static/img/based_op.gif)
 This shows you the status of your local `Gateway` and a general overview of the chain.
 You can press left and right keys to cycle between the different tabs and explore all the information!
 
