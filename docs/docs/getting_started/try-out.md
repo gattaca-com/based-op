@@ -57,7 +57,6 @@ The following single command sets up everything and will start your `Gateway`, `
 
 If everything went well, you should see a terminal UI appear, called the `Overseer`:
 ![](./../based_op.gif)
-
 This shows you the status of your local `Gateway` and a general overview of the chain.
 You can press left and right keys to cycle between the different tabs and explore all the information!
 

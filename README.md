@@ -2,20 +2,6 @@
 
 ## Local Development/Quick start
 
-> [!IMPORTANT]
->
-> **Prerequisites**
->
-> Before you start, make sure you have the following installed on your machine:
->
-> - [Go](https://golang.org/dl/)
-> - [Rust](https://www.rust-lang.org/tools/install)
-> - [Docker](https://docs.docker.com/get-docker/)
-> - [Make](https://www.gnu.org/software/make/)
->
-> Based-op is fully l1 pectra ready
-
-
 ### With existing OP chain
 The following steps have been tested on Sepolia, with a previously deployed L2 chain (l2 non-pectra) 
 1. locate your `rollup.json`, `genesis.json` and `state.json` files
