@@ -95,8 +95,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0 &&
-                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0
+                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -532,7 +532,8 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
                 // Reset the tx pool.
-                data.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut data.telemetry);
+                data.tx_pool
+                    .remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut data.telemetry);
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
 
