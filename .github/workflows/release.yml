@@ -22,15 +22,6 @@ jobs:
     strategy:
       matrix:
         image:
-          - name: based-op-node
-            context: optimism
-            file: optimism/ops/docker/op-stack-go/Dockerfile
-            target: op-node-target
-            build-contexts: ''
-          - name: based-op-geth
-            context: op-geth
-            file: op-geth/Dockerfile
-            build-contexts: ''
           - name: based-gateway
             context: based
             file: based/gateway.Dockerfile
@@ -56,6 +47,9 @@ jobs:
       - name: Build & Push ${{ matrix.image.name }}
         uses: docker/build-push-action@v6
         with:
+          platforms: |
+            linux/amd64
+            linux/arm64
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.file }}
           target: ${{ matrix.image.target }}
