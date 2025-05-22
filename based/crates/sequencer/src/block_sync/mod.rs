@@ -1,7 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
-use alloy_consensus::Transaction as AlloyTransactionTrait;
-use alloy_consensus::BlockHeader;
+use alloy_consensus::{BlockHeader, Transaction as AlloyTransactionTrait};
 use bop_common::{
     communication::{Producer, messages::BlockSyncError},
     db::{DatabaseRead, DatabaseWrite},
@@ -262,7 +261,7 @@ impl BlockSync {
         // Validate receipts/ gas used
         self.timers.validate.time(|| {
             reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &res.receipts)
-                .map_err(|e| BlockExecutionError::other(e))
+                .map_err(BlockExecutionError::other)
         })?;
 
         // Validate state root
@@ -297,7 +296,6 @@ mod tests {
     use std::collections::HashMap;
 
     use alloy_primitives::B256;
-    use alloy_provider::ProviderBuilder;
     use bop_common::utils::initialize_test_tracing;
     use bop_db::{AlloyDB, init_database};
     use reqwest::Url;

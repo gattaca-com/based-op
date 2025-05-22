@@ -6,9 +6,7 @@ use alloy_rpc_types::engine::{
     BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
 };
 use bop_common::{
-    communication::{
-        Producer, SendersSpine, TrackedSenders,
-    },
+    communication::{Producer, SendersSpine, TrackedSenders},
     debug_panic,
     p2p::{FragV0, SealV0},
     shared::SharedState,
