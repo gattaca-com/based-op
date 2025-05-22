@@ -57,6 +57,8 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
+build-key_to_address: ## 🏗️ Build based gateway from based directory
+	docker build -t key_to_address -f ./based/key_to_address.Dockerfile --build-context reth=./reth ./based
 
 L1_CHAIN_ID?=11155111
 L2_CHAIN_ID?=$(shell \
@@ -178,7 +180,7 @@ start-gateway:
              \"id\":1}"; \
       echo; echo
 
-	@cd .local_gateway_and_follower && docker compose $(START_GATEWAY_COMPOSE_FILES) up -d
+	@docker compose $(START_GATEWAY_COMPOSE_FILES) up -d
 	$(MAKE) start-overseer
 
 start-overseer: 
