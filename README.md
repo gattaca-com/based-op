@@ -2,20 +2,6 @@
 
 ## Local Development/Quick start
 
-> [!IMPORTANT]
->
-> **Prerequisites**
->
-> Before you start, make sure you have the following installed on your machine:
->
-> - [Go](https://golang.org/dl/)
-> - [Rust](https://www.rust-lang.org/tools/install)
-> - [Docker](https://docs.docker.com/get-docker/)
-> - [Make](https://www.gnu.org/software/make/)
->
-> Based-op is fully l1 pectra ready
-
-
 ### With existing OP chain
 The following steps have been tested on Sepolia, with a previously deployed L2 chain (l2 non-pectra) 
 1. locate your `rollup.json`, `genesis.json` and `state.json` files
@@ -48,7 +34,7 @@ The following single command sets up everything and will start your `Gateway`, `
 
 If everything went well, you should see a terminal UI appear, called the `Overseer`:
 
-![ ](./assets/based_op.gif)
+![ ](./docs/static/img/based_op.gif)
 
 This shows you the status of your local `Gateway` and a general overview of the chain.
 You can press left and right keys to cycle between the different tabs and explore all the information!
