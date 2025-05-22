@@ -1,4 +1,6 @@
 FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y clang
@@ -16,11 +18,10 @@ COPY . .
 RUN --mount=from=reth,target=/reth cargo build --release --bin key_to_address
 
 
-FROM debian:stable-slim AS runtime
+FROM alpine:latest AS runtime
 WORKDIR /app
 
-RUN apt-get update
-RUN apt-get install -y openssl ca-certificates libssl3 libssl-dev
+RUN apk update && apk add openssl ca-certificates
 
 COPY --from=builder /app/target/release/key_to_address /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/key_to_address"]
