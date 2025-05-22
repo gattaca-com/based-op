@@ -87,7 +87,7 @@ impl<
     pub fn update_evm_environments(&mut self, evm_block_params: EvmEnv<OpSpecId>) {
         let timestamp = evm_block_params.block_env.timestamp();
         self.evm_tof.modify_block(|b| *b = evm_block_params.block_env.clone()); // TODO: re-use mem
-        self.evm_tof.modify_cfg(|c| c.spec = evm_block_params.spec_id().clone());
+        self.evm_tof.modify_cfg(|c| c.spec = *evm_block_params.spec_id());
 
         self.regolith_active = self.evm_config.chain_spec().fork(OpHardfork::Regolith).active_at_timestamp(timestamp);
     }
