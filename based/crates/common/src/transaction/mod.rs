@@ -4,7 +4,10 @@ pub mod tx_list;
 use std::{ops::Deref, sync::Arc};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
-use alloy_eips::{eip2718::{Decodable2718, Encodable2718}, Typed2718};
+use alloy_eips::{
+    Typed2718,
+    eip2718::{Decodable2718, Encodable2718},
+};
 use alloy_primitives::{Address, Bytes};
 use op_alloy_consensus::OpTxEnvelope;
 use op_revm::OpTransaction;
@@ -15,9 +18,9 @@ pub use tx_list::TxList;
 use uuid::Uuid;
 
 use crate::{
-    telemetry::{order::Ingested, Telemetry, Tx}, typedefs::BlockSyncMessage,
+    telemetry::{Telemetry, Tx, order::Ingested},
+    typedefs::BlockSyncMessage,
 };
-
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
@@ -158,8 +161,6 @@ impl Transaction {
                 tx_env.deposit.source_hash = deposit_tx.source_hash;
                 tx_env.deposit.mint = deposit_tx.mint;
                 tx_env.deposit.is_system_transaction = deposit_tx.is_system_transaction;
-
-                return;
             }
         }
     }
@@ -258,6 +259,6 @@ impl From<OpTransactionSigned> for Transaction {
     fn from(value: OpTransactionSigned) -> Self {
         let sender = value.recover_signer().expect("could not recover signer");
         let envelope = value.encoded_2718().into();
-        Self { tx: value.into(), sender, envelope, uuid: Uuid::new_v4() }
+        Self { tx: value, sender, envelope, uuid: Uuid::new_v4() }
     }
 }
