@@ -54,7 +54,7 @@ services:
     network_mode: "host"
     command:
       - op-node
-      - --l2=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
+      - --l2=http://based-op-geth:$OP_GETH_ENGINE_RPC_PORT
       - --l2.jwt-secret=/config/jwt
       - --verifier.l1-confs=1
       - --rollup.config=/config/rollup.json
@@ -95,6 +95,7 @@ services:
       - --eth_client.url=$PORTAL
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
+      - --gossip.root_peer_url=http://based-op-node:8547
     volumes: 
       - ./config:/config
       - ./data/gateway:/data/gateway

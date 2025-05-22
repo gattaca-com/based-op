@@ -1,45 +1,29 @@
-.PHONY: deps run clean restart help \
+.PHONY: clean help \
 build build-portal build-op-node build-op-geth \
 logs op-node-logs op-geth-logs \
 test-frag test-seal \
-docs \
-build-key_to_address
-
-%: build-key_to_address
+docs 
 
 # ──────────────────────────────────────────────
 # Cross-platform networking shim
 # ──────────────────────────────────────────────
 OS := $(shell uname -s)
 
-.PHONY: fix-compose
-fix-compose:           ## normalise compose.yml for macOS & Linux
-ifeq ($(OS),Darwin)    # Docker Desktop ignores network_mode:host  publish the port instead
-	@sed -i.bak -e '/network_mode: *"host"/c\
-\  ports:\n\    - "$${PORTAL_HOST_PORT:-8080}:8080"\n\  extra_hosts:\n\    - "host.docker.internal:host-gateway"' \
-	      .local_main_node/compose.yml
-endif
-
 .DEFAULT_GOAL := help
 
 # Variables
+IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:v0.1.0
 
-# The following port variables are:
-#
-# - OP_EL_PORT: This is the port of the Sequencer's OP-Node.
-# - BOP_NODE_PORT: This is the port of the Follower's BOP-Node.
-# - BOP_EL_PORT: This is the port of the Follower's BOP-Node.
-#
-# Note: The Kurtosis enclave must be running for these to work.
-#OP_EL_PORT=$(shell kurtosis service inspect based-op op-el-1-op-reth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-#BOP_NODE_PORT=$(shell kurtosis service inspect based-op op-cl-2-op-node-op-geth-op-kurtosis | grep ' http: 8547/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-#BOP_EL_PORT=$(shell kurtosis service inspect based-op op-el-2-op-geth-op-node-op-kurtosis | grep 'rpc: 8545/tcp -> http://127.0.0.1:' | cut -d : -f 4)
-#PORTAL_PORT=$(shell kurtosis service inspect based-op op-based-portal-1-op-kurtosis | grep 'rpc: 8541/tcp -> http://127.0.0.1:' | cut -d : -f 4)
+
+START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
+ifeq ($(OS),Darwin)
+  START_GATEWAY_COMPOSE_FILES += -f .local_gateway_and_follower/compose.mac.yml
+endif
+
+# Overridable Variables
 
 # Some servers default to executing shell scripts below with /bin/sh, we set bash to make sure our bash syntax works
 SHELL := /bin/bash
-
-# Recipes
 
 help: ## 📚 Show help for each of the Makefile recipes
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -50,9 +34,7 @@ docs: ## 📚 Build local docs
 	npm run build && \
 	npm run start
 
-build: build-portal build-gateway build-op-node build-op-geth build-registry build-overseer## 🏗️ Build
-
-build-no-gateway: build-portal build-op-node build-op-geth ## 🏗️ Build without gateway
+build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry build-overseer## 🏗️ Build
 
 build-portal: ## 🏗️ Build based portal
 	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
@@ -63,22 +45,11 @@ build-registry: ## 🏗️ Build based registry
 build-gateway: ## 🏗️ Build based gateway
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
-build-key_to_address: ## 🏗️ Build based gateway from based directory
-	docker build -t key_to_address -f ./based/key_to_address.Dockerfile --build-context reth=./reth ./based
-build-overseer: ## 🏗️ Build based overseer
-	docker build -t based_overseer_local -f ./based/overseer.Dockerfile --build-context reth=./reth ./based
-
-build-follower-op-node: ## 🏗️ Build OP node from optimism directory
-	cd ../based-optimism && \
-	IMAGE_TAGS=develop \
-	docker buildx bake \
-	-f docker-bake.hcl \
-	--set op-node.tags=based_op_node \
-	--load \
-	op-node
-
-build-follower-op-geth: ## 🏗️ Build OP geth from op-eth directory
+build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t based_op_geth ../based-op-geth
+
+build-based-op-node: ## 🏗️ Build OP geth from op-eth directory
+	docker build -t based_op_node ../based-op-node
 
 build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and Firefox
 	cd rabby && \
@@ -86,13 +57,16 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
+build-key_to_address: ## 🏗️ Build based gateway from based directory
+	docker build -t key_to_address -f ./based/key_to_address.Dockerfile --build-context reth=./reth ./based
 
 L1_CHAIN_ID?=11155111
 L2_CHAIN_ID?=$(shell \
     RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
     echo $$((RAW % 50000 + 1)); \
 )
-L2_CHAIN_ID_HEX := $(shell printf "0x%064x" $(L2_CHAIN_ID))
+
+L2_CHAIN_ID_HEX := $(shell )
 
 PORTAL?=http://18.185.199.51:8080
 L1_RPC_URL?=http://34.194.193.217:8545
@@ -125,7 +99,7 @@ start-gateway:
 	@# generate .env and fetch JSON if missing
 	@if [ ! -f .local_gateway_and_follower/.env ]; then \
 	  cp follower_node/env_example .local_gateway_and_follower/.env; \
-	  cp follower_node/compose.yml .local_gateway_and_follower/compose.yml; \
+	  cp follower_node/compose* .local_gateway_and_follower; \
 	  echo "Initializing gateway and follower op-node in ./.local_gateway_and_follower ..."; \
 	  echo "Gateway Sequencing Private Key: $(GATEWAY_SEQUENCING_KEY)"; \
 	  echo "Gateway Sequencing Wallet:      $(GATEWAY_SEQUENCING_ADDRESS)"; \
@@ -186,7 +160,7 @@ start-gateway:
 	    mkdir -p $(BASED_GATEWAY_DATA_DIR); \
 	fi
 
-	@wallet=$$(docker run --rm -i key_to_address $(GATEWAY_SEQUENCING_KEY)); \
+	@wallet=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(GATEWAY_SEQUENCING_KEY)); \
       echo "...Done"; \
       echo; \
       echo "Starting with the following generated .env:"; \
@@ -206,12 +180,11 @@ start-gateway:
              \"id\":1}"; \
       echo; echo
 
-	@cd .local_gateway_and_follower && docker compose up -d
+	@docker compose $(START_GATEWAY_COMPOSE_FILES) up -d
 	$(MAKE) start-overseer
 
-
 start-overseer: 
-	docker exec -it based-op-gateway overseer --portal-url $(PORTAL)
+	docker exec -it based-op-gateway overseer --portal-url $(PORTAL) --based-op-node-url http://based-op-node:8547 --based-op-geth-url http://based-op-geth:8645
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -238,7 +211,7 @@ endif
 endif
 # ────────────────────────────────────────────────────────────────────────────────
 
-deploy-chain: build-key_to_address
+deploy-chain: 
 	@echo "Deploying new Chain with id: $(L2_CHAIN_ID)"
 	@if [ -d .local_main_node/config ]; then \
 		echo "❌  Seems like information of a previous chain is already present. Please remove .local_main_node to deploy a new one."; \
@@ -246,12 +219,13 @@ deploy-chain: build-key_to_address
 	fi
 	@mkdir -p .local_main_node/config
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
-	@wallet_batcher=$$(docker run -i key_to_address $(OP_BATCHER_KEY)); \
-	wallet_proposer=$$(docker run -i key_to_address $(OP_PROPOSER_KEY)); \
-	wallet_main=$$(docker run -i key_to_address $(MAIN_KEY)); \
+	@wallet_batcher=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(OP_PROPOSER_KEY) | tail -n1); \
+	wallet_proposer=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(OP_PROPOSER_KEY) | tail -n1); \
+	wallet_main=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(MAIN_KEY) | tail -n1); \
+	l2_chain_id_hex=$$(printf "0x%064x" $(L2_CHAIN_ID)); \
 	sed -E \
 		  -e "s@L1_CHAIN_ID@$(L1_CHAIN_ID)@g" \
-		  -e "s@L2_CHAIN_ID@$(L2_CHAIN_ID_HEX)@g" \
+		  -e "s@L2_CHAIN_ID@$${l2_chain_id_hex}@g" \
 		  -e "s@VAULT_WALLET@$${wallet_main}@g" \
 		  -e "s@OP_BATCHER_WALLET@$${wallet_batcher}@g" \
 		  -e "s@OP_PROPOSER_WALLET@$${wallet_proposer}@g" \
@@ -259,8 +233,8 @@ deploy-chain: build-key_to_address
 		  > .local_main_node/config/intent.toml
 
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY) 
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $${l2_chain_id_hex} > $$(pwd)/.local_main_node/config/genesis.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $${l2_chain_id_hex} > $$(pwd)/.local_main_node/config/rollup.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
     > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
