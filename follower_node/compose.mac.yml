@@ -1,0 +1,29 @@
+version: "3.8"
+services:
+  based-op-geth:
+    # macOS: no host networking, map ports instead
+    network_mode: null
+    ports:
+      - "${OP_GETH_RPC_PORT:-8645}:${OP_GETH_RPC_PORT:-8645}"
+      - "${OP_GETH_WS_PORT:-8646}:${OP_GETH_WS_PORT:-8646}"
+      - "${OP_GETH_ENGINE_RPC_PORT:-8651}:${OP_GETH_ENGINE_RPC_PORT:-8651}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  based-op-node:
+    network_mode: null
+    ports:
+      # RPC API
+      - "8547:8547"
+      # libp2p gossip port (TCP + UDP)
+      - "${OP_NODE_GOSSIP_PORT:-9103}:${OP_NODE_GOSSIP_PORT:-9103}/tcp"
+      - "${OP_NODE_GOSSIP_PORT:-9103}:${OP_NODE_GOSSIP_PORT:-9103}/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  based-op-gateway:
+    network_mode: null
+    ports:
+      - "${GATEWAY_PORT:-9997}:${GATEWAY_PORT:-9997}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
