@@ -320,7 +320,7 @@ config-main-node:
 	@echo
 
 # By default these will be pointing to directories under .local_<xyz>
-start-main-node: build-portal build-registry
+start-main-node: 
 	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
 		echo "❌  Main node already running."; \
 		exit 1; \
