@@ -37,23 +37,23 @@ docs: ## 📚 Build local docs
 build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry ## 🏗️ Build
 
 build-portal: ## 🏗️ Build based portal
-	docker build -t ghcr.io/gattaca-com/based-op/based-portal:latest -f ./based/portal.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_portal -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
 build-registry: ## 🏗️ Build based registry
-	docker build -t ghcr.io/gattaca-com/based-op/based-registry:latest -f ./based/registry.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_registry -f ./based/registry.Dockerfile --build-context reth=./reth ./based
 
 build-gateway: ## 🏗️ Build based gateway
-	docker build -t ghcr.io/gattaca-com/based-op/based-gateway:latest -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_gateway -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest ../based-op-geth
+	docker build -t local_based_op_geth ../based-op-geth
 
 build-based-op-node: ## 🏗️ Build OP geth from op-eth directory
 	cd ../based-optimism && \
     IMAGE_TAGS=develop \
     docker buildx bake \
     -f docker-bake.hcl \
-    --set op-node.tags=ghcr.io/gattaca-com/based-optimism/based-op-node:latest \
+    --set op-node.tags=local_based_op_node \
     --load \
     op-node
 
