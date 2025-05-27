@@ -128,7 +128,8 @@ services:
     restart: unless-stopped
 
   based-portal:
-    image: based_portal_local
+    image: ghcr.io/gattaca-com/based-op/based-portal:latest 
+    pull_policy: always
     network_mode: "host"
     container_name: based-portal
     command:
@@ -141,7 +142,8 @@ services:
     restart: unless-stopped
 
   based-registry:
-    image: based_registry_local
+    image: ghcr.io/gattaca-com/based-op/based-registry:latest
+    pull_policy: always
     network_mode: "host"
     container_name: based-registry
     command:

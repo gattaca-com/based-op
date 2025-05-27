@@ -34,19 +34,19 @@ docs: ## 📚 Build local docs
 	npm run build && \
 	npm run start
 
-build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry build-overseer## 🏗️ Build
+build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry ## 🏗️ Build
 
 build-portal: ## 🏗️ Build based portal
-	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
+	docker build -t ghcr.io/gattaca-com/based-op/based-portal:latest -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
 build-registry: ## 🏗️ Build based registry
-	docker build -t based_registry_local -f ./based/registry.Dockerfile --build-context reth=./reth ./based
+	docker build -t ghcr.io/gattaca-com/based-op/based-registry:latest -f ./based/registry.Dockerfile --build-context reth=./reth ./based
 
 build-gateway: ## 🏗️ Build based gateway
-	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
+	docker build -t ghcr.io/gattaca-com/based-op/based-gateway:latest -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t ghcr.io/gattaca-com/based-op/based-op-geth:latest ../based-op-geth
+	docker build -t ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest ../based-op-geth
 
 build-based-op-node: ## 🏗️ Build OP geth from op-eth directory
 	cd ../based-optimism && \
