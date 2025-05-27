@@ -14,6 +14,7 @@ OS := $(shell uname -s)
 # Variables
 IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:v0.1.0
 
+
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
 ifeq ($(OS),Darwin)
   START_GATEWAY_COMPOSE_FILES += -f .local_gateway_and_follower/compose.mac.yml
@@ -159,7 +160,7 @@ start-gateway:
 	    mkdir -p $(BASED_GATEWAY_DATA_DIR); \
 	fi
 
-	@wallet=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(GATEWAY_SEQUENCING_KEY)); \
+	@wallet=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(GATEWAY_SEQUENCING_KEY)); \
       echo "...Done"; \
       echo; \
       echo "Starting with the following generated .env:"; \
@@ -218,9 +219,9 @@ deploy-chain:
 	fi
 	@mkdir -p .local_main_node/config
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
-	@wallet_batcher=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(OP_PROPOSER_KEY) | tail -n1); \
-	wallet_proposer=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(OP_BATCHER_KEY) | tail -n1); \
-	wallet_main=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(MAIN_KEY) | tail -n1); \
+	@wallet_batcher=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
+	wallet_proposer=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
+	wallet_main=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(MAIN_KEY) | tail -n1); \
 	l2_chain_id_hex=$$(printf "0x%064x" $(L2_CHAIN_ID)); \
 	sed -E \
 		  -e "s@L1_CHAIN_ID@$(L1_CHAIN_ID)@g" \
@@ -273,8 +274,16 @@ $(error STATE_JSON is undefined!  Please invoke like \
     `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
 endif
 
-OP_GETH_DATA_DIR?=.local_main_node/data/geth
-OP_NODE_DATA_DIR?=.local_main_node/data/node
+ifndef OP_GETH_DATA_DIR
+$(error  OP_GETH_DATA_DIR is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
+ifndef OP_NODE_DATA_DIR
+$(error  OP_NODE_DATA_DIR is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
 endif
 # ────────────────────────────────────────────────────────────────────────────────
 config-main-node:
@@ -288,12 +297,12 @@ config-main-node:
 	@cp $(ROLLUP_JSON) .local_main_node/config
 	@cp $(GENESIS_JSON) .local_main_node/config
 	@cp $(STATE_JSON) .local_main_node/config
-	@if [ "$(OP_GETH_DATA_DIR)" != ".local_main_node/data/geth" ] && [ ! -d ".local_main_node/data/geth" ] && [ -d "$(OP_GETH_DATA_DIR)" ]; then \
+	@if [ "$(OP_GETH_DATA_DIR)" != ".local_main_node/data/geth" ] && [ ! -d ".local_main_node/data/geth" ]; then \
 	    ln -s $(OP_GETH_DATA_DIR) .local_main_node/data/geth; \
 	else \
 	    mkdir -p $(BASED_OP_GETH_DATA_DIR); \
 	fi
-	@if [ "$(OP_NODE_DATA_DIR)" != ".local_main_node/data/node" ] && [ ! -d ".local_main_node/data/node" ] && [ -d "$(OP_NODE_DATA_DIR)" ]; then \
+	@if [ "$(OP_NODE_DATA_DIR)" != ".local_main_node/data/node" ] && [ ! -d ".local_main_node/data/node" ]; then \
 	    ln -s $(OP_NODE_DATA_DIR) .local_main_node/data/node; \
 	else \
 	    mkdir -p $(OP_NODE_DATA_DIR); \
