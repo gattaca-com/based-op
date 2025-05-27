@@ -46,10 +46,16 @@ build-gateway: ## 🏗️ Build based gateway
 	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t based_op_geth ../based-op-geth
+	docker build -t ghcr.io/gattaca-com/based-op/based-op-geth:latest ../based-op-geth
 
 build-based-op-node: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t based_op_node ../based-op-node
+	cd ../based-optimism && \
+    IMAGE_TAGS=develop \
+    docker buildx bake \
+    -f docker-bake.hcl \
+    --set op-node.tags=ghcr.io/gattaca-com/based-optimism/based-op-node:latest \
+    --load \
+    op-node
 
 build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and Firefox
 	cd rabby && \
@@ -235,11 +241,11 @@ deploy-chain:
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
     > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
-	@blockNumber=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.genesis.l1.number' /config/rollup.json); \
+	@blockNumber=$$(docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq -r '.genesis.l1.number' /config/rollup.json); \
 	 hex=$$(printf "0x%x" $$blockNumber); \
 	 hash=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	   --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["'"$$hex"'",false]}' \
-	   $(L1_RPC_URL) | docker run -i imega/jq -r '.result.hash'); \
+	   $(L1_RPC_URL) | docker run --rm -i imega/jq -r '.result.hash'); \
 	 docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq --arg h "$$hash" '.genesis.l1.hash = $$h' /config/rollup.json > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/rollup.json
 
 	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt

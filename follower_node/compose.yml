@@ -1,6 +1,6 @@
 services:
   based-op-geth:
-    image: ghcr.io/gattaca-com/based-op/based-op-geth:v0.1.0
+    image: ghcr.io/gattaca-com/based-op/based-op-geth:latest
     container_name: based-op-geth
     network_mode: "host"
     entrypoint: ["/bin/sh", "-c"]
@@ -49,7 +49,7 @@ services:
     restart: unless-stopped
 
   based-op-node:
-    image: ghcr.io/gattaca-com/based-op/based-op-node:v0.1.0
+    image: ghcr.io/gattaca-com/based-op/based-op-node:latest
     container_name: based-op-node
     network_mode: "host"
     command:
