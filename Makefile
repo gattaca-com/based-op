@@ -16,14 +16,7 @@ IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:latest
 
 
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
-ifeq ($(OS),Darwin)
-  START_GATEWAY_COMPOSE_FILES += -f .local_gateway_and_follower/compose.mac.yml
-endif
-
 START_MAIN_NODE_COMPOSE_FILES := -f .local_main_node/compose.yml
-# ifeq ($(OS),Darwin)
-  START_MAIN_NODE_COMPOSE_FILES += -f .local_main_node/compose.mac.yml
-# endif
 
 # Overridable Variables
 L1_CHAIN_ID?=11155111
@@ -91,7 +84,10 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-start-gateway: 
+create-network:
+	docker network inspect based_op_net >/dev/null 2>&1 || docker network create based_op_net
+
+start-gateway: create-network
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
 		exit 1; \
@@ -315,7 +311,7 @@ config-main-node:
 	@echo
 
 # By default these will be pointing to directories under .local_<xyz>
-start-main-node: 
+start-main-node: create-network
 	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
 		echo "❌  Main node already running."; \
 		exit 1; \
