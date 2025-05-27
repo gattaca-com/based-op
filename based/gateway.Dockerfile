@@ -19,10 +19,11 @@ RUN --mount=from=reth,target=/reth cargo build --release --bin bop-gateway
 RUN --mount=from=reth,target=/reth cargo build --release --bin overseer
 
 
-FROM alpine:latest AS runtime
+FROM debian:stable-slim AS runtime
 WORKDIR /app
 
-RUN apk update && apk add openssl ca-certificates
+RUN apt-get update
+RUN apt-get install -y openssl ca-certificates libssl3 libssl-dev
 
 COPY --from=builder /app/target/release/bop-gateway /usr/local/bin
 COPY --from=builder /app/target/release/overseer /usr/local/bin
