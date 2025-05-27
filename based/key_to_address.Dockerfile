@@ -18,10 +18,11 @@ COPY . .
 RUN --mount=from=reth,target=/reth cargo build --release --bin key_to_address
 
 
-FROM alpine:latest AS runtime
+FROM debian:stable-slim AS runtime
 WORKDIR /app
 
-RUN apk update && apk add openssl ca-certificates
+RUN apt-get update
+RUN apt-get install -y openssl ca-certificates libssl3 libssl-dev
 
 COPY --from=builder /app/target/release/key_to_address /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/key_to_address"]
