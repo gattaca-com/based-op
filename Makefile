@@ -273,18 +273,10 @@ ifndef STATE_JSON
 $(error STATE_JSON is undefined!  Please invoke like \
     `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
 endif
-
-ifndef OP_GETH_DATA_DIR
-$(error  OP_GETH_DATA_DIR is undefined!  Please invoke like \
-    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
 endif
 
-ifndef OP_NODE_DATA_DIR
-$(error  OP_NODE_DATA_DIR is undefined!  Please invoke like \
-    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
-endif
-
-endif
+OP_GETH_DATA_DIR?=.local_main_node/data/geth
+OP_NODE_DATA_DIR?=.local_main_node/data/node
 # ────────────────────────────────────────────────────────────────────────────────
 config-main-node:
 	@if [ -d .local_main_node/config ]; then \
@@ -297,12 +289,12 @@ config-main-node:
 	@cp $(ROLLUP_JSON) .local_main_node/config
 	@cp $(GENESIS_JSON) .local_main_node/config
 	@cp $(STATE_JSON) .local_main_node/config
-	@if [ "$(OP_GETH_DATA_DIR)" != ".local_main_node/data/geth" ] && [ ! -d ".local_main_node/data/geth" ]; then \
+	@if [ "$(OP_GETH_DATA_DIR)" != ".local_main_node/data/geth" ] && [ ! -d ".local_main_node/data/geth" ] && [ -d "$(OP_GETH_DATA_DIR)"]; then \
 	    ln -s $(OP_GETH_DATA_DIR) .local_main_node/data/geth; \
 	else \
 	    mkdir -p $(BASED_OP_GETH_DATA_DIR); \
 	fi
-	@if [ "$(OP_NODE_DATA_DIR)" != ".local_main_node/data/node" ] && [ ! -d ".local_main_node/data/node" ]; then \
+	@if [ "$(OP_NODE_DATA_DIR)" != ".local_main_node/data/node" ] && [ ! -d ".local_main_node/data/node" ] && [ -d "$(OP_NODE_DATA_DIR)"]; then \
 	    ln -s $(OP_NODE_DATA_DIR) .local_main_node/data/node; \
 	else \
 	    mkdir -p $(OP_NODE_DATA_DIR); \
