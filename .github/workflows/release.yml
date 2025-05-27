@@ -61,7 +61,7 @@ jobs:
       - name: Build & Push ${{ matrix.image.name }}
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/${{ matrix.platform.arch }}
+          platforms: linux/${{ matrix.platform.arch == 'arm64' && 'arm64/v8' || matrix.platform.arch }}
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.file }}
           push: true
@@ -99,7 +99,7 @@ jobs:
           tag="${{ github.ref_name }}"
           name="${{ matrix.image }}"
 
-          # Use buildx imagetools instead of docker manifest
+          # Use buildx imagetools to create multi-arch manifest
           docker buildx imagetools create \
             --tag $ghcr/$name:$tag \
             $ghcr/$name:$tag-amd64 \
