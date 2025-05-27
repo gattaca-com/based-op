@@ -1,6 +1,7 @@
 services:
   based-op-geth:
-    image: ghcr.io/gattaca-com/based-op/based-op-geth:v0.1.0
+    image: ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest
+    pull_policy: always
     container_name: based-op-geth
     network_mode: "host"
     entrypoint: ["/bin/sh", "-c"]
@@ -49,7 +50,8 @@ services:
     restart: unless-stopped
 
   based-op-node:
-    image: ghcr.io/gattaca-com/based-op/based-op-node:v0.1.0
+    image: ghcr.io/gattaca-com/based-optimism/based-op-node:latest
+    pull_policy: always
     container_name: based-op-node
     network_mode: "host"
     command:
@@ -84,7 +86,8 @@ services:
     restart: unless-stopped
 
   gateway:
-    image: ghcr.io/gattaca-com/based-op/based-gateway:v0.1.0
+    image: ghcr.io/gattaca-com/based-op/based-gateway:latest
+    pull_policy: always
     container_name: based-op-gateway
     network_mode: "host"
     command:

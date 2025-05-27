@@ -275,7 +275,7 @@ fn main() {
     tracing::info!("Overseer starting");
     let args = OverseerArgs::parse();
     let mut consumers = OverseerConsumers::new(&args);
-    let mut overseer: Overseer = consumers.rollup_config().expect("couldn't connect to portal").into();
+    let mut overseer: Overseer = consumers.rollup_config().expect("couldn't read rollup_config").into();
     let genesis_time = overseer.genesis_time();
     let block_duration = overseer.block_duration();
 
