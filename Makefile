@@ -12,7 +12,8 @@ OS := $(shell uname -s)
 .DEFAULT_GOAL := help
 
 # Variables
-IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:v0.1.0
+IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:latest
+
 
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
 ifeq ($(OS),Darwin)
@@ -33,22 +34,28 @@ docs: ## 📚 Build local docs
 	npm run build && \
 	npm run start
 
-build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry build-overseer## 🏗️ Build
+build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry ## 🏗️ Build
 
 build-portal: ## 🏗️ Build based portal
-	docker build -t based_portal_local -f ./based/portal.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_portal -f ./based/portal.Dockerfile --build-context reth=./reth ./based
 
 build-registry: ## 🏗️ Build based registry
-	docker build -t based_registry_local -f ./based/registry.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_registry -f ./based/registry.Dockerfile --build-context reth=./reth ./based
 
 build-gateway: ## 🏗️ Build based gateway
-	docker build -t based_gateway_local -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_gateway -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t based_op_geth ../based-op-geth
+	docker build -t local_based_op_geth ../based-op-geth
 
 build-based-op-node: ## 🏗️ Build OP geth from op-eth directory
-	docker build -t based_op_node ../based-op-node
+	cd ../based-optimism && \
+    IMAGE_TAGS=develop \
+    docker buildx bake \
+    -f docker-bake.hcl \
+    --set op-node.tags=local_based_op_node \
+    --load \
+    op-node
 
 build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and Firefox
 	cd rabby && \
@@ -56,17 +63,12 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-build-key_to_address: ## 🏗️ Build based gateway from based directory
-	docker build -t key_to_address -f ./based/key_to_address.Dockerfile --build-context reth=./reth ./based
-
 L1_CHAIN_ID?=11155111
 L2_CHAIN_ID?=$(shell \
     RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
     echo $$((RAW % 50000 + 1)); \
 )
-
-L2_CHAIN_ID_HEX := $(shell )
-
+L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
 PORTAL?=http://18.185.199.51:8080
 L1_RPC_URL?=http://34.194.193.217:8545
 L1_BEACON_RPC_URL?=http://34.194.193.217:5052
@@ -76,7 +78,7 @@ GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
   grep -m1 '^GATEWAY_SEQUENCING_KEY=' .local_gateway_and_follower/.env \
     | cut -d= -f2                                                   \
 )
-_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i key_to_address $(GATEWAY_SEQUENCING_KEY))
+_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(GATEWAY_SEQUENCING_KEY))
 GATEWAY_SEQUENCING_KEY:=$(word 1,$(_GATEWAY_KEY_AND_WALLET))
 GATEWAY_SEQUENCING_ADDRESS:=$(word 2,$(_GATEWAY_KEY_AND_WALLET))
 
@@ -159,7 +161,7 @@ start-gateway:
 	    mkdir -p $(BASED_GATEWAY_DATA_DIR); \
 	fi
 
-	@wallet=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(GATEWAY_SEQUENCING_KEY)); \
+	@wallet=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(GATEWAY_SEQUENCING_KEY)); \
       echo "...Done"; \
       echo; \
       echo "Starting with the following generated .env:"; \
@@ -218,13 +220,12 @@ deploy-chain:
 	fi
 	@mkdir -p .local_main_node/config
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
-	@wallet_batcher=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(OP_PROPOSER_KEY) | tail -n1); \
-	wallet_proposer=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(OP_BATCHER_KEY) | tail -n1); \
-	wallet_main=$$(docker run --rm -i $(KEY_TO_ADDRESS_IMAGE) $(MAIN_KEY) | tail -n1); \
-	l2_chain_id_hex=$$(printf "0x%064x" $(L2_CHAIN_ID)); \
+	@wallet_batcher=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
+	wallet_proposer=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
+	wallet_main=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(MAIN_KEY) | tail -n1); \
 	sed -E \
 		  -e "s@L1_CHAIN_ID@$(L1_CHAIN_ID)@g" \
-		  -e "s@L2_CHAIN_ID@$${l2_chain_id_hex}@g" \
+		  -e "s@L2_CHAIN_ID@$(L2_CHAIN_ID_HEX)@g" \
 		  -e "s@VAULT_WALLET@$${wallet_main}@g" \
 		  -e "s@OP_BATCHER_WALLET@$${wallet_batcher}@g" \
 		  -e "s@OP_PROPOSER_WALLET@$${wallet_proposer}@g" \
@@ -232,16 +233,16 @@ deploy-chain:
 		  > .local_main_node/config/intent.toml
 
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY) 
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $${l2_chain_id_hex} > $$(pwd)/.local_main_node/config/genesis.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $${l2_chain_id_hex} > $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
     > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
-	@blockNumber=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i imega/jq -r '.genesis.l1.number' /config/rollup.json); \
+	@blockNumber=$$(docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq -r '.genesis.l1.number' /config/rollup.json); \
 	 hex=$$(printf "0x%x" $$blockNumber); \
 	 hash=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	   --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["'"$$hex"'",false]}' \
-	   $(L1_RPC_URL) | docker run -i imega/jq -r '.result.hash'); \
+	   $(L1_RPC_URL) | docker run --rm -i imega/jq -r '.result.hash'); \
 	 docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq --arg h "$$hash" '.genesis.l1.hash = $$h' /config/rollup.json > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/rollup.json
 
 	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
@@ -273,8 +274,16 @@ $(error STATE_JSON is undefined!  Please invoke like \
     `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
 endif
 
-OP_GETH_DATA_DIR?=.local_main_node/data/geth
-OP_NODE_DATA_DIR?=.local_main_node/data/node
+ifndef OP_GETH_DATA_DIR
+$(error  OP_GETH_DATA_DIR is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
+ifndef OP_NODE_DATA_DIR
+$(error  OP_NODE_DATA_DIR is undefined!  Please invoke like \
+    `make $(MAKECMDGOALS) ROLLUP_JSON=… GENESIS_JSON=… STATE_JSON=… OP_GETH_DATA_DIR=… OP_NODE_DATA_DIR=…`)
+endif
+
 endif
 # ────────────────────────────────────────────────────────────────────────────────
 config-main-node:
@@ -288,12 +297,12 @@ config-main-node:
 	@cp $(ROLLUP_JSON) .local_main_node/config
 	@cp $(GENESIS_JSON) .local_main_node/config
 	@cp $(STATE_JSON) .local_main_node/config
-	@if [ "$(OP_GETH_DATA_DIR)" != ".local_main_node/data/geth" ] && [ ! -d ".local_main_node/data/geth" ] && [ -d "$(OP_GETH_DATA_DIR)" ]; then \
+	@if [ "$(OP_GETH_DATA_DIR)" != ".local_main_node/data/geth" ] && [ ! -d ".local_main_node/data/geth" ]; then \
 	    ln -s $(OP_GETH_DATA_DIR) .local_main_node/data/geth; \
 	else \
 	    mkdir -p $(BASED_OP_GETH_DATA_DIR); \
 	fi
-	@if [ "$(OP_NODE_DATA_DIR)" != ".local_main_node/data/node" ] && [ ! -d ".local_main_node/data/node" ] && [ -d "$(OP_NODE_DATA_DIR)" ]; then \
+	@if [ "$(OP_NODE_DATA_DIR)" != ".local_main_node/data/node" ] && [ ! -d ".local_main_node/data/node" ]; then \
 	    ln -s $(OP_NODE_DATA_DIR) .local_main_node/data/node; \
 	else \
 	    mkdir -p $(OP_NODE_DATA_DIR); \
@@ -308,7 +317,7 @@ config-main-node:
 	@echo
 
 # By default these will be pointing to directories under .local_<xyz>
-start-main-node: build-portal build-registry
+start-main-node: 
 	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
 		echo "❌  Main node already running."; \
 		exit 1; \
