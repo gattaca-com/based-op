@@ -12,7 +12,7 @@ OS := $(shell uname -s)
 .DEFAULT_GOAL := help
 
 # Variables
-IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:v0.1.0
+IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:latest
 
 
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
