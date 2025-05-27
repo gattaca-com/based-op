@@ -63,9 +63,6 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-build-key_to_address: ## 🏗️ Build based gateway from based directory
-	docker build -t key_to_address -f ./based/key_to_address.Dockerfile --build-context reth=./reth ./based
-
 L1_CHAIN_ID?=11155111
 L2_CHAIN_ID?=$(shell \
     RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
@@ -81,7 +78,7 @@ GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
   grep -m1 '^GATEWAY_SEQUENCING_KEY=' .local_gateway_and_follower/.env \
     | cut -d= -f2                                                   \
 )
-_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i key_to_address $(GATEWAY_SEQUENCING_KEY))
+_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(GATEWAY_SEQUENCING_KEY))
 GATEWAY_SEQUENCING_KEY:=$(word 1,$(_GATEWAY_KEY_AND_WALLET))
 GATEWAY_SEQUENCING_ADDRESS:=$(word 2,$(_GATEWAY_KEY_AND_WALLET))
 
