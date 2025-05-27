@@ -4,7 +4,6 @@ networks:
 
 services:
   op-geth:
-    network_mode: bridge  # Override host networking
     networks:
       - op_net
     ports:
@@ -17,7 +16,6 @@ services:
       - "host.docker.internal:host-gateway"
 
   op-node:
-    network_mode: bridge  # Override host networking
     networks:
       - op_net
     ports:
@@ -50,7 +48,6 @@ services:
       - --sequencer.enabled
 
   op-batcher:
-    network_mode: bridge  # Override host networking
     networks:
       - op_net
     ports:
@@ -76,7 +73,6 @@ services:
       - --data-availability-type=blobs
 
   op-proposer:
-    network_mode: bridge  # Override host networking
     networks:
       - op_net
     ports:
@@ -96,7 +92,6 @@ services:
       - --proposal-interval=2s
 
   based-portal:
-    network_mode: bridge  # Override host networking
     networks:
       - op_net
     ports:
@@ -112,7 +107,6 @@ services:
       - --gateway.timeout_ms=200
 
   based-registry:
-    network_mode: bridge  # Override host networking
     networks:
       - op_net
     ports:
@@ -127,7 +121,6 @@ services:
       - --port=${REGISTRY_PORT}
 
   blockscout-postgres:
-    network_mode: bridge  # Override host networking
     networks:
       - op_net
     ports:
@@ -136,7 +129,6 @@ services:
       - "host.docker.internal:host-gateway"
 
   blockscout:
-    network_mode: bridge
     networks:
       - op_net
     ports:
@@ -160,7 +152,6 @@ services:
       SSG_ENABLED: "false"
 
   restarter:
-    network_mode: bridge  # Override host networking
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
