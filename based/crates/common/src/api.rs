@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
-    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
+    engine::{ExecutionPayloadV3, ExecutionPayloadV4, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -59,9 +59,34 @@ pub trait EngineApi {
         parent_beacon_block_root: B256,
     ) -> RpcResult<PayloadStatus>;
 
+    #[method(name = "newPayloadV4")]
+    async fn new_payload_v4(
+        &self,
+        payload: ExecutionPayloadV3,
+        versioned_hashes: Vec<B256>,
+        parent_beacon_block_root: B256,
+        _execution_requests: Vec<u8>,
+    ) -> RpcResult<PayloadStatus> {
+        self.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root)
+    }
+
     /// Used to fetch an execution payload from a previous `payload_id` set in `forkchoiceUpdatedV3`
     #[method(name = "getPayloadV3")]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3>;
+
+    #[method(name = "getPayloadV4")]
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4> {
+        let execution_payload = self.get_payload_v3(payload_id).await?;
+
+        Ok(OpExecutionPayloadEnvelopeV4 {
+            execution_payload: execution_payload.execution_payload,
+            block_value: execution_payload.block_value,
+            blobs_bundle: execution_payload.blobs_bundle,
+            should_override_builder: execution_payload.should_override_builder,
+            parent_beacon_block_root: execution_payload.parent_beacon_block_root,
+            execution_requests: vec![],
+        })
+    }
 }
 
 /// The Eth API is used to interact with the EL directly.
