@@ -21,6 +21,29 @@ ifeq ($(OS),Darwin)
 endif
 
 # Overridable Variables
+L1_CHAIN_ID?=11155111
+L2_CHAIN_ID?=$(shell \
+    RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
+    echo $$((RAW % 50000 + 1)); \
+)
+L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
+PORTAL?=http://18.185.199.51:8080
+L1_RPC_URL?=http://34.194.193.217:8545
+L1_BEACON_RPC_URL?=http://34.194.193.217:5052
+PUBLIC_IP?=$(shell curl ifconfig.me)
+# if GATEWAY_SEQUENCING_KEY is set, use that one, otherwise key_to_address will generate a new one
+GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
+  [ -f .local_gateway_and_follower/.env ] &&                        \
+  grep -m1 '^GATEWAY_SEQUENCING_KEY=' .local_gateway_and_follower/.env \
+    | cut -d= -f2                                                   \
+)
+_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(GATEWAY_SEQUENCING_KEY))
+GATEWAY_SEQUENCING_KEY:=$(word 1,$(_GATEWAY_KEY_AND_WALLET))
+GATEWAY_SEQUENCING_ADDRESS:=$(word 2,$(_GATEWAY_KEY_AND_WALLET))
+
+BASED_GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
+BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
+BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
 
 # Some servers default to executing shell scripts below with /bin/sh, we set bash to make sure our bash syntax works
 SHELL := /bin/bash
@@ -63,28 +86,6 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-L1_CHAIN_ID?=11155111
-L2_CHAIN_ID?=$(shell \
-    RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
-    echo $$((RAW % 50000 + 1)); \
-)
-L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
-PORTAL?=http://18.185.199.51:8080
-L1_RPC_URL?=http://34.194.193.217:8545
-L1_BEACON_RPC_URL?=http://34.194.193.217:5052
-# if GATEWAY_SEQUENCING_KEY is set, use that one, otherwise key_to_address will generate a new one
-GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
-  [ -f .local_gateway_and_follower/.env ] &&                        \
-  grep -m1 '^GATEWAY_SEQUENCING_KEY=' .local_gateway_and_follower/.env \
-    | cut -d= -f2                                                   \
-)
-_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(GATEWAY_SEQUENCING_KEY))
-GATEWAY_SEQUENCING_KEY:=$(word 1,$(_GATEWAY_KEY_AND_WALLET))
-GATEWAY_SEQUENCING_ADDRESS:=$(word 2,$(_GATEWAY_KEY_AND_WALLET))
-
-BASED_GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
-BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
-BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
 start-gateway: 
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
@@ -106,7 +107,7 @@ start-gateway:
 	  echo "Gateway Sequencing Wallet:      $(GATEWAY_SEQUENCING_ADDRESS)"; \
 	  { \
 	    echo "PORTAL=$(PORTAL)"; \
-	    echo "OP_NODE_GOSSIP_IP=$$(curl ifconfig.me)"; \
+	    echo "OP_NODE_GOSSIP_IP=$(PUBLIC_IP)"; \
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
 	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
@@ -168,7 +169,7 @@ start-gateway:
       cat .local_gateway_and_follower/.env; \
       echo; echo; \
       echo "Calling registerGateway method via JSON-RPC:"; \
-      GATEWAY_URL=http://$$(curl -s ifconfig.me):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2); \
+      GATEWAY_URL=http://$(PUBLIC_IP):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2); \
       GATEWAY_ADDRESS=$$wallet; \
       JWT=$$(cat .local_gateway_and_follower/config/jwt); \
       curl -X POST "$(PORTAL)" \
@@ -185,7 +186,7 @@ start-gateway:
 	$(MAKE) start-overseer
 
 start-overseer: 
-	docker exec -it based-op-gateway overseer --portal-url $(PORTAL) --based-op-node-url http://based-op-node:8547 --based-op-geth-url http://based-op-geth:8645
+	docker exec -it based-op-gateway overseer --portal-url $(PORTAL)
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -334,7 +335,7 @@ start-main-node:
 	    echo "L1_RPC_URL=$(L1_RPC_URL)"; \
 	    echo "L1_BEACON_RPC_URL=$(L1_BEACON_RPC_URL)"; \
 	    echo "OP_NODE_SEQUENCER_KEY=$(MAIN_KEY)"; \
-	    echo "OP_NODE_GOSSIP_IP=$$(curl ifconfig.me)"; \
+	    echo "OP_NODE_GOSSIP_IP=$(PUBLIC_IP)"; \
 	    echo "OP_BATCHER_PRIVATE_KEY=$(OP_BATCHER_KEY)"; \
 	    echo "OP_PROPOSER_PRIVATE_KEY=$(OP_PROPOSER_KEY)"; \
 	  } >> .local_main_node/.env; \
@@ -421,7 +422,7 @@ logs-based-op-node: ## 📜 Show based op-node logs
 	docker logs based-op-node --tail 100 -f
 
 logs-based-op-geth: ## 📜 Show based op-geth logs
-	docker logs based-op-node --tail 100 -f
+	docker logs based-op-geth --tail 100 -f
 	
 logs-op-node: ## 📜 Show main op-node logs (only for main sequencing node)
 	docker logs op-node --tail 100 -f

@@ -53,7 +53,7 @@ services:
       - sh
       - -c
       - |
-        sleep "${OP_NODE_DELAY:-15}" &&
+        sleep "${OP_NODE_DELAY:-10}" &&
         exec op-node "$@"
     command:
       - op-node
@@ -155,6 +155,8 @@ services:
     volumes: 
       - ./config:/config
     restart: unless-stopped
+
+    
   restarter:
     image: docker:cli
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
