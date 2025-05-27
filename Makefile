@@ -65,9 +65,7 @@ L2_CHAIN_ID?=$(shell \
     RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
     echo $$((RAW % 50000 + 1)); \
 )
-
-L2_CHAIN_ID_HEX := $(shell )
-
+L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
 PORTAL?=http://18.185.199.51:8080
 L1_RPC_URL?=http://34.194.193.217:8545
 L1_BEACON_RPC_URL?=http://34.194.193.217:5052
@@ -222,10 +220,9 @@ deploy-chain:
 	@wallet_batcher=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
 	wallet_proposer=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
 	wallet_main=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(MAIN_KEY) | tail -n1); \
-	l2_chain_id_hex=$$(printf "0x%064x" $(L2_CHAIN_ID)); \
 	sed -E \
 		  -e "s@L1_CHAIN_ID@$(L1_CHAIN_ID)@g" \
-		  -e "s@L2_CHAIN_ID@$${l2_chain_id_hex}@g" \
+		  -e "s@L2_CHAIN_ID@$(L2_CHAIN_ID_HEX)@g" \
 		  -e "s@VAULT_WALLET@$${wallet_main}@g" \
 		  -e "s@OP_BATCHER_WALLET@$${wallet_batcher}@g" \
 		  -e "s@OP_PROPOSER_WALLET@$${wallet_proposer}@g" \
@@ -233,8 +230,8 @@ deploy-chain:
 		  > .local_main_node/config/intent.toml
 
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY) 
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $${l2_chain_id_hex} > $$(pwd)/.local_main_node/config/genesis.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $${l2_chain_id_hex} > $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
 	@docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
     > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
