@@ -50,6 +50,7 @@ services:
     ports:
       - "${OP_GETH_RPC_PORT:-8645}:${OP_GETH_RPC_PORT:-8645}"
       - "${OP_GETH_WS_PORT:-8646}:${OP_GETH_WS_PORT:-8646}"
+      - "${OP_GETH_GOSSIP_PORT}:${OP_GETH_GOSSIP_PORT}"
       - "${OP_GETH_ENGINE_RPC_PORT:-8651}:${OP_GETH_ENGINE_RPC_PORT:-8651}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -123,6 +124,8 @@ services:
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
       - /dev/shm:/dev/shm
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     restart: unless-stopped
     networks:
       - based_op_net
