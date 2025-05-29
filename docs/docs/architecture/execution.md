@@ -5,7 +5,10 @@ description: Upgrades to the OP execution layer
 
 # Execution
 
-The OP geth was upgraded to receive `Frag`s messages from the OP node, as well as to serve state for RPC calls off the "unsealed block". Because `Frag`s are shared continously from the gateway, the EL can already start pre-processing and preparing for the block seal and sync.
+The OP geth was upgraded to receive `Frag`s messages from the OP node, as well as to serve state for RPC calls off the "unsealed block".
+Because `Frag`s are shared continously from the gateway, the EL can already start pre-processing and preparing for the block seal and sync.
+
+The forked repo with changes can be found in [based-op-geth](https://github.com/gattaca-com/based-op-geth).
 
 ![op-el](../../static/img/architecture_execution.png)
 
