@@ -13,6 +13,8 @@ The main changes include:
 
 Importantly, all these changes are incremental and backwards compatible. Non-modified nodes will still be able to stay in the network and receive new blocks, they just won't be able to process `Frag`s and provide preconfirmations.
 
+The forked repo with changes can be found in [based-optimism](https://github.com/gattaca-com/based-optimism).
+
 ![op-node](../../static/img/architecture_consensus.png)
 
 ## P2P Capability
