@@ -10,7 +10,7 @@ use alloy_rpc_types::engine::{
     PayloadId,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
 use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
@@ -163,7 +163,7 @@ impl<T> From<InternalMessage<T>> for Nanos {
 pub enum EngineApi {
     ForkChoiceUpdatedV3 { fork_choice_state: ForkchoiceState, payload_attributes: Option<Box<OpPayloadAttributes>> },
     NewPayloadV3 { payload: ExecutionPayloadV3, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
-    GetPayloadV3 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV3> },
+    GetPayloadV4 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV4> },
 }
 impl EngineApi {
     pub fn messages_from_block(

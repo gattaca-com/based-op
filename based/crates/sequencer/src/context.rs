@@ -17,12 +17,14 @@ use bop_common::{
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use op_revm::OpSpecId;
 use reth_evm::{ConfigureEvm, block::SystemCaller, env::EvmEnv, execute::ProviderError};
 use reth_optimism_chainspec::OpChainSpec;
+use reth_optimism_consensus::isthmus::withdrawals_root;
 use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
+use reth_provider::StorageRootProvider;
 use revm_primitives::{B256, Bytes, U256, b256};
 use tracing::info;
 
@@ -161,7 +163,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
     }
 }
 
-impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SequencerContext<Db> {
+impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + StorageRootProvider> SequencerContext<Db> {
     pub fn handle_tx(&mut self, tx: Arc<Transaction>, senders: &SendersSpine<Db>) {
         if tx.is_deposit() {
             self.deposits.push_back(tx);
@@ -230,7 +232,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
     }
 
     /// Finalize the block after the last frag has been sealed
-    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV3) {
+    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4) {
         frag_seq.sorting_telemetry.report();
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
@@ -239,6 +241,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
 
         let state_changes = self.shared_state.as_mut().take_state_changes();
         let state_root = self.db.calculate_state_root(&state_changes).unwrap().0;
+
+        let withdrawals_root = if self.chain_spec().fork(OpHardfork::Isthmus).active_at_timestamp(self.timestamp()) {
+            withdrawals_root(&state_changes, &self.db).expect("something wrong with withdrawals root calculation")
+        } else {
+            b256!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+        };
 
         let extra_data = self.extra_data();
 
@@ -251,7 +259,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             state_root,
             transactions_root,
             receipts_root,
-            withdrawals_root: Some(b256!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")),
+            withdrawals_root: Some(withdrawals_root),
             logs_bloom,
             timestamp: self.block_env.timestamp,
             mix_hash: self.block_env.prevrandao.unwrap_or_default(),
@@ -302,16 +310,18 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> Sequence
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
-        (seal, OpExecutionPayloadEnvelopeV3 {
-            execution_payload: ExecutionPayloadV3 {
-                payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-                blob_gas_used: 0,
-                excess_blob_gas: 0,
-            },
+        let payload_inner = ExecutionPayloadV3 {
+            payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
+            blob_gas_used: 0,
+            excess_blob_gas: 0,
+        };
+        (seal, OpExecutionPayloadEnvelopeV4 {
+            execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 { payload_inner, withdrawals_root },
             block_value: frag_seq.payment.to(),
             blobs_bundle: BlobsBundleV1::new(vec![]),
             should_override_builder: false,
             parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+            execution_requests: vec![],
         })
     }
 }

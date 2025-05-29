@@ -250,7 +250,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
 
             Duration::from_millis(2000).sleep();
             let (block_tx, mut block_rx) = oneshot::channel();
-            connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
+            connections.send(EngineApi::GetPayloadV4 { payload_id: PayloadId::new([0; 8]), res: block_tx });
             Duration::from_millis(100).sleep();
             let curt = Instant::now();
             let mut sealed_block = loop {
@@ -264,10 +264,10 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             };
 
             let hash = block.hash_slow();
-            let hash1 = sealed_block.execution_payload.payload_inner.payload_inner.block_hash;
+            let hash1 = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash;
             if hash1 != hash {
-                sealed_block.execution_payload.payload_inner.payload_inner.transactions = vec![];
-                let receipt = sealed_block.execution_payload.payload_inner.payload_inner.receipts_root;
+                sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.transactions = vec![];
+                let receipt = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.receipts_root;
                 if receipt == block.receipts_root {
                     info!("receipts match");
                 } else {
@@ -275,7 +275,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
                     debug_assert!(false, "receipts don't match");
                 };
 
-                let gas_used = sealed_block.execution_payload.payload_inner.payload_inner.gas_used;
+                let gas_used = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.gas_used;
 
                 if gas_used == block.gas_used() {
                     info!("gas_used matches")
@@ -284,7 +284,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
                     debug_assert!(false, "gas_used doesn't match");
                 };
 
-                let state_root = sealed_block.execution_payload.payload_inner.payload_inner.state_root;
+                let state_root = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.state_root;
 
                 if state_root == block.state_root() {
                     info!("state_root matches")
@@ -297,7 +297,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             }
 
             assert_eq!(
-                sealed_block.execution_payload.payload_inner.payload_inner.block_hash,
+                sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash,
                 block.hash_slow(),
                 "{block:#?} vs {sealed_block:#?}"
             );
@@ -356,14 +356,14 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
 
         while curt.elapsed() < *get_payload_delay {}
         let (block_tx, block_rx) = oneshot::channel();
-        connections.send(EngineApi::GetPayloadV3 { payload_id: PayloadId::new([0; 8]), res: block_tx });
+        connections.send(EngineApi::GetPayloadV4 { payload_id: PayloadId::new([0; 8]), res: block_tx });
 
         let Ok(sealed_block) = block_rx.blocking_recv() else {
             warn!("issue getting block");
             return;
         };
-        let gas = sealed_block.execution_payload.payload_inner.payload_inner.gas_used;
-        let n_txs = sealed_block.execution_payload.payload_inner.payload_inner.transactions.len();
+        let gas = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.gas_used;
+        let n_txs = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.transactions.len();
         let el = curt.elapsed();
         info!(
             "in {}: sequenced {n_txs} txs, {gas} ({:.3} MGas/s)",

@@ -227,6 +227,6 @@ mod tests {
 
         // Seal the block
         let (_seal, payload) = ctx.seal_block(seq);
-        assert_eq!(block.hash_slow(), payload.execution_payload.payload_inner.payload_inner.block_hash);
+        assert_eq!(block.hash_slow(), payload.execution_payload.payload_inner.payload_inner.payload_inner.block_hash);
     }
 }

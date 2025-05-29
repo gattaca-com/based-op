@@ -19,7 +19,7 @@ use jsonrpsee::{
     server::{RpcServiceBuilder, ServerBuilder},
 };
 use op_alloy_rpc_types::OpTransactionReceipt;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use parking_lot::RwLock;
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
@@ -486,18 +486,18 @@ impl EngineApiServer for PortalServer {
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
-    async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4> {
         debug!(%payload_id, "new request");
 
         let fallback_fut = tokio::spawn({
             let client = self.fallback_client.clone();
 
-            async move { client.get_payload_v3(payload_id).await }
+            async move { client.get_payload_v4(payload_id).await }
         });
 
         let Some(gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
 
-        let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV3, _>> = tokio::spawn(
+        let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV4, _>> = tokio::spawn(
             {
                 // only get payload from previously picked gateway
                 let fallback_client = self.fallback_client.clone();
@@ -505,15 +505,16 @@ impl EngineApiServer for PortalServer {
                 async move {
                     let gateway_payload = gateway
                         .client
-                        .get_payload_v3(payload_id)
+                        .get_payload_v4(payload_id)
                         .await
                         .inspect_err(|err| error!(%err, "failed gateway"))?;
 
                     let payload_status = fallback_client
-                        .new_payload_v3(
-                            gateway_payload.execution_payload.clone(),
+                        .new_payload_v4(
+                            gateway_payload.execution_payload.payload_inner.clone(),
                             vec![],
                             gateway_payload.parent_beacon_block_root,
+                            vec![],
                         )
                         .await
                         .inspect_err(|err| error!(%err, "failed fallback validation"))?;
@@ -538,13 +539,13 @@ impl EngineApiServer for PortalServer {
         if let Ok(gateway) = gateway.as_ref() {
             info!(
                 "block {}: successfully served from based-gateway {:?}",
-                gateway.execution_payload.payload_inner.payload_inner.block_number,
+                gateway.execution_payload.payload_inner.payload_inner.payload_inner.block_number,
                 self.current_gateway.lock().await.as_ref().unwrap()
             );
         } else if let Ok(fallback) = fallback.as_ref() {
             info!(
                 "block {}: successfully served from fallback",
-                fallback.execution_payload.payload_inner.payload_inner.block_number
+                fallback.execution_payload.payload_inner.payload_inner.payload_inner.block_number
             );
         } else {
             error!("couldn't serve a block from fallback or gateway");

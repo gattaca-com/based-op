@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
-    engine::{ExecutionPayloadV3, ExecutionPayloadV4, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
+    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
@@ -18,7 +18,9 @@ use crate::communication::messages::RpcResult;
 pub const PORTAL_CAPABILITIES: &[&str] = &[
     "engine_forkchoiceUpdatedV3",
     "engine_getPayloadV3",
+    "engine_getPayloadV4",
     "engine_newPayloadV3",
+    "engine_newPayloadV4",
     "eth_sendRawTransaction",
     // "eth_getTransactionReceipt",
     // "eth_getBlockByNumber",
@@ -35,8 +37,6 @@ pub type OpRpcBlock = alloy_rpc_types::Block<OpTxEnvelope>;
 ///
 /// ref: https://github.com/ethereum/execution-apis/tree/main/src/engine
 /// ref: https://specs.optimism.io/protocol/exec-engine.html#engine-api
-///
-/// NOTE: currently only v3 endpoints are supported
 #[rpc(client, server, namespace = "engine")]
 pub trait EngineApi {
     /// Used by the op-node to set which blocks are considered canonical.
@@ -67,26 +67,25 @@ pub trait EngineApi {
         parent_beacon_block_root: B256,
         _execution_requests: Vec<u8>,
     ) -> RpcResult<PayloadStatus> {
-        self.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root)
+        self.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await
     }
 
     /// Used to fetch an execution payload from a previous `payload_id` set in `forkchoiceUpdatedV3`
     #[method(name = "getPayloadV3")]
-    async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3>;
+    async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
+        let execution_payload = self.get_payload_v4(payload_id).await?;
 
-    #[method(name = "getPayloadV4")]
-    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4> {
-        let execution_payload = self.get_payload_v3(payload_id).await?;
-
-        Ok(OpExecutionPayloadEnvelopeV4 {
-            execution_payload: execution_payload.execution_payload,
+        Ok(OpExecutionPayloadEnvelopeV3 {
+            execution_payload: execution_payload.execution_payload.payload_inner,
             block_value: execution_payload.block_value,
             blobs_bundle: execution_payload.blobs_bundle,
             should_override_builder: execution_payload.should_override_builder,
             parent_beacon_block_root: execution_payload.parent_beacon_block_root,
-            execution_requests: vec![],
         })
     }
+
+    #[method(name = "getPayloadV4")]
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4>;
 }
 
 /// The Eth API is used to interact with the EL directly.

@@ -20,10 +20,11 @@ use bop_common::{
     typedefs::{BlockSyncMessage, DatabaseRef},
 };
 use bop_db::DatabaseRead;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::SignedTransaction;
+use reth_provider::StorageRootProvider;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
@@ -75,7 +76,7 @@ impl<Db: DatabaseRead> Sequencer<Db> {
 
 impl<Db> Actor<Db> for Sequencer<Db>
 where
-    Db: DatabaseWrite + DatabaseRead,
+    Db: DatabaseWrite + DatabaseRead + StorageRootProvider,
 {
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle block sync
@@ -95,8 +96,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0
-                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0 &&
+                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -187,7 +188,7 @@ impl<Db> SequencerState<Db> {
 
 impl<Db> SequencerState<Db>
 where
-    Db: DatabaseWrite + DatabaseRead,
+    Db: DatabaseWrite + DatabaseRead + StorageRootProvider,
 {
     /// Processes Engine API messages that drive state transitions in the sequencer.
     ///
@@ -213,7 +214,7 @@ where
             ForkChoiceUpdatedV3 { fork_choice_state, payload_attributes, .. } => {
                 self.handle_fork_choice_updated_engine_api(fork_choice_state, payload_attributes, ctx, senders)
             }
-            GetPayloadV3 { res, .. } => self.handle_get_payload_engine_api(res, ctx, senders),
+            GetPayloadV4 { res, .. } => self.handle_get_payload_engine_api(res, ctx, senders),
         }
     }
 
@@ -370,7 +371,7 @@ where
     /// 4. Returns payload to consensus layer
     fn handle_get_payload_engine_api(
         self,
-        res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
+        res: oneshot::Sender<OpExecutionPayloadEnvelopeV4>,
         ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
@@ -406,7 +407,7 @@ where
                 if ctx.config.commit_sealed_frags_to_db {
                     let sidecar =
                         ExecutionPayloadSidecar::v3(CancunPayloadFields::new(block.parent_beacon_block_root, vec![]));
-                    let block = payload_to_block(ExecutionPayload::V3(block.execution_payload), sidecar)
+                    let block = payload_to_block(ExecutionPayload::V3(block.execution_payload.payload_inner), sidecar)
                         .expect("couldn't get block from payload");
                     ctx.commit_block(&block);
                     ctx.shared_state.reset();

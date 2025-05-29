@@ -5,7 +5,7 @@ use bop_common::{
     communication::messages::{self, RpcError, RpcResult},
 };
 use jsonrpsee::core::async_trait;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use tokio::sync::oneshot;
 use tracing::{Level, trace};
 
@@ -48,11 +48,11 @@ impl EngineApiServer for RpcServer {
     }
 
     #[tracing::instrument(skip_all, ret(level = Level::TRACE))]
-    async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4> {
         trace!(%payload_id, "new request");
 
         let (tx, rx) = oneshot::channel();
-        self.send(messages::EngineApi::GetPayloadV3 { payload_id, res: tx });
+        self.send(messages::EngineApi::GetPayloadV4 { payload_id, res: tx });
 
         // wait with timeout
         let res = tokio::time::timeout(self.engine_timeout.into(), rx).await??;
