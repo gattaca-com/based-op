@@ -1549,6 +1549,7 @@ checksum = "89e25b6adfb930f02d1981565a6e5d9c547ac15a96606256d3b59040e5cd4ca3"
 name = "based-portal"
 version = "0.1.0"
 dependencies = [
+ "alloy-eips 0.14.0",
  "alloy-primitives",
  "alloy-rpc-types",
  "bop-common",
@@ -1561,6 +1562,7 @@ dependencies = [
  "parking_lot",
  "reqwest",
  "reth-rpc-layer",
+ "serde",
  "serde_json",
  "tokio",
  "tower 0.4.13",
@@ -1874,6 +1876,7 @@ dependencies = [
 name = "bop-rpc"
 version = "0.1.0"
 dependencies = [
+ "alloy-eips 0.14.0",
  "alloy-primitives",
  "alloy-rpc-types",
  "bop-common",

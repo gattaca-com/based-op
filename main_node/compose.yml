@@ -4,7 +4,7 @@ networks:
 
 services:
   op-geth:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.8-rc.1
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101503.4-rc.1
     container_name: op-geth
     networks:
       - based_op_net
@@ -50,7 +50,8 @@ services:
           --syncmode=full \
           --rpc.allow-unprotected-txs \
           --discovery.port=$OP_GETH_GOSSIP_PORT \
-          --port=$OP_GETH_GOSSIP_PORT
+          --port=$OP_GETH_GOSSIP_PORT \
+          --override.isthmus=0
 
     volumes:
       - ./data/geth:/data/geth
@@ -58,7 +59,7 @@ services:
     restart: unless-stopped
 
   op-node:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.2
     container_name: op-node
     entrypoint:
       - sh
@@ -96,6 +97,7 @@ services:
       - --p2p.sequencer.key=${OP_NODE_SEQUENCER_KEY}
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --sequencer.enabled
+      - --override.isthmus=0
 
     volumes:
       - ./data/node:/data/op-node
@@ -106,7 +108,7 @@ services:
     restart: unless-stopped
     
   op-batcher:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.2
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.13.2
     container_name: op-batcher
     networks:
       - based_op_net

@@ -3,8 +3,8 @@ configType = "standard-overrides"
 l1ChainID = L1_CHAIN_ID
 fundDevAccounts = true
 useInterop = false
-l1ContractsLocator = "tag://op-contracts/v1.8.0-rc.4"
-l2ContractsLocator = "tag://op-contracts/v1.7.0-beta.1+l2-contracts"
+l1ContractsLocator = "tag://op-contracts/v3.0.0"
+l2ContractsLocator = "tag://op-contracts/v3.0.0"
 
 [superchainRoles]
   proxyAdminOwner = "0x1eb2ffc903729a0f03966b917003800b145f56e2"

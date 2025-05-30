@@ -1,14 +1,15 @@
 use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
-use alloy_primitives::{Address, B256, Bytes, U256};
+use alloy_eips::eip7685::{EMPTY_REQUESTS_HASH, RequestsOrHash};
+use alloy_primitives::{Address, B256, Bytes, U256, b256};
 use alloy_rpc_types::{
-    BlockId, BlockNumberOrTag,
+    BlockId, BlockNumberOrTag, Withdrawal,
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient, OpNodeApiClient,
-        OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
+        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, ExecutionPayloadV4, OpGethAdminApiClient,
+        OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
     },
     communication::messages::{RpcError, RpcResult},
     utils::{uuid, wait_for_signal},
@@ -437,6 +438,61 @@ impl EngineApiServer for PortalServer {
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
+    async fn new_payload_v4(
+        &self,
+        payload: ExecutionPayloadV4,
+        versioned_hashes: Vec<B256>,
+        parent_beacon_block_root: B256,
+        requests: RequestsOrHash,
+    ) -> RpcResult<PayloadStatus> {
+        let block_number = payload.payload_inner.payload_inner.payload_inner.block_number;
+        let block_hash = payload.payload_inner.payload_inner.payload_inner.block_hash;
+        let gas_limit = payload.payload_inner.payload_inner.payload_inner.gas_limit;
+        let gas_used = payload.payload_inner.payload_inner.payload_inner.gas_used;
+        let n_txs = payload.payload_inner.payload_inner.payload_inner.transactions.len();
+        let n_withdrawals = payload.payload_inner.payload_inner.withdrawals.len();
+        let blob_gas_used = payload.payload_inner.blob_gas_used;
+        let excess_blob_gas = payload.payload_inner.excess_blob_gas;
+
+        debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
+        let response = self
+            .fallback_client
+            .new_payload_v4(payload.clone(), versioned_hashes.clone(), parent_beacon_block_root, requests.clone())
+            .await
+            .inspect_err(|e| tracing::error!("issue sending new_payload_v4 to el {e}"))?;
+
+        // send to all gateways
+        for gateway in self.gateways() {
+            let payload = payload.clone();
+            let requests = requests.clone();
+            let versioned_hashes = versioned_hashes.clone();
+
+            tokio::spawn(
+                async move {
+                    match gateway
+                        .client
+                        .new_payload_v4(payload, versioned_hashes, parent_beacon_block_root, requests)
+                        .await
+                    {
+                        Ok(res) => {
+                            if res.is_valid() {
+                                debug!(?gateway, ?res, "gateway response");
+                            } else {
+                                error!(?gateway, ?res, "gateway response");
+                            }
+                        }
+                        Err(ClientError::Call(_)) => {}
+                        Err(err) => error!(?gateway, %err, "failed gateway"),
+                    }
+                }
+                .in_current_span(),
+            );
+        }
+
+        Ok(response)
+    }
+
+    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn new_payload_v3(
         &self,
         payload: ExecutionPayloadV3,
@@ -511,10 +567,13 @@ impl EngineApiServer for PortalServer {
 
                     let payload_status = fallback_client
                         .new_payload_v4(
-                            gateway_payload.execution_payload.payload_inner.clone(),
+                            ExecutionPayloadV4 {
+                                payload_inner: gateway_payload.execution_payload.payload_inner.clone(),
+                                withdrawals_root: Some(gateway_payload.execution_payload.withdrawals_root),
+                            },
                             vec![],
                             gateway_payload.parent_beacon_block_root,
-                            vec![],
+                            RequestsOrHash::default(),
                         )
                         .await
                         .inspect_err(|err| error!(%err, "failed fallback validation"))?;

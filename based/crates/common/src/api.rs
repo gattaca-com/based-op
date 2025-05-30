@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
@@ -32,6 +33,14 @@ pub const PORTAL_CAPABILITIES: &[&str] = &[
 
 pub type OpRpcBlock = alloy_rpc_types::Block<OpTxEnvelope>;
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExecutionPayloadV4 {
+    #[serde(flatten)]
+    pub payload_inner: ExecutionPayloadV3,
+    #[serde(rename = "withdrawalsRoot")]
+    pub withdrawals_root: B256,
+}
+
 /// The Engine API is used by the consensus layer to interact with the execution layer. Here we
 /// implement a minimal subset of the API for the gateway to return blocks to the op-node
 ///
@@ -62,14 +71,11 @@ pub trait EngineApi {
     #[method(name = "newPayloadV4")]
     async fn new_payload_v4(
         &self,
-        payload: ExecutionPayloadV3,
+        payload: ExecutionPayloadV4,
         versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
-        _execution_requests: Vec<u8>,
-    ) -> RpcResult<PayloadStatus> {
-        self.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await
-    }
-
+        _execution_requests: RequestsOrHash,
+    ) -> RpcResult<PayloadStatus>;
     /// Used to fetch an execution payload from a previous `payload_id` set in `forkchoiceUpdatedV3`
     #[method(name = "getPayloadV3")]
     async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
