@@ -1,14 +1,14 @@
 use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
-use alloy_eips::eip7685::{EMPTY_REQUESTS_HASH, RequestsOrHash};
-use alloy_primitives::{Address, B256, Bytes, U256, b256};
+use alloy_eips::eip7685::RequestsOrHash;
+use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
-    BlockId, BlockNumberOrTag, Withdrawal,
+    BlockId, BlockNumberOrTag, 
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, ExecutionPayloadV4, OpGethAdminApiClient,
+        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient,
         OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
     },
     communication::messages::{RpcError, RpcResult},
@@ -20,7 +20,7 @@ use jsonrpsee::{
     server::{RpcServiceBuilder, ServerBuilder},
 };
 use op_alloy_rpc_types::OpTransactionReceipt;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
 use parking_lot::RwLock;
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
@@ -440,7 +440,7 @@ impl EngineApiServer for PortalServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
     async fn new_payload_v4(
         &self,
-        payload: ExecutionPayloadV4,
+        payload: OpExecutionPayloadV4,
         versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
         requests: RequestsOrHash,
@@ -567,7 +567,7 @@ impl EngineApiServer for PortalServer {
 
                     let payload_status = fallback_client
                         .new_payload_v4(
-                            ExecutionPayloadV4 {
+                            OpExecutionPayloadV4 {
                                 payload_inner: gateway_payload.execution_payload.payload_inner.clone(),
                                 withdrawals_root: gateway_payload.execution_payload.withdrawals_root,
                             },

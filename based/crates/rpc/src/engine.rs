@@ -2,11 +2,11 @@ use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
-    api::{EngineApiServer, ExecutionPayloadV4},
+    api::EngineApiServer,
     communication::messages::{self, RpcError, RpcResult},
 };
 use jsonrpsee::core::async_trait;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
 use tokio::sync::oneshot;
 use tracing::{Level, trace};
 
@@ -45,7 +45,7 @@ impl EngineApiServer for RpcServer {
         trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
 
         self.send(messages::EngineApi::NewPayloadV4 {
-            payload: ExecutionPayloadV4 { payload_inner: payload, withdrawals_root: B256::ZERO },
+            payload: OpExecutionPayloadV4 { payload_inner: payload, withdrawals_root: B256::ZERO },
             versioned_hashes,
             parent_beacon_block_root,
         });
@@ -55,7 +55,7 @@ impl EngineApiServer for RpcServer {
     #[tracing::instrument(skip_all,  ret(level = Level::TRACE))]
     async fn new_payload_v4(
         &self,
-        payload: ExecutionPayloadV4,
+        payload: OpExecutionPayloadV4,
         versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
         _requests: RequestsOrHash,

@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
 
-use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header};
+use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::merge::BEACON_NONCE;
 use alloy_rpc_types::engine::{
     BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
@@ -10,7 +10,7 @@ use bop_common::{
     debug_panic,
     p2p::{FragV0, SealV0},
     shared::SharedState,
-    telemetry::{TelemetryUpdate, telemetry_queue},
+    telemetry::{telemetry_queue, TelemetryUpdate},
     time::Timer,
     transaction::Transaction,
     typedefs::*,
@@ -20,16 +20,16 @@ use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use op_revm::OpSpecId;
 use reth_chainspec::EthereumHardforks;
-use reth_evm::{ConfigureEvm, block::SystemCaller, env::EvmEnv, execute::ProviderError};
+use reth_evm::{block::SystemCaller, env::EvmEnv, execute::ProviderError, ConfigureEvm};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_consensus::isthmus::withdrawals_root;
 use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use reth_provider::StorageRootProvider;
-use revm_primitives::{B256, Bytes, U256, b256};
+use revm_primitives::{b256, Bytes, B256, U256};
 use tracing::info;
 
-use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
+use crate::{block_sync::BlockSync, sorting::SortingData, FragSequence, SequencerConfig};
 
 /// These are used to time different parts of the sequencer loop
 pub struct SequencerTimers {
@@ -143,6 +143,10 @@ impl<Db> SequencerContext<Db> {
     pub fn timestamp(&self) -> u64 {
         self.block_env.timestamp
     }
+
+    pub fn is_prague_active(&self) -> bool {
+        self.chain_spec().is_prague_active_at_timestamp(self.timestamp())
+    }
 }
 
 impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
@@ -243,10 +247,16 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let state_changes = self.shared_state.as_mut().take_state_changes();
         let state_root = self.db.calculate_state_root(&state_changes).unwrap().0;
 
-        let withdrawals_root = if self.chain_spec().fork(OpHardfork::Isthmus).active_at_timestamp(self.timestamp()) {
-            withdrawals_root(&state_changes, &self.db).expect("something wrong with withdrawals root calculation")
+        let (withdrawals_root, requests_hash) = if self.is_prague_active() {
+            (
+                Some(
+                    withdrawals_root(&state_changes, &self.db)
+                        .expect("something wrong with withdrawals root calculation"),
+                ),
+                Some(b256!("0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")),
+            )
         } else {
-            b256!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+            (Some(b256!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")), None)
         };
 
         let extra_data = self.extra_data();
@@ -260,7 +270,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             state_root,
             transactions_root,
             receipts_root,
-            withdrawals_root: Some(withdrawals_root),
+            withdrawals_root,
             logs_bloom,
             timestamp: self.block_env.timestamp,
             mix_hash: self.block_env.prevrandao.unwrap_or_default(),
@@ -274,7 +284,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             parent_beacon_block_root,
             blob_gas_used: Some(0),
             excess_blob_gas: Some(0),
-            requests_hash: None,
+            requests_hash,
         };
 
         let v1 = ExecutionPayloadV1 {
@@ -317,7 +327,10 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             excess_blob_gas: 0,
         };
         (seal, OpExecutionPayloadEnvelopeV4 {
-            execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 { payload_inner, withdrawals_root },
+            execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
+                payload_inner,
+                withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+            },
             block_value: frag_seq.payment.to(),
             blobs_bundle: BlobsBundleV1::new(vec![]),
             should_override_builder: false,
@@ -332,7 +345,6 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// and clear the existing pool based on that
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
     pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
-        tracing::info!("{:?}", block.header());
         let blocks_to_fetch = match self.block_executor.commit_block(block, &self.db, true, &mut self.telemetry) {
             Ok(blocks_to_fetch) => blocks_to_fetch,
             Err(e) => {

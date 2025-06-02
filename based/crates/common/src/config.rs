@@ -24,7 +24,6 @@ pub struct GatewayArgs {
         long,
         value_name = "CHAIN_OR_PATH",
         long_help = OpChainSpecParser::help_message(),
-        default_value = OpChainSpecParser::SUPPORTED_CHAINS[6],
         value_parser = OpChainSpecParser::parser(),
     )]
     pub chain: Arc<OpChainSpec>,

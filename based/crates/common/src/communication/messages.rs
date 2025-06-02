@@ -10,8 +10,8 @@ use alloy_rpc_types::engine::{
     PayloadId,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
-use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,10 @@ use thiserror::Error;
 use tokio::sync::oneshot::{self};
 
 use crate::{
-    api::ExecutionPayloadV4, db::{DBFrag, DBSorting}, time::{Duration, IngestionTime, Instant, Nanos}, transaction::{SimulatedTx, Transaction}, typedefs::*
+    db::{DBFrag, DBSorting},
+    time::{Duration, IngestionTime, Instant, Nanos},
+    transaction::{SimulatedTx, Transaction},
+    typedefs::*,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
@@ -159,7 +162,7 @@ impl<T> From<InternalMessage<T>> for Nanos {
 #[derive(Debug, AsRefStr)]
 pub enum EngineApi {
     ForkChoiceUpdatedV3 { fork_choice_state: ForkchoiceState, payload_attributes: Option<Box<OpPayloadAttributes>> },
-    NewPayloadV4 { payload: ExecutionPayloadV4, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
+    NewPayloadV4 { payload: OpExecutionPayloadV4, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
     GetPayloadV4 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV4> },
 }
 impl EngineApi {
@@ -213,10 +216,7 @@ impl EngineApi {
             blob_gas_used: Default::default(),
             excess_blob_gas: Default::default(),
         };
-        let v4 = ExecutionPayloadV4{
-            payload_inner: v3,
-            withdrawals_root: EMPTY_WITHDRAWALS 
-        };
+        let v4 = OpExecutionPayloadV4 { payload_inner: v3, withdrawals_root: EMPTY_WITHDRAWALS };
         let new_payload = EngineApi::NewPayloadV4 {
             payload: v4,
             versioned_hashes: Default::default(),
