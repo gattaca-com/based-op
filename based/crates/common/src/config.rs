@@ -32,7 +32,7 @@ pub struct GatewayArgs {
     #[arg(long = "rpc.host", default_value_t = Ipv4Addr::UNSPECIFIED)]
     pub rpc_host: Ipv4Addr,
     /// The port to run the engine_ and eth_ RPC
-    #[arg(long = "rpc.port", default_value_t = 9090)]
+    #[arg(long = "rpc.port", default_value_t = 9997)]
     pub rpc_port: u16,
     #[arg(long = "rpc.jwt")]
     pub rpc_jwt: String,

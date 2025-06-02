@@ -6,9 +6,11 @@ useInterop = false
 l1ContractsLocator = "tag://op-contracts/v3.0.0"
 l2ContractsLocator = "tag://op-contracts/v3.0.0"
 
+l1DevGenesisParams.pragueTimeOffset = 0
+
 [superchainRoles]
   proxyAdminOwner = "0x1eb2ffc903729a0f03966b917003800b145f56e2"
-  protocolVersionsOwner = "0x79add5713b383daa0a138d3c4780c7a1804a8090"
+  protocolVersionsOwner = "0xfd1d2e729ae8eee2e146c033bf4400fe75284301"
   guardian = "0x7a50f00e8d05b95f98fe38d8bee366a7324dcf7e"
 
 [[chains]]

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::{Address, B256, Bytes, U256};
@@ -39,6 +39,14 @@ pub struct ExecutionPayloadV4 {
     pub payload_inner: ExecutionPayloadV3,
     #[serde(rename = "withdrawalsRoot")]
     pub withdrawals_root: B256,
+}
+
+impl Deref for ExecutionPayloadV4 {
+    type Target = ExecutionPayloadV3;
+
+    fn deref(&self) -> &Self::Target {
+        &self.payload_inner
+    }
 }
 
 /// The Engine API is used by the consensus layer to interact with the execution layer. Here we

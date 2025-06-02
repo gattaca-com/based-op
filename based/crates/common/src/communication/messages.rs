@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::{BlockHeader, Transaction as TransactionTrait};
+use alloy_consensus::{constants::EMPTY_WITHDRAWALS, BlockHeader, Transaction as TransactionTrait};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, PayloadAttributes, PayloadError,
@@ -20,10 +20,7 @@ use thiserror::Error;
 use tokio::sync::oneshot::{self};
 
 use crate::{
-    db::{DBFrag, DBSorting},
-    time::{Duration, IngestionTime, Instant, Nanos},
-    transaction::{SimulatedTx, Transaction},
-    typedefs::*,
+    api::ExecutionPayloadV4, db::{DBFrag, DBSorting}, time::{Duration, IngestionTime, Instant, Nanos}, transaction::{SimulatedTx, Transaction}, typedefs::*
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
@@ -162,7 +159,7 @@ impl<T> From<InternalMessage<T>> for Nanos {
 #[derive(Debug, AsRefStr)]
 pub enum EngineApi {
     ForkChoiceUpdatedV3 { fork_choice_state: ForkchoiceState, payload_attributes: Option<Box<OpPayloadAttributes>> },
-    NewPayloadV3 { payload: ExecutionPayloadV3, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
+    NewPayloadV4 { payload: ExecutionPayloadV4, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
     GetPayloadV4 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV4> },
 }
 impl EngineApi {
@@ -216,8 +213,12 @@ impl EngineApi {
             blob_gas_used: Default::default(),
             excess_blob_gas: Default::default(),
         };
-        let new_payload = EngineApi::NewPayloadV3 {
-            payload: v3,
+        let v4 = ExecutionPayloadV4{
+            payload_inner: v3,
+            withdrawals_root: EMPTY_WITHDRAWALS 
+        };
+        let new_payload = EngineApi::NewPayloadV4 {
+            payload: v4,
             versioned_hashes: Default::default(),
             parent_beacon_block_root: block
                 .parent_beacon_block_root()

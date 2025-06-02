@@ -569,7 +569,7 @@ impl EngineApiServer for PortalServer {
                         .new_payload_v4(
                             ExecutionPayloadV4 {
                                 payload_inner: gateway_payload.execution_payload.payload_inner.clone(),
-                                withdrawals_root: Some(gateway_payload.execution_payload.withdrawals_root),
+                                withdrawals_root: gateway_payload.execution_payload.withdrawals_root,
                             },
                             vec![],
                             gateway_payload.parent_beacon_block_root,

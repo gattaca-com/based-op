@@ -19,6 +19,7 @@ use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use op_revm::OpSpecId;
+use reth_chainspec::EthereumHardforks;
 use reth_evm::{ConfigureEvm, block::SystemCaller, env::EvmEnv, execute::ProviderError};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_consensus::isthmus::withdrawals_root;
@@ -331,6 +332,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
     /// and clear the existing pool based on that
     /// Returns a list of block numbers to fetch. This will be used in the case of a reorg.
     pub fn commit_block(&mut self, block: &BlockSyncMessage) -> Option<(u64, u64)> {
+        tracing::info!("{:?}", block.header());
         let blocks_to_fetch = match self.block_executor.commit_block(block, &self.db, true, &mut self.telemetry) {
             Ok(blocks_to_fetch) => blocks_to_fetch,
             Err(e) => {
