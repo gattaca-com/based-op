@@ -13,6 +13,8 @@ OS := $(shell uname -s)
 
 # Variables
 IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:latest
+## This image is totally vanilla, but automatically sets isthmus at genesis when using v3.0.0 contracts
+IMAGE_OP_DEPLOYER:=ghcr.io/gattaca-com/based-optimism/based-op-deployer:latest
 
 
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
@@ -232,7 +234,7 @@ deploy-chain:
 		exit 1; \
 	fi
 	@mkdir -p .local_main_node/config
-	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) local_based_op_deployer -c "/usr/local/bin/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID)  --workdir /config && chmod 666 /config/*"
+	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) -c "/usr/local/bin/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID)  --workdir /config && chmod 666 /config/*"
 	@wallet_batcher=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
 	wallet_proposer=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
 	wallet_main=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(MAIN_KEY) | tail -n1); \
@@ -245,13 +247,10 @@ deploy-chain:
 		  main_node/intent.template.toml \
 		  > .local_main_node/config/intent.toml
 
-	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) local_based_op_deployer op-deployer apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY)
-	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) local_based_op_deployer op-deployer inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) local_based_op_deployer op-deployer inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) --entrypoint sh  local_based_op_deployer -c "chmod 666 /config/*"
-	# @docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.config.isthmusTime = 10' /config/genesis.json > $$(pwd)/.local_main_node/config/genesis.json.tmp && mv $$(pwd)/.local_main_node/config/genesis.json.tmp $$(pwd)/.local_main_node/config/genesis.json
-	# @docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.config.pragueTime = 10' /config/genesis.json > $$(pwd)/.local_main_node/config/genesis.json.tmp && mv $$(pwd)/.local_main_node/config/genesis.json.tmp $$(pwd)/.local_main_node/config/genesis.json
-	# @docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.isthmus_time = 10' /config/rollup.json > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) op-deployer apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY)
+	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) op-deployer inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) op-deployer inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) --entrypoint sh  $(IMAGE_OP_DEPLOYER) -c "chmod 666 /config/*"
 
 	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
 	@echo "...Done deploying. See chain config in"

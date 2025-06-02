@@ -50,9 +50,7 @@ services:
           --syncmode=full \
           --rpc.allow-unprotected-txs \
           --discovery.port=$OP_GETH_GOSSIP_PORT \
-          --port=$OP_GETH_GOSSIP_PORT \
-          --override.isthmus=0
-
+          --port=$OP_GETH_GOSSIP_PORT
     volumes:
       - ./data/geth:/data/geth
       - ./config:/config
@@ -97,7 +95,6 @@ services:
       - --p2p.sequencer.key=${OP_NODE_SEQUENCER_KEY}
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --sequencer.enabled
-      - --override.isthmus=0
 
     volumes:
       - ./data/node:/data/op-node
