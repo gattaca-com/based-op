@@ -506,7 +506,7 @@ impl Data {
             }
             if let Ok(mut peers) = consumers
                 .peers_based_op_geth()
-                .inspect_err(|e| tracing::warn!("couldn't get peers of local based-op-node: {e}"))
+                .inspect_err(|e| tracing::warn!("couldn't get peers of local based-op-geth: {e}"))
             {
                 peers.sort_unstable_by(|d1, d2| d1.id.cmp(&d2.id));
                 self.peers_local_op_geth = peers;

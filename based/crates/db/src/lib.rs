@@ -19,10 +19,10 @@ use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::{RecoveredBlock, StorageEntry};
 use reth_provider::{
     BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, OriginalValuesKnown, ProviderFactory,
-    StateWriter, TrieWriter, providers::ConsistentDbView,
+    ProviderResult, StateWriter, StorageRootProvider, TrieWriter, providers::ConsistentDbView,
 };
 use reth_storage_api::{DBProvider, HashedPostStateProvider};
-use reth_trie::{StateRoot, TrieInput};
+use reth_trie::{HashedStorage, StateRoot, StorageMultiProof, StorageProof, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
 use reth_trie_parallel::root::ParallelStateRoot;
@@ -270,5 +270,29 @@ impl Database for SequencerDB {
     #[inline]
     fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
         self.block_hash_ref(number)
+    }
+}
+
+impl StorageRootProvider for SequencerDB {
+    fn storage_root(&self, address: Address, hashed_storage: HashedStorage) -> ProviderResult<B256> {
+        self.provider()?.latest().storage_root(address, hashed_storage)
+    }
+
+    fn storage_proof(
+        &self,
+        address: Address,
+        slot: B256,
+        hashed_storage: HashedStorage,
+    ) -> ProviderResult<StorageProof> {
+        self.provider()?.latest().storage_proof(address, slot, hashed_storage)
+    }
+
+    fn storage_multiproof(
+        &self,
+        address: Address,
+        slots: &[B256],
+        hashed_storage: HashedStorage,
+    ) -> ProviderResult<StorageMultiProof> {
+        self.provider()?.latest().storage_multiproof(address, slots, hashed_storage)
     }
 }

@@ -3,15 +3,15 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::{BlockHeader, Transaction as TransactionTrait};
+use alloy_consensus::{constants::EMPTY_WITHDRAWALS, BlockHeader, Transaction as TransactionTrait};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, PayloadAttributes, PayloadError,
     PayloadId,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
-use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
 use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
@@ -162,8 +162,8 @@ impl<T> From<InternalMessage<T>> for Nanos {
 #[derive(Debug, AsRefStr)]
 pub enum EngineApi {
     ForkChoiceUpdatedV3 { fork_choice_state: ForkchoiceState, payload_attributes: Option<Box<OpPayloadAttributes>> },
-    NewPayloadV3 { payload: ExecutionPayloadV3, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
-    GetPayloadV3 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV3> },
+    NewPayloadV4 { payload: OpExecutionPayloadV4, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
+    GetPayloadV4 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV4> },
 }
 impl EngineApi {
     pub fn messages_from_block(
@@ -216,8 +216,9 @@ impl EngineApi {
             blob_gas_used: Default::default(),
             excess_blob_gas: Default::default(),
         };
-        let new_payload = EngineApi::NewPayloadV3 {
-            payload: v3,
+        let v4 = OpExecutionPayloadV4 { payload_inner: v3, withdrawals_root: EMPTY_WITHDRAWALS };
+        let new_payload = EngineApi::NewPayloadV4 {
+            payload: v4,
             versioned_hashes: Default::default(),
             parent_beacon_block_root: block
                 .parent_beacon_block_root()
