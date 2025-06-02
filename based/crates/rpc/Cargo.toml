@@ -12,6 +12,7 @@ jsonrpsee.workspace = true
 op-alloy-consensus.workspace = true
 op-alloy-rpc-types.workspace = true
 op-alloy-rpc-types-engine.workspace = true
+alloy-eips.workspace =true
 reqwest.workspace = true
 reth-optimism-primitives.workspace = true
 serde_json.workspace = true
