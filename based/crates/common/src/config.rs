@@ -24,7 +24,6 @@ pub struct GatewayArgs {
         long,
         value_name = "CHAIN_OR_PATH",
         long_help = OpChainSpecParser::help_message(),
-        default_value = OpChainSpecParser::SUPPORTED_CHAINS[6],
         value_parser = OpChainSpecParser::parser(),
     )]
     pub chain: Arc<OpChainSpec>,
@@ -32,7 +31,7 @@ pub struct GatewayArgs {
     #[arg(long = "rpc.host", default_value_t = Ipv4Addr::UNSPECIFIED)]
     pub rpc_host: Ipv4Addr,
     /// The port to run the engine_ and eth_ RPC
-    #[arg(long = "rpc.port", default_value_t = 9090)]
+    #[arg(long = "rpc.port", default_value_t = 9997)]
     pub rpc_port: u16,
     #[arg(long = "rpc.jwt")]
     pub rpc_jwt: String,

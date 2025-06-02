@@ -1,9 +1,21 @@
-# fill out env_example and copy it to .env besides this file
+networks:
+  based_op_net:
+    external: true
+
 services:
   op-geth:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.8-rc.1
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101503.4-rc.1
     container_name: op-geth
-    network_mode: "host"
+    networks:
+      - based_op_net
+    ports:
+      - "${OP_GETH_RPC_PORT}:${OP_GETH_RPC_PORT}"
+      - "${OP_GETH_WS_PORT}:${OP_GETH_WS_PORT}"
+      - "${OP_GETH_ENGINE_RPC_PORT}:${OP_GETH_ENGINE_RPC_PORT}"
+      - "${OP_GETH_GOSSIP_PORT}:${OP_GETH_GOSSIP_PORT}/tcp"
+      - "${OP_GETH_GOSSIP_PORT}:${OP_GETH_GOSSIP_PORT}/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -39,41 +51,48 @@ services:
           --rpc.allow-unprotected-txs \
           --discovery.port=$OP_GETH_GOSSIP_PORT \
           --port=$OP_GETH_GOSSIP_PORT
-
     volumes:
       - ./data/geth:/data/geth
       - ./config:/config
     restart: unless-stopped
 
   op-node:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2
-    network_mode: "host"
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.2
     container_name: op-node
     entrypoint:
       - sh
       - -c
       - |
-        sleep "${OP_NODE_DELAY:-15}" &&
+        sleep "${OP_NODE_DELAY:-10}" &&
         exec op-node "$@"
+    networks:
+      - based_op_net
+    ports:
+      - "${OP_NODE_RPC_PORT}:${OP_NODE_RPC_PORT}"
+      - "${OP_NODE_GOSSIP_PORT}:${OP_NODE_GOSSIP_PORT}/tcp"
+      - "${OP_NODE_GOSSIP_PORT}:${OP_NODE_GOSSIP_PORT}/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Override inter-container URLs for bridge networking
     command:
       - op-node
-      - --l2=http://0.0.0.0:$PORTAL_PORT
+      - --l2=http://based-portal:${PORTAL_PORT}
       - --l2.jwt-secret=/config/jwt
       - --verifier.l1-confs=1
       - --rollup.config=/config/rollup.json
       - --rpc.addr=0.0.0.0
-      - --rpc.port=$OP_NODE_RPC_PORT
+      - --rpc.port=${OP_NODE_RPC_PORT}
       - --rpc.enable-admin
-      - --l1=$L1_RPC_URL
+      - --l1=${L1_RPC_URL}
       - --l1.rpckind=standard
-      - --l1.beacon=$L1_BEACON_RPC_URL
-      - --p2p.advertise.ip=$OP_NODE_GOSSIP_IP
-      - --p2p.advertise.tcp=$OP_NODE_GOSSIP_PORT
-      - --p2p.advertise.udp=$OP_NODE_GOSSIP_PORT
+      - --l1.beacon=${L1_BEACON_RPC_URL}
+      - --p2p.advertise.ip=${OP_NODE_GOSSIP_IP}
+      - --p2p.advertise.tcp=${OP_NODE_GOSSIP_PORT}
+      - --p2p.advertise.udp=${OP_NODE_GOSSIP_PORT}
       - --p2p.listen.ip=0.0.0.0
-      - --p2p.listen.tcp=$OP_NODE_GOSSIP_PORT
-      - --p2p.listen.udp=$OP_NODE_GOSSIP_PORT
-      - --p2p.sequencer.key=$OP_NODE_SEQUENCER_KEY
+      - --p2p.listen.tcp=${OP_NODE_GOSSIP_PORT}
+      - --p2p.listen.udp=${OP_NODE_GOSSIP_PORT}
+      - --p2p.sequencer.key=${OP_NODE_SEQUENCER_KEY}
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --sequencer.enabled
 
@@ -86,13 +105,19 @@ services:
     restart: unless-stopped
     
   op-batcher:
-    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.2
-    network_mode: "host"
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.13.2
     container_name: op-batcher
+    networks:
+      - based_op_net
+    ports:
+      - "8548:8548"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Override inter-container URLs for bridge networking
     command:
       - op-batcher
-      - --l2-eth-rpc=http://0.0.0.0:$PORTAL_PORT
-      - --rollup-rpc=http://0.0.0.0:$OP_NODE_RPC_PORT
+      - --l2-eth-rpc=http://based-portal:${PORTAL_PORT}
+      - --rollup-rpc=http://op-node:${OP_NODE_RPC_PORT}
       - --sub-safety-margin=6
       - --num-confirmations=1
       - --safe-abort-nonce-too-low-count=3
@@ -101,8 +126,8 @@ services:
       - --rpc.port=8548
       - --rpc.enable-admin
       - --max-channel-duration=50
-      - --l1-eth-rpc=$L1_RPC_URL
-      - --private-key=$OP_BATCHER_PRIVATE_KEY
+      - --l1-eth-rpc=${L1_RPC_URL}
+      - --private-key=${OP_BATCHER_PRIVATE_KEY}
       - --max-blocks-per-span-batch=10
       - --data-availability-type=blobs
     depends_on:
@@ -111,18 +136,25 @@ services:
 
   op-proposer:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.10.0
-    network_mode: "host"
     container_name: op-proposer
+    networks:
+      - based_op_net
+    ports:
+      - "8560:8560"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Override inter-container URLs for bridge networking
     command:
       - op-proposer
       - --poll-interval=12s
       - --rpc.port=8560
-      - --rollup-rpc=http://0.0.0.0:$OP_NODE_RPC_PORT
-      - --game-factory-address=$DISPUTE_GAME_FACTORY_ADDRESS
-      - --game-type=$DISPUTE_GAME_TYPE
-      - --private-key=$OP_PROPOSER_PRIVATE_KEY
-      - --l1-eth-rpc=$L1_RPC_URL
+      - --rollup-rpc=http://op-node:${OP_NODE_RPC_PORT}
+      - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
+      - --game-type=${DISPUTE_GAME_TYPE}
+      - --private-key=${OP_PROPOSER_PRIVATE_KEY}
+      - --l1-eth-rpc=${L1_RPC_URL}
       - --proposal-interval=2s
+
     depends_on:
       - op-node
     restart: unless-stopped
@@ -130,13 +162,19 @@ services:
   based-portal:
     image: ghcr.io/gattaca-com/based-op/based-portal:latest 
     pull_policy: always
-    network_mode: "host"
     container_name: based-portal
+    networks:
+      - based_op_net
+    ports:
+      - "${PORTAL_PORT}:${PORTAL_PORT}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Override inter-container URLs for bridge networking
     command:
-      - --fallback.eth_url=http://0.0.0.0:$OP_GETH_RPC_PORT
-      - --fallback.engine_url=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
-      - --op_node.url=http://0.0.0.0:$OP_NODE_RPC_PORT
-      - --registry.url=http://0.0.0.0:$REGISTRY_PORT
+      - --fallback.eth_url=http://op-geth:${OP_GETH_RPC_PORT}
+      - --fallback.engine_url=http://op-geth:${OP_GETH_ENGINE_RPC_PORT}
+      - --op_node.url=http://op-node:${OP_NODE_RPC_PORT}
+      - --registry.url=http://based-registry:${REGISTRY_PORT}
       - --gateway.timeout_ms=200
     volumes:
       - ./config:/config
@@ -145,21 +183,30 @@ services:
   based-registry:
     image: ghcr.io/gattaca-com/based-op/based-registry:latest
     pull_policy: always
-    network_mode: "host"
     container_name: based-registry
+    networks:
+      - based_op_net
+    ports:
+      - "${REGISTRY_PORT}:${REGISTRY_PORT}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Override inter-container URLs for bridge networking
     command:
       - --registry.path=/config/registry.json
-      - --portal.url=http://0.0.0.0:$OP_GETH_RPC_PORT
+      - --portal.url=http://op-geth:${OP_GETH_RPC_PORT}
       - --portal.timeout_ms=100
-      - --port=$REGISTRY_PORT
+      - --port=${REGISTRY_PORT}
     volumes: 
       - ./config:/config
     restart: unless-stopped
+    
   restarter:
     image: docker:cli
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
     command: ["/bin/sh", "-c", "while true; do sleep 3600; docker restart op-batcher; done"]
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 ################################################################################
 # Postgres for Blockscout
@@ -168,7 +215,6 @@ services:
     image: postgres:14-alpine
     container_name: blockscout-postgres
     restart: unless-stopped
-    network_mode: "host"          # everything else in your stack is host-mode already
     environment:
       # these credentials will be baked into the Blockscout DATABASE_URL below
       POSTGRES_USER: blockscout
@@ -177,6 +223,12 @@ services:
     volumes:
       - ./data/blockscout-postgres:/var/lib/postgresql/data
     shm_size: '50gb'
+    networks:
+      - based_op_net
+    ports:
+      - "5432:5432"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 ################################################################################
 # Blockscout explorer
@@ -189,18 +241,21 @@ services:
       - -c
       - bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()" && bin/blockscout start
     
-    network_mode: "host"          # everything else in your stack is host-mode already
+    networks:
+      - based_op_net
+    ports:
+      - "${BLOCKSCOUT_PORT}:${BLOCKSCOUT_PORT}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - op-node                  # need the L2 node up to serve RPC
       - blockscout-postgres      # need the DB up first
     environment:
-      # point to the Postgres above
-      DATABASE_URL:     "postgresql://blockscout:blockscout@0.0.0.0:5432/blockscout"
+      DATABASE_URL: "postgresql://blockscout:blockscout@blockscout-postgres:5432/blockscout"
       # point to your L2 JSON-RPC:
-      ETHEREUM_JSONRPC_HTTP_URL: "http://0.0.0.0:${OP_GETH_RPC_PORT}"
-      # WebSockets (if you want to enable filters/tx-watch)
-      ETHEREUM_JSONRPC_WS_URL:   "ws://0.0.0.0:${OP_GETH_WS_PORT}"
-      ETHEREUM_JSONRPC_TRACE_URL: "http://0.0.0.0:${OP_GETH_RPC_PORT}"
+      ETHEREUM_JSONRPC_HTTP_URL: "http://op-geth:${OP_GETH_RPC_PORT}"
+      ETHEREUM_JSONRPC_WS_URL: "ws://op-geth:${OP_GETH_WS_PORT}"
+      ETHEREUM_JSONRPC_TRACE_URL: "http://op-geth:${OP_GETH_RPC_PORT}"
       ETHEREUM_JSONRPC_VARIANT: "geth"
       SECRET_KEY_BASE: "56NtB48ear7+wMSf0IQuWDAAazhpb31qyc7GiyspBP2vh7t5zlCsF5QDv76chXeN"
       # A “network name” for Blockscout’s UI
@@ -209,5 +264,6 @@ services:
       # disable Subgraph support if you don’t have one
       ECTO_USE_SSL:   "false"
       SSG_ENABLED:    "false"
+      PORT: "${BLOCKSCOUT_PORT}"
     # no ports: host-mode means Blockscout binds to 4000 on the host automatically
 

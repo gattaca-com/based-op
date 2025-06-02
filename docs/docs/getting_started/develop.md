@@ -13,7 +13,7 @@ For local development, you will also need:
 
 ### Quick start
 #### With existing OP chain
-The following steps have been tested on Sepolia, with a previously deployed L2 chain (non-pectra) 
+The following steps have been tested on Sepolia, with a previously deployed L2 chain 
 1. locate your `rollup.json`, `genesis.json` and `state.json` files
 2. run `make config-main-node OP_NODE_DATA_DIR=<path/to/op-node/data> OP_GETH_DATA_DIR=<path/to/op-geth/data> ROLLUP_JSON=<path/to/rollup.json> GENESIS_JSON=<path/to/genesis.json> STATE_JSON=<path/to/state.json>`
 3. there should be some files set up in `.local_main_node`

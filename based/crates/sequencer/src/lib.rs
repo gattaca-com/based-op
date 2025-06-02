@@ -1,29 +1,32 @@
 use std::sync::Arc;
 
 use alloy_consensus::BlockHeader;
+use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{
-    CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV3, ForkchoiceState,
+    CancunPayloadFields, ExecutionPayload, ExecutionPayloadSidecar, ForkchoiceState, PraguePayloadFields,
 };
 use bop_common::{
     actor::Actor,
     communication::{
-        Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
         messages::{self, BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
+        Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
     },
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
     shared::SharedState,
-    telemetry::{self, Telemetry, TelemetryUpdate, system::SystemNotification},
+    telemetry::{self, system::SystemNotification, Telemetry, TelemetryUpdate},
     time::{Duration, Repeater},
     transaction::Transaction,
     typedefs::{BlockSyncMessage, DatabaseRef},
 };
 use bop_db::DatabaseRead;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
-use reth_primitives_traits::SignedTransaction;
+use reth_primitives_traits::{block::TestBlock, SignedTransaction};
+use reth_provider::StorageRootProvider;
+use revm_primitives::b256;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
@@ -43,13 +46,21 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 pub fn payload_to_block(
-    payload: ExecutionPayload,
+    payload: OpExecutionPayloadV4,
     sidecar: ExecutionPayloadSidecar,
 ) -> Result<BlockSyncMessage, BlockSyncError> {
-    let block = payload.try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
+    let withdrawals_root = payload.withdrawals_root;
+    let mut block =
+        ExecutionPayload::V3(payload.payload_inner).try_into_block_with_sidecar::<OpTransactionSigned>(&sidecar)?;
     let mut block_senders = vec![];
     for tx in &block.body.transactions {
         block_senders.push(tx.recover_signer_unchecked()?);
+    }
+    if withdrawals_root != B256::ZERO {
+        block.header_mut().withdrawals_root = Some(withdrawals_root)
+    } else {
+        block.header_mut().withdrawals_root =
+            Some(b256!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"));
     }
     Ok(RecoveredBlock::new_unhashed(block, block_senders))
 }
@@ -75,7 +86,7 @@ impl<Db: DatabaseRead> Sequencer<Db> {
 
 impl<Db> Actor<Db> for Sequencer<Db>
 where
-    Db: DatabaseWrite + DatabaseRead,
+    Db: DatabaseWrite + DatabaseRead + StorageRootProvider,
 {
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle block sync
@@ -95,8 +106,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0
-                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0 &&
+                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -187,7 +198,7 @@ impl<Db> SequencerState<Db> {
 
 impl<Db> SequencerState<Db>
 where
-    Db: DatabaseWrite + DatabaseRead,
+    Db: DatabaseWrite + DatabaseRead + StorageRootProvider,
 {
     /// Processes Engine API messages that drive state transitions in the sequencer.
     ///
@@ -207,13 +218,13 @@ where
         use EngineApi::*;
 
         match msg {
-            NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
+            NewPayloadV4 { payload, versioned_hashes, parent_beacon_block_root, .. } => {
                 self.handle_new_payload_engine_api(ctx, senders, payload, versioned_hashes, parent_beacon_block_root)
             }
             ForkChoiceUpdatedV3 { fork_choice_state, payload_attributes, .. } => {
                 self.handle_fork_choice_updated_engine_api(fork_choice_state, payload_attributes, ctx, senders)
             }
-            GetPayloadV3 { res, .. } => self.handle_get_payload_engine_api(res, ctx, senders),
+            GetPayloadV4 { res, .. } => self.handle_get_payload_engine_api(res, ctx, senders),
         }
     }
 
@@ -227,14 +238,16 @@ where
         self,
         ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
-        payload: ExecutionPayloadV3,
+        payload: OpExecutionPayloadV4,
         versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
     ) -> SequencerState<Db> {
         use SequencerState::*;
         TelemetryUpdate::send(
             Uuid::nil(),
-            Telemetry::System(SystemNotification::NewPayload(payload.payload_inner.payload_inner.block_number)),
+            Telemetry::System(SystemNotification::NewPayload(
+                payload.payload_inner.payload_inner.payload_inner.block_number,
+            )),
             &mut ctx.telemetry,
         );
         if matches!(self, Sorting(_, _)) {
@@ -242,7 +255,7 @@ where
             return self;
         }
         let head_bn = ctx.db.head_block_number().expect("couldn't get db");
-        let bn = payload.payload_inner.payload_inner.block_number;
+        let bn = payload.payload_inner.payload_inner.payload_inner.block_number;
         if bn > head_bn + 1 {
             return Self::sync_until(head_bn + 1, bn, senders);
         };
@@ -250,15 +263,21 @@ where
         match self {
             // Default path once synced. Apply and commit the payload.
             WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
-                let payload = ExecutionPayload::V3(payload);
-                let sidecar =
-                    ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes));
+                // let payload = ExecutionPayload::V3(payload);
+                let sidecar = if ctx.is_prague_active() {
+                    ExecutionPayloadSidecar::v4(
+                        CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes),
+                        PraguePayloadFields::new(RequestsOrHash::empty()),
+                    )
+                } else {
+                    ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes))
+                };
 
                 // Clear shared state for each NewPayload event
                 ctx.shared_state.reset();
 
                 // NewPayload skipped some blocks. Signal to fetch them all and set state to syncing.
-                let payload_hash = payload.block_hash();
+                let payload_hash = payload.payload_inner.payload_inner.payload_inner.block_hash;
                 // Check if we have already committed this payload.
                 if payload_hash == ctx.db.head_block_hash().expect("couldn't get db head block hash") {
                     return WaitingForForkChoiceWithAttributes;
@@ -370,7 +389,7 @@ where
     /// 4. Returns payload to consensus layer
     fn handle_get_payload_engine_api(
         self,
-        res: oneshot::Sender<OpExecutionPayloadEnvelopeV3>,
+        res: oneshot::Sender<OpExecutionPayloadEnvelopeV4>,
         ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
@@ -404,10 +423,12 @@ where
 
                 // Commit the block to the db
                 if ctx.config.commit_sealed_frags_to_db {
-                    let sidecar =
-                        ExecutionPayloadSidecar::v3(CancunPayloadFields::new(block.parent_beacon_block_root, vec![]));
-                    let block = payload_to_block(ExecutionPayload::V3(block.execution_payload), sidecar)
-                        .expect("couldn't get block from payload");
+                    let sidecar = ExecutionPayloadSidecar::v4(
+                        CancunPayloadFields::new(block.parent_beacon_block_root, vec![]),
+                        PraguePayloadFields::new(RequestsOrHash::empty()),
+                    );
+                    let block =
+                        payload_to_block(block.execution_payload, sidecar).expect("couldn't get block from payload");
                     ctx.commit_block(&block);
                     ctx.shared_state.reset();
                     info!("committing to db");

@@ -13,14 +13,39 @@ OS := $(shell uname -s)
 
 # Variables
 IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:latest
+## This image is totally vanilla, but automatically sets isthmus at genesis when using v3.0.0 contracts
+IMAGE_OP_DEPLOYER:=ghcr.io/gattaca-com/based-optimism/based-op-deployer:latest
 
 
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
-ifeq ($(OS),Darwin)
-  START_GATEWAY_COMPOSE_FILES += -f .local_gateway_and_follower/compose.mac.yml
-endif
+START_MAIN_NODE_COMPOSE_FILES := -f .local_main_node/compose.yml
 
 # Overridable Variables
+L1_CHAIN_ID?=11155111
+L2_CHAIN_ID?=$(shell \
+    RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
+    echo $$((RAW % 50000 + 1)); \
+)
+L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
+PORTAL?=http://18.185.199.51:8080
+L1_RPC_URL?=http://34.194.193.217:8545
+L1_BEACON_RPC_URL?=http://34.194.193.217:5052
+PUBLIC_IP?=$(shell curl ifconfig.me)
+# if GATEWAY_SEQUENCING_KEY is set, use that one, otherwise key_to_address will generate a new one
+GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
+  [ -f .local_gateway_and_follower/.env ] &&                        \
+  grep -m1 '^GATEWAY_SEQUENCING_KEY=' .local_gateway_and_follower/.env \
+    | cut -d= -f2                                                   \
+)
+_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(GATEWAY_SEQUENCING_KEY))
+GATEWAY_SEQUENCING_KEY:=$(word 1,$(_GATEWAY_KEY_AND_WALLET))
+GATEWAY_SEQUENCING_ADDRESS:=$(word 2,$(_GATEWAY_KEY_AND_WALLET))
+
+BASED_GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
+BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
+BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
+
+DEPLOYER_CACHE_DIR:=/tmp/op-deployer-cache
 
 # Some servers default to executing shell scripts below with /bin/sh, we set bash to make sure our bash syntax works
 SHELL := /bin/bash
@@ -57,35 +82,25 @@ build-based-op-node: ## 🏗️ Build OP geth from op-eth directory
     --load \
     op-node
 
+build-based-op-deployer: ## 🏗️ Build OP deployer from op-eth directory
+	cd ../based-optimism && \
+    IMAGE_TAGS=develop \
+    docker buildx bake \
+    -f docker-bake.hcl \
+    --set op-deployer.tags=local_based_op_deployer \
+    --load \
+    op-deployer
+
 build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and Firefox
 	cd rabby && \
 		yarn && \
 		yarn build:pro && \
 		yarn build:pro:mv2
 
-L1_CHAIN_ID?=11155111
-L2_CHAIN_ID?=$(shell \
-    RAW=$$(od -An -N2 -tu2 /dev/urandom | tr -d ' '); \
-    echo $$((RAW % 50000 + 1)); \
-)
-L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
-PORTAL?=http://18.185.199.51:8080
-L1_RPC_URL?=http://34.194.193.217:8545
-L1_BEACON_RPC_URL?=http://34.194.193.217:5052
-# if GATEWAY_SEQUENCING_KEY is set, use that one, otherwise key_to_address will generate a new one
-GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
-  [ -f .local_gateway_and_follower/.env ] &&                        \
-  grep -m1 '^GATEWAY_SEQUENCING_KEY=' .local_gateway_and_follower/.env \
-    | cut -d= -f2                                                   \
-)
-_GATEWAY_KEY_AND_WALLET:=$(shell docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(GATEWAY_SEQUENCING_KEY))
-GATEWAY_SEQUENCING_KEY:=$(word 1,$(_GATEWAY_KEY_AND_WALLET))
-GATEWAY_SEQUENCING_ADDRESS:=$(word 2,$(_GATEWAY_KEY_AND_WALLET))
+create-network:
+	docker network inspect based_op_net >/dev/null 2>&1 || docker network create based_op_net
 
-BASED_GATEWAY_DATA_DIR?=.local_gateway_and_follower/data/gateway
-BASED_OP_NODE_DATA_DIR?=.local_gateway_and_follower/data/node
-BASED_OP_GETH_DATA_DIR?=.local_gateway_and_follower/data/geth
-start-gateway: 
+start-gateway: create-network
 	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
 		echo "❌  Gateway already running."; \
 		exit 1; \
@@ -106,7 +121,7 @@ start-gateway:
 	  echo "Gateway Sequencing Wallet:      $(GATEWAY_SEQUENCING_ADDRESS)"; \
 	  { \
 	    echo "PORTAL=$(PORTAL)"; \
-	    echo "OP_NODE_GOSSIP_IP=$$(curl ifconfig.me)"; \
+	    echo "OP_NODE_GOSSIP_IP=$(PUBLIC_IP)"; \
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
 	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
 	      --data '{"jsonrpc":"2.0","method":"portal_opNodeGossipStatic","params":[],"id":1}' \
@@ -168,7 +183,7 @@ start-gateway:
       cat .local_gateway_and_follower/.env; \
       echo; echo; \
       echo "Calling registerGateway method via JSON-RPC:"; \
-      GATEWAY_URL=http://$$(curl -s ifconfig.me):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2); \
+      GATEWAY_URL=http://$(PUBLIC_IP):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2); \
       GATEWAY_ADDRESS=$$wallet; \
       JWT=$$(cat .local_gateway_and_follower/config/jwt); \
       curl -X POST "$(PORTAL)" \
@@ -185,7 +200,7 @@ start-gateway:
 	$(MAKE) start-overseer
 
 start-overseer: 
-	docker exec -it based-op-gateway overseer --portal-url $(PORTAL) --based-op-node-url http://based-op-node:8547 --based-op-geth-url http://based-op-geth:8645
+	docker exec -it based-op-gateway overseer --portal-url $(PORTAL)
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -219,7 +234,7 @@ deploy-chain:
 		exit 1; \
 	fi
 	@mkdir -p .local_main_node/config
-	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh  --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 -c "/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID) --workdir /config && chmod 666 /config/*"
+	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) -c "/usr/local/bin/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID)  --workdir /config && chmod 666 /config/*"
 	@wallet_batcher=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
 	wallet_proposer=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
 	wallet_main=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(MAIN_KEY) | tail -n1); \
@@ -232,18 +247,10 @@ deploy-chain:
 		  main_node/intent.template.toml \
 		  > .local_main_node/config/intent.toml
 
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.0.11 apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY) 
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
-	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh --rm us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.2.0 -c "chmod 666 /config/*"
-	@docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq '.chain_op_config = {"eip1559Elasticity":6, "eip1559Denominator":50, "eip1559DenominatorCanyon":250}' /config/rollup.json \
-    > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/config.json
-	@blockNumber=$$(docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq -r '.genesis.l1.number' /config/rollup.json); \
-	 hex=$$(printf "0x%x" $$blockNumber); \
-	 hash=$$(curl -s -X POST -H 'Content-Type: application/json' \
-	   --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["'"$$hex"'",false]}' \
-	   $(L1_RPC_URL) | docker run --rm -i imega/jq -r '.result.hash'); \
-	 docker run -v $$(pwd)/.local_main_node/config:/config --rm -i imega/jq --arg h "$$hash" '.genesis.l1.hash = $$h' /config/rollup.json > $$(pwd)/.local_main_node/config/rollup.json.tmp && mv $$(pwd)/.local_main_node/config/rollup.json.tmp $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) op-deployer apply --workdir /config --l1-rpc-url $(L1_RPC_URL) --private-key $(MAIN_KEY)
+	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) op-deployer inspect genesis --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/genesis.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) op-deployer inspect rollup --workdir /config $(L2_CHAIN_ID_HEX) > $$(pwd)/.local_main_node/config/rollup.json
+	@docker run -v $$(pwd)/.local_main_node/config:/config -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) --entrypoint sh  $(IMAGE_OP_DEPLOYER) -c "chmod 666 /config/*"
 
 	@openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > .local_main_node/config/jwt
 	@echo "...Done deploying. See chain config in"
@@ -309,7 +316,7 @@ config-main-node:
 	@echo
 
 # By default these will be pointing to directories under .local_<xyz>
-start-main-node: 
+start-main-node: create-network
 	@if docker ps --format '{{.Names}}' | grep -wq op-node ; then \
 		echo "❌  Main node already running."; \
 		exit 1; \
@@ -325,7 +332,7 @@ start-main-node:
 	@# generate .env and fetch JSON if missing
 	@if [ ! -f .local_main_node/.env ]; then \
 	  cp main_node/env_example .local_main_node/.env; \
-	  cp main_node/compose.yml .local_main_node/compose.yml; \
+	  cp main_node/compose* .local_main_node; \
 	  $(MAKE) fix-compose; \
 	  echo "Initializing all components of a main sequencing node in ./.local_main_node ..."; \
 	  { \
@@ -334,7 +341,7 @@ start-main-node:
 	    echo "L1_RPC_URL=$(L1_RPC_URL)"; \
 	    echo "L1_BEACON_RPC_URL=$(L1_BEACON_RPC_URL)"; \
 	    echo "OP_NODE_SEQUENCER_KEY=$(MAIN_KEY)"; \
-	    echo "OP_NODE_GOSSIP_IP=$$(curl ifconfig.me)"; \
+	    echo "OP_NODE_GOSSIP_IP=$(PUBLIC_IP)"; \
 	    echo "OP_BATCHER_PRIVATE_KEY=$(OP_BATCHER_KEY)"; \
 	    echo "OP_PROPOSER_PRIVATE_KEY=$(OP_PROPOSER_KEY)"; \
 	  } >> .local_main_node/.env; \
@@ -349,7 +356,7 @@ start-main-node:
 	@echo
 	@echo
 
-	@cd .local_main_node && docker compose up -d
+	@docker compose $(START_MAIN_NODE_COMPOSE_FILES) up -d
 	$(MAKE) logs-main-node
 
 start-portal: build-portal
@@ -421,7 +428,7 @@ logs-based-op-node: ## 📜 Show based op-node logs
 	docker logs based-op-node --tail 100 -f
 
 logs-based-op-geth: ## 📜 Show based op-geth logs
-	docker logs based-op-node --tail 100 -f
+	docker logs based-op-geth --tail 100 -f
 	
 logs-op-node: ## 📜 Show main op-node logs (only for main sequencing node)
 	docker logs op-node --tail 100 -f

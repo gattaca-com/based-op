@@ -19,7 +19,8 @@ use bop_common::{time::BlockSyncTimers, typedefs::*};
 use op_alloy_network::Optimism;
 use reth_db::DatabaseError;
 use reth_optimism_primitives::{OpBlock, OpReceipt};
-use reth_provider::{BlockExecutionOutput, ProviderError};
+use reth_provider::{BlockExecutionOutput, ProviderError, ProviderResult, StorageRootProvider};
+use reth_trie::{HashedStorage, StorageMultiProof, StorageProof};
 use reth_trie_common::updates::TrieUpdates;
 use revm_primitives::HashMap;
 use tokio::runtime::Runtime;
@@ -190,6 +191,30 @@ impl DatabaseWrite for AlloyDB {
     fn roll_back_head(&self) -> Result<(), Error> {
         self.set_block_number(self.block_number().saturating_sub(1));
         Ok(())
+    }
+}
+
+impl StorageRootProvider for AlloyDB {
+    fn storage_root(&self, _address: Address, _hashed_storage: HashedStorage) -> ProviderResult<B256> {
+        Ok(B256::ZERO)
+    }
+
+    fn storage_proof(
+        &self,
+        _address: Address,
+        _slot: B256,
+        _hashed_storage: HashedStorage,
+    ) -> ProviderResult<StorageProof> {
+        Ok(StorageProof::default())
+    }
+
+    fn storage_multiproof(
+        &self,
+        _address: Address,
+        _slots: &[B256],
+        _hashed_storage: HashedStorage,
+    ) -> ProviderResult<StorageMultiProof> {
+        Ok(StorageMultiProof::empty())
     }
 }
 
