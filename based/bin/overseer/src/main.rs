@@ -50,10 +50,10 @@ pub struct OverseerArgs {
     #[arg(short, long)]
     pub portal_url: Url,
     /// The url of the based-op-node running next to the based-gateway
-    #[arg(long, default_value = "http://0.0.0.0:8547")]
+    #[arg(long, default_value = "http://127.0.0.1:8547")]
     pub based_op_node_url: Url,
     /// The url of the based-op-geth running next to the based-gateway
-    #[arg(long, default_value = "http://0.0.0.0:8645")]
+    #[arg(long, default_value = "http://127.0.0.1:8645")]
     pub based_op_geth_url: Url,
 }
 

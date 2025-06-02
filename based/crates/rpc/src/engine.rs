@@ -1,3 +1,4 @@
+use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
@@ -5,7 +6,7 @@ use bop_common::{
     communication::messages::{self, RpcError, RpcResult},
 };
 use jsonrpsee::core::async_trait;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
 use tokio::sync::oneshot;
 use tracing::{Level, trace};
 
@@ -43,16 +44,34 @@ impl EngineApiServer for RpcServer {
     ) -> RpcResult<PayloadStatus> {
         trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
 
-        self.send(messages::EngineApi::NewPayloadV3 { payload, versioned_hashes, parent_beacon_block_root });
+        self.send(messages::EngineApi::NewPayloadV4 {
+            payload: OpExecutionPayloadV4 { payload_inner: payload, withdrawals_root: B256::ZERO },
+            versioned_hashes,
+            parent_beacon_block_root,
+        });
+        Err(RpcError::NoReturn)
+    }
+
+    #[tracing::instrument(skip_all,  ret(level = Level::TRACE))]
+    async fn new_payload_v4(
+        &self,
+        payload: OpExecutionPayloadV4,
+        versioned_hashes: Vec<B256>,
+        parent_beacon_block_root: B256,
+        _requests: RequestsOrHash,
+    ) -> RpcResult<PayloadStatus> {
+        trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
+
+        self.send(messages::EngineApi::NewPayloadV4 { payload, versioned_hashes, parent_beacon_block_root });
         Err(RpcError::NoReturn)
     }
 
     #[tracing::instrument(skip_all, ret(level = Level::TRACE))]
-    async fn get_payload_v3(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV3> {
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4> {
         trace!(%payload_id, "new request");
 
         let (tx, rx) = oneshot::channel();
-        self.send(messages::EngineApi::GetPayloadV3 { payload_id, res: tx });
+        self.send(messages::EngineApi::GetPayloadV4 { payload_id, res: tx });
 
         // wait with timeout
         let res = tokio::time::timeout(self.engine_timeout.into(), rx).await??;

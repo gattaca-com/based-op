@@ -1,9 +1,12 @@
+networks:
+  based_op_net:
+    external: true
+
 services:
   based-op-geth:
     image: ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest
     pull_policy: always
     container_name: based-op-geth
-    network_mode: "host"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -44,16 +47,34 @@ services:
           --bootnodes=$MAIN_OP_GETH_ENODE,enode://3ce86ecae36ae4bc4197e555b0c518c642602596e66f851090fc7a2686d29924b7baa6c4fcc8ca886f00f51f6951c4b4251d1cb67f61dc491a70cec212fd0498@18.185.199.51:31303 \
           --rollup.sequencerhttp=$PORTAL
 
+    ports:
+      - "${OP_GETH_RPC_PORT:-8645}:${OP_GETH_RPC_PORT:-8645}"
+      - "${OP_GETH_WS_PORT:-8646}:${OP_GETH_WS_PORT:-8646}"
+      - "${OP_GETH_GOSSIP_PORT}:${OP_GETH_GOSSIP_PORT}"
+      - "${OP_GETH_ENGINE_RPC_PORT:-8651}:${OP_GETH_ENGINE_RPC_PORT:-8651}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data/geth:/data/geth
       - ./config:/config
     restart: unless-stopped
+    networks:
+      - based_op_net
 
   based-op-node:
     image: ghcr.io/gattaca-com/based-optimism/based-op-node:latest
     pull_policy: always
     container_name: based-op-node
-    network_mode: "host"
+    ports:
+      # RPC API
+      - "8547:8547"
+      # libp2p gossip port (TCP + UDP)
+      - "${OP_NODE_GOSSIP_PORT:-9103}:${OP_NODE_GOSSIP_PORT:-9103}/tcp"
+      - "${OP_NODE_GOSSIP_PORT:-9103}:${OP_NODE_GOSSIP_PORT:-9103}/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - based_op_net
     command:
       - op-node
       - --l2=http://based-op-geth:$OP_GETH_ENGINE_RPC_PORT
@@ -89,7 +110,6 @@ services:
     image: ghcr.io/gattaca-com/based-op/based-gateway:latest
     pull_policy: always
     container_name: based-op-gateway
-    network_mode: "host"
     command:
       - --rpc.port=$GATEWAY_PORT
       - --rpc.host=0.0.0.0
@@ -104,4 +124,8 @@ services:
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
       - /dev/shm:/dev/shm
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     restart: unless-stopped
+    networks:
+      - based_op_net
