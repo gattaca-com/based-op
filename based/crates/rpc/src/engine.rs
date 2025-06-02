@@ -60,7 +60,7 @@ impl EngineApiServer for RpcServer {
         parent_beacon_block_root: B256,
         _requests: RequestsOrHash,
     ) -> RpcResult<PayloadStatus> {
-        tracing::info!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
+        trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
 
         self.send(messages::EngineApi::NewPayloadV4 { payload, versioned_hashes, parent_beacon_block_root });
         Err(RpcError::NoReturn)

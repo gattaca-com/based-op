@@ -26,6 +26,7 @@ use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::{block::TestBlock, SignedTransaction};
 use reth_provider::StorageRootProvider;
+use revm_primitives::b256;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
 use tokio::sync::oneshot;
@@ -58,7 +59,8 @@ pub fn payload_to_block(
     if withdrawals_root != B256::ZERO {
         block.header_mut().withdrawals_root = Some(withdrawals_root)
     } else {
-        block.header_mut().withdrawals_root = None
+        block.header_mut().withdrawals_root =
+            Some(b256!("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"));
     }
     Ok(RecoveredBlock::new_unhashed(block, block_senders))
 }
@@ -262,10 +264,14 @@ where
             // Default path once synced. Apply and commit the payload.
             WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
                 // let payload = ExecutionPayload::V3(payload);
-                let sidecar = ExecutionPayloadSidecar::v4(
-                    CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes),
-                    PraguePayloadFields::new(RequestsOrHash::empty()),
-                );
+                let sidecar = if ctx.is_prague_active() {
+                    ExecutionPayloadSidecar::v4(
+                        CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes),
+                        PraguePayloadFields::new(RequestsOrHash::empty()),
+                    )
+                } else {
+                    ExecutionPayloadSidecar::v3(CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes))
+                };
 
                 // Clear shared state for each NewPayload event
                 ctx.shared_state.reset();
