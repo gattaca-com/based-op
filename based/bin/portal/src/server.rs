@@ -675,7 +675,12 @@ impl PortalApiServer for PortalServer {
     /// handle heartbeat from gateway
     async fn heartbeat(&self, jwt_secret: String) -> RpcResult<()> {
         let mut map = self.last_seen_map.lock().await;
-        map.insert(jwt_secret, Instant::now());
+        // map.insert(jwt_secret, Instant::now());
+
+        map.entry(jwt_secret)
+            .and_modify(|e| *e = Instant::now())
+            .or_insert_with(Instant::now);
+
         Ok(())
     }
 }
