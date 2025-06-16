@@ -3,9 +3,18 @@ use std::{net::SocketAddr, sync::Arc};
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
-    api::{EngineApiServer, MinimalEthApiServer}, communication::{
-        messages::{EngineApi, RpcResult}, Producer, Sender, Spine
-    }, config::GatewayArgs, db::DatabaseRead, fabric::FabricGatewayApiServer, p2p::SignedVersionedMessage, telemetry::{telemetry_queue, TelemetryUpdate}, time::Duration, transaction::Transaction
+    api::{EngineApiServer, MinimalEthApiServer},
+    communication::{
+        Producer, Sender, Spine,
+        messages::{EngineApi, RpcResult},
+    },
+    config::GatewayArgs,
+    db::DatabaseRead,
+    fabric::FabricGatewayApiServer,
+    p2p::SignedVersionedMessage,
+    telemetry::{TelemetryUpdate, telemetry_queue},
+    time::Duration,
+    transaction::Transaction,
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
@@ -13,8 +22,8 @@ use tokio::runtime::Runtime;
 use tracing::{Level, error, info, trace};
 
 mod engine;
-pub mod gossiper;
 mod fabric;
+pub mod gossiper;
 
 pub fn start_rpc<Db: DatabaseRead>(
     config: &GatewayArgs,

@@ -8,26 +8,26 @@ pub const FRAG_COMMITMENT_TYPE: u64 = 7;
 
 /// A CommitmentRequest message created by a user
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CommitmentRequest {
     pub commitment_type: u64,
     pub payload: Bytes,
-    pub slasher: Address
+    pub slasher: Address,
 }
 
 /// A Commitment message responding to a CommitmentRequest
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Commitment {
     pub commitment_type: u64,
     pub payload: Bytes,
     pub request_hash: u64,
-    pub slasher: Address
+    pub slasher: Address,
 }
 
 /// A signed Commitment binding to a CommitmentRequest
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct SignedCommitment {
     pub commitment: Commitment,
     pub signature: Bytes,
@@ -35,7 +35,7 @@ pub struct SignedCommitment {
 
 /// Specifies which commitments can be made for a specific chain
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Offering {
     pub chain_id: u64,
     pub commitment_types: Vec<u64>,
@@ -43,7 +43,7 @@ pub struct Offering {
 
 /// Information about a Gateway's offerings at a specific slot
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct SlotInfo {
     pub slot: u64,
     pub offerings: Vec<Offering>,
@@ -51,14 +51,14 @@ pub struct SlotInfo {
 
 /// Response containing multiple SlotInfo
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct SlotInfoResponse {
     pub slots: Vec<SlotInfo>,
 }
 
 /// Fee information for a specific commitment request
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct FeeInfo {
     pub payload: Bytes,
     pub commitment_type: u64,

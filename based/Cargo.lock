@@ -1876,10 +1876,13 @@ dependencies = [
 name = "bop-rpc"
 version = "0.1.0"
 dependencies = [
+ "alloy-consensus 0.14.0",
  "alloy-eips 0.14.0",
  "alloy-primitives",
  "alloy-rpc-types",
  "bop-common",
+ "clap",
+ "eyre",
  "jsonrpsee",
  "op-alloy-consensus 0.14.1",
  "op-alloy-rpc-types 0.14.1",
@@ -1887,10 +1890,12 @@ dependencies = [
  "reqwest",
  "reth-optimism-primitives",
  "reth-rpc-layer",
+ "serde",
  "serde_json",
  "tokio",
  "tower 0.4.13",
  "tracing",
+ "tracing-subscriber 0.3.19",
 ]
 
 [[package]]

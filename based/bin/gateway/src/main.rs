@@ -9,11 +9,11 @@ use bop_common::{
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
-use bop_db::{init_database, DatabaseRead};
+use bop_db::{DatabaseRead, init_database};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
-    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
     Sequencer, SequencerConfig, Simulator,
+    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
 };
 use clap::Parser;
 use revm_primitives::B256;

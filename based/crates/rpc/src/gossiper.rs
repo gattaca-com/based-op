@@ -1,7 +1,7 @@
 use bop_common::{
     actor::Actor,
     communication::SpineConnections,
-    p2p::{self, FragV0, SignedVersionedMessage},
+    p2p::{self, SignedVersionedMessage},
     signing::ECDSASigner,
 };
 use jsonrpsee::client_transport::ws::Url;

@@ -2,9 +2,13 @@ use std::{sync::Arc, time::Duration};
 
 use alloy_eips::Decodable2718;
 use bop_common::{
-    communication::messages::{RpcError, RpcResult}, fabric::{Commitment, CommitmentRequest, FabricGatewayApiServer, FeeInfo, SignedCommitment, SlotInfoResponse}, p2p::VersionedMessage, telemetry::TelemetryUpdate, transaction::Transaction
+    communication::messages::{RpcError, RpcResult},
+    fabric::{Commitment, CommitmentRequest, FabricGatewayApiServer, FeeInfo, SignedCommitment, SlotInfoResponse},
+    p2p::VersionedMessage,
+    telemetry::TelemetryUpdate,
+    transaction::Transaction,
 };
-use jsonrpsee::{core::async_trait};
+use jsonrpsee::core::async_trait;
 use op_alloy_consensus::OpTxEnvelope;
 use tokio::time::timeout;
 use tracing::Level;
@@ -20,10 +24,10 @@ impl FabricGatewayApiServer for RpcServer {
         // Send the transaction to the sequencer
         let tx = Arc::new(Transaction::decode(commitment.payload.clone())?);
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
-        
+
         let hash = tx.tx_hash();
         let request_hash = u64::from_be_bytes(hash[..8].try_into().unwrap());
-        
+
         let _ = self.new_order_tx.send(tx.into());
 
         // Wait for the transaction to be committed
