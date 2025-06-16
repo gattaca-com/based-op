@@ -91,33 +91,11 @@ impl PortalServer {
 
         let gateway_timeout = Duration::from_millis(args.gateway_timeout_ms);
 
-        let current_gateway = Arc::new(Mutex::new(registry_client.current_gateway().await.ok().and_then(
-            |(_, gateway_url, _, jwt_as_b256)| {
-                create_gateway_client(
-                    gateway_url,
-                    unsafe {
-                        std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                    },
-                    gateway_timeout,
-                )
-                .ok()
-            },
-        )));
-
-        let mut gateways = vec![];
-        for (gateway_url, _, jwt_as_b256) in registry_client.registered_gateways().await.unwrap_or_else(|_| vec![]) {
-            gateways.push(create_gateway_client(
-                gateway_url,
-                unsafe {
-                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                },
-                gateway_timeout,
-            )?)
-        }
-
+        let current_gateway = Arc::new(Mutex::new(None));
+        let gateways = vec![];
         let gateways = Arc::new(RwLock::new(gateways));
 
-        Ok(Self {
+        let temp = Self {
             fallback_eth_client,
             fallback_client,
             op_node_client,
@@ -127,7 +105,11 @@ impl PortalServer {
             last_seen_map: Arc::new(Mutex::new(HashMap::new())),
             gateway_timeout,
             args: Arc::new(args),
-        })
+        };
+
+        temp.refresh_gateways().await?;
+
+        Ok(temp)
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
@@ -165,7 +147,7 @@ impl PortalServer {
 
         tokio::spawn(async move {
             loop {
-                let _ = self.refresh().await;
+                let _ = self.refresh_gateways().await;
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         });
@@ -234,7 +216,7 @@ impl PortalServer {
         return Ok(());
     }
 
-    pub async fn refresh(&self) -> eyre::Result<()> {
+    pub async fn refresh_gateways(&self) -> eyre::Result<()> {
         self.fetch_registered_gateways().await?;
         self.update_current_gateway().await?;
         Ok(())
