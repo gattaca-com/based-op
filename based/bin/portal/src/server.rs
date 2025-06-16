@@ -188,7 +188,7 @@ impl PortalServer {
         self.gateways.read().clone()
     }
 
-    pub async fn refresh(&self) -> eyre::Result<()> {
+    async fn fetch_registered_gateways(&self) {
         let mut gateways = vec![];
         for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
             let Ok(client) = create_gateway_client(
@@ -203,19 +203,49 @@ impl PortalServer {
             gateways.push(client);
         }
         *self.gateways.write() = gateways;
-
+    }
+    
+    async fn update_current_gateway(&self) -> eyre::Result<()> {
         let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
-        for g in self.gateways() {
-            if g.id == gateway_url {
-                *self.current_gateway.lock().await = Some(g);
-                return Ok(());
+        let current_gateway_index = self.gateways().iter().position(|g| g.id == gateway_url);
+        match current_gateway_index {
+            Some(index) => {
+                let gateway = self.gateways().get(index).cloned().unwrap();
+                *self.current_gateway.lock().await = Some(gateway);
+                let mut i = index;
+                while self.sec_since_last_seen(self.current_gateway.lock().await.as_ref().unwrap()).await > 5 {
+                    i = (i + 1) % self.gateways().len();
+                    if(i == index) {
+                        error!("CRITICAL: No gateway is available, all gateways are stale");
+                        return Ok(());
+                    }
+                    *self.current_gateway.lock().await = Some(self.gateways().get(i).cloned().unwrap());
+                }
+            }
+            None => {
+                error!(
+                    "CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent"
+                );
             }
         }
 
-        error!(
-            "CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent"
-        );
-        Ok(())
+        return Ok(());
+    }
+
+    pub async fn refresh(&self) -> eyre::Result<()> {
+        self.fetch_registered_gateways().await?;
+        self.update_current_gateway().await?;
+    }
+
+
+    async fn sec_since_last_seen(&self, gateway: &Gateway) -> u64 {
+        let last_seen = self.last_seen_map.lock().await.get(gateway.jwt_secret_str.as_str());
+        if let Some(last_seen) = last_seen {
+            let now = Instant::now();
+            now.duration_since(*last_seen).as_secs()
+        } else {
+            0
+        }
     }
 
     async fn send_fcu(
@@ -235,6 +265,7 @@ impl PortalServer {
         }
         debug!(?gateway, "served fcu")
     }
+
 }
 
 /// This is a temporary API to broacast transactions to both gateway and fallback. In practice this should not be
