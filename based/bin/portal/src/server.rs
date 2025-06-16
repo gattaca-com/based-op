@@ -1,7 +1,13 @@
-use std::{collections::HashMap, fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt,
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{hex, Address, Bytes, B256, U256};
+use alloy_primitives::{Address, B256, Bytes, U256, hex};
 use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
@@ -31,8 +37,6 @@ use tracing::{Instrument, Level, debug, error, info, trace};
 
 use crate::{cli::PortalArgs, middleware::ProxyService};
 
-use std::time::Instant;
-
 pub type RpcClient = jsonrpsee::http_client::HttpClient;
 pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
 
@@ -51,11 +55,7 @@ impl fmt::Debug for Gateway {
 
 impl Gateway {
     fn new(id: Url, client: AuthRpcClient, jwt_secret_str: String) -> Self {
-        Self {
-            id,
-            client,
-            jwt_secret_str,
-        }
+        Self { id, client, jwt_secret_str }
     }
 }
 
@@ -188,23 +188,25 @@ impl PortalServer {
         self.gateways.read().clone()
     }
 
-    async fn fetch_registered_gateways(&self) {
+    async fn fetch_registered_gateways(&self) -> eyre::Result<()> {
         let mut gateways = vec![];
-        for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
-            let Ok(client) = create_gateway_client(
+        let registered_gateways = self.registry_client.registered_gateways().await?;
+        for (gateway_url, _, jwt_as_b256) in registered_gateways {
+            let client = create_gateway_client(
                 gateway_url,
                 unsafe {
                     std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
                 },
                 self.gateway_timeout,
-            ) else {
-                continue;
-            };
-            gateways.push(client);
+            );
+            if let Ok(client) = client {
+                gateways.push(client);
+            }
         }
         *self.gateways.write() = gateways;
+        Ok(())
     }
-    
+
     async fn update_current_gateway(&self) -> eyre::Result<()> {
         let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
         let current_gateway_index = self.gateways().iter().position(|g| g.id == gateway_url);
@@ -215,7 +217,7 @@ impl PortalServer {
                 let mut i = index;
                 while self.sec_since_last_seen(self.current_gateway.lock().await.as_ref().unwrap()).await > 5 {
                     i = (i + 1) % self.gateways().len();
-                    if(i == index) {
+                    if (i == index) {
                         error!("CRITICAL: No gateway is available, all gateways are stale");
                         return Ok(());
                     }
@@ -235,11 +237,12 @@ impl PortalServer {
     pub async fn refresh(&self) -> eyre::Result<()> {
         self.fetch_registered_gateways().await?;
         self.update_current_gateway().await?;
+        Ok(())
     }
 
-
     async fn sec_since_last_seen(&self, gateway: &Gateway) -> u64 {
-        let last_seen = self.last_seen_map.lock().await.get(gateway.jwt_secret_str.as_str());
+        let last_seen_map = self.last_seen_map.lock().await;
+        let last_seen = last_seen_map.get(gateway.jwt_secret_str.as_str());
         if let Some(last_seen) = last_seen {
             let now = Instant::now();
             now.duration_since(*last_seen).as_secs()
@@ -265,7 +268,6 @@ impl PortalServer {
         }
         debug!(?gateway, "served fcu")
     }
-
 }
 
 /// This is a temporary API to broacast transactions to both gateway and fallback. In practice this should not be
@@ -708,9 +710,7 @@ impl PortalApiServer for PortalServer {
         let mut map = self.last_seen_map.lock().await;
         // map.insert(jwt_secret, Instant::now());
 
-        map.entry(jwt_secret)
-            .and_modify(|e| *e = Instant::now())
-            .or_insert_with(Instant::now);
+        map.entry(jwt_secret).and_modify(|e| *e = Instant::now()).or_insert_with(Instant::now);
 
         Ok(())
     }

@@ -1849,6 +1849,7 @@ dependencies = [
  "reqwest",
  "reth-optimism-chainspec",
  "reth-primitives",
+ "reth-rpc-builder",
  "revm-primitives",
  "serde",
  "serde_json",
