@@ -9,11 +9,11 @@ use bop_common::{
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
-use bop_db::{DatabaseRead, init_database};
+use bop_db::{init_database, DatabaseRead};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
-    Sequencer, SequencerConfig, Simulator,
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
+    Sequencer, SequencerConfig, Simulator,
 };
 use clap::Parser;
 use revm_primitives::B256;
@@ -63,7 +63,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     };
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
-    let (tx, rx) = tokio::sync::broadcast::channel(10_000);
+    let (tx, _) = tokio::sync::broadcast::channel(10_000);
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -75,7 +75,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, &rt, rx);
+            start_rpc(&args, &spine, &rt, tx.clone());
             move || rt.block_on(wait_for_signal())
         });
 

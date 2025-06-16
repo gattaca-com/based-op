@@ -44,7 +44,7 @@ impl Gossiper {
         let body = res.text().expect("couldn't read response");
 
         if code.is_success() {
-            info!("successfully sent {}", msg.as_ref());
+            info!("successfully sent {:?}", signed);
         } else {
             error!(body, %payload, code = code.as_u16(), "failed to send");
         }
