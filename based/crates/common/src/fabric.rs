@@ -64,6 +64,12 @@ pub struct FeeInfo {
     pub commitment_type: u64,
 }
 
+impl Default for FeeInfo {
+    fn default() -> Self {
+        Self { payload: Bytes::new(), commitment_type: FRAG_COMMITMENT_TYPE }
+    }
+}
+
 #[rpc(client, server, namespace = "gateway")]
 pub trait FabricGatewayApi {
     /// Request a new SignedCommitment

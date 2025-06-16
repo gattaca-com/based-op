@@ -1,23 +1,13 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use alloy_eips::Decodable2718;
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
-    api::{CommitmentFabric, EngineApiServer, GatewayApiServer, MinimalEthApiServer, SignedCommitmentFabric},
-    communication::{
-        Producer, Sender, Spine,
-        messages::{EngineApi, RpcResult},
-    },
-    config::GatewayArgs,
-    db::DatabaseRead,
-    p2p::{SignedVersionedMessage, VersionedMessage},
-    telemetry::{TelemetryUpdate, telemetry_queue},
-    time::Duration,
-    transaction::Transaction,
+    api::{EngineApiServer, MinimalEthApiServer}, communication::{
+        messages::{EngineApi, RpcResult}, Producer, Sender, Spine
+    }, config::GatewayArgs, db::DatabaseRead, fabric::FabricGatewayApiServer, p2p::SignedVersionedMessage, telemetry::{telemetry_queue, TelemetryUpdate}, time::Duration, transaction::Transaction
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
-use op_alloy_consensus::OpTxEnvelope;
 use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
 use tokio::runtime::Runtime;
 use tracing::{Level, error, info, trace};
@@ -84,7 +74,7 @@ impl RpcServer {
             .expect("failed to create eth RPC server");
         let mut module = MinimalEthApiServer::into_rpc(self.clone());
         module.merge(EngineApiServer::into_rpc(self.clone())).expect("failed to merge modules");
-        module.merge(GatewayApiServer::into_rpc(self)).expect("failed to merge modules");
+        module.merge(FabricGatewayApiServer::into_rpc(self)).expect("failed to merge modules");
 
         let server_handle = server.start(module);
         //TODO: Handle other communcation from sequencer ?
@@ -112,33 +102,5 @@ impl MinimalEthApiServer for RpcServer {
         let _ = self.new_order_tx.send(tx.into());
 
         Ok(hash)
-    }
-}
-
-#[async_trait]
-impl GatewayApiServer for RpcServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn commitment(&self, commitment: CommitmentFabric) -> RpcResult<SignedCommitmentFabric> {
-        let tx = Arc::new(Transaction::decode(commitment.payload.clone())?);
-        TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
-        let hash = tx.tx_hash();
-        let _ = self.new_order_tx.send(tx.into());
-
-        let mut receiver = self.frag_receiver_spawner.subscribe();
-        loop {
-            if let Ok(msg) = receiver.recv().await {
-                let VersionedMessage::FragV0(frag) = &msg.message else {
-                    continue;
-                };
-                if frag
-                    .txs
-                    .iter()
-                    .filter_map(|t| OpTxEnvelope::decode_2718(&mut t.as_ref()).ok())
-                    .any(|t| *t.hash() == hash)
-                {
-                    return Ok(SignedCommitmentFabric { commitment, signature: msg.signature });
-                }
-            }
-        }
     }
 }
