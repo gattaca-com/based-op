@@ -3,16 +3,9 @@ use std::{net::SocketAddr, sync::Arc};
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
-    api::{EngineApiServer, MinimalEthApiServer},
-    communication::{
-        Producer, Sender, Spine,
-        messages::{EngineApi, RpcResult},
-    },
-    config::GatewayArgs,
-    db::DatabaseRead,
-    telemetry::{TelemetryUpdate, telemetry_queue},
-    time::Duration,
-    transaction::Transaction,
+    api::{CommitmentFabric, EngineApiServer, GatewayApiServer, MinimalEthApiServer, SignedCommitmentFabric}, communication::{
+        messages::{EngineApi, RpcResult}, Producer, Sender, Spine
+    }, config::GatewayArgs, db::DatabaseRead, p2p::FragV0, telemetry::{telemetry_queue, TelemetryUpdate}, time::Duration, transaction::Transaction
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
 use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
@@ -22,9 +15,9 @@ use tracing::{Level, error, info, trace};
 mod engine;
 pub mod gossiper;
 
-pub fn start_rpc<Db: DatabaseRead>(config: &GatewayArgs, spine: &Spine<Db>, rt: &Runtime) {
+pub fn start_rpc<Db: DatabaseRead>(config: &GatewayArgs, spine: &Spine<Db>, rt: &Runtime, rx_spawner: tokio::sync::broadcast::Sender<FragV0>) {
     let addr = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
-    let server = RpcServer::new(spine, config.sequencer_jwt());
+    let server = RpcServer::new(spine, config.sequencer_jwt(), rx_spawner);
     rt.spawn(server.run(addr));
 }
 
@@ -37,16 +30,18 @@ struct RpcServer {
     engine_rpc_tx: Sender<EngineApi>,
     jwt: JwtSecret,
     telemetry_producer: Producer<TelemetryUpdate>,
+    frag_receiver_spawner: tokio::sync::broadcast::Sender<FragV0>
 }
 
 impl RpcServer {
-    pub fn new<Db>(spine: &Spine<Db>, jwt: JwtSecret) -> Self {
+    pub fn new<Db>(spine: &Spine<Db>, jwt: JwtSecret, frag_receiver_spawner: tokio::sync::broadcast::Sender<FragV0>) -> Self {
         Self {
             new_order_tx: spine.into(),
             engine_rpc_tx: spine.into(),
             engine_timeout: Duration::from_secs(1),
             jwt,
             telemetry_producer: telemetry_queue().into(),
+            frag_receiver_spawner
         }
     }
 
@@ -68,7 +63,8 @@ impl RpcServer {
             .await
             .expect("failed to create eth RPC server");
         let mut module = MinimalEthApiServer::into_rpc(self.clone());
-        module.merge(EngineApiServer::into_rpc(self)).expect("failed to merge modules");
+        module.merge(EngineApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        module.merge(GatewayApiServer::into_rpc(self)).expect("failed to merge modules");
 
         let server_handle = server.start(module);
         //TODO: Handle other communcation from sequencer ?
@@ -94,6 +90,22 @@ impl MinimalEthApiServer for RpcServer {
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
         let hash = tx.tx_hash();
         let _ = self.new_order_tx.send(tx.into());
+
+        Ok(hash)
+    }
+}
+
+#[async_trait]
+impl GatewayApiServer for RpcServer {
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    async fn commitment(&self, commitment: CommitmentFabric) -> RpcResult<SignedCommitmentFabric> {
+
+        let tx = Arc::new(Transaction::decode(commitment.payload)?);
+        TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
+        let hash = tx.tx_hash();
+        let _ = self.new_order_tx.send(tx.into());
+
+        
 
         Ok(hash)
     }

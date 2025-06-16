@@ -211,6 +211,12 @@ pub trait OpGethAdminApi {
     async fn peers(&self) -> RpcResult<Vec<OpGethPeer>>;
 }
 
+#[rpc(client, server, namespace = "gateway")]
+pub trait GatewayApi {
+    #[method(name = "commitment")]
+    async fn commitment(&self, commitment: CommitmentFabric) -> RpcResult<SignedCommitmentFabric>;
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RollupConfig {
     pub genesis: Genesis,
@@ -472,6 +478,21 @@ pub struct EthVersion {
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct SnapVersion {
     pub version: Option<u32>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all="camelCase")]
+pub struct CommitmentFabric {
+    pub commitment_type: u64,
+    pub payload: Bytes,
+    pub slasher: Address
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all="camelCase")]
+pub struct SignedCommitmentFabric {
+    pub commitment: CommitmentFabric,
+    pub signature: Bytes,
 }
 
 #[cfg(test)]
