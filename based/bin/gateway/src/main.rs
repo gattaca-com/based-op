@@ -1,13 +1,7 @@
 use std::sync::Arc;
-
+use reth_rpc_builder::utils::launch_auth;
 use bop_common::{
-    actor::{Actor, ActorConfig},
-    communication::Spine,
-    config::GatewayArgs,
-    shared::SharedState,
-    signing::ECDSASigner,
-    time::Duration,
-    utils::{init_tracing, wait_for_signal},
+    actor::{Actor, ActorConfig}, api::PortalApiClient, communication::Spine, config::GatewayArgs, shared::SharedState, signing::ECDSASigner, time::{self, Duration}, utils::{init_tracing, wait_for_signal}
 };
 use bop_db::{DatabaseRead, init_database};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
@@ -121,6 +115,22 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 }
             });
         }
+
+        s.spawn(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to create runtime")
+                .block_on(async {
+                    let handle = launch_auth(secret).await;
+                    let client = handle.http_client();
+                    let jwt_secret = args.rpc_jwt;
+                    loop {
+                        PortalApiClient::heartbeat(client.clone(), jwt_secret.clone()).await;
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                });
+        })
     });
 
     Ok(())

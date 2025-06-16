@@ -15,6 +15,7 @@ clap.workspace = true
 eyre.workspace = true
 reqwest.workspace = true
 reth-optimism-chainspec.workspace = true
+reth_rpc_builder.workspace = true
 revm-primitives.workspace = true
 tokio.workspace = true
 tracing.workspace = true
