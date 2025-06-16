@@ -171,11 +171,8 @@ impl RegistryApiServer for RegistryServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
         // let curblock = self.eth_client.block_number().await?;
-        let curblock = if !self.use_mock_blocknumber {
-            self.eth_client.block_number().await?
-        } else {
-            self.mock_blocknumber
-        };
+        let curblock =
+            if !self.use_mock_blocknumber { self.eth_client.block_number().await? } else { self.mock_blocknumber };
         let gateways = self.gateway_clients.read();
         let n_gateways = gateways.len();
         if n_gateways == 0 {

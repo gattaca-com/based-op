@@ -9,7 +9,9 @@ use alloy_rpc_types::{
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{
+    OpExecutionPayloadEnvelopeV3, OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes,
+};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

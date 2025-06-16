@@ -97,6 +97,7 @@ reth-primitives = { path = "../reth/crates/primitives" }
 reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
 reth-provider = { path = "../reth/crates/storage/provider", features = ["test-utils"] }
 reth-revm = { path = "../reth/crates/revm" }
+reth-rpc-builder = { path = "../reth/crates/rpc/rpc-builder" }
 reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
 reth-stages-types = { path = "../reth/crates/stages/types" }
 reth-storage-api = { path = "../reth/crates/storage/storage-api" }

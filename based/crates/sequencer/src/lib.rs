@@ -9,13 +9,13 @@ use alloy_rpc_types::engine::{
 use bop_common::{
     actor::Actor,
     communication::{
-        messages::{self, BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
+        messages::{self, BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
     shared::SharedState,
-    telemetry::{self, system::SystemNotification, Telemetry, TelemetryUpdate},
+    telemetry::{self, Telemetry, TelemetryUpdate, system::SystemNotification},
     time::{Duration, Repeater},
     transaction::Transaction,
     typedefs::{BlockSyncMessage, DatabaseRef},
@@ -24,7 +24,7 @@ use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
-use reth_primitives_traits::{block::TestBlock, SignedTransaction};
+use reth_primitives_traits::{SignedTransaction, block::TestBlock};
 use reth_provider::StorageRootProvider;
 use revm_primitives::b256;
 use sorting::FragSequence;
