@@ -24,6 +24,7 @@ use tracing::{Level, error, info, trace};
 
 mod engine;
 pub mod gossiper;
+mod fabric;
 
 pub fn start_rpc<Db: DatabaseRead>(
     config: &GatewayArgs,
