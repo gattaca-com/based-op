@@ -161,7 +161,6 @@ pub trait PortalApi {
     /// The network id of the l1
     #[method(name = "l1ChainId")]
     async fn l1_chain_id(&self) -> RpcResult<u64>;
-
     /// rollup.json file
     #[method(name = "fileRollup")]
     async fn file_rollup(&self) -> RpcResult<String>;
@@ -180,6 +179,10 @@ pub trait PortalApi {
     /// The enode that can be used to sync with the op-geth
     #[method(name = "opGethBootnodeEnode")]
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String>;
+
+    // Heartbeat API
+    #[method(name = "heartbeat")]
+    async fn heartbeat(&self, jwt_secret: String) -> RpcResult<()>;
 }
 
 #[rpc(client, server, namespace = "optimism")]
