@@ -9,7 +9,9 @@ use alloy_rpc_types::{
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{
+    OpExecutionPayloadEnvelopeV3, OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes,
+};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -481,15 +483,15 @@ pub struct SnapVersion {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CommitmentFabric {
     pub commitment_type: u64,
     pub payload: Bytes,
-    pub slasher: Address
+    pub slasher: Address,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct SignedCommitmentFabric {
     pub commitment: CommitmentFabric,
     pub signature: Bytes,

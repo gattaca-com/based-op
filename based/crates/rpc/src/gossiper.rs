@@ -1,7 +1,7 @@
 use bop_common::{
     actor::Actor,
     communication::SpineConnections,
-    p2p::{self, FragV0},
+    p2p::{self, FragV0, SignedVersionedMessage},
     signing::ECDSASigner,
 };
 use jsonrpsee::client_transport::ws::Url;
@@ -12,14 +12,14 @@ pub struct Gossiper {
     target_rpc: Url,
     client: Client,
     signer: ECDSASigner,
-    frag_broadcast: tokio::sync::broadcast::Sender<FragV0>,
+    frag_broadcast: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
 }
 
 impl Gossiper {
     pub fn new(
         target_rpc: Url,
         signer: Option<ECDSASigner>,
-        frag_broadcast: tokio::sync::broadcast::Sender<FragV0>,
+        frag_broadcast: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
     ) -> Self {
         let client = ClientBuilder::new()
             .timeout(std::time::Duration::from_secs(10))
@@ -32,7 +32,8 @@ impl Gossiper {
     }
 
     fn gossip(&self, msg: p2p::VersionedMessage) {
-        let payload = msg.to_json(&self.signer);
+        let signed = msg.to_signed(&self.signer);
+        let payload = signed.to_json();
 
         let Ok(res) = self.client.post(self.target_rpc.clone()).json(&payload).send() else {
             tracing::error!("couldn't send {}", payload);
@@ -47,14 +48,11 @@ impl Gossiper {
         } else {
             error!(body, %payload, code = code.as_u16(), "failed to send");
         }
-        match msg {
-            p2p::VersionedMessage::FragV0(frag_v0) => {
-                let mut to_send = frag_v0;
-                while let Err(e) = self.frag_broadcast.send(to_send) {
-                    to_send = e.0;
-                }
+        if matches!(signed.message, p2p::VersionedMessage::FragV0(_)) {
+            let mut to_send = signed;
+            while let Err(e) = self.frag_broadcast.send(to_send) {
+                to_send = e.0;
             }
-            _ => {}
         }
     }
 }

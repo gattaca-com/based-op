@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::{constants::EMPTY_WITHDRAWALS, BlockHeader, Transaction as TransactionTrait};
+use alloy_consensus::{BlockHeader, Transaction as TransactionTrait, constants::EMPTY_WITHDRAWALS};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, PayloadAttributes, PayloadError,
@@ -11,7 +11,7 @@ use alloy_rpc_types::engine::{
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
-use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
+use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
 use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
