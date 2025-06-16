@@ -258,6 +258,9 @@ pub enum RpcError {
     #[error("response channel closed {0}")]
     ChannelClosed(#[from] oneshot::error::RecvError),
 
+    #[error("broadcast channel closed")]
+    BroadcastChannelClosed,
+
     #[error("invalid transaction bytes")]
     InvalidTransaction(#[from] alloy_rlp::Error),
 
@@ -275,6 +278,12 @@ pub enum RpcError {
 
     #[error("no return")]
     NoReturn,
+
+    #[error("no commitment for request: {0}")]
+    NoCommitmentForRequest(u64),
+
+    #[error("serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
 }
 
 impl From<RpcError> for RpcErrorObject<'static> {
@@ -283,15 +292,22 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::Internal |
             RpcError::Timeout(_) |
             RpcError::ChannelClosed(_) |
+            RpcError::BroadcastChannelClosed |
             RpcError::Jsonrpsee(_) |
             RpcError::TokioJoin(_) |
             RpcError::Db(_) |
             RpcError::Io(_) |
+            RpcError::Serialization(_) |
             RpcError::NoReturn => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
                 Some(error.to_string()),
+            ),
+            RpcError::NoCommitmentForRequest(slot) => RpcErrorObject::owned(
+                ErrorCode::InvalidParams.code(),
+                ErrorCode::InvalidParams.message(),
+                Some(format!("no commitment for request: {slot}")),
             ),
         }
     }

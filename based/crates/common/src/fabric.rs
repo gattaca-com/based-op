@@ -50,7 +50,7 @@ pub struct SlotInfo {
 }
 
 /// Response containing multiple SlotInfo
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all="camelCase")]
 pub struct SlotInfoResponse {
     pub slots: Vec<SlotInfo>,
