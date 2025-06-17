@@ -19,11 +19,11 @@ use tracing::{error, info};
 #[derive(Parser, Debug)]
 #[command(version, about = "Test fabric commitment RPC")]
 struct Args {
-    #[arg(long, default_value = "http://localhost:9997")]
+    #[arg(long, default_value = "http://0.0.0.0:9998")]
     gateway_url: Url,
 
     /// ETH RPC URL for getting nonce
-    #[arg(long, default_value = "http://localhost:8545")]
+    #[arg(long, default_value = "http://0.0.0.0:8545")]
     eth_rpc_url: Url,
 
     /// Private key for signing (hex string, defaults to test account)
@@ -79,7 +79,7 @@ async fn main() -> eyre::Result<()> {
     // Create test transaction
     let nonce = get_nonce(&eth_client, &args.eth_rpc_url, signer.address).await?;
     let tx = TxEip1559 {
-        chain_id: 2151908,
+        chain_id: 43444,
         nonce,
         gas_limit: 21000,
         max_fee_per_gas: 10_000_000_000,

@@ -6,7 +6,7 @@ use bop_common::{
 };
 use jsonrpsee::client_transport::ws::Url;
 use reqwest::blocking::{Client, ClientBuilder};
-use tracing::{error, info};
+use tracing::error;
 
 pub struct Gossiper {
     target_rpc: Url,
@@ -35,6 +35,12 @@ impl Gossiper {
         let signed = msg.to_signed(&self.signer);
         let payload = signed.to_json();
 
+        if matches!(signed.message, p2p::VersionedMessage::FragV0(_)) {
+            if let Err(e) = self.frag_broadcast.send(signed) {
+                tracing::debug!(" broadcast of frag failed {e}")
+            }
+        }
+
         let Ok(res) = self.client.post(self.target_rpc.clone()).json(&payload).send() else {
             tracing::error!("couldn't send {}", payload);
             return;
@@ -44,15 +50,9 @@ impl Gossiper {
         let body = res.text().expect("couldn't read response");
 
         if code.is_success() {
-            info!("successfully sent {:?}", signed);
+            tracing::debug!("successfully sent {:?}", payload);
         } else {
             error!(body, %payload, code = code.as_u16(), "failed to send");
-        }
-        if matches!(signed.message, p2p::VersionedMessage::FragV0(_)) {
-            let mut to_send = signed;
-            while let Err(e) = self.frag_broadcast.send(to_send) {
-                to_send = e.0;
-            }
         }
     }
 }

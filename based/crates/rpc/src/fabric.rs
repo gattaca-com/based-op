@@ -28,12 +28,14 @@ impl FabricGatewayApiServer for RpcServer {
         let hash = tx.tx_hash();
         let request_hash = u64::from_be_bytes(hash[..8].try_into().unwrap());
 
-        let _ = self.new_order_tx.send(tx.into());
-
         // Wait for the transaction to be committed
         let mut receiver = self.frag_receiver_spawner.subscribe();
+
+        let _ = self.new_order_tx.send(tx.into());
+
         let commitment_future = async {
             while let Ok(msg) = receiver.recv().await {
+                tracing::info!("got {msg:?}");
                 let VersionedMessage::FragV0(frag) = &msg.message else {
                     continue;
                 };
@@ -55,10 +57,9 @@ impl FabricGatewayApiServer for RpcServer {
             Err(RpcError::BroadcastChannelClosed)
         };
 
-        let commitment_result = timeout(COMMITMENT_TIMEOUT, commitment_future)
+        timeout(COMMITMENT_TIMEOUT, commitment_future)
             .await
-            .map_err(|_| RpcError::NoCommitmentForRequest(request_hash))?;
-        commitment_result
+            .map_err(|_| RpcError::NoCommitmentForRequest(request_hash))?
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]

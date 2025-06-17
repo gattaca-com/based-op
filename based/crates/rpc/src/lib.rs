@@ -31,9 +31,10 @@ pub fn start_rpc<Db: DatabaseRead>(
     rt: &Runtime,
     rx_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
 ) {
-    let addr = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
+    let addr_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
+    let addr_no_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port_no_auth);
     let server = RpcServer::new(spine, config.sequencer_jwt(), rx_spawner);
-    rt.spawn(server.run(addr));
+    rt.spawn(server.run(addr_auth, addr_no_auth));
 }
 
 // TODO: jwt auth
@@ -65,8 +66,8 @@ impl RpcServer {
     }
 
     #[tracing::instrument(skip_all, name = "rpc")]
-    pub async fn run(self, addr: SocketAddr) {
-        info!(%addr, "starting RPC server");
+    pub async fn run(self, addr_auth: SocketAddr, addr_no_auth: SocketAddr) {
+        info!(%addr_auth, "starting RPC server");
         let validator = JwtAuthValidator::new(self.jwt);
         let auth_layer = AuthLayer::new(validator);
         let service_builder = tower::ServiceBuilder::new()
@@ -74,23 +75,35 @@ impl RpcServer {
             .layer(auth_layer)
             .timeout(std::time::Duration::from_secs(2));
 
-        let server = ServerBuilder::default()
+        let server_auth = ServerBuilder::default()
             .max_request_body_size(u32::MAX)
             .max_response_body_size(u32::MAX)
             .set_http_middleware(service_builder)
-            .build(addr)
+            .build(addr_auth)
             .await
             .expect("failed to create eth RPC server");
         let mut module = MinimalEthApiServer::into_rpc(self.clone());
         module.merge(EngineApiServer::into_rpc(self.clone())).expect("failed to merge modules");
-        module.merge(FabricGatewayApiServer::into_rpc(self)).expect("failed to merge modules");
+        let server_handle_auth = server_auth.start(module);
 
-        let server_handle = server.start(module);
+        let service_builder = tower::ServiceBuilder::new().timeout(std::time::Duration::from_secs(2));
+
+        let server_no_auth = ServerBuilder::default()
+            .max_request_body_size(u32::MAX)
+            .max_response_body_size(u32::MAX)
+            .set_http_middleware(service_builder)
+            .build(addr_no_auth)
+            .await
+            .expect("failed to create eth RPC server");
+        let module = FabricGatewayApiServer::into_rpc(self);
+        let server_handle_no_auth = server_no_auth.start(module);
+
         //TODO: Handle other communcation from sequencer ?
         //      Idea: we have this part do rpc requests, using the rpc->sequencer channel,
         //      but we make it part of another sync actor that uses the connections and gathers
         //      state etc in a spinloop that the rpc runtime can use to serve requests with?
-        server_handle.stopped().await;
+        server_handle_auth.stopped().await;
+        server_handle_no_auth.stopped().await;
 
         error!("server stopped");
     }
