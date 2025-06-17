@@ -19,6 +19,7 @@ reth-rpc-builder.workspace = true
 revm-primitives.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+jsonrpsee.workspace = true
 
 [dev-dependencies]
 alloy-consensus.workspace = true

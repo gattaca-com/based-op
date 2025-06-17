@@ -1844,6 +1844,7 @@ dependencies = [
  "bop-sequencer",
  "clap",
  "eyre",
+ "jsonrpsee",
  "op-alloy-consensus 0.14.1",
  "op-alloy-rpc-types 0.14.1",
  "reqwest",
