@@ -33,6 +33,8 @@ pub struct GatewayArgs {
     /// The port to run the engine_ and eth_ RPC
     #[arg(long = "rpc.port", default_value_t = 9997)]
     pub rpc_port: u16,
+    #[arg(long = "rpc.port_no_auth", default_value_t = 9998)]
+    pub rpc_port_no_auth: u16,
     #[arg(long = "rpc.jwt")]
     pub rpc_jwt: String,
     /// Url to an L2 eth api rpc

@@ -19,4 +19,16 @@ serde_json.workspace = true
 tokio.workspace = true
 tower.workspace = true
 tracing.workspace = true
+tree_hash.workspace = true
 reth-rpc-layer.workspace = true
+
+[dev-dependencies]
+clap.workspace = true
+tracing-subscriber.workspace = true
+eyre.workspace = true
+alloy-consensus.workspace = true
+serde.workspace = true
+
+[[example]]
+name = "fabric_commitment"
+path = "examples/fabric_commitment.rs"
