@@ -3,13 +3,13 @@ use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
-    BlockId, BlockNumberOrTag, 
+    BlockId, BlockNumberOrTag,
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient,
-        OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
+        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient, OpNodeApiClient,
+        OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
     },
     communication::messages::{RpcError, RpcResult},
     utils::{uuid, wait_for_signal},
