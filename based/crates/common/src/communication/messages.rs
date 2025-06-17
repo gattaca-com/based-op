@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::{constants::EMPTY_WITHDRAWALS, BlockHeader, Transaction as TransactionTrait};
+use alloy_consensus::{BlockHeader, Transaction as TransactionTrait, constants::EMPTY_WITHDRAWALS};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_rpc_types::engine::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState, PayloadAttributes, PayloadError,
@@ -11,7 +11,7 @@ use alloy_rpc_types::engine::{
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
-use reth_evm::{execute::BlockExecutionError, NextBlockEnvAttributes};
+use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
 use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
@@ -258,6 +258,9 @@ pub enum RpcError {
     #[error("response channel closed {0}")]
     ChannelClosed(#[from] oneshot::error::RecvError),
 
+    #[error("broadcast channel closed")]
+    BroadcastChannelClosed,
+
     #[error("invalid transaction bytes")]
     InvalidTransaction(#[from] alloy_rlp::Error),
 
@@ -275,6 +278,12 @@ pub enum RpcError {
 
     #[error("no return")]
     NoReturn,
+
+    #[error("no commitment for request: {0:?}")]
+    NoCommitmentForRequest(B256),
+
+    #[error("serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
 }
 
 impl From<RpcError> for RpcErrorObject<'static> {
@@ -283,15 +292,22 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::Internal |
             RpcError::Timeout(_) |
             RpcError::ChannelClosed(_) |
+            RpcError::BroadcastChannelClosed |
             RpcError::Jsonrpsee(_) |
             RpcError::TokioJoin(_) |
             RpcError::Db(_) |
             RpcError::Io(_) |
+            RpcError::Serialization(_) |
             RpcError::NoReturn => internal_error(),
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
                 Some(error.to_string()),
+            ),
+            RpcError::NoCommitmentForRequest(slot) => RpcErrorObject::owned(
+                ErrorCode::InvalidParams.code(),
+                ErrorCode::InvalidParams.message(),
+                Some(format!("no commitment for request: {slot}")),
             ),
         }
     }

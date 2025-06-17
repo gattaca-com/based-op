@@ -8,34 +8,6 @@ use tree_hash_derive::TreeHash;
 
 use crate::{signing::ECDSASigner, transaction::Transaction as BuilderTransaction};
 
-#[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize, AsRefStr)]
-#[tree_hash(enum_behaviour = "union")]
-#[serde(untagged)]
-#[non_exhaustive]
-pub enum VersionedMessage {
-    FragV0(FragV0),
-    SealV0(SealV0),
-    EnvV0(EnvV0),
-}
-
-impl From<FragV0> for VersionedMessage {
-    fn from(value: FragV0) -> Self {
-        Self::FragV0(value)
-    }
-}
-
-impl From<SealV0> for VersionedMessage {
-    fn from(value: SealV0) -> Self {
-        Self::SealV0(value)
-    }
-}
-
-impl From<EnvV0> for VersionedMessage {
-    fn from(value: EnvV0) -> Self {
-        Self::EnvV0(value)
-    }
-}
-
 pub type MaxExtraDataSize = typenum::U256;
 pub type ExtraData = VariableList<u8, MaxExtraDataSize>;
 
@@ -91,7 +63,7 @@ pub struct FragV0 {
     pub is_last: bool,
     /// Ordered list of EIP-2718 encoded transactions
     #[serde(with = "ssz_types::serde_utils::list_of_hex_var_list")]
-    txs: Transactions,
+    pub txs: Transactions,
 }
 
 impl FragV0 {
@@ -124,13 +96,52 @@ pub struct SealV0 {
     pub block_hash: B256,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize, AsRefStr)]
+#[tree_hash(enum_behaviour = "union")]
+#[serde(untagged)]
+#[non_exhaustive]
+pub enum VersionedMessage {
+    FragV0(FragV0),
+    SealV0(SealV0),
+    EnvV0(EnvV0),
+}
+
 impl VersionedMessage {
-    pub fn to_json(&self, signer: &ECDSASigner) -> serde_json::Value {
+    pub fn to_signed(self, signer: &ECDSASigner) -> SignedVersionedMessage {
         let hash = self.tree_hash_root();
         let signature = signer.sign_message(hash).expect("couldn't sign message");
         let signature = Bytes::from(signature.as_bytes());
+        SignedVersionedMessage { message: self, signature }
+    }
+}
 
-        let method = match &self {
+impl From<FragV0> for VersionedMessage {
+    fn from(value: FragV0) -> Self {
+        Self::FragV0(value)
+    }
+}
+
+impl From<SealV0> for VersionedMessage {
+    fn from(value: SealV0) -> Self {
+        Self::SealV0(value)
+    }
+}
+
+impl From<EnvV0> for VersionedMessage {
+    fn from(value: EnvV0) -> Self {
+        Self::EnvV0(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignedVersionedMessage {
+    pub message: VersionedMessage,
+    pub signature: Bytes,
+}
+
+impl SignedVersionedMessage {
+    pub fn to_json(&self) -> serde_json::Value {
+        let method = match &self.message {
             VersionedMessage::FragV0(_) => "based_newFrag",
             VersionedMessage::SealV0(_) => "based_sealFrag",
             VersionedMessage::EnvV0(_) => "based_env",
@@ -139,7 +150,7 @@ impl VersionedMessage {
         serde_json::json!({
             "jsonrpc": "2.0",
             "method": method,
-            "params": [{"signature": signature, "message": self}],
+            "params": [{"signature": self.signature, "message": self.message}],
             "id": 1
         })
     }
