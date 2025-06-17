@@ -199,7 +199,7 @@ impl PortalServer {
                 let mut i = index;
                 while self.sec_since_last_seen(self.current_gateway.lock().await.as_ref().unwrap()).await > 5 {
                     i = (i + 1) % self.gateways().len();
-                    if (i == index) {
+                    if i == index {
                         error!("CRITICAL: No gateway is available, all gateways are stale");
                         return Ok(());
                     }
@@ -213,7 +213,7 @@ impl PortalServer {
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 
     pub async fn refresh_gateways(&self) -> eyre::Result<()> {

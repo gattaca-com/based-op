@@ -7,7 +7,7 @@ use bop_common::{
     config::GatewayArgs,
     shared::SharedState,
     signing::ECDSASigner,
-    time::{self, Duration},
+    time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{DatabaseRead, init_database};
@@ -17,6 +17,7 @@ use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
 };
 use clap::Parser;
+use jsonrpsee::http_client::HttpClient;
 use revm_primitives::B256;
 use tokio::runtime::Runtime;
 use tracing::{error, info};
@@ -123,23 +124,18 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             });
         }
 
-        s.spawn(|| {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to create runtime")
-                .block_on(async {
-                    // TODO: Figure this out. This does not compile.
-                    let handle = launch_auth(args.rpc_jwt).await;
-                    let client = handle.http_client();
-                    let jwt_secret = args.rpc_jwt;
-                    loop {
-                        PortalApiClient::heartbeat(client.clone(), jwt_secret.clone()).await;
-                        tokio::time::sleep(Duration::from_secs(1).into()).await;
-                    }
-                });
-        })
+        tokio::runtime::Builder::new_current_thread().enable_all().build().expect("failed to create runtime").block_on(
+            async {
+                let client_portal = HttpClient::builder()
+                    .build(args.portal_rpc_url.clone())
+                    .expect("Couldn't initialize portal rpc client");
+                let jwt_secret = args.rpc_jwt;
+                loop {
+                    let _ = PortalApiClient::heartbeat(&client_portal, jwt_secret.clone()).await;
+                    tokio::time::sleep(Duration::from_secs(1).into()).await;
+                }
+            },
+        );
     });
-
     Ok(())
 }
