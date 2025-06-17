@@ -91,12 +91,15 @@ async fn main() -> eyre::Result<()> {
 
     let signed_tx = signer.sign_tx(tx)?;
     let op_tx = OpTxEnvelope::Eip1559(signed_tx);
-    let encoded_tx = Bytes::from(op_tx.encoded_2718());
+    let encoded_tx = op_tx.encoded_2718();
     info!(?op_tx, sender = %signer.address, hash = %op_tx.tx_hash(), "Created test transaction");
 
     // Create commitment request
-    let commitment_request =
-        CommitmentRequest { commitment_type: FRAG_COMMITMENT_TYPE, payload: encoded_tx, slasher: Address::random() };
+    let commitment_request = CommitmentRequest {
+        commitment_type: FRAG_COMMITMENT_TYPE,
+        payload: encoded_tx.into(),
+        slasher: Address::random(),
+    };
     info!(?commitment_request, "Sending commitment request");
 
     match commitment_client.post_commitment(commitment_request.clone()).await {

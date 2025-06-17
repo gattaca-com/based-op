@@ -279,8 +279,8 @@ pub enum RpcError {
     #[error("no return")]
     NoReturn,
 
-    #[error("no commitment for request: {0}")]
-    NoCommitmentForRequest(u64),
+    #[error("no commitment for request: {0:?}")]
+    NoCommitmentForRequest(B256),
 
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),

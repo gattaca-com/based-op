@@ -1896,6 +1896,7 @@ dependencies = [
  "tower 0.4.13",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "tree_hash",
 ]
 
 [[package]]

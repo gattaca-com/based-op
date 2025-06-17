@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use alloy_eips::Decodable2718;
+use alloy_primitives::B256;
 use bop_common::{
     communication::messages::{RpcError, RpcResult},
     fabric::{Commitment, CommitmentRequest, FabricGatewayApiServer, FeeInfo, SignedCommitment, SlotInfoResponse},
@@ -12,6 +13,7 @@ use jsonrpsee::core::async_trait;
 use op_alloy_consensus::OpTxEnvelope;
 use tokio::time::timeout;
 use tracing::Level;
+use tree_hash::TreeHash;
 
 use crate::RpcServer;
 
@@ -21,18 +23,17 @@ const COMMITMENT_TIMEOUT: Duration = Duration::from_secs(1);
 impl FabricGatewayApiServer for RpcServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn post_commitment(&self, commitment: CommitmentRequest) -> RpcResult<SignedCommitment> {
-        // Send the transaction to the sequencer
-        let tx = Arc::new(Transaction::decode(commitment.payload.clone())?);
-        TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
+        let request_hash = commitment.tree_hash_root();
+        let tx = Arc::new(Transaction::decode(commitment.payload.to_vec().into())?);
+        let tx_hash = tx.tx_hash();
 
-        let hash = tx.tx_hash();
-        let request_hash = u64::from_be_bytes(hash[..8].try_into().unwrap());
-
-        // Wait for the transaction to be committed
         let mut receiver = self.frag_receiver_spawner.subscribe();
 
+        // Send the transaction to the sequencer
+        TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
         let _ = self.new_order_tx.send(tx.into());
 
+        // Wait for the transaction to be committed
         let commitment_future = async {
             while let Ok(msg) = receiver.recv().await {
                 tracing::info!("got {msg:?}");
@@ -43,7 +44,7 @@ impl FabricGatewayApiServer for RpcServer {
                     .txs
                     .iter()
                     .filter_map(|t| OpTxEnvelope::decode_2718(&mut t.as_ref()).ok())
-                    .any(|t| *t.hash() == hash)
+                    .any(|t| *t.hash() == tx_hash)
                 {
                     let commitment = Commitment {
                         commitment_type: commitment.commitment_type,
@@ -63,7 +64,7 @@ impl FabricGatewayApiServer for RpcServer {
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn get_commitment(&self, request_hash: u64) -> RpcResult<SignedCommitment> {
+    async fn get_commitment(&self, request_hash: B256) -> RpcResult<SignedCommitment> {
         // TODO: fetch from datastore
         Err(RpcError::NoCommitmentForRequest(request_hash))
     }

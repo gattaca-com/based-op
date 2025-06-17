@@ -1,17 +1,22 @@
-use alloy_primitives::{Address, Bytes};
+use alloy_primitives::{Address, B256, Bytes};
 use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
+use ssz_types::{VariableList, typenum};
+use tree_hash_derive::TreeHash;
 
 use crate::communication::messages::RpcResult;
+
+pub type MaxCommitmentRequestPayloadSize = typenum::U1048576; // 1MB.
+pub type CommitmentRequestPayload = VariableList<u8, MaxCommitmentRequestPayloadSize>;
 
 pub const FRAG_COMMITMENT_TYPE: u64 = 7;
 
 /// A CommitmentRequest message created by a user
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, TreeHash)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitmentRequest {
     pub commitment_type: u64,
-    pub payload: Bytes,
+    pub payload: CommitmentRequestPayload,
     pub slasher: Address,
 }
 
@@ -21,7 +26,7 @@ pub struct CommitmentRequest {
 pub struct Commitment {
     pub commitment_type: u64,
     pub payload: Bytes,
-    pub request_hash: u64,
+    pub request_hash: B256,
     pub slasher: Address,
 }
 
@@ -78,7 +83,7 @@ pub trait FabricGatewayApi {
 
     /// Request an existing SignedCommitment by request hash
     #[method(name = "getCommitment")]
-    async fn get_commitment(&self, request_hash: u64) -> RpcResult<SignedCommitment>;
+    async fn get_commitment(&self, request_hash: B256) -> RpcResult<SignedCommitment>;
 
     /// Get Gateway information for upcoming slots
     #[method(name = "slots")]
