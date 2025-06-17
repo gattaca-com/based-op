@@ -63,6 +63,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     };
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
+    let (tx, _) = tokio::sync::broadcast::channel(10_000);
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -74,7 +75,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, &rt);
+            start_rpc(&args, &spine, &rt, tx.clone());
             move || rt.block_on(wait_for_signal())
         });
 
@@ -103,7 +104,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         let root_peer_url = args.gossip_root_peer_url.clone();
         let gossip_signer_private_key = args.gossip_signer_private_key.map(|key| ECDSASigner::new(key).unwrap());
         s.spawn(|| {
-            Gossiper::new(root_peer_url, gossip_signer_private_key).run(
+            Gossiper::new(root_peer_url, gossip_signer_private_key, tx).run(
                 spine.to_connections("Gossiper"),
                 ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
             );
