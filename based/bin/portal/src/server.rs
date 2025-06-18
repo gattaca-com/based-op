@@ -18,6 +18,7 @@ use bop_common::{
     api::{
         ControlApiClient, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient,
         OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
+        RegistryApiServer,
     },
     communication::messages::{RpcError, RpcResult},
     utils::{utcnow_ms, uuid, wait_for_signal},
@@ -76,6 +77,7 @@ pub struct PortalServer {
     fallback_client: AuthRpcClient,
     op_node_client: RpcClient,
     registry_client: RpcClient,
+    current_gateway_candidate: Arc<Mutex<Option<Gateway>>>,
     current_gateway: Arc<Mutex<Option<Gateway>>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
@@ -101,7 +103,6 @@ impl PortalServer {
 
         let gateway_timeout = Duration::from_millis(args.gateway_timeout_ms);
 
-        let current_gateway = Arc::new(Mutex::new(None));
         let gateways = vec![];
         let gateways = Arc::new(RwLock::new(gateways));
 
@@ -110,7 +111,8 @@ impl PortalServer {
             fallback_client,
             op_node_client,
             registry_client,
-            current_gateway,
+            current_gateway_candidate: Arc::new(Mutex::new(None)),
+            current_gateway: Arc::new(Mutex::new(None)),
             gateways,
             gateway_timeout,
             args: Arc::new(args),
@@ -118,6 +120,7 @@ impl PortalServer {
 
         match temp.refresh_gateways().await {
             Ok(_) => {
+                temp.update_current_gateway().await?;
                 info!("Successfully fetched registered gateways");
             }
             Err(err) => {
@@ -228,21 +231,21 @@ impl PortalServer {
         Ok(())
     }
 
-    async fn update_current_gateway(&self) -> eyre::Result<()> {
+    async fn update_current_gateway_candidate(&self) -> eyre::Result<()> {
         let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
         let current_gateway_index = self.gateways().iter().position(|g| g.id == gateway_url);
         match current_gateway_index {
             Some(index) => {
                 let gateway = self.gateways().get(index).cloned().unwrap();
-                *self.current_gateway.lock().await = Some(gateway);
+                *self.current_gateway_candidate.lock().await = Some(gateway);
                 let mut i = index;
-                while !self.current_gateway.lock().await.as_ref().unwrap().is_active() {
+                while !self.current_gateway_candidate.lock().await.as_ref().unwrap().is_active() {
                     i = (i + 1) % self.gateways().len();
                     if i == index {
                         error!("CRITICAL: No gateway is available, all gateways are stale");
                         return Ok(());
                     }
-                    *self.current_gateway.lock().await = Some(self.gateways().get(i).cloned().unwrap());
+                    *self.current_gateway_candidate.lock().await = Some(self.gateways().get(i).cloned().unwrap());
                 }
             }
             None => {
@@ -255,9 +258,14 @@ impl PortalServer {
         Ok(())
     }
 
+    async fn update_current_gateway(&self) -> eyre::Result<()> {
+        self.current_gateway.lock().await.replace(self.current_gateway_candidate.lock().await.clone().unwrap());
+        Ok(())
+    }
+
     pub async fn refresh_gateways(&self) -> eyre::Result<()> {
         self.fetch_registered_gateways().await?;
-        self.update_current_gateway().await?;
+        self.update_current_gateway_candidate().await?;
         Ok(())
     }
 
@@ -670,6 +678,15 @@ impl EngineApiServer for PortalServer {
 
         let payload = gateway.or(fallback)?;
 
+        match self.update_current_gateway().await {
+            Ok(_) => {
+                info!("updated current gateway to {:?}", self.current_gateway.lock().await);
+            }
+            Err(err) => {
+                error!(%err, "failed to update current gateway");
+            }
+        }
+
         Ok(payload)
     }
 }
@@ -713,6 +730,53 @@ impl PortalApiServer for PortalServer {
     /// The enode that can be used to sync with the op-geth
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String> {
         Ok(self.fallback_eth_client.node_info().await.map(|p| p.enode)?)
+    }
+}
+
+#[async_trait]
+impl RegistryApiServer for PortalServer {
+    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
+        match self.registry_client.get_future_gateway(n_blocks_into_future).await {
+            Ok(gateway) => Ok(gateway),
+            Err(err) => {
+                error!(%err, "Failed to get future gateway");
+                Err(RpcError::Internal)
+            }
+        }
+    }
+
+    async fn current_gateway(&self) -> RpcResult<(u64, Url, Address, B256)> {
+        // match self.current_gateway.lock().await.as_ref() {
+        //     Some(gateway) => {
+        //         let url = gateway.id.clone();
+        //         let address = gateway.client.id().clone();
+        //         let jwt_as_b256 = gateway.client.jwt().clone();
+
+        //         Ok((n_blocks_into_future, url, address, jwt_as_b256))
+        //     }
+        //     None => Err(RpcError::Internal),
+        // }
+        Ok((0, Url::parse("http://localhost:8545").unwrap(), Address::default(), B256::default()))
+    }
+
+    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
+        match self.registry_client.registered_gateways().await {
+            Ok(gateways) => Ok(gateways),
+            Err(err) => {
+                error!(%err, "Failed to get registered gateways");
+                Err(RpcError::Internal)
+            }
+        }
+    }
+
+    async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()> {
+        match self.registry_client.register_gateway(gateway).await {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                error!(%err, "Failed to register gateway");
+                Err(RpcError::Internal)
+            }
+        }
     }
 }
 
