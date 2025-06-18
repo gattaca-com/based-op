@@ -733,6 +733,7 @@ impl PortalApiServer for PortalServer {
     }
 }
 
+// TODO: Implement this properly
 #[async_trait]
 impl RegistryApiServer for PortalServer {
     async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
@@ -756,7 +757,7 @@ impl RegistryApiServer for PortalServer {
         //     }
         //     None => Err(RpcError::Internal),
         // }
-        Ok((0, Url::parse("http://localhost:8545").unwrap(), Address::default(), B256::default()))
+        Ok((0, Url::parse("0.0.0.0").unwrap(), Address::default(), B256::default()))
     }
 
     async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
