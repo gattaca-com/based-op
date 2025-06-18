@@ -1,24 +1,26 @@
 use std::{
-    collections::HashMap,
     fmt,
     net::SocketAddr,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes, U256, hex};
+use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient, OpNodeApiClient,
-        OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
+        ControlApiClient, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient,
+        OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
     },
     communication::messages::{RpcError, RpcResult},
-    utils::{uuid, wait_for_signal},
+    utils::{utcnow_ms, uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::{ClientError, async_trait},
@@ -44,7 +46,23 @@ pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<Ht
 struct Gateway {
     id: Url,
     client: AuthRpcClient,
-    jwt_secret_str: String,
+    ping_ms: Arc<AtomicU64>,
+    last_seen: Arc<AtomicU64>, // unix timestamp in milliseconds
+}
+
+impl Gateway {
+    pub fn is_active(&self) -> bool {
+        let current_ts = utcnow_ms();
+        let elapsed = current_ts - self.last_seen.load(Ordering::Relaxed);
+        info!(
+            "Gateway {} ping: {}ms, last seen: {}, elapsed: {}",
+            self.id,
+            self.ping_ms.load(Ordering::Relaxed),
+            self.last_seen.load(Ordering::Relaxed),
+            elapsed
+        );
+        elapsed < 5000
+    }
 }
 
 impl fmt::Debug for Gateway {
@@ -54,8 +72,8 @@ impl fmt::Debug for Gateway {
 }
 
 impl Gateway {
-    fn new(id: Url, client: AuthRpcClient, jwt_secret_str: String) -> Self {
-        Self { id, client, jwt_secret_str }
+    fn new(id: Url, client: AuthRpcClient) -> Self {
+        Self { id, client, ping_ms: Arc::new(AtomicU64::new(0)), last_seen: Arc::new(AtomicU64::new(0)) }
     }
 }
 
@@ -68,7 +86,6 @@ pub struct PortalServer {
     current_gateway: Arc<Mutex<Option<Gateway>>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
-    last_seen_map: Arc<Mutex<HashMap<String, Instant>>>,
     args: Arc<PortalArgs>,
 }
 
@@ -102,12 +119,18 @@ impl PortalServer {
             registry_client,
             current_gateway,
             gateways,
-            last_seen_map: Arc::new(Mutex::new(HashMap::new())),
             gateway_timeout,
             args: Arc::new(args),
         };
 
-        temp.refresh_gateways().await?;
+        match temp.refresh_gateways().await {
+            Ok(_) => {
+                info!("Successfully fetched registered gateways");
+            }
+            Err(err) => {
+                error!(%err, "Failed to fetch registered gateways");
+            }
+        }
 
         Ok(temp)
     }
@@ -147,7 +170,13 @@ impl PortalServer {
 
         tokio::spawn(async move {
             loop {
-                let _ = self.refresh_gateways().await;
+                match self.refresh_gateways().await {
+                    Ok(_) => {}
+                    Err(err) => {
+                        error!(%err, "Failed to fetch registered gateways");
+                    }
+                }
+                // self.ping_gateways().await;
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         });
@@ -185,6 +214,23 @@ impl PortalServer {
                 gateways.push(client);
             }
         }
+
+        for gateway in gateways.iter() {
+            let ping_start = Instant::now();
+            match ControlApiClient::heartbeat(&gateway.client).await {
+                Ok(_) => {
+                    let ping_duration = ping_start.elapsed();
+                    gateway.ping_ms.store(ping_duration.as_millis() as u64, Ordering::Relaxed);
+                    gateway.last_seen.store(utcnow_ms(), Ordering::Relaxed);
+                    info!(?gateway, ping_ms = gateway.ping_ms.load(Ordering::Relaxed), "pinged gateway successfully");
+                }
+                Err(err) => {
+                    gateway.last_seen.store(0, Ordering::Relaxed);
+                    error!(%err, ?gateway, "failed to ping gateway");
+                }
+            }
+        }
+
         *self.gateways.write() = gateways;
         Ok(())
     }
@@ -197,7 +243,7 @@ impl PortalServer {
                 let gateway = self.gateways().get(index).cloned().unwrap();
                 *self.current_gateway.lock().await = Some(gateway);
                 let mut i = index;
-                while self.sec_since_last_seen(self.current_gateway.lock().await.as_ref().unwrap()).await > 5 {
+                while !self.current_gateway.lock().await.as_ref().unwrap().is_active() {
                     i = (i + 1) % self.gateways().len();
                     if i == index {
                         error!("CRITICAL: No gateway is available, all gateways are stale");
@@ -220,17 +266,6 @@ impl PortalServer {
         self.fetch_registered_gateways().await?;
         self.update_current_gateway().await?;
         Ok(())
-    }
-
-    async fn sec_since_last_seen(&self, gateway: &Gateway) -> u64 {
-        let last_seen_map = self.last_seen_map.lock().await;
-        let last_seen = last_seen_map.get(gateway.jwt_secret_str.as_str());
-        if let Some(last_seen) = last_seen {
-            let now = Instant::now();
-            now.duration_since(*last_seen).as_secs()
-        } else {
-            0
-        }
     }
 
     async fn send_fcu(
@@ -686,16 +721,6 @@ impl PortalApiServer for PortalServer {
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String> {
         Ok(self.fallback_eth_client.node_info().await.map(|p| p.enode)?)
     }
-
-    /// handle heartbeat from gateway
-    async fn heartbeat(&self, jwt_secret: String) -> RpcResult<()> {
-        let mut map = self.last_seen_map.lock().await;
-        // map.insert(jwt_secret, Instant::now());
-
-        map.entry(jwt_secret).and_modify(|e| *e = Instant::now()).or_insert_with(Instant::now);
-
-        Ok(())
-    }
 }
 
 fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
@@ -724,6 +749,6 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
 fn create_gateway_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Result<Gateway> {
     let client = create_auth_client(url.clone(), jwt, timeout)?;
     // let gateway_client = Gateway { client, id: url };
-    let gateway_client = Gateway::new(url, client, hex::encode(jwt.as_bytes()));
+    let gateway_client = Gateway::new(url, client);
     Ok(gateway_client)
 }

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use bop_common::{
     actor::{Actor, ActorConfig},
-    api::PortalApiClient,
     communication::Spine,
     config::GatewayArgs,
     shared::SharedState,
@@ -17,7 +16,6 @@ use bop_sequencer::{
     block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
 };
 use clap::Parser;
-use jsonrpsee::http_client::HttpClient;
 use revm_primitives::B256;
 use tokio::runtime::Runtime;
 use tracing::{error, info};
@@ -103,6 +101,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 );
             });
         }
+
         let root_peer_url = args.gossip_root_peer_url.clone();
         let gossip_signer_private_key = args.gossip_signer_private_key.map(|key| ECDSASigner::new(key).unwrap());
         s.spawn(|| {
@@ -124,18 +123,18 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             });
         }
 
-        tokio::runtime::Builder::new_current_thread().enable_all().build().expect("failed to create runtime").block_on(
-            async {
-                let client_portal = HttpClient::builder()
-                    .build(args.portal_rpc_url.clone())
-                    .expect("Couldn't initialize portal rpc client");
-                let jwt_secret = args.rpc_jwt;
-                loop {
-                    let _ = PortalApiClient::heartbeat(&client_portal, jwt_secret.clone()).await;
-                    tokio::time::sleep(Duration::from_secs(1).into()).await;
-                }
-            },
-        );
+        // tokio::runtime::Builder::new_current_thread().enable_all().build().expect("failed to create
+        // runtime").block_on(     async {
+        //         let client_portal = HttpClient::builder()
+        //             .build(args.portal_rpc_url.clone())
+        //             .expect("Couldn't initialize portal rpc client");
+        //         let jwt_secret = args.rpc_jwt;
+        //         loop {
+        //             let _ = PortalApiClient::heartbeat(&client_portal, jwt_secret.clone()).await;
+        //             tokio::time::sleep(Duration::from_secs(1).into()).await;
+        //         }
+        //     },
+        // );
     });
     Ok(())
 }
