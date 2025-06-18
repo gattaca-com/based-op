@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
-    api::{EngineApiServer, MinimalEthApiServer},
+    api::{ControlApiServer, EngineApiServer, MinimalEthApiServer},
     communication::{
         Producer, Sender, Spine,
         messages::{EngineApi, RpcResult},
@@ -68,7 +68,8 @@ impl RpcServer {
             .await
             .expect("failed to create eth RPC server");
         let mut module = MinimalEthApiServer::into_rpc(self.clone());
-        module.merge(EngineApiServer::into_rpc(self)).expect("failed to merge modules");
+        module.merge(EngineApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        module.merge(ControlApiServer::into_rpc(self.clone())).expect("failed to merge modules");
 
         let server_handle = server.start(module);
         //TODO: Handle other communcation from sequencer ?
@@ -81,9 +82,6 @@ impl RpcServer {
     }
 }
 
-/// Note: this is a temporary RPC implementation that only serves the lastest state from the sequencer.
-/// It doesn't adhere to the specific block number or hash requests.
-/// This will ultimately be replaced by the RPC server in the EL when the full Frag handling is implemented.
 #[async_trait]
 impl MinimalEthApiServer for RpcServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
@@ -96,5 +94,12 @@ impl MinimalEthApiServer for RpcServer {
         let _ = self.new_order_tx.send(tx.into());
 
         Ok(hash)
+    }
+}
+
+#[async_trait]
+impl ControlApiServer for RpcServer {
+    async fn heartbeat(&self) -> RpcResult<()> {
+        Ok(())
     }
 }

@@ -181,10 +181,15 @@ pub trait PortalApi {
     /// The enode that can be used to sync with the op-geth
     #[method(name = "opGethBootnodeEnode")]
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String>;
+}
 
+#[rpc(client, server, namespace = "control")]
+pub trait ControlApi {
     // Heartbeat API
     #[method(name = "heartbeat")]
-    async fn heartbeat(&self, jwt_secret: String) -> RpcResult<()>;
+    async fn heartbeat(&self) -> RpcResult<()> {
+        Ok(())
+    }
 }
 
 #[rpc(client, server, namespace = "optimism")]
