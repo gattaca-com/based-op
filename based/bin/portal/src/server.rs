@@ -54,13 +54,6 @@ impl Gateway {
     pub fn is_active(&self) -> bool {
         let current_ts = utcnow_ms();
         let elapsed = current_ts - self.last_seen.load(Ordering::Relaxed);
-        info!(
-            "Gateway {} ping: {}ms, last seen: {}, elapsed: {}",
-            self.id,
-            self.ping_ms.load(Ordering::Relaxed),
-            self.last_seen.load(Ordering::Relaxed),
-            elapsed
-        );
         elapsed < 5000
     }
 }
