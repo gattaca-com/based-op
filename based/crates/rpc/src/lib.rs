@@ -85,6 +85,7 @@ impl RpcServer {
         let mut module = MinimalEthApiServer::into_rpc(self.clone());
         module.merge(EngineApiServer::into_rpc(self.clone().clone())).expect("failed to merge modules");
         module.merge(ControlApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        
         let server_handle_auth = server_auth.start(module);
 
         let service_builder = tower::ServiceBuilder::new().timeout(std::time::Duration::from_secs(2));
