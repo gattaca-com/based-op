@@ -46,6 +46,8 @@ pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<Ht
 #[derive(Clone)]
 struct Gateway {
     id: Url,
+    jwt: String,
+    address: Address,
     client: AuthRpcClient,
     ping_ms: Arc<AtomicU64>,
     last_seen: Arc<AtomicU64>, // unix timestamp in milliseconds
@@ -66,8 +68,8 @@ impl fmt::Debug for Gateway {
 }
 
 impl Gateway {
-    fn new(id: Url, client: AuthRpcClient) -> Self {
-        Self { id, client, ping_ms: Arc::new(AtomicU64::new(0)), last_seen: Arc::new(AtomicU64::new(0)) }
+    fn new(id: Url, client: AuthRpcClient, jwt: String, address: Address) -> Self {
+        Self { id, jwt, client, ping_ms: Arc::new(AtomicU64::new(0)), last_seen: Arc::new(AtomicU64::new(0)), address }
     }
 }
 
@@ -172,7 +174,6 @@ impl PortalServer {
                         error!(%err, "Failed to fetch registered gateways");
                     }
                 }
-                // self.ping_gateways().await;
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         });
@@ -198,12 +199,14 @@ impl PortalServer {
     async fn fetch_registered_gateways(&self) -> eyre::Result<()> {
         let mut gateways = vec![];
         let registered_gateways = self.registry_client.registered_gateways().await?;
-        for (gateway_url, _, jwt_as_b256) in registered_gateways {
+        for (gateway_url, address, jwt_as_b256) in registered_gateways {
+            let jwt_str = unsafe {
+                std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
+            };
             let client = create_gateway_client(
                 gateway_url,
-                unsafe {
-                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                },
+                jwt_str,
+                address,
                 self.gateway_timeout,
             );
             if let Ok(client) = client {
@@ -747,17 +750,18 @@ impl RegistryApiServer for PortalServer {
     }
 
     async fn current_gateway(&self) -> RpcResult<(u64, Url, Address, B256)> {
-        // match self.current_gateway.lock().await.as_ref() {
-        //     Some(gateway) => {
-        //         let url = gateway.id.clone();
-        //         let address = gateway.client.id().clone();
-        //         let jwt_as_b256 = gateway.client.jwt().clone();
+        match self.current_gateway.lock().await.as_ref() {
+            Some(gateway) => {
+                let block_number = 0; // TODO: Get the actual block number
+                let url = gateway.id.clone();
+                let address = gateway.address;
+                let jwt_as_b256 = gateway.jwt.as_bytes().try_into().map_err(|_| RpcError::Internal)?;
 
-        //         Ok((n_blocks_into_future, url, address, jwt_as_b256))
-        //     }
-        //     None => Err(RpcError::Internal),
-        // }
-        Ok((0, Url::parse("0.0.0.0").unwrap(), Address::default(), B256::default()))
+                Ok((block_number, url, address, jwt_as_b256))
+            }
+            None => Err(RpcError::Internal),
+        }
+        // Ok((0, Url::parse("0.0.0.0").unwrap(), Address::default(), B256::default()))
     }
 
     async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
@@ -804,9 +808,9 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
     Ok(client)
 }
 
-fn create_gateway_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Result<Gateway> {
+fn create_gateway_client(url: Url, jwt_str: String, address: Address, timeout: Duration) -> eyre::Result<Gateway> {
+    let jwt = JwtSecret::from_str(&jwt_str).map_err(|_| eyre::eyre!("Invalid JWT secret"))?;
     let client = create_auth_client(url.clone(), jwt, timeout)?;
-    // let gateway_client = Gateway { client, id: url };
-    let gateway_client = Gateway::new(url, client);
+    let gateway_client = Gateway::new(url, client, jwt_str, address);
     Ok(gateway_client)
 }
