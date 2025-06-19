@@ -83,6 +83,7 @@ pub struct PortalServer {
     current_gateway: Arc<Mutex<Option<Gateway>>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
+    current_block_number: Arc<AtomicU64>,
     args: Arc<PortalArgs>,
 }
 
@@ -117,10 +118,11 @@ impl PortalServer {
             current_gateway: Arc::new(Mutex::new(None)),
             gateways,
             gateway_timeout,
+            current_block_number: Arc::new(AtomicU64::new(0)),
             args: Arc::new(args),
         };
 
-        match temp.refresh_gateways().await {
+        match temp.refresh_gateway_list().await {
             Ok(_) => {
                 temp.update_current_gateway().await?;
                 info!("Successfully fetched registered gateways");
@@ -129,6 +131,15 @@ impl PortalServer {
                 error!(%err, "Failed to fetch registered gateways");
             }
         }
+
+        let (block_number, _, _, _) = match temp.registry_client.current_gateway().await {
+            Ok(data) => data,
+            Err(err) => {
+                error!(%err, "Failed to get future gateway from registry");
+                return Err(err.into());
+            }
+        };
+        temp.current_block_number.store(block_number, Ordering::Relaxed);
 
         Ok(temp)
     }
@@ -168,7 +179,7 @@ impl PortalServer {
 
         tokio::spawn(async move {
             loop {
-                match self.refresh_gateways().await {
+                match self.refresh_gateway_list().await {
                     Ok(_) => {}
                     Err(err) => {
                         error!(%err, "Failed to fetch registered gateways");
@@ -227,8 +238,25 @@ impl PortalServer {
         Ok(())
     }
 
-    async fn update_current_gateway_candidate(&self) -> eyre::Result<()> {
-        let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
+    async fn update_current_gateway_candidate(
+        &self,
+        n_blocks_into_future: u64,
+        expected_block_number: Option<u64>,
+    ) -> eyre::Result<()> {
+        let (block_number, gateway_url, _, _) = self.registry_client.get_future_gateway(n_blocks_into_future).await?;
+        if let Some(expected_block_number) = expected_block_number {
+            if block_number != expected_block_number {
+                error!(
+                    "CRITICAL: The block number we got from the registry ({}) does not match the expected block number ({})",
+                    block_number, expected_block_number
+                );
+                panic!(
+                    "CRITICAL: The block number we got from the registry ({}) does not match the expected block number ({})",
+                    block_number, expected_block_number
+                );
+                // return Ok(());
+            }
+        }
         let current_gateway_index = self.gateways().iter().position(|g| g.id == gateway_url);
         match current_gateway_index {
             Some(index) => {
@@ -259,9 +287,16 @@ impl PortalServer {
         Ok(())
     }
 
-    pub async fn refresh_gateways(&self) -> eyre::Result<()> {
+    pub async fn refresh_gateway_list(&self) -> eyre::Result<()> {
         self.fetch_registered_gateways().await?;
-        self.update_current_gateway_candidate().await?;
+        // self.update_current_gateway_candidate(0, None).await?;
+        Ok(())
+    }
+
+    pub async fn on_new_payload(&self, block_number: u64) -> eyre::Result<()> {
+        self.update_current_gateway_candidate(1, Some(block_number + 1)).await?;
+        self.update_current_gateway().await?;
+        self.current_block_number.store(block_number + 1, Ordering::Relaxed);
         Ok(())
     }
 
@@ -517,6 +552,13 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.payload_inner.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
+        match self.on_new_payload(block_number).await {
+            Ok(_) => {}
+            Err(err) => {
+                error!(%err, "failed to process new payload");
+            }
+        };
+
         let response = self
             .fallback_client
             .new_payload_v4(payload.clone(), versioned_hashes.clone(), parent_beacon_block_root, requests.clone())
@@ -571,6 +613,12 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
+        match self.on_new_payload(block_number).await {
+            Ok(_) => {}
+            Err(err) => {
+                error!(%err, "failed to process new payload");
+            }
+        };
 
         let response = self
             .fallback_client
@@ -673,16 +721,6 @@ impl EngineApiServer for PortalServer {
         }
 
         let payload = gateway.or(fallback)?;
-
-        match self.update_current_gateway().await {
-            Ok(_) => {
-                info!("updated current gateway to {:?}", self.current_gateway.lock().await);
-            }
-            Err(err) => {
-                error!(%err, "failed to update current gateway");
-            }
-        }
-
         Ok(payload)
     }
 }
@@ -745,7 +783,7 @@ impl RegistryApiServer for PortalServer {
     async fn current_gateway(&self) -> RpcResult<(u64, Url, Address, B256)> {
         match self.current_gateway.lock().await.as_ref() {
             Some(gateway) => {
-                let block_number = 0; // TODO: Get the actual block number
+                let block_number = self.current_block_number.load(Ordering::Relaxed);
                 let url = gateway.id.clone();
                 let address = gateway.address;
                 let jwt_as_b256 = gateway.jwt.as_bytes().try_into().map_err(|_| RpcError::Internal)?;
@@ -754,7 +792,6 @@ impl RegistryApiServer for PortalServer {
             }
             None => Err(RpcError::Internal),
         }
-        // Ok((0, Url::parse("0.0.0.0").unwrap(), Address::default(), B256::default()))
     }
 
     async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
