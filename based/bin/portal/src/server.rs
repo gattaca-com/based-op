@@ -9,7 +9,7 @@ use std::{
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes, U256};
+use alloy_primitives::{Address, B256, Bytes, U256, hex};
 use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
@@ -200,15 +200,8 @@ impl PortalServer {
         let mut gateways = vec![];
         let registered_gateways = self.registry_client.registered_gateways().await?;
         for (gateway_url, address, jwt_as_b256) in registered_gateways {
-            let jwt_str = unsafe {
-                std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-            };
-            let client = create_gateway_client(
-                gateway_url,
-                jwt_str,
-                address,
-                self.gateway_timeout,
-            );
+            let jwt_str = hex::encode(jwt_as_b256);
+            let client = create_gateway_client(gateway_url, jwt_str, address, self.gateway_timeout);
             if let Ok(client) = client {
                 gateways.push(client);
             }
@@ -809,7 +802,7 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
 }
 
 fn create_gateway_client(url: Url, jwt_str: String, address: Address, timeout: Duration) -> eyre::Result<Gateway> {
-    let jwt = JwtSecret::from_str(&jwt_str).map_err(|_| eyre::eyre!("Invalid JWT secret"))?;
+    let jwt = JwtSecret::from_hex(&jwt_str).map_err(|_| eyre::eyre!("Invalid JWT secret"))?;
     let client = create_auth_client(url.clone(), jwt, timeout)?;
     let gateway_client = Gateway::new(url, client, jwt_str, address);
     Ok(gateway_client)
