@@ -21,7 +21,7 @@ use bop_common::{
         RegistryApiServer,
     },
     communication::messages::{RpcError, RpcResult},
-    utils::{utcnow_ms, uuid, wait_for_signal},
+    utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::{ClientError, async_trait},
@@ -49,15 +49,19 @@ struct Gateway {
     jwt: String,
     address: Address,
     client: AuthRpcClient,
-    ping_ms: Arc<AtomicU64>,
-    last_seen: Arc<AtomicU64>, // unix timestamp in milliseconds
+    ping_ms: Arc<Duration>,
+    last_seen: Arc<Option<Instant>>,
 }
 
 impl Gateway {
-    pub fn is_active(&self) -> bool {
-        let current_ts = utcnow_ms();
-        let elapsed = current_ts - self.last_seen.load(Ordering::Relaxed);
-        elapsed < 5000
+    pub fn is_active(&self, gateway_inactivity_timeout_ms: u64) -> bool {
+        match self.last_seen.as_ref() {
+            Some(last_seen) => {
+                let elapsed = last_seen.elapsed();
+                elapsed < Duration::from_millis(gateway_inactivity_timeout_ms)
+            }
+            None => false,
+        }
     }
 }
 
@@ -69,7 +73,7 @@ impl fmt::Debug for Gateway {
 
 impl Gateway {
     fn new(id: Url, client: AuthRpcClient, jwt: String, address: Address) -> Self {
-        Self { id, jwt, client, ping_ms: Arc::new(AtomicU64::new(0)), last_seen: Arc::new(AtomicU64::new(0)), address }
+        Self { id, jwt, client, ping_ms: Arc::new(Duration::from_millis(0)), last_seen: Arc::new(None), address }
     }
 }
 
@@ -223,12 +227,11 @@ impl PortalServer {
             match ControlApiClient::heartbeat(&gateway.client).await {
                 Ok(_) => {
                     let ping_duration = ping_start.elapsed();
-                    gateway.ping_ms.store(ping_duration.as_millis() as u64, Ordering::Relaxed);
-                    gateway.last_seen.store(utcnow_ms(), Ordering::Relaxed);
-                    info!(?gateway, ping_ms = gateway.ping_ms.load(Ordering::Relaxed), "pinged gateway successfully");
+                    gateway.ping_ms.as_ref().clone_from(&&ping_duration);
+                    gateway.last_seen.as_ref().clone_from(&&Some(Instant::now()));
+                    info!(?gateway, ping_ms = gateway.ping_ms.as_millis(), "pinged gateway successfully");
                 }
                 Err(err) => {
-                    gateway.last_seen.store(0, Ordering::Relaxed);
                     error!(%err, ?gateway, "failed to ping gateway");
                 }
             }
@@ -263,7 +266,7 @@ impl PortalServer {
                 let gateway = self.gateways().get(index).cloned().unwrap();
                 *self.current_gateway_candidate.lock().await = Some(gateway);
                 let mut i = index;
-                while !self.current_gateway_candidate.lock().await.as_ref().unwrap().is_active() {
+                while !self.current_gateway_candidate.lock().await.as_ref().unwrap().is_active(self.args.gateway_inactivity_timeout_ms) {
                     i = (i + 1) % self.gateways().len();
                     if i == index {
                         error!("CRITICAL: No gateway is available, all gateways are stale");
