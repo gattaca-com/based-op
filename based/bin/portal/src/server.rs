@@ -49,7 +49,7 @@ struct Gateway {
     jwt: String,
     address: Address,
     client: AuthRpcClient,
-    ping_ms: Arc<Duration>,
+    ping: Arc<Duration>,
     last_seen: Arc<Option<Instant>>,
 }
 
@@ -73,7 +73,7 @@ impl fmt::Debug for Gateway {
 
 impl Gateway {
     fn new(id: Url, client: AuthRpcClient, jwt: String, address: Address) -> Self {
-        Self { id, jwt, client, ping_ms: Arc::new(Duration::from_millis(0)), last_seen: Arc::new(None), address }
+        Self { id, jwt, client, ping: Arc::new(Duration::from_millis(0)), last_seen: Arc::new(None), address }
     }
 }
 
@@ -231,9 +231,9 @@ impl PortalServer {
             match ControlApiClient::heartbeat(&gateway.client).await {
                 Ok(_) => {
                     let ping_duration = ping_start.elapsed();
-                    gateway.ping_ms = Arc::new(ping_duration);
+                    gateway.ping = Arc::new(ping_duration);
                     gateway.last_seen = Arc::new(Some(Instant::now()));
-                    info!(?gateway, ping_ms = ping_duration.as_micros(), "pinged gateway successfully");
+                    info!(?gateway, ping = ping_duration.as_micros(), "pinged gateway successfully");
                 }
                 Err(err) => {
                     error!(%err, ?gateway, "failed to ping gateway");
