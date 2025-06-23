@@ -87,6 +87,8 @@ pub struct PortalServer {
     current_gateway: Arc<Mutex<Option<Gateway>>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
+    new_payload_block_number: Arc<AtomicU64>,
+    new_payload_block_hash: Arc<Mutex<B256>>,
     current_block_number: Arc<AtomicU64>,
     args: Arc<PortalArgs>,
 }
@@ -120,8 +122,10 @@ impl PortalServer {
             registry_client,
             current_gateway_candidate: Arc::new(Mutex::new(None)),
             current_gateway: Arc::new(Mutex::new(None)),
-            gateways,
             gateway_timeout,
+            gateways,
+            new_payload_block_number: Arc::new(AtomicU64::new(0)),
+            new_payload_block_hash: Arc::new(Mutex::new(B256::ZERO)),
             current_block_number: Arc::new(AtomicU64::new(0)),
             args: Arc::new(args),
         };
@@ -136,14 +140,14 @@ impl PortalServer {
             }
         }
 
-        let (block_number, _, _, _) = match temp.registry_client.current_gateway().await {
-            Ok(data) => data,
+        match temp.registry_client.current_gateway().await {
+            Ok((block_number, _, _, _)) => {
+                temp.current_block_number.store(block_number, Ordering::Relaxed);
+            }
             Err(err) => {
                 error!(%err, "Failed to get future gateway from registry");
-                return Err(err.into());
             }
         };
-        temp.current_block_number.store(block_number, Ordering::Relaxed);
 
         Ok(temp)
     }
@@ -216,20 +220,21 @@ impl PortalServer {
         let registered_gateways = self.registry_client.registered_gateways().await?;
         for (gateway_url, address, jwt_as_b256) in registered_gateways {
             let jwt_str = hex::encode(jwt_as_b256);
-            let client = create_gateway_client(gateway_url, jwt_str, address, self.gateway_timeout);
+            let client = create_gateway_client(gateway_url, jwt_str.clone(), address, self.gateway_timeout);
+            println!("Token: {}", jwt_str);
             if let Ok(client) = client {
                 gateways.push(client);
             }
         }
 
-        for gateway in gateways.iter() {
+        for gateway in gateways.iter_mut() {
             let ping_start = Instant::now();
             match ControlApiClient::heartbeat(&gateway.client).await {
                 Ok(_) => {
                     let ping_duration = ping_start.elapsed();
-                    gateway.ping_ms.as_ref().clone_from(&&ping_duration);
-                    gateway.last_seen.as_ref().clone_from(&&Some(Instant::now()));
-                    info!(?gateway, ping_ms = gateway.ping_ms.as_millis(), "pinged gateway successfully");
+                    gateway.ping_ms = Arc::new(ping_duration);
+                    gateway.last_seen = Arc::new(Some(Instant::now()));
+                    info!(?gateway, ping_ms = ping_duration.as_micros(), "pinged gateway successfully");
                 }
                 Err(err) => {
                     error!(%err, ?gateway, "failed to ping gateway");
@@ -266,7 +271,14 @@ impl PortalServer {
                 let gateway = self.gateways().get(index).cloned().unwrap();
                 *self.current_gateway_candidate.lock().await = Some(gateway);
                 let mut i = index;
-                while !self.current_gateway_candidate.lock().await.as_ref().unwrap().is_active(self.args.gateway_inactivity_timeout_ms) {
+                while !self
+                    .current_gateway_candidate
+                    .lock()
+                    .await
+                    .as_ref()
+                    .unwrap()
+                    .is_active(self.args.gateway_inactivity_timeout_ms)
+                {
                     i = (i + 1) % self.gateways().len();
                     if i == index {
                         error!("CRITICAL: No gateway is available, all gateways are stale");
@@ -286,7 +298,22 @@ impl PortalServer {
     }
 
     async fn update_current_gateway(&self) -> eyre::Result<()> {
-        self.current_gateway.lock().await.replace(self.current_gateway_candidate.lock().await.clone().unwrap());
+        match self.current_gateway_candidate.lock().await.clone() {
+            Some(new_gateway) => {
+                self.current_gateway.lock().await.replace(new_gateway);
+            }
+            None => {
+                error!("CRITICAL: Couldn't find the current gateway");
+            }
+        }
+        // match self.current_gateway.lock().await.replace() {
+        //     Some(old_gateway) => {
+        //         info!(?old_gateway, "updated current gateway");
+        //     }
+        //     None => {
+        //         error!("CRITICAL: Couldn't find the current gateway");
+        //     }
+        // }
         Ok(())
     }
 
@@ -296,10 +323,10 @@ impl PortalServer {
         Ok(())
     }
 
-    pub async fn on_new_payload(&self, block_number: u64) -> eyre::Result<()> {
-        self.update_current_gateway_candidate(1, Some(block_number + 1)).await?;
+    pub async fn on_fork(&self, expected_block_number: Option<u64>) -> eyre::Result<()> {
+        self.update_current_gateway_candidate(0, expected_block_number).await?;
         self.update_current_gateway().await?;
-        self.current_block_number.store(block_number + 1, Ordering::Relaxed);
+        self.current_block_number.store(0, Ordering::Relaxed);
         Ok(())
     }
 
@@ -518,6 +545,17 @@ impl EngineApiServer for PortalServer {
             debug!(%parent_block_hash, "new request (no attributes)");
         }
 
+        if payload_attributes.is_some() && *self.new_payload_block_hash.lock().await == parent_block_hash {
+            let new_block_number = self.new_payload_block_number.load(Ordering::Relaxed) + 1;
+            self.current_block_number.store(new_block_number, Ordering::Relaxed);
+            match self.on_fork(Some(new_block_number)).await {
+                Ok(_) => {}
+                Err(err) => {
+                    error!(%err, "failed to process new payload");
+                }
+            };
+        }
+
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
@@ -555,12 +593,8 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.payload_inner.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
-        match self.on_new_payload(block_number).await {
-            Ok(_) => {}
-            Err(err) => {
-                error!(%err, "failed to process new payload");
-            }
-        };
+        self.new_payload_block_number.store(block_number, Ordering::Relaxed);
+        *self.new_payload_block_hash.lock().await = block_hash;
 
         let response = self
             .fallback_client
@@ -616,12 +650,8 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
-        match self.on_new_payload(block_number).await {
-            Ok(_) => {}
-            Err(err) => {
-                error!(%err, "failed to process new payload");
-            }
-        };
+        self.new_payload_block_number.store(block_number, Ordering::Relaxed);
+        *self.new_payload_block_hash.lock().await = block_hash;
 
         let response = self
             .fallback_client
