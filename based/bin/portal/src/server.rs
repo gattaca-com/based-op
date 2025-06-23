@@ -221,7 +221,6 @@ impl PortalServer {
         for (gateway_url, address, jwt_as_b256) in registered_gateways {
             let jwt_str = hex::encode(jwt_as_b256);
             let client = create_gateway_client(gateway_url, jwt_str.clone(), address, self.gateway_timeout);
-            println!("Token: {}", jwt_str);
             if let Ok(client) = client {
                 gateways.push(client);
             }
