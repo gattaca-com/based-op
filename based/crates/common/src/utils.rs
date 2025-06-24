@@ -190,6 +190,10 @@ pub fn utcnow_sec() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
 }
 
+pub fn utcnow_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis().try_into().unwrap()
+}
+
 #[macro_export]
 macro_rules! debug_panic {
     ($($arg:tt)*) => (if cfg!(debug_assertions) { panic!($($arg)*); } else {tracing::error!($($arg)*)})
