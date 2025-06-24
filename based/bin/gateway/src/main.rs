@@ -101,6 +101,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 );
             });
         }
+
         let root_peer_url = args.gossip_root_peer_url.clone();
         let gossip_signer_private_key = args.gossip_signer_private_key.map(|key| ECDSASigner::new(key).unwrap());
         s.spawn(|| {
@@ -122,6 +123,5 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             });
         }
     });
-
     Ok(())
 }

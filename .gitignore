@@ -35,5 +35,11 @@ follower_node/.env
 .local/
 .local_gateway_and_follower
 .local_main_node
+.local_main_node2
 based/.envrc
 .envrc
+
+based/data
+based/genesis.json
+based/temp_registry.json
+temp
