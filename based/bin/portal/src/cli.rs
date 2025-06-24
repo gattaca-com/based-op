@@ -61,6 +61,10 @@ pub struct PortalArgs {
     /// Prefix of log files
     #[arg(long = "log.prefix", default_value = "bop-portal.log")]
     pub log_prefix: String,
+
+    /// gateway inactivity timeout in milliseconds
+    #[arg(long = "gateway.inactivity_timeout_ms", default_value_t = 3000)]
+    pub gateway_inactivity_timeout_ms: u64,
 }
 
 impl PortalArgs {

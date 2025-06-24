@@ -1,17 +1,26 @@
-use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    fmt,
+    net::SocketAddr,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes, U256};
+use alloy_primitives::{Address, B256, Bytes, U256, hex};
 use alloy_rpc_types::{
     BlockId, BlockNumberOrTag,
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient, OpNodeApiClient,
-        OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
+        ControlApiClient, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient,
+        OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
+        RegistryApiServer,
     },
     communication::messages::{RpcError, RpcResult},
+    time::{Duration, Instant},
     utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
@@ -37,12 +46,34 @@ pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<Ht
 #[derive(Clone)]
 struct Gateway {
     id: Url,
+    jwt: String,
+    address: Address,
     client: AuthRpcClient,
+    ping: Arc<Duration>,
+    last_seen: Arc<Option<Instant>>,
+}
+
+impl Gateway {
+    pub fn is_active(&self, gateway_inactivity_timeout_ms: u64) -> bool {
+        match self.last_seen.as_ref() {
+            Some(last_seen) => {
+                let elapsed = last_seen.elapsed();
+                elapsed < Duration::from_millis(gateway_inactivity_timeout_ms)
+            }
+            None => false,
+        }
+    }
 }
 
 impl fmt::Debug for Gateway {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.id)
+    }
+}
+
+impl Gateway {
+    fn new(id: Url, client: AuthRpcClient, jwt: String, address: Address) -> Self {
+        Self { id, jwt, client, ping: Arc::new(Duration::from_millis(0)), last_seen: Arc::new(None), address }
     }
 }
 
@@ -52,9 +83,13 @@ pub struct PortalServer {
     fallback_client: AuthRpcClient,
     op_node_client: RpcClient,
     registry_client: RpcClient,
+    current_gateway_candidate: Arc<Mutex<Option<Gateway>>>,
     current_gateway: Arc<Mutex<Option<Gateway>>>,
     gateway_timeout: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
+    new_payload_block_number: Arc<AtomicU64>,
+    new_payload_block_hash: Arc<Mutex<B256>>,
+    current_block_number: Arc<AtomicU64>,
     args: Arc<PortalArgs>,
 }
 
@@ -77,42 +112,44 @@ impl PortalServer {
 
         let gateway_timeout = Duration::from_millis(args.gateway_timeout_ms);
 
-        let current_gateway = Arc::new(Mutex::new(registry_client.current_gateway().await.ok().and_then(
-            |(_, gateway_url, _, jwt_as_b256)| {
-                create_gateway_client(
-                    gateway_url,
-                    unsafe {
-                        std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                    },
-                    gateway_timeout,
-                )
-                .ok()
-            },
-        )));
-
-        let mut gateways = vec![];
-        for (gateway_url, _, jwt_as_b256) in registry_client.registered_gateways().await.unwrap_or_else(|_| vec![]) {
-            gateways.push(create_gateway_client(
-                gateway_url,
-                unsafe {
-                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                },
-                gateway_timeout,
-            )?)
-        }
-
+        let gateways = vec![];
         let gateways = Arc::new(RwLock::new(gateways));
 
-        Ok(Self {
+        let temp = Self {
             fallback_eth_client,
             fallback_client,
             op_node_client,
             registry_client,
-            current_gateway,
-            gateways,
+            current_gateway_candidate: Arc::new(Mutex::new(None)),
+            current_gateway: Arc::new(Mutex::new(None)),
             gateway_timeout,
+            gateways,
+            new_payload_block_number: Arc::new(AtomicU64::new(0)),
+            new_payload_block_hash: Arc::new(Mutex::new(B256::ZERO)),
+            current_block_number: Arc::new(AtomicU64::new(0)),
             args: Arc::new(args),
-        })
+        };
+
+        match temp.refresh_gateway_list().await {
+            Ok(_) => {
+                temp.update_current_gateway().await?;
+                info!("Successfully fetched registered gateways");
+            }
+            Err(err) => {
+                error!(%err, "Failed to fetch registered gateways");
+            }
+        }
+
+        match temp.registry_client.current_gateway().await {
+            Ok((block_number, _, _, _)) => {
+                temp.current_block_number.store(block_number, Ordering::Relaxed);
+            }
+            Err(err) => {
+                error!(%err, "Failed to get future gateway from registry");
+            }
+        };
+
+        Ok(temp)
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
@@ -150,8 +187,13 @@ impl PortalServer {
 
         tokio::spawn(async move {
             loop {
-                let _ = self.refresh().await;
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                match self.refresh_gateway_list().await {
+                    Ok(_) => {}
+                    Err(err) => {
+                        error!(%err, "Failed to fetch registered gateways");
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(1).into()).await;
             }
         });
         let server_handle = server.start(module);
@@ -173,33 +215,117 @@ impl PortalServer {
         self.gateways.read().clone()
     }
 
-    pub async fn refresh(&self) -> eyre::Result<()> {
+    async fn fetch_registered_gateways(&self) -> eyre::Result<()> {
         let mut gateways = vec![];
-        for (gateway_url, _, jwt_as_b256) in self.registry_client.registered_gateways().await? {
-            let Ok(client) = create_gateway_client(
-                gateway_url,
-                unsafe {
-                    std::mem::transmute::<alloy_primitives::FixedBytes<32>, reth_rpc_layer::JwtSecret>(jwt_as_b256)
-                },
-                self.gateway_timeout,
-            ) else {
-                continue;
-            };
-            gateways.push(client);
-        }
-        *self.gateways.write() = gateways;
-
-        let (_, gateway_url, _, _) = self.registry_client.current_gateway().await?;
-        for g in self.gateways() {
-            if g.id == gateway_url {
-                *self.current_gateway.lock().await = Some(g);
-                return Ok(());
+        let registered_gateways = self.registry_client.registered_gateways().await?;
+        for (gateway_url, address, jwt_as_b256) in registered_gateways {
+            let jwt_str = hex::encode(jwt_as_b256);
+            let client = create_gateway_client(gateway_url, jwt_str.clone(), address, self.gateway_timeout);
+            if let Ok(client) = client {
+                gateways.push(client);
             }
         }
 
-        error!(
-            "CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent"
-        );
+        for gateway in gateways.iter_mut() {
+            let ping_start = Instant::now();
+            match ControlApiClient::heartbeat(&gateway.client).await {
+                Ok(_) => {
+                    let ping_duration = ping_start.elapsed();
+                    gateway.ping = Arc::new(ping_duration);
+                    gateway.last_seen = Arc::new(Some(Instant::now()));
+                    info!("successfully pinged gateway={} ping={:>9}", gateway.id, ping_duration.to_string());
+                }
+                Err(err) => {
+                    error!(%err, ?gateway, "failed to ping gateway");
+                }
+            }
+        }
+
+        *self.gateways.write() = gateways;
+        Ok(())
+    }
+
+    async fn update_current_gateway_candidate(
+        &self,
+        n_blocks_into_future: u64,
+        expected_block_number: Option<u64>,
+    ) -> eyre::Result<()> {
+        let (block_number, gateway_url, _, _) = self.registry_client.get_future_gateway(n_blocks_into_future).await?;
+        if let Some(expected_block_number) = expected_block_number {
+            if block_number != expected_block_number {
+                error!(
+                    "CRITICAL: The block number we got from the registry ({}) does not match the expected block number ({})",
+                    block_number, expected_block_number
+                );
+                panic!(
+                    "CRITICAL: The block number we got from the registry ({}) does not match the expected block number ({})",
+                    block_number, expected_block_number
+                );
+                // return Ok(());
+            }
+        }
+        let current_gateway_index = self.gateways().iter().position(|g| g.id == gateway_url);
+        match current_gateway_index {
+            Some(index) => {
+                let gateway = self.gateways().get(index).cloned().unwrap();
+                *self.current_gateway_candidate.lock().await = Some(gateway);
+                let mut i = index;
+                while !self
+                    .current_gateway_candidate
+                    .lock()
+                    .await
+                    .as_ref()
+                    .unwrap()
+                    .is_active(self.args.gateway_inactivity_timeout_ms)
+                {
+                    i = (i + 1) % self.gateways().len();
+                    if i == index {
+                        error!("CRITICAL: No gateway is available, all gateways are stale");
+                        return Ok(());
+                    }
+                    *self.current_gateway_candidate.lock().await = Some(self.gateways().get(i).cloned().unwrap());
+                }
+            }
+            None => {
+                error!(
+                    "CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent"
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn update_current_gateway(&self) -> eyre::Result<()> {
+        match self.current_gateway_candidate.lock().await.clone() {
+            Some(new_gateway) => {
+                self.current_gateway.lock().await.replace(new_gateway);
+            }
+            None => {
+                error!("CRITICAL: Couldn't find the current gateway");
+            }
+        }
+        // match self.current_gateway.lock().await.replace() {
+        //     Some(old_gateway) => {
+        //         info!(?old_gateway, "updated current gateway");
+        //     }
+        //     None => {
+        //         error!("CRITICAL: Couldn't find the current gateway");
+        //     }
+        // }
+        Ok(())
+    }
+
+    pub async fn refresh_gateway_list(&self) -> eyre::Result<()> {
+        self.fetch_registered_gateways().await?;
+        // self.update_current_gateway_candidate(0, None).await?;
+        Ok(())
+    }
+
+    pub async fn on_fork(&self, expected_block_number: Option<u64>) -> eyre::Result<()> {
+        self.update_current_gateway_candidate(0, expected_block_number).await?;
+        self.update_current_gateway().await?;
+        self.current_block_number.store(0, Ordering::Relaxed);
         Ok(())
     }
 
@@ -418,6 +544,17 @@ impl EngineApiServer for PortalServer {
             debug!(%parent_block_hash, "new request (no attributes)");
         }
 
+        if payload_attributes.is_some() && *self.new_payload_block_hash.lock().await == parent_block_hash {
+            let new_block_number = self.new_payload_block_number.load(Ordering::Relaxed) + 1;
+            self.current_block_number.store(new_block_number, Ordering::Relaxed);
+            match self.on_fork(Some(new_block_number)).await {
+                Ok(_) => {}
+                Err(err) => {
+                    error!(%err, "failed to process new payload");
+                }
+            };
+        }
+
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
@@ -455,6 +592,9 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.payload_inner.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
+        self.new_payload_block_number.store(block_number, Ordering::Relaxed);
+        *self.new_payload_block_hash.lock().await = block_hash;
+
         let response = self
             .fallback_client
             .new_payload_v4(payload.clone(), versioned_hashes.clone(), parent_beacon_block_root, requests.clone())
@@ -509,6 +649,8 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
+        self.new_payload_block_number.store(block_number, Ordering::Relaxed);
+        *self.new_payload_block_hash.lock().await = block_hash;
 
         let response = self
             .fallback_client
@@ -611,7 +753,6 @@ impl EngineApiServer for PortalServer {
         }
 
         let payload = gateway.or(fallback)?;
-
         Ok(payload)
     }
 }
@@ -658,11 +799,59 @@ impl PortalApiServer for PortalServer {
     }
 }
 
+// TODO: Implement this properly
+#[async_trait]
+impl RegistryApiServer for PortalServer {
+    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
+        match self.registry_client.get_future_gateway(n_blocks_into_future).await {
+            Ok(gateway) => Ok(gateway),
+            Err(err) => {
+                error!(%err, "Failed to get future gateway");
+                Err(RpcError::Internal)
+            }
+        }
+    }
+
+    async fn current_gateway(&self) -> RpcResult<(u64, Url, Address, B256)> {
+        match self.current_gateway.lock().await.as_ref() {
+            Some(gateway) => {
+                let block_number = self.current_block_number.load(Ordering::Relaxed);
+                let url = gateway.id.clone();
+                let address = gateway.address;
+                let jwt_as_b256 = gateway.jwt.as_bytes().try_into().map_err(|_| RpcError::Internal)?;
+
+                Ok((block_number, url, address, jwt_as_b256))
+            }
+            None => Err(RpcError::Internal),
+        }
+    }
+
+    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
+        match self.registry_client.registered_gateways().await {
+            Ok(gateways) => Ok(gateways),
+            Err(err) => {
+                error!(%err, "Failed to get registered gateways");
+                Err(RpcError::Internal)
+            }
+        }
+    }
+
+    async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()> {
+        match self.registry_client.register_gateway(gateway).await {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                error!(%err, "Failed to register gateway");
+                Err(RpcError::Internal)
+            }
+        }
+    }
+}
+
 fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
     let client = HttpClientBuilder::default()
         .max_request_size(u32::MAX)
         .max_response_size(u32::MAX)
-        .request_timeout(timeout)
+        .request_timeout(timeout.into())
         .build(url)?;
     Ok(client)
 }
@@ -675,14 +864,15 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
         .max_request_size(u32::MAX)
         .max_response_size(u32::MAX)
         .set_http_middleware(middleware)
-        .request_timeout(timeout)
+        .request_timeout(timeout.into())
         .build(url)?;
 
     Ok(client)
 }
 
-fn create_gateway_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Result<Gateway> {
+fn create_gateway_client(url: Url, jwt_str: String, address: Address, timeout: Duration) -> eyre::Result<Gateway> {
+    let jwt = JwtSecret::from_hex(&jwt_str).map_err(|_| eyre::eyre!("Invalid JWT secret"))?;
     let client = create_auth_client(url.clone(), jwt, timeout)?;
-    let gateway_client = Gateway { client, id: url };
+    let gateway_client = Gateway::new(url, client, jwt_str, address);
     Ok(gateway_client)
 }
