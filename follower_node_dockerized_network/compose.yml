@@ -1,3 +1,7 @@
+networks:
+  based_op_net:
+    external: true
+
 services:
   based-op-geth:
     image: ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest
@@ -43,20 +47,37 @@ services:
           --bootnodes=$MAIN_OP_GETH_ENODE \
           --rollup.sequencerhttp=$PORTAL
 
+    ports:
+      - "${OP_GETH_RPC_PORT:-8645}:${OP_GETH_RPC_PORT:-8645}"
+      - "${OP_GETH_WS_PORT:-8646}:${OP_GETH_WS_PORT:-8646}"
+      - "${OP_GETH_GOSSIP_PORT}:${OP_GETH_GOSSIP_PORT}"
+      - "${OP_GETH_ENGINE_RPC_PORT:-8651}:${OP_GETH_ENGINE_RPC_PORT:-8651}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data/geth:/data/geth
       - ./config:/config
     restart: unless-stopped
-    network_mode: "host"
+    networks:
+      - based_op_net
 
   based-op-node:
     image: ghcr.io/gattaca-com/based-optimism/based-op-node:latest
     pull_policy: always
     container_name: based-op-node
-    network_mode: "host"
+    ports:
+      # RPC API
+      - "8547:8547"
+      # libp2p gossip port (TCP + UDP)
+      - "${OP_NODE_GOSSIP_PORT:-9103}:${OP_NODE_GOSSIP_PORT:-9103}/tcp"
+      - "${OP_NODE_GOSSIP_PORT:-9103}:${OP_NODE_GOSSIP_PORT:-9103}/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - based_op_net
     command:
       - op-node
-      - --l2=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
+      - --l2=http://based-op-geth:$OP_GETH_ENGINE_RPC_PORT
       - --l2.jwt-secret=/config/jwt
       - --verifier.l1-confs=1
       - --rollup.config=/config/rollup.json
@@ -97,11 +118,14 @@ services:
       - --eth_client.url=$PORTAL
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
-      - --gossip.root_peer_url=http://0.0.0.0:8547
+      - --gossip.root_peer_url=http://based-op-node:8547
     volumes: 
       - ./config:/config
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
       - /dev/shm:/dev/shm
-    network_mode: "host"
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     restart: unless-stopped
+    networks:
+      - based_op_net
