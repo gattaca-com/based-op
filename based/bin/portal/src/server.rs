@@ -20,8 +20,8 @@ use bop_common::{
         RegistryApiServer,
     },
     communication::messages::{RpcError, RpcResult},
+    time::{Duration, Instant},
     utils::{uuid, wait_for_signal},
-    time::{Duration, Instant}
 };
 use jsonrpsee::{
     core::{ClientError, async_trait},
@@ -872,7 +872,7 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
 
 fn create_gateway_client(url: Url, jwt_str: String, address: Address, timeout: Duration) -> eyre::Result<Gateway> {
     let jwt = JwtSecret::from_hex(&jwt_str).map_err(|_| eyre::eyre!("Invalid JWT secret"))?;
-    let client = create_auth_client(url.clone(), jwt, timeout.into())?;
+    let client = create_auth_client(url.clone(), jwt, timeout)?;
     let gateway_client = Gateway::new(url, client, jwt_str, address);
     Ok(gateway_client)
 }
