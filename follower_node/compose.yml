@@ -85,10 +85,10 @@ services:
       - based-op-geth
     restart: unless-stopped
 
-  gateway:
+  based-gateway:
     image: ghcr.io/gattaca-com/based-op/based-gateway:latest
     pull_policy: always
-    container_name: based-op-gateway
+    container_name: based-gateway
     command:
       - --rpc.port=$GATEWAY_PORT
       - --rpc.host=0.0.0.0
