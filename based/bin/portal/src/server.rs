@@ -5,7 +5,6 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, Instant},
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
@@ -22,6 +21,7 @@ use bop_common::{
     },
     communication::messages::{RpcError, RpcResult},
     utils::{uuid, wait_for_signal},
+    time::{Duration, Instant}
 };
 use jsonrpsee::{
     core::{ClientError, async_trait},
@@ -193,7 +193,7 @@ impl PortalServer {
                         error!(%err, "Failed to fetch registered gateways");
                     }
                 }
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1).into()).await;
             }
         });
         let server_handle = server.start(module);
@@ -233,7 +233,7 @@ impl PortalServer {
                     let ping_duration = ping_start.elapsed();
                     gateway.ping = Arc::new(ping_duration);
                     gateway.last_seen = Arc::new(Some(Instant::now()));
-                    info!(?gateway, ping = ping_duration.as_micros(), "pinged gateway successfully");
+                    info!("successfully pinged gateway={} ping={:>9}", gateway.id, ping_duration.to_string());
                 }
                 Err(err) => {
                     error!(%err, ?gateway, "failed to ping gateway");
@@ -851,7 +851,7 @@ fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
     let client = HttpClientBuilder::default()
         .max_request_size(u32::MAX)
         .max_response_size(u32::MAX)
-        .request_timeout(timeout)
+        .request_timeout(timeout.into())
         .build(url)?;
     Ok(client)
 }
@@ -864,7 +864,7 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
         .max_request_size(u32::MAX)
         .max_response_size(u32::MAX)
         .set_http_middleware(middleware)
-        .request_timeout(timeout)
+        .request_timeout(timeout.into())
         .build(url)?;
 
     Ok(client)
@@ -872,7 +872,7 @@ fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Resu
 
 fn create_gateway_client(url: Url, jwt_str: String, address: Address, timeout: Duration) -> eyre::Result<Gateway> {
     let jwt = JwtSecret::from_hex(&jwt_str).map_err(|_| eyre::eyre!("Invalid JWT secret"))?;
-    let client = create_auth_client(url.clone(), jwt, timeout)?;
+    let client = create_auth_client(url.clone(), jwt, timeout.into())?;
     let gateway_client = Gateway::new(url, client, jwt_str, address);
     Ok(gateway_client)
 }
