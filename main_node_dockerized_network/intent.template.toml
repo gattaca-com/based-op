@@ -1,0 +1,31 @@
+deploymentStrategy = "live"
+configType = "standard-overrides"
+l1ChainID = L1_CHAIN_ID
+fundDevAccounts = true
+useInterop = false
+l1ContractsLocator = "tag://op-contracts/v3.0.0"
+l2ContractsLocator = "tag://op-contracts/v3.0.0"
+
+l1DevGenesisParams.pragueTimeOffset = 0
+
+[superchainRoles]
+  proxyAdminOwner = "0x1eb2ffc903729a0f03966b917003800b145f56e2"
+  protocolVersionsOwner = "0xfd1d2e729ae8eee2e146c033bf4400fe75284301"
+  guardian = "0x7a50f00e8d05b95f98fe38d8bee366a7324dcf7e"
+
+[[chains]]
+  id = "L2_CHAIN_ID"
+  baseFeeVaultRecipient = "VAULT_WALLET"
+  l1FeeVaultRecipient = "VAULT_WALLET"
+  sequencerFeeVaultRecipient = "VAULT_WALLET"
+  eip1559DenominatorCanyon = 250
+  eip1559Denominator = 50
+  eip1559Elasticity = 6
+  [chains.roles]
+    l1ProxyAdminOwner = "0x1eb2ffc903729a0f03966b917003800b145f56e2"
+    l2ProxyAdminOwner = "0x2fc3ffc903729a0f03966b917003800b145f67f3"
+    systemConfigOwner = "VAULT_WALLET"
+    unsafeBlockSigner = "VAULT_WALLET"
+    batcher = "OP_BATCHER_WALLET"
+    proposer = "OP_PROPOSER_WALLET"
+    challenger = "0xfd1d2e729ae8eee2e146c033bf4400fe75284301"
