@@ -100,8 +100,8 @@ build-rabby-chrom: ## 🏗️ Build modified Rabby wallet for Google Chrome and 
 create-network:
 	docker network inspect based_op_net >/dev/null 2>&1 || docker network create based_op_net
 
-start-gateway: create-network
-	@if docker ps --format '{{.Names}}' | grep -wq based-op-gateway ; then \
+start-based-gateway: create-network
+	@if docker ps --format '{{.Names}}' | grep -wq based-gateway ; then \
 		echo "❌  Gateway already running."; \
 		exit 1; \
 	fi
@@ -200,7 +200,7 @@ start-gateway: create-network
 	$(MAKE) start-overseer
 
 start-overseer: 
-	docker exec -it based-op-gateway overseer --portal-url $(PORTAL)
+	docker exec -it based-gateway overseer --portal-url $(PORTAL)
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -377,7 +377,7 @@ start-registry: build-registry
 	docker compose -f .local_main_node/compose.yml up -d based-registry 
 	$(MAKE) logs-registry
 	
-stop-gateway:
+stop-based-gateway:
 	cd .local_gateway_and_follower && docker compose down
 
 stop-main-node:
@@ -422,7 +422,7 @@ logs-registry: ## 📜 Show registry logs (only for main sequencing node)
 	docker logs based-registry --tail 100 -f
 
 logs-gateway: ## 📜 Show gateway logs
-	docker logs based-op-gateway --tail 100 -f
+	docker logs based-gateway --tail 100 -f
 
 logs-based-op-node: ## 📜 Show based op-node logs
 	docker logs based-op-node --tail 100 -f
