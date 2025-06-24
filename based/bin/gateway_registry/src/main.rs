@@ -183,7 +183,7 @@ impl RegistryApiServer for RegistryServer {
 
         let id = (target_block / self.gateway_update_blocks) as usize;
         let (url, address, jwt_in_b256) = gateways[id % n_gateways].clone();
-        info!("serving future gateway for block {target_block}: url={url}, address={address}",);
+        tracing::debug!("serving future gateway for block {target_block}: url={url}, address={address}",);
         Ok((target_block, url, address, jwt_in_b256))
     }
 
