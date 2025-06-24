@@ -56,7 +56,7 @@ services:
     # Override inter-container URLs for bridge networking
     command:
       - op-node
-      - --l2=http://based-portal:${PORTAL_PORT}
+      - --l2=http://0.0.0.0:${PORTAL_PORT}
       - --l2.jwt-secret=/config/jwt
       - --verifier.l1-confs=1
       - --rollup.config=/config/rollup.json
@@ -92,8 +92,8 @@ services:
     # Override inter-container URLs for bridge networking
     command:
       - op-batcher
-      - --l2-eth-rpc=http://based-portal:${PORTAL_PORT}
-      - --rollup-rpc=http://op-node:${OP_NODE_RPC_PORT}
+      - --l2-eth-rpc=http://0.0.0.0:${PORTAL_PORT}
+      - --rollup-rpc=http://0.0.0.0:${OP_NODE_RPC_PORT}
       - --sub-safety-margin=6
       - --num-confirmations=1
       - --safe-abort-nonce-too-low-count=3
@@ -118,7 +118,7 @@ services:
       - op-proposer
       - --poll-interval=12s
       - --rpc.port=8560
-      - --rollup-rpc=http://op-node:${OP_NODE_RPC_PORT}
+      - --rollup-rpc=http://0.0.0.0:${OP_NODE_RPC_PORT}
       - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
       - --game-type=${DISPUTE_GAME_TYPE}
       - --private-key=${OP_PROPOSER_PRIVATE_KEY}
@@ -136,10 +136,10 @@ services:
     network_mode: "host"
     # Override inter-container URLs for bridge networking
     command:
-      - --fallback.eth_url=http://op-geth:${OP_GETH_RPC_PORT}
-      - --fallback.engine_url=http://op-geth:${OP_GETH_ENGINE_RPC_PORT}
-      - --op_node.url=http://op-node:${OP_NODE_RPC_PORT}
-      - --registry.url=http://based-registry:${REGISTRY_PORT}
+      - --fallback.eth_url=http://0.0.0.0:${OP_GETH_RPC_PORT}
+      - --fallback.engine_url=http://0.0.0.0:${OP_GETH_ENGINE_RPC_PORT}
+      - --op_node.url=http://0.0.0.0:${OP_NODE_RPC_PORT}
+      - --registry.url=http://0.0.0.0:${REGISTRY_PORT}
       - --gateway.timeout_ms=200
     volumes:
       - ./config:/config
@@ -153,7 +153,7 @@ services:
     # Override inter-container URLs for bridge networking
     command:
       - --registry.path=/config/registry.json
-      - --portal.url=http://op-geth:${OP_GETH_RPC_PORT}
+      - --portal.url=http://0.0.0.0:${OP_GETH_RPC_PORT}
       - --portal.timeout_ms=100
       - --port=${REGISTRY_PORT}
     volumes: 
@@ -201,9 +201,9 @@ services:
     environment:
       DATABASE_URL: "postgresql://blockscout:blockscout@blockscout-postgres:5432/blockscout"
       # point to your L2 JSON-RPC:
-      ETHEREUM_JSONRPC_HTTP_URL: "http://op-geth:${OP_GETH_RPC_PORT}"
-      ETHEREUM_JSONRPC_WS_URL: "ws://op-geth:${OP_GETH_WS_PORT}"
-      ETHEREUM_JSONRPC_TRACE_URL: "http://op-geth:${OP_GETH_RPC_PORT}"
+      ETHEREUM_JSONRPC_HTTP_URL: "http://0.0.0.0:${OP_GETH_RPC_PORT}"
+      ETHEREUM_JSONRPC_WS_URL: "ws://0.0.0.0:${OP_GETH_WS_PORT}"
+      ETHEREUM_JSONRPC_TRACE_URL: "http://0.0.0.0:${OP_GETH_RPC_PORT}"
       ETHEREUM_JSONRPC_VARIANT: "geth"
       SECRET_KEY_BASE: "56NtB48ear7+wMSf0IQuWDAAazhpb31qyc7GiyspBP2vh7t5zlCsF5QDv76chXeN"
       # A “network name” for Blockscout’s UI
