@@ -235,7 +235,7 @@ deploy-chain:
 	fi
 	@mkdir -p .local_main_node/config
 	@docker run -v $$(pwd)/.local_main_node/config:/config --entrypoint sh -e DEPLOYER_CACHE_DIR=$(DEPLOYER_CACHE_DIR) $(IMAGE_OP_DEPLOYER) -c "/usr/local/bin/op-deployer init --l1-chain-id $(L1_CHAIN_ID) --l2-chain-ids $(L2_CHAIN_ID)  --workdir /config && chmod 666 /config/*"
-	@wallet_batcher=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
+	@wallet_batcher=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_BATCHER_KEY) | tail -n1); \
 	wallet_proposer=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(OP_PROPOSER_KEY) | tail -n1); \
 	wallet_main=$$(docker run --rm -i $(IMAGE_KEY_TO_ADDRESS) $(MAIN_KEY) | tail -n1); \
 	sed -E \
