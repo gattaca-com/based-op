@@ -56,6 +56,10 @@ pub struct RegistryArgs {
     /// Prefix of log files
     #[arg(long = "log.prefix", default_value = "bop-portal.log")]
     pub log_prefix: String,
+
+    /// mock blocknumber
+    #[arg(long = "use_mock_blocknumber", default_value_t = false)]
+    pub use_mock_blocknumber: bool,
 }
 
 impl From<&RegistryArgs> for LoggingConfig {
@@ -99,6 +103,9 @@ pub struct RegistryServer {
     gateway_clients: Arc<RwLock<Vec<(Url, Address, B256)>>>,
     gateway_update_blocks: u64,
     registry_path: Arc<PathBuf>,
+
+    mock_blocknumber: U256,
+    use_mock_blocknumber: bool,
 }
 
 impl RegistryServer {
@@ -128,6 +135,8 @@ impl RegistryServer {
             gateway_clients,
             gateway_update_blocks: args.gateway_update_blocks,
             registry_path,
+            mock_blocknumber: U256::from(0),
+            use_mock_blocknumber: args.use_mock_blocknumber,
         })
     }
 
@@ -161,7 +170,9 @@ impl RegistryServer {
 impl RegistryApiServer for RegistryServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
-        let curblock = self.eth_client.block_number().await?;
+        // let curblock = self.eth_client.block_number().await?;
+        let curblock =
+            if !self.use_mock_blocknumber { self.eth_client.block_number().await? } else { self.mock_blocknumber };
         let gateways = self.gateway_clients.read();
         let n_gateways = gateways.len();
         if n_gateways == 0 {

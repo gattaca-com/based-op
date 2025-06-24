@@ -44,7 +44,7 @@ services:
           --allow-insecure-unlock \
           --discovery.port=$OP_GETH_GOSSIP_PORT \
           --port=$OP_GETH_GOSSIP_PORT \
-          --bootnodes=$MAIN_OP_GETH_ENODE,enode://3ce86ecae36ae4bc4197e555b0c518c642602596e66f851090fc7a2686d29924b7baa6c4fcc8ca886f00f51f6951c4b4251d1cb67f61dc491a70cec212fd0498@18.185.199.51:31303 \
+          --bootnodes= \
           --rollup.sequencerhttp=$PORTAL
 
     ports:
