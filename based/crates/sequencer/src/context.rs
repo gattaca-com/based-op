@@ -313,6 +313,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             receipts_root,
             state_root,
             block_hash: v1.block_hash,
+            withdrawals_root,
         };
         let mgas = (gas_used / 10_000) as f64 / 100.0;
         info!(
