@@ -94,7 +94,6 @@ pub struct SealV0 {
     pub receipts_root: B256,
     pub state_root: B256,
     pub block_hash: B256,
-    pub withdrawals_root: B256,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize, AsRefStr)]
