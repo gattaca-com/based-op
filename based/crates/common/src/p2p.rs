@@ -1,7 +1,7 @@
-use alloy_primitives::{Address, B256, Bytes, U256};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use revm::context::BlockEnv;
 use serde::{Deserialize, Serialize};
-use ssz_types::{VariableList, typenum};
+use ssz_types::{typenum, VariableList};
 use strum_macros::AsRefStr;
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
@@ -93,8 +93,8 @@ pub struct SealV0 {
     pub transactions_root: B256,
     pub receipts_root: B256,
     pub state_root: B256,
-    pub withdrawals_root: B256,
     pub block_hash: B256,
+    pub withdrawals_root: B256,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize, AsRefStr)]
@@ -228,7 +228,7 @@ mod tests {
             receipts_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             state_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             block_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
-            withdrawals_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+            withdrawals_root: B256::ZERO,
         };
 
         let message = VersionedMessage::from(sealed);
