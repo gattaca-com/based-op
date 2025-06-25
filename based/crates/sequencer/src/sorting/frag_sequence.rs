@@ -48,7 +48,13 @@ impl FragSequence {
         self.payment += in_sort.payment();
         let uuid = in_sort.uuid;
 
-        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
+        let msg = FragV0::new(
+            self.block_number,
+            self.next_seq,
+            B256::ZERO,
+            in_sort.txs.iter().map(|tx| tx.tx.as_ref()),
+            false,
+        );
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
             self.txs.push(tx);
