@@ -407,6 +407,7 @@ where
 
                 // Gossip last frag before sealing
                 let last_frag = ctx.seal_last_frag(&mut seq, sorting_data);
+
                 let s = senders.send_timeout(VersionedMessage::from(last_frag), Duration::from_millis(10));
                 debug_assert!(s.is_ok(), "couldn't send last frag for 10 millis");
 
