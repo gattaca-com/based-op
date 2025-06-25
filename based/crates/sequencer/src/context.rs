@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
 
-use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header};
+use alloy_consensus::{BlockHeader, Header, EMPTY_OMMER_ROOT_HASH};
 use alloy_eips::merge::BEACON_NONCE;
 use alloy_rpc_types::engine::{
     BlobsBundleV1, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkchoiceState,
@@ -10,7 +10,7 @@ use bop_common::{
     debug_panic,
     p2p::{FragV0, SealV0},
     shared::SharedState,
-    telemetry::{TelemetryUpdate, telemetry_queue},
+    telemetry::{telemetry_queue, TelemetryUpdate},
     time::Timer,
     transaction::Transaction,
     typedefs::*,
@@ -20,16 +20,16 @@ use bop_pool::transaction::pool::TxPool;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
 use op_revm::OpSpecId;
 use reth_chainspec::EthereumHardforks;
-use reth_evm::{ConfigureEvm, block::SystemCaller, env::EvmEnv, execute::ProviderError};
+use reth_evm::{block::SystemCaller, env::EvmEnv, execute::ProviderError, ConfigureEvm};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_consensus::isthmus::withdrawals_root;
 use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use reth_provider::StorageRootProvider;
-use revm_primitives::{B256, Bytes, U256, b256};
+use revm_primitives::{b256, Bytes, B256, U256};
 use tracing::info;
 
-use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
+use crate::{block_sync::BlockSync, sorting::SortingData, FragSequence, SequencerConfig};
 
 /// These are used to time different parts of the sequencer loop
 pub struct SequencerTimers {
@@ -313,7 +313,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             receipts_root,
             state_root,
             block_hash: v1.block_hash,
-            withdrawals_root,
+            withdrawals_root: withdrawals_root.unwrap_or_default(),
         };
         let mgas = (gas_used / 10_000) as f64 / 100.0;
         info!(
