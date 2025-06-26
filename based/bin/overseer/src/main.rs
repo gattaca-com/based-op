@@ -269,16 +269,37 @@ impl OverseerConnections {
             }
 
             match &pending.tx_hash {
-                Some(_hash) => {
-                    let Some(receipt) = serde_json::from_slice::<RpcResponse<Option<OpTransactionReceipt>>>(&body)
-                        .ok()
-                        .and_then(|r| r.result)
-                        .flatten()
+                Some(hash) => {
+                    let Some(receipt) = serde_json::from_slice::<RpcResponse<Option<OpTransactionReceipt>>>(&body).ok()
                     else {
                         tracing::warn!("issue parsing receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
                         continue;
                     };
-                    tracing::info!("got receipt {receipt:?}");
+                    let Some(receipt) = receipt.result.flatten() else {
+                        let payload = serde_json::to_vec(&serde_json::json!({
+                            "id": 1,
+                            "jsonrpc": "2.0",
+                            "method": "eth_getTransactionReceipt",
+                            "params": [hash]
+                        }))
+                        .unwrap();
+                        let Ok(req) = Request::builder()
+                            .header("content-type", "application/json")
+                            .method("POST")
+                            .uri(self.uri_portal.clone())
+                            .body(payload)
+                        else {
+                            tracing::warn!("couldn't create request");
+                            continue;
+                        };
+                        let Ok(callref) = self.walkie_talkie.send(req).inspect_err(|e| {
+                            tracing::warn!("issue sending nonce request to portal: {e}");
+                        }) else {
+                            continue;
+                        };
+                        self.pending_transfers.insert(callref, pending);
+                        continue;
+                    };
 
                     f(SpammedTx::new(
                         pending.from_address,
