@@ -241,8 +241,9 @@ impl OverseerConnections {
     pub fn gather_pending_txs(&mut self, mut f: impl FnMut(SpammedTx)) {
         self.walkie_talkie.gather_responses(&mut self.results_buf);
         for res in self.results_buf.drain(..) {
-            let Ok((callref, res, body)) = res else {
-                tracing::warn!("got an issue when receiving a transaction response");
+            let Ok((callref, res, body)) = res.inspect_err(|e| {
+                tracing::warn!("got an issue when receiving a transaction response: {e}");
+            }) else {
                 continue;
             };
 
