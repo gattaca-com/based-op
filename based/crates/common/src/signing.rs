@@ -134,7 +134,7 @@ impl ECDSASigner {
         };
         let signed_tx = self.sign_tx(tx).unwrap();
         let tx = OpTxEnvelope::Eip1559(signed_tx);
-        let envelope = hex::encode(Bytes::from(tx.encoded_2718()));
+        let envelope = hex::encode_prefixed(Bytes::from(tx.encoded_2718()));
 
         let Ok(payload) = serde_json::to_vec(&serde_json::json!({
             "id": 1,
