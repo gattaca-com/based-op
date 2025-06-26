@@ -275,7 +275,7 @@ impl OverseerConnections {
                         .and_then(|r| r.result)
                         .flatten()
                     else {
-                        tracing::warn!("issue parsing receipt for {pending:?}");
+                        tracing::warn!("issue parsing receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
                         continue;
                     };
                     tracing::info!("got receipt {receipt:?}");
