@@ -63,8 +63,11 @@ impl TableState {
         let drawable_header = Row::new(drawable_header).height(header_height).underlined();
         let drawable_rows = rows
             .into_iter()
-            .map(|r| {
+            .filter_map(|r| {
                 let row = r.to_row(data);
+                if row.is_empty() {
+                    return None;
+                }
                 let mut row_height = row.iter().map(|l| l.lines.len()).max().unwrap();
                 let mut cells = vec![];
                 for (ic, column) in row.into_iter().enumerate() {
@@ -87,7 +90,7 @@ impl TableState {
                 }
                 height_avail = height_avail.saturating_sub(row_height as u16);
 
-                (Row::new(cells).height(row_height as u16), height_avail)
+                Some((Row::new(cells).height(row_height as u16), height_avail))
             })
             .take_while(|(_, height)| *height > 0)
             .map(|(row, _)| row);
