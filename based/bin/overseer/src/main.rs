@@ -204,14 +204,18 @@ impl OverseerConnections {
             let new_signer = ECDSASigner::random();
             let to_account = new_signer.address;
             let value = U256::from(1_000_000_000_000_000u64);
-            signer.send_transfer(
+            if let Some(callref) = signer.send_transfer(
                 &mut self.walkie_talkie,
                 self.uri_portal.clone(),
                 self.rollup_config.l2_chain_id,
                 to_account,
                 value,
                 None,
-            );
+            ) {
+                tracing::info!("airdropping: {callref:?}");
+            } else {
+                tracing::info!("airdrop: failed");
+            };
             Some(new_signer)
         })
     }
@@ -226,6 +230,7 @@ impl OverseerConnections {
             value,
             Some(nonce),
         ) {
+            tracing::info!("sending to self {nonce}: {callref:?}");
             self.pending_transfers.insert(callref, PendingTransaction {
                 sent_timestamp: Nanos::now(),
                 from_address: signer.address,
@@ -242,7 +247,7 @@ impl OverseerConnections {
         self.walkie_talkie.gather_responses(&mut self.results_buf);
         for res in self.results_buf.drain(..) {
             let Ok((callref, res, body)) = res.inspect_err(|e| {
-                tracing::warn!("got an issue when receiving a transaction response: {e}");
+                tracing::warn!("got an issue when receiving a transaction response {:?}: {e}", e.callref());
             }) else {
                 continue;
             };
