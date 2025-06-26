@@ -383,7 +383,7 @@ impl Overseer {
     pub fn update(&mut self, consumers: &mut OverseerConnections, slot_time: bool) {
         match &mut self.tx_spam_account {
             Some((account, nonce)) => {
-                if consumers.pending_transfers.len() < 100 {
+                while consumers.pending_transfers.len() < 100 {
                     consumers.send_transfer_to_self(account, *nonce);
                     *nonce += 1;
                 }
