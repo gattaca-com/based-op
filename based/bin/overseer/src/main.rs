@@ -204,7 +204,7 @@ impl OverseerConnections {
             let new_signer = ECDSASigner::random();
             let to_account = new_signer.address;
             let value = U256::from(1_000_000_000_000_000u64);
-            if let Some(callref) = signer.send_transfer(
+            if let Some(_callref) = signer.send_transfer(
                 &mut self.walkie_talkie,
                 self.uri_portal.clone(),
                 self.rollup_config.l2_chain_id,
@@ -213,18 +213,12 @@ impl OverseerConnections {
                 None,
             ) {
                 let mut resp_buf = Vec::new();
-                'outer: loop {
+                loop {
                     self.walkie_talkie.gather_responses(&mut resp_buf);
-                    for resp in resp_buf.drain(..) {
-                        if let Ok((_, _, body)) = resp {
-                            tracing::info!("airdropping: {}", String::from_utf8(body).unwrap());
-                        }
-                        break 'outer;
-                    }
+                    break;
                 }
-                // tracing::info!("airdropping: {callref:?}");
             } else {
-                tracing::info!("airdrop: failed");
+                tracing::warn!("airdrop: failed");
             };
             Some(new_signer)
         })
@@ -240,7 +234,6 @@ impl OverseerConnections {
             value,
             Some(nonce),
         ) {
-            tracing::info!("sending to self {nonce}: {callref:?}");
             self.pending_transfers.insert(callref, PendingTransaction {
                 sent_timestamp: Nanos::now(),
                 from_address: signer.address,
@@ -285,6 +278,7 @@ impl OverseerConnections {
                         tracing::warn!("issue parsing receipt for {pending:?}");
                         continue;
                     };
+                    tracing::info!("got receipt {receipt:?}");
 
                     f(SpammedTx::new(
                         pending.from_address,

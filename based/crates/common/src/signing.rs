@@ -120,7 +120,7 @@ impl ECDSASigner {
         let nonce = nonce.or_else(|| self.nonce(walkie_talkie, uri.clone()))?;
         let max_gas_units = 21_000;
         let max_fee_per_gas = 1_000_000_000;
-        let max_priority_fee_per_gas = 0;
+        let max_priority_fee_per_gas = 1;
 
         let tx = TxEip1559 {
             chain_id,
