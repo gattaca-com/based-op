@@ -212,7 +212,15 @@ impl OverseerConnections {
                 value,
                 None,
             ) {
-                tracing::info!("airdropping: {callref:?}");
+                let mut resp_buf = Vec::new();
+                'outer: loop {
+                    self.walkie_talkie.gather_responses(&mut resp_buf);
+                    for resp in resp_buf.drain(..) {
+                        tracing::info!("airdropping: {resp:?}");
+                        break 'outer;
+                    }
+                }
+                // tracing::info!("airdropping: {callref:?}");
             } else {
                 tracing::info!("airdrop: failed");
             };
