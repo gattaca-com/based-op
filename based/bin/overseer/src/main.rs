@@ -216,7 +216,9 @@ impl OverseerConnections {
                 'outer: loop {
                     self.walkie_talkie.gather_responses(&mut resp_buf);
                     for resp in resp_buf.drain(..) {
-                        tracing::info!("airdropping: {resp:?}");
+                        if let Ok((_, _, body)) = resp {
+                            tracing::info!("airdropping: {}", String::from_utf8(body).unwrap());
+                        }
                         break 'outer;
                     }
                 }
