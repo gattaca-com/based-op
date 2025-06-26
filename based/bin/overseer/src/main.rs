@@ -126,7 +126,7 @@ struct OverseerConnections {
     walkie_talkie: WalkieTalkie,
     runtime: tokio::runtime::Runtime,
     client_portal: HttpClient,
-    uri_portal: Uri,
+    uri_based_op_geth: Uri,
     client_based_op_node: HttpClient,
     client_based_op_geth: HttpClient,
     rich_wallet_key: Option<ECDSASigner>,
@@ -160,7 +160,7 @@ impl OverseerConnections {
             telemetry: telemetry_queue().into(),
             runtime,
             client_portal,
-            uri_portal: args.portal_url.to_string().parse().expect("couldn't parse portal url"),
+            uri_based_op_geth: args.based_op_geth_url.to_string().parse().expect("couldn't parse portal url"),
             client_based_op_node,
             client_based_op_geth,
             rich_wallet_key: args.rich_wallet_key.and_then(|k| {
@@ -206,7 +206,7 @@ impl OverseerConnections {
             let value = U256::from(1_000_000_000_000_000u64);
             if let Some(_callref) = signer.send_transfer(
                 &mut self.walkie_talkie,
-                self.uri_portal.clone(),
+                self.uri_based_op_geth.clone(),
                 self.rollup_config.l2_chain_id,
                 to_account,
                 value,
@@ -228,7 +228,7 @@ impl OverseerConnections {
         let value = U256::from(1u64);
         if let Some(callref) = signer.send_transfer(
             &mut self.walkie_talkie,
-            self.uri_portal.clone(),
+            self.uri_based_op_geth.clone(),
             self.rollup_config.l2_chain_id,
             signer.address,
             value,
@@ -286,7 +286,7 @@ impl OverseerConnections {
                         let Ok(req) = Request::builder()
                             .header("content-type", "application/json")
                             .method("POST")
-                            .uri(self.uri_portal.clone())
+                            .uri(self.uri_based_op_geth.clone())
                             .body(payload)
                         else {
                             tracing::warn!("couldn't create request");
@@ -335,7 +335,7 @@ impl OverseerConnections {
                     let Ok(req) = Request::builder()
                         .header("content-type", "application/json")
                         .method("POST")
-                        .uri(self.uri_portal.clone())
+                        .uri(self.uri_based_op_geth.clone())
                         .body(payload)
                     else {
                         tracing::warn!("couldn't create request");
