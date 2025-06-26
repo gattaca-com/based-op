@@ -1,3 +1,4 @@
+use alloy_primitives::{Address, B256};
 use bop_common::{
     telemetry::order::{IncludedInFrag, Ingested, Tx},
     time::Nanos,
@@ -6,7 +7,8 @@ use ratatui::text::Text;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::collections::HasKey;
+use super::Data;
+use crate::{collections::HasKey, ui::ToRow};
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TransactionData {
     uuid: Uuid,
@@ -54,22 +56,6 @@ impl TransactionData {
         ["Timestamp", "Hash", "Sender", "Nonce"].into_iter().map(|t| t.into())
     }
 
-    pub fn to_pool_row(&self) -> Vec<Text<'_>> {
-        if !self.active() {
-            return vec![];
-        }
-        let Some(ingested) = self.ingested() else {
-            return vec![];
-        };
-
-        vec![
-            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
-            ingested.hash.to_string()[0..6].to_string().into(),
-            ingested.sender.to_string()[0..6].to_string().into(),
-            ingested.nonce.to_string().into(),
-        ]
-    }
-
     #[allow(dead_code)]
     pub fn frag_table_header() -> impl ExactSizeIterator<Item = Text<'static>> {
         ["Timestamp", "Hash", "Sender", "Nonce", "Payment", "Gas", "Simtime"].into_iter().map(|t| t.into())
@@ -101,5 +87,61 @@ impl HasKey for TransactionData {
 
     fn key(&self) -> &Self::Key {
         &self.uuid
+    }
+}
+
+impl ToRow for TransactionData {
+    fn to_row(&self, _data: &Data) -> Vec<Text<'_>> {
+        if !self.active() {
+            return vec![];
+        }
+        let Some(ingested) = self.ingested() else {
+            return vec![];
+        };
+
+        vec![
+            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
+            ingested.hash.to_string()[0..6].to_string().into(),
+            ingested.sender.to_string()[0..6].to_string().into(),
+            ingested.nonce.to_string().into(),
+        ]
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct SpammedTx {
+    pub wallet: Address,
+    pub hash: B256,
+    pub nonce: u64,
+    pub block: u64,
+    pub sent_timestamp: Nanos,
+    pub receipt_timestamp: Nanos,
+}
+impl SpammedTx {
+    pub fn new(
+        wallet: Address,
+        hash: B256,
+        nonce: u64,
+        block: u64,
+        sent_timestamp: Nanos,
+        receipt_timestamp: Nanos,
+    ) -> Self {
+        Self { wallet, hash, nonce, block, sent_timestamp, receipt_timestamp }
+    }
+
+    pub fn header() -> impl ExactSizeIterator<Item = Text<'static>> {
+        ["Timestamp", "Hash", "Nonce", "Block", "Latency"].into_iter().map(|t| t.into())
+    }
+}
+
+impl ToRow for SpammedTx {
+    fn to_row(&self, _data: &Data) -> Vec<Text<'_>> {
+        vec![
+            self.sent_timestamp.with_fmt("%d %H:%M:%S%.3f").into(),
+            self.hash.to_string().into(),
+            self.nonce.to_string().into(),
+            self.block.to_string().into(),
+            (self.receipt_timestamp - self.sent_timestamp).to_string().into(),
+        ]
     }
 }

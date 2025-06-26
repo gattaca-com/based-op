@@ -19,6 +19,9 @@ pub use queue::{Consumer, Producer, Queue};
 pub use seqlock::Seqlock;
 pub mod messages;
 pub use messages::InternalMessage;
+pub mod walkie_talkie;
+pub use walkie_talkie::WalkieTalkie;
+
 use tracing::{error, warn};
 
 use crate::{

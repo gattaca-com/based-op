@@ -21,7 +21,7 @@ impl Display for SequencerState {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, AsRefStr)]
 #[repr(u8)]
 pub enum SystemNotification {
     StateChanged(SequencerState),

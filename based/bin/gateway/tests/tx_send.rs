@@ -8,10 +8,10 @@ use bop_common::{
 };
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::OpTransactionReceipt;
-use reqwest::{Url, blocking::Client};
-use revm_primitives::{Address, B256, Bytes, TxKind, U256, address, b256};
+use reqwest::{blocking::Client, Url};
+use revm_primitives::{address, b256, Address, Bytes, TxKind, B256, U256};
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tracing::{info, level_filters::LevelFilter, warn};
 use tracing_subscriber::EnvFilter;
 

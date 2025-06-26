@@ -4,33 +4,30 @@ use alloy_primitives::Address;
 use block::BlockData;
 use bop_common::{
     api::{OpGethPeer, OpPeerInfo, RollupConfig, SyncStatus},
-    communication::{Consumer, Queue, queues_dir},
-    telemetry::{
-        Telemetry,
-        frag::Frag,
-        order::Tx,
-        system::{SequencerState, SystemNotification},
-    },
+    communication::{queues_dir, Consumer, Queue},
+    telemetry::{frag::Frag, order::Tx, system::SystemNotification, Telemetry},
     time::{Duration, TimingMessage},
 };
 use frag::FragData;
 use ratatui::{buffer::Buffer, layout::Size, widgets::Wrap};
 use reqwest::Url;
-use transaction::TransactionData;
+use system::SystemNotificationData;
+use transaction::{SpammedTx, TransactionData};
 use tui_scrollview::ScrollViewState;
 
 use crate::{
-    OverseerConsumers,
     collections::{CircularBuffer, KeyedCircularBuffer},
     prelude::*,
     statistics::Statistics,
-    timekeeper::{TimeKeeper, TimerDataState, clock_overhead},
+    timekeeper::{clock_overhead, TimeKeeper, TimerDataState},
     ui::plot::RenderFlags,
     utils::empty_if_default,
+    OverseerConnections,
 };
 
 pub mod block;
 pub mod frag;
+pub mod system;
 pub mod transaction;
 
 #[derive(Clone, Debug, Default)]
@@ -39,6 +36,7 @@ pub struct UIData {
     pub table_frags: TableState,
     pub table_pool: TableState,
     pub table_system: TableState,
+    pub table_spam: TableState,
     pub scroll_view_state: ScrollViewState,
 }
 
@@ -64,21 +62,24 @@ impl UIData {
         self.table_blocks.render(
             Some("Blocks".to_string()),
             BlockData::header(),
-            data.sealed_blocks().map(|b| b.to_row()),
+            data.sealed_blocks(),
+            data,
             frame,
             left,
         );
         self.table_frags.render(
             Some(format!("Frags in currently sequenced Block {}", data.block_number)),
             FragData::block_table_header(),
-            data.current_block_frags().map(|b| b.to_block_table_row()),
+            data.current_block_frags(),
+            data,
             frame,
             bottom_left,
         );
         self.table_pool.render(
             Some("Tx Pool".to_string()),
             TransactionData::pool_header(),
-            data.transactions.iter().map(|b| b.to_pool_row()).rev(),
+            data.transactions.iter().rev(),
+            data,
             frame,
             middle_bottom,
         )
@@ -146,10 +147,10 @@ impl UIData {
         let _ = writeln!(
             &mut tw,
             "Last Update:\t{}",
-            data.system.last().map(|(t, _)| t.with_fmt("%d %H:%M:%S%.3f")).unwrap_or_default()
+            data.system.last().map(|t| t.timestamp.with_fmt("%d %H:%M:%S%.3f")).unwrap_or_default()
         );
 
-        let (t, cur_state) = data.current_state().unwrap_or_default();
+        let SystemNotificationData { timestamp: t, notification: cur_state } = data.current_state().unwrap_or_default();
         if let Some((url, address)) = data.current_gateway.as_ref() {
             let _ = writeln!(&mut tw, "Current Gateway:\t{url}");
             let _ = writeln!(&mut tw, "Signing wallet:\t{address}");
@@ -160,8 +161,8 @@ impl UIData {
 
         let _ = writeln!(&mut tw, "Current Block:\t{}", data.block_number);
         let _ = writeln!(&mut tw, "Current State:\t{}", cur_state.as_ref());
-        let (_, last_state) = data.last_state().unwrap_or_default();
-        let _ = writeln!(&mut tw, "Prev State:\t{}", empty_if_default(last_state));
+        let SystemNotificationData { notification: last_state, .. } = data.last_state().unwrap_or_default();
+        let _ = writeln!(&mut tw, "Prev State:\t{}", empty_if_default(last_state.as_ref()));
         let _ = writeln!(&mut tw, "Last State Transition:\t{}", empty_if_default(t));
         let local_op_bn = data.sync_status_local.1.unsafe_l2.number;
         if local_op_bn == 0 {
@@ -235,12 +236,21 @@ impl UIData {
         self.table_system.render(
             Some("System Messages".to_string()),
             vec![Text::from("Timestamp"), Text::from("Message")].into_iter(),
-            data.system
-                .iter()
-                .rev()
-                .map(|(t, b)| vec![t.with_fmt("%d %H:%M:%S%.3f").into(), format!("{:?}", b).into()]),
+            data.system.iter().rev(),
+            data,
             frame,
             right,
+        );
+    }
+
+    pub fn render_tx_spammer(&mut self, data: &Data, inner_area: Rect, frame: &mut Frame<'_>) {
+        self.table_spam.render(
+            Some("System Messages".to_string()),
+            SpammedTx::header(),
+            data.spammed_txs.iter().rev(),
+            data,
+            frame,
+            inner_area,
         );
     }
 }
@@ -305,7 +315,8 @@ pub struct Data {
     pub transactions: KeyedCircularBuffer<TransactionData>,
     pub blocks: KeyedCircularBuffer<BlockData>,
     pub frags: KeyedCircularBuffer<FragData>,
-    pub system: CircularBuffer<(Nanos, SystemNotification)>,
+    pub system: CircularBuffer<SystemNotificationData>,
+    pub spammed_txs: CircularBuffer<SpammedTx>,
     pub data_gatherer: Repeater,
     pub queue_checker: Repeater,
     pub syncstatus_poller: Repeater,
@@ -327,6 +338,7 @@ impl Data {
             frags: KeyedCircularBuffer::new(10_000),
             blocks: KeyedCircularBuffer::new(10_000),
             system: CircularBuffer::new(10_000),
+            spammed_txs: CircularBuffer::new(10_000),
             timekeeper: Default::default(),
             time_datas: Default::default(),
             data_gatherer: Repeater::every(Duration::from_secs(6) / 256u64),
@@ -398,7 +410,10 @@ impl Data {
         self.transactions.insert(TransactionData::new(uuid, t, update));
     }
 
-    pub fn update(&mut self, consumers: &mut OverseerConsumers, block_time: bool) {
+    pub fn update(&mut self, consumers: &mut OverseerConnections, block_time: bool) {
+        consumers.gather_pending_txs(|tx| {
+            self.spammed_txs.push(tx);
+        });
         while let Some(update) = consumers.telemetry.try_consume() {
             let (key, t, update) = update.into();
             match update {
@@ -418,7 +433,7 @@ impl Data {
                     if let Some(block) = self.blocks.get_mut(&curblock) {
                         block.sealed = true;
                     }
-                    self.system.push((t, system));
+                    self.system.push(SystemNotificationData::new(t, system));
                 }
                 Telemetry::System(system @ SystemNotification::BlockSync(block_number, gas_used)) => {
                     if !self.blocks.contains_key(&block_number) {
@@ -433,7 +448,7 @@ impl Data {
                             block.reset();
                         }
                     }
-                    self.system.push((t, system));
+                    self.system.push(SystemNotificationData::new(t, system));
                     self.block_number = block_number;
                 }
                 Telemetry::System(system @ SystemNotification::NewPayload(block_number)) => {
@@ -442,7 +457,7 @@ impl Data {
                         self.blocks.insert(block);
                     }
                     self.block_number = block_number;
-                    self.system.push((t, system));
+                    self.system.push(SystemNotificationData::new(t, system));
                 }
                 Telemetry::System(system @ SystemNotification::Sorting(block_number)) => {
                     if !self.blocks.contains_key(&block_number) {
@@ -450,10 +465,10 @@ impl Data {
                         self.blocks.insert(block);
                     }
                     self.block_number = block_number;
-                    self.system.push((t, system));
+                    self.system.push(SystemNotificationData::new(t, system));
                 }
                 Telemetry::System(system) => {
-                    self.system.push((t, system));
+                    self.system.push(SystemNotificationData::new(t, system));
                 }
             }
         }
@@ -557,20 +572,21 @@ impl Data {
         self.blocks.iter().rev().filter(|f| f.sealed)
     }
 
-    fn current_state(&self) -> Option<(Nanos, SequencerState)> {
-        self.system
-            .iter()
-            .rev()
-            .find_map(|(t, s)| if let SystemNotification::StateChanged(state) = s { Some((*t, *state)) } else { None })
+    fn current_state(&self) -> Option<SystemNotificationData> {
+        self.system.iter().rev().find_map(|t| {
+            if let SystemNotification::StateChanged(_) = t.notification {
+                Some(*t)
+            } else {
+                None
+            }
+        })
     }
 
-    fn last_state(&self) -> Option<(Nanos, SequencerState)> {
+    fn last_state(&self) -> Option<SystemNotificationData> {
         self.system
             .iter()
             .rev()
-            .filter_map(
-                |(t, s)| if let SystemNotification::StateChanged(state) = s { Some((*t, *state)) } else { None },
-            )
+            .filter_map(|t| if let SystemNotification::StateChanged(_) = t.notification { Some(*t) } else { None })
             .nth(1)
     }
 }

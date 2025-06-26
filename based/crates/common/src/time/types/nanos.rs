@@ -14,7 +14,7 @@ use super::Duration;
 use crate::time::global_clock;
 
 /// Nanos since unix epoch, good till 2554 I think
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, Hash)]
 #[repr(C)]
 pub struct Nanos(pub u64);
 
