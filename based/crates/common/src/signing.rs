@@ -80,7 +80,9 @@ impl ECDSASigner {
             return None;
         };
 
-        let Ok(req) = Request::builder().method("POST").uri(uri.clone()).body(payload) else {
+        let Ok(req) =
+            Request::builder().header("content-type", "application/json").method("POST").uri(uri.clone()).body(payload)
+        else {
             tracing::warn!("couldn't create request");
             return None;
         };
@@ -144,7 +146,9 @@ impl ECDSASigner {
             return None;
         };
 
-        let Ok(req) = Request::builder().method("POST").uri(uri.clone()).body(payload) else {
+        let Ok(req) =
+            Request::builder().method("POST").uri(uri.clone()).header("content-type", "application/json").body(payload)
+        else {
             tracing::warn!("couldn't create request");
             return None;
         };

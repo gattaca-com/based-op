@@ -301,7 +301,12 @@ impl OverseerConnections {
                         "params": [hash]
                     }))
                     .unwrap();
-                    let Ok(req) = Request::builder().method("POST").uri(self.uri_portal.clone()).body(payload) else {
+                    let Ok(req) = Request::builder()
+                        .header("content-type", "application/json")
+                        .method("POST")
+                        .uri(self.uri_portal.clone())
+                        .body(payload)
+                    else {
                         tracing::warn!("couldn't create request");
                         continue;
                     };
