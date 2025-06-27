@@ -54,7 +54,7 @@ impl Repeater {
 
     #[inline]
     pub fn remaining(&self) -> Duration {
-        self.last_acted.elapsed().saturating_sub(self.interval)
+        self.interval.saturating_sub(self.last_acted.elapsed())
     }
 }
 
