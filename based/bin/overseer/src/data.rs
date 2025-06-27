@@ -146,6 +146,10 @@ impl TxSpammer {
         if pending.retries < self.max_retries {
             pending.retries += 1;
             self.pending_retries.push_back(pending);
+        } else {
+            tracing::warn!("{pending:?} failed after 5 reqs, keep retrying");
+            pending.retries = 0;
+            self.pending_retries.push_back(pending);
         }
     }
 
