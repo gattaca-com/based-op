@@ -738,16 +738,10 @@ impl Data {
     }
 
     pub fn update(&mut self, consumers: &mut OverseerConnections, block_time: bool) {
-        match &mut self.tx_spam_account {
-            Some((account, nonce)) => {
-                *nonce = self.tx_spammer.maybe_spam_more_txs(&mut consumers.walkie_talkie, account, *nonce, |tx| {
-                    self.spammed_txs.insert(tx);
-                });
-            }
-            None => {
-                self.tx_spam_account =
-                    self.tx_spammer.airdrop_eth(&mut consumers.walkie_talkie).map(|account| (account, 0))
-            }
+        if let Some((account, nonce)) = &mut self.tx_spam_account {
+            *nonce = self.tx_spammer.maybe_spam_more_txs(&mut consumers.walkie_talkie, account, *nonce, |tx| {
+                self.spammed_txs.insert(tx);
+            });
         }
         self.gather_pending_txs(&mut consumers.walkie_talkie);
 
