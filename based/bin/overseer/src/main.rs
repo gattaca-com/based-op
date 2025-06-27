@@ -333,6 +333,9 @@ impl TxSpammer {
         mut nonce: u64,
         mut f: impl FnMut(SpammedTx),
     ) -> u64 {
+        if self.time_since_last_tx_send == Nanos::default() {
+            self.time_since_last_tx_send = Nanos::now()
+        }
 
         let time_per_tx = Nanos::from_secs(1)/self.tps;
         let tx_per_frame = Nanos::from_millis(16) / ((time_per_tx - self.time_since_last_tx_send.elapsed().min(Nanos::from_secs(1))));
