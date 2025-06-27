@@ -337,7 +337,10 @@ impl TxSpammer {
             return nonce;
         }
         let time_per_tx = 200 * 2 / capacity; // frag time * rt
-        let tx_per_frame = time_per_tx / 16; // 16ms / frame
+        if time_per_tx == 0 {
+            return nonce;
+        }
+        let tx_per_frame = 16 / time_per_tx; // 16ms / frame
 
         for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
