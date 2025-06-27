@@ -270,11 +270,13 @@ impl TxSpammer {
         if self.tx_resetter.fired() {
             self.n_txs_sent = 0
         }
-        let remaining_frames = self.tx_resetter.remaining() / Duration::from_millis(16);
-        let remaining_txs = self.tps.saturating_sub(self.n_txs_sent);
-        let tx_per_frame = remaining_txs as u64 / remaining_frames.max(1);
 
-        for _ in 0..tx_per_frame {
+        let tps = self.tps as f64;
+        let tx_per_frame = tps / 60.0;
+        let tx_this_frame =
+            (self.tx_resetter.elapsed().as_secs() * tps - self.n_txs_sent as f64 + tx_per_frame).ceil() as usize;
+
+        for _ in 0..tx_this_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
                 self.n_txs_sent += 1;
                 f(tx);
@@ -282,7 +284,6 @@ impl TxSpammer {
             } else {
                 break;
             }
-
         }
         nonce
     }
