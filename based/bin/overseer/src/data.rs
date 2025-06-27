@@ -210,6 +210,9 @@ impl TxSpammer {
     ) {
         let Ok((callref, res, body)) = resp.inspect_err(|e| {
             tracing::warn!("got an issue when receiving a transaction response {:?}: {e}", e.callref());
+            if let Some(pending) = self.pending_transfers.remove(e.callref()) {
+                self.maybe_resend_later(pending);
+            }
         }) else {
             return;
         };
