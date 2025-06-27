@@ -58,7 +58,8 @@ pub struct TxSpammer {
     rich_wallet_key: Option<ECDSASigner>,
     chain_id: u64,
     pub tps: usize,
-    time_since_last_tx_send: Nanos,
+    tx_resetter: Repeater,
+    n_txs_sent: usize,
 }
 
 impl TxSpammer {
@@ -68,7 +69,15 @@ impl TxSpammer {
         rich_wallet_key: Option<ECDSASigner>,
         chain_id: u64,
     ) -> Self {
-        Self { max_retries, uri_based_op_geth, rich_wallet_key, chain_id, tps: 50, ..Default::default() }
+        Self {
+            max_retries,
+            uri_based_op_geth,
+            rich_wallet_key,
+            chain_id,
+            tps: 50,
+            tx_resetter: Repeater::every(Duration::from_secs(1)),
+            ..Default::default()
+        }
     }
 
     fn airdrop_eth(&self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {
@@ -258,20 +267,20 @@ impl TxSpammer {
         mut nonce: u64,
         mut f: impl FnMut(SpammedTx),
     ) -> u64 {
-        if self.time_since_last_tx_send == Nanos::default() {
-            self.time_since_last_tx_send = Nanos::now()
-        }
-        let time_per_tx = Nanos::from_secs(1) / self.tps;
-        let tx_per_frame = self.time_since_last_tx_send.elapsed() / time_per_tx;
+        let remaining_frames = self.tx_resetter.remaining() / Duration::from_millis(16);
+        let remaining_txs = self.tps.saturating_sub(self.n_txs_sent);
+        let tx_per_frame = remaining_txs as u64 / remaining_frames;
 
         for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
                 f(tx);
                 nonce += 1;
-                self.time_since_last_tx_send = Nanos::now();
             } else {
                 break;
             }
+        }
+        if self.tx_resetter.fired() {
+            self.n_txs_sent = 0
         }
         nonce
     }

@@ -190,6 +190,15 @@ impl Div<usize> for Duration {
     }
 }
 
+impl Div<Duration> for Duration {
+    type Output = u64;
+
+    #[inline]
+    fn div(self, rhs: Duration) -> u64 {
+        self.0 / rhs.0
+    }
+}
+
 impl DivAssign<u32> for Duration {
     #[inline]
     fn div_assign(&mut self, rhs: u32) {
