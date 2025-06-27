@@ -339,7 +339,7 @@ impl TxSpammer {
         }
         let time_per_tx = ((Nanos::from_millis(200 * 2).saturating_sub(self.time_since_last_tx_send.elapsed())) /
             capacity)
-            .min(Nanos::from_micros(16_000 / capacity as u64)); // frag time * rt
+            .max(Nanos::from_micros(16_000 / capacity as u64)); // frag time * rt
         if time_per_tx == Nanos::ZERO {
             return nonce;
         }
