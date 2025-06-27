@@ -337,13 +337,10 @@ impl TxSpammer {
         if capacity == 0 {
             return nonce;
         }
-        let time_per_tx = ((Nanos::from_millis(200 * 2).saturating_sub(self.time_since_last_tx_send.elapsed())) /
-            capacity)
-            .max(Nanos::from_micros(16_000 / capacity as u64)); // frag time * rt
-        if time_per_tx == Nanos::ZERO {
-            return nonce;
-        }
-        let tx_per_frame = Nanos::from_millis(16) / time_per_tx; // 16ms / frame
+        let time_per_tx =
+            (Nanos::from_millis(200).saturating_sub(self.time_since_last_tx_send.elapsed())) / capacity; // frag time
+        let tx_per_frame =
+            if time_per_tx == Nanos::ZERO { capacity as u64 } else { Nanos::from_millis(16) / time_per_tx };
 
         for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
