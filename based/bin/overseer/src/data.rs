@@ -272,7 +272,7 @@ impl TxSpammer {
         }
         let remaining_frames = self.tx_resetter.remaining() / Duration::from_millis(16);
         let remaining_txs = self.tps.saturating_sub(self.n_txs_sent);
-        let tx_per_frame = remaining_txs as u64 / remaining_frames;
+        let tx_per_frame = remaining_txs as u64 / remaining_frames.max(1);
 
         for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
