@@ -170,7 +170,12 @@ impl TxSpammer {
         })
     }
 
-    fn send_transfer_to_self(&mut self, walkie_talkie: &mut WalkieTalkie, signer: &ECDSASigner, nonce: u64) -> bool {
+    fn send_transfer_to_self(
+        &mut self,
+        walkie_talkie: &mut WalkieTalkie,
+        signer: &ECDSASigner,
+        nonce: u64,
+    ) -> Option<SpammedTx> {
         let value = U256::from(1u64);
         if let Some(callref) = signer.send_transfer(
             walkie_talkie,
@@ -180,16 +185,25 @@ impl TxSpammer {
             value,
             Some(nonce),
         ) {
+            let sent_timestamp = Nanos::now();
             self.pending_transfers.insert(callref, PendingTransaction {
-                sent_timestamp: Nanos::now(),
+                sent_timestamp,
                 retries: 0,
                 from_address: signer.address,
                 tx_hash: None,
                 nonce,
             });
-            true
+
+            Some(SpammedTx {
+                wallet: signer.address,
+                sent_timestamp,
+                nonce,
+                hash: None,
+                block: None,
+                receipt_timestamp: None,
+            })
         } else {
-            false
+            None
         }
     }
 
@@ -283,12 +297,12 @@ impl TxSpammer {
                 };
 
                 f(SpammedTx::new(
-                    pending.from_address,
-                    receipt.inner.transaction_hash,
-                    pending.nonce,
-                    receipt.inner.block_number.unwrap_or_default(),
                     pending.sent_timestamp,
-                    Nanos::now(),
+                    pending.from_address,
+                    pending.nonce,
+                    Some(receipt.inner.transaction_hash),
+                    Some(receipt.inner.block_number.unwrap_or_default()),
+                    Some(Nanos::now()),
                 ));
             }
             None => {
@@ -311,10 +325,20 @@ impl TxSpammer {
         }
     }
 
-    fn maybe_spam_more_txs(&mut self, walkie_talkie: &mut WalkieTalkie, signer: &ECDSASigner, mut nonce: u64) -> u64 {
+    fn maybe_spam_more_txs(
+        &mut self,
+        walkie_talkie: &mut WalkieTalkie,
+        signer: &ECDSASigner,
+        mut nonce: u64,
+        mut f: impl FnMut(SpammedTx),
+    ) -> u64 {
         while self.pending_transfers.len() < self.max_pending {
-            self.send_transfer_to_self(walkie_talkie, signer, nonce);
-            nonce += 1;
+            if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
+                f(tx);
+                nonce += 1;
+            } else {
+                break;
+            }
         }
         nonce
     }
@@ -414,8 +438,8 @@ impl OverseerConnections {
         }
     }
 
-    fn maybe_spam_more_txs(&mut self, signer: &ECDSASigner, nonce: u64) -> u64 {
-        self.tx_spammer.maybe_spam_more_txs(&mut self.walkie_talkie, signer, nonce)
+    fn maybe_spam_more_txs(&mut self, signer: &ECDSASigner, nonce: u64, f: impl FnMut(SpammedTx)) -> u64 {
+        self.tx_spammer.maybe_spam_more_txs(&mut self.walkie_talkie, signer, nonce, f)
     }
 }
 
@@ -449,7 +473,7 @@ impl Overseer {
     pub fn update(&mut self, consumers: &mut OverseerConnections, slot_time: bool) {
         match &mut self.tx_spam_account {
             Some((account, nonce)) => {
-                *nonce = consumers.maybe_spam_more_txs(account, *nonce);
+                *nonce = consumers.maybe_spam_more_txs(account, *nonce, |tx| self.data.handle_spammed_tx(tx));
             }
             None => self.tx_spam_account = consumers.airdrop_eth().map(|account| (account, 0)),
         }

@@ -316,7 +316,7 @@ pub struct Data {
     pub blocks: KeyedCircularBuffer<BlockData>,
     pub frags: KeyedCircularBuffer<FragData>,
     pub system: CircularBuffer<SystemNotificationData>,
-    pub spammed_txs: CircularBuffer<SpammedTx>,
+    pub spammed_txs: KeyedCircularBuffer<SpammedTx>,
     pub data_gatherer: Repeater,
     pub queue_checker: Repeater,
     pub syncstatus_poller: Repeater,
@@ -331,6 +331,9 @@ pub struct Data {
     pub peers_local_op_geth: Vec<OpGethPeer>,
 }
 impl Data {
+    const NUM_DATAPOINTS: usize = 256;
+    const SAMPLES_PER_MEDIAN: usize = 128;
+
     pub fn new(rollup_config: RollupConfig) -> Self {
         Self {
             block_number: Default::default(),
@@ -338,7 +341,7 @@ impl Data {
             frags: KeyedCircularBuffer::new(10_000),
             blocks: KeyedCircularBuffer::new(10_000),
             system: CircularBuffer::new(10_000),
-            spammed_txs: CircularBuffer::new(10_000),
+            spammed_txs: KeyedCircularBuffer::new(10_000),
             timekeeper: Default::default(),
             time_datas: Default::default(),
             data_gatherer: Repeater::every(Duration::from_secs(6) / 256u64),
@@ -353,11 +356,10 @@ impl Data {
             peers_local_op_geth: Default::default(),
         }
     }
-}
 
-impl Data {
-    const NUM_DATAPOINTS: usize = 256;
-    const SAMPLES_PER_MEDIAN: usize = 128;
+    pub fn handle_spammed_tx(&mut self, tx: SpammedTx) {
+        self.spammed_txs.insert(tx);
+    }
 
     pub fn is_empty(&self) -> bool {
         self.transactions.is_empty() && self.blocks.is_empty() && self.frags.is_empty()
@@ -412,8 +414,9 @@ impl Data {
 
     pub fn update(&mut self, consumers: &mut OverseerConnections, block_time: bool) {
         consumers.gather_pending_txs(|tx| {
-            self.spammed_txs.push(tx);
+            self.handle_spammed_tx(tx);
         });
+
         while let Some(update) = consumers.telemetry.try_consume() {
             let (key, t, update) = update.into();
             match update {

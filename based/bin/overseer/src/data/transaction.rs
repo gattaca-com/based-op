@@ -110,27 +110,35 @@ impl ToRow for TransactionData {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SpammedTx {
-    pub wallet: Address,
-    pub hash: B256,
-    pub nonce: u64,
-    pub block: u64,
     pub sent_timestamp: Nanos,
-    pub receipt_timestamp: Nanos,
+    pub wallet: Address,
+    pub nonce: u64,
+    pub hash: Option<B256>,
+    pub block: Option<u64>,
+    pub receipt_timestamp: Option<Nanos>,
 }
 impl SpammedTx {
     pub fn new(
-        wallet: Address,
-        hash: B256,
-        nonce: u64,
-        block: u64,
         sent_timestamp: Nanos,
-        receipt_timestamp: Nanos,
+        wallet: Address,
+        nonce: u64,
+        hash: Option<B256>,
+        block: Option<u64>,
+        receipt_timestamp: Option<Nanos>,
     ) -> Self {
         Self { wallet, hash, nonce, block, sent_timestamp, receipt_timestamp }
     }
 
     pub fn header() -> impl ExactSizeIterator<Item = Text<'static>> {
-        ["Timestamp", "Hash", "Nonce", "Block", "Latency"].into_iter().map(|t| t.into())
+        ["Timestamp", "Nonce", "Hash", "Block", "Latency"].into_iter().map(|t| t.into())
+    }
+}
+
+impl HasKey for SpammedTx {
+    type Key = Nanos;
+
+    fn key(&self) -> &Self::Key {
+        &self.sent_timestamp
     }
 }
 
@@ -138,10 +146,10 @@ impl ToRow for SpammedTx {
     fn to_row(&self, _data: &Data) -> Vec<Text<'_>> {
         vec![
             self.sent_timestamp.with_fmt("%d %H:%M:%S%.3f").into(),
-            self.hash.to_string().into(),
             self.nonce.to_string().into(),
-            self.block.to_string().into(),
-            (self.receipt_timestamp - self.sent_timestamp).to_string().into(),
+            self.hash.map(|t| t.to_string()).unwrap_or_default().into(),
+            self.block.map(|t| t.to_string()).unwrap_or_default().into(),
+            self.receipt_timestamp.map(|r| (r - self.sent_timestamp).to_string()).unwrap_or_default().into(),
         ]
     }
 }
