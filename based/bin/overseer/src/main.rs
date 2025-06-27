@@ -333,12 +333,10 @@ impl TxSpammer {
         mut nonce: u64,
         mut f: impl FnMut(SpammedTx),
     ) -> u64 {
-        let time_per_tx = (self.time_since_last_tx_send.elapsed()/Nanos::from_secs(1)).max(1) * Nanos::from_secs(1) / self.tps; // frag time
-        if time_per_tx == Nanos::ZERO {
-            return nonce
-        }
-        let tx_per_frame = Nanos::from_millis(16) / time_per_tx;
 
+        let time_per_tx = Nanos::from_secs(1)/self.tps;
+        let tx_per_frame = Nanos::from_millis(16) / ((time_per_tx - self.time_since_last_tx_send.elapsed().min(Nanos::from_secs(1))));
+       
         for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
                 f(tx);
