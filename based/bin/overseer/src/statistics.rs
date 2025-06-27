@@ -148,7 +148,7 @@ impl<T: Statisticable> Statistics<T> {
             return;
         }
         if tot_count == 0 {
-            tot_count = self.samples;
+            tot_count = self.tot_count + self.samples;
         }
         let median = self.measurements.median();
 
