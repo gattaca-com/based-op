@@ -336,10 +336,8 @@ impl TxSpammer {
         if self.time_since_last_tx_send == Nanos::default() {
             self.time_since_last_tx_send = Nanos::now()
         }
-        let frames_since_last = self.time_since_last_tx_send.elapsed() / Nanos::from_millis(16);
-
         let time_per_tx = Nanos::from_secs(1) / self.tps;
-        let tx_per_frame = Nanos::from_millis(16) * frames_since_last / time_per_tx;
+        let tx_per_frame = self.time_since_last_tx_send.elapsed() / time_per_tx;
 
         for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
