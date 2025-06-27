@@ -332,7 +332,11 @@ impl TxSpammer {
         mut nonce: u64,
         mut f: impl FnMut(SpammedTx),
     ) -> u64 {
-        while self.pending_transfers.len() < self.max_pending {
+        let capacity = self.max_pending.saturating_sub(self.pending_transfers.len());
+        let time_per_tx = 200 * 2 / capacity; // frag time * rt
+        let tx_per_frame = time_per_tx / 16; // 16ms / frame
+
+        for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
                 f(tx);
                 nonce += 1;
