@@ -21,7 +21,7 @@ use op_alloy_rpc_types::OpTransactionReceipt;
 use ratatui::{buffer::Buffer, layout::Size, widgets::Wrap};
 use reqwest::Url;
 use system::SystemNotificationData;
-use transaction::{SpammedTx, TransactionData};
+use transaction::{SpamData, SpammedTx, TransactionData};
 use tui_scrollview::ScrollViewState;
 
 use crate::{
@@ -503,13 +503,41 @@ impl UIData {
     }
 
     pub fn render_tx_spammer(&mut self, data: &Data, inner_area: Rect, frame: &mut Frame<'_>) {
+        let [left, right] =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(inner_area);
+        let [left_top, left_bottom] = Layout::vertical([Constraint::Length(12), Constraint::Fill(1)]).areas(left);
+
+        let mut tw = tabwriter::TabWriter::new(vec![]);
+        let _ = writeln!(
+            &mut tw,
+            "Wallet:\t{}",
+            data.tx_spam_account.as_ref().map(|(address, _)| address.address.to_string()).unwrap_or_default()
+        );
+
+        let _ = writeln!(
+            &mut tw,
+            "Nonce:\t{}",
+            data.spammed_txs.iter().last().map(|t| t.nonce.to_string()).unwrap_or_default()
+        );
+
+        let _ = writeln!(&mut tw, "Tps:\t{} (+- to increase/decrease)", data.tx_spammer.tps.to_string());
+
+        let (min, avg, med, max) = data.spam_data.latencies();
+        let _ = writeln!(&mut tw, "Latency:\tAvg: {avg:>11}\tMin: {min:>11}\tMax: {max:>11}\tMed: {med:>11}");
+
+        tw.flush().unwrap();
+        let txt = String::from_utf8(tw.into_inner().unwrap()).unwrap();
+        let info = Paragraph::new(txt).block(Block::new().title("Spam Stats").borders(Borders::all()));
+        frame.render_widget(info, left_top);
+        data.spam_data.report(frame, right);
+
         self.table_spam.render(
-            Some("System Messages".to_string()),
+            Some("".to_string()),
             SpammedTx::header(),
             data.spammed_txs.iter().rev(),
             data,
             frame,
-            inner_area,
+            left_bottom,
         );
     }
 }
@@ -575,7 +603,6 @@ pub struct Data {
     pub blocks: KeyedCircularBuffer<BlockData>,
     pub frags: KeyedCircularBuffer<FragData>,
     pub system: CircularBuffer<SystemNotificationData>,
-    pub spammed_txs: KeyedCircularBuffer<SpammedTx>,
     pub data_gatherer: Repeater,
     pub queue_checker: Repeater,
     pub syncstatus_poller: Repeater,
@@ -588,7 +615,11 @@ pub struct Data {
     pub sync_status_local: (Nanos, SyncStatus),
     pub peers_local_op_node: Vec<OpPeerInfo>,
     pub peers_local_op_geth: Vec<OpGethPeer>,
+
+    tx_spam_account: Option<(ECDSASigner, u64)>,
+    pub spammed_txs: KeyedCircularBuffer<SpammedTx>,
     pub tx_spammer: TxSpammer,
+    pub spam_data: SpamData,
     results_buf: Vec<walkie_talkie::Result<(CallRef, Response, Vec<u8>)>>,
 }
 impl Data {
@@ -627,6 +658,8 @@ impl Data {
             peers_local_op_node: Default::default(),
             peers_local_op_geth: Default::default(),
             results_buf: Default::default(),
+            spam_data: Default::default(),
+            tx_spam_account: None,
         }
     }
 
@@ -681,10 +714,6 @@ impl Data {
         self.transactions.insert(TransactionData::new(uuid, t, update));
     }
 
-    pub fn airdrop_eth(&mut self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {
-        self.tx_spammer.airdrop_eth(walkie_talkie)
-    }
-
     pub fn gather_pending_txs(&mut self, walkie_talkie: &mut WalkieTalkie) {
         walkie_talkie.gather_responses(&mut self.results_buf);
         for res in self.results_buf.drain(..) {
@@ -695,19 +724,25 @@ impl Data {
 
             if self.tx_spammer.has_callref(callref) {
                 self.tx_spammer.handle_response(walkie_talkie, res, |tx| {
+                    self.spam_data.track(tx.latency());
                     self.spammed_txs.insert(tx);
                 });
             }
         }
     }
 
-    pub fn maybe_spam_more_txs(&mut self, walkie_talkie: &mut WalkieTalkie, signer: &ECDSASigner, nonce: u64) -> u64 {
-        self.tx_spammer.maybe_spam_more_txs(walkie_talkie, signer, nonce, |tx| {
-            self.spammed_txs.insert(tx);
-        })
-    }
-
     pub fn update(&mut self, consumers: &mut OverseerConnections, block_time: bool) {
+        match &mut self.tx_spam_account {
+            Some((account, nonce)) => {
+                *nonce = self.tx_spammer.maybe_spam_more_txs(&mut consumers.walkie_talkie, account, *nonce, |tx| {
+                    self.spammed_txs.insert(tx);
+                });
+            }
+            None => {
+                self.tx_spam_account =
+                    self.tx_spammer.airdrop_eth(&mut consumers.walkie_talkie).map(|account| (account, 0))
+            }
+        }
         self.gather_pending_txs(&mut consumers.walkie_talkie);
 
         while let Some(update) = consumers.telemetry.try_consume() {

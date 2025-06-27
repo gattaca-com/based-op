@@ -92,6 +92,7 @@ pub struct Statistics<T: Statisticable> {
     max: u64,
     tot: u64,
     samples: usize,
+    // last median
 
     // tot_count does not necessarily need to be equal to the sum of the samples
     // of the datapoints. If a timer is spamming messages, the timekeeper
@@ -123,6 +124,7 @@ impl<T: Statisticable> Statistics<T> {
             max: 0,
             avg: 0,
             tot: 0,
+            med: 0,
             offset: offset.into(),
             samples: 0,
             tot_count: 0,
@@ -234,5 +236,21 @@ impl<T: Statisticable> Statistics<T> {
 
     pub fn toggle(&mut self, flags: RenderFlags) {
         self.flags ^= flags
+    }
+
+    pub fn avg(&self) -> T {
+        self.datapoints.last().map(|d| d.avg).unwrap_or_default().into()
+    }
+
+    pub fn max(&self) -> T {
+        self.datapoints.last().map(|d| d.max).unwrap_or_default().into()
+    }
+
+    pub fn min(&self) -> T {
+        self.datapoints.last().map(|d| d.min).unwrap_or_default().into()
+    }
+
+    pub fn med(&self) -> T {
+        self.datapoints.last().map(|d| d.median).unwrap_or_default().into()
     }
 }

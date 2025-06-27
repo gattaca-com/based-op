@@ -1,14 +1,22 @@
 use alloy_primitives::{Address, B256};
 use bop_common::{
     telemetry::order::{IncludedInFrag, Ingested, Tx},
-    time::Nanos,
+    time::{Duration, Nanos},
 };
-use ratatui::text::Text;
+use ratatui::{
+    layout::{Constraint, Layout, Rect},
+    text::Text,
+    Frame,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::Data;
-use crate::{collections::HasKey, ui::ToRow};
+use crate::{
+    collections::HasKey,
+    statistics::{MsgPer10Sec, Statistics},
+    ui::ToRow,
+};
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TransactionData {
     uuid: Uuid,
@@ -132,6 +140,10 @@ impl SpammedTx {
     pub fn header() -> impl ExactSizeIterator<Item = Text<'static>> {
         ["Timestamp", "Nonce", "Hash", "Block", "Latency"].into_iter().map(|t| t.into())
     }
+
+    pub fn latency(&self) -> Duration {
+        Duration::from(self.receipt_timestamp.unwrap() - self.sent_timestamp)
+    }
 }
 
 impl HasKey for SpammedTx {
@@ -151,5 +163,41 @@ impl ToRow for SpammedTx {
             self.block.map(|t| t.to_string()).unwrap_or_default().into(),
             self.receipt_timestamp.map(|r| (r - self.sent_timestamp).to_string()).unwrap_or_default().into(),
         ]
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpamData {
+    latency: Statistics<Duration>,
+}
+
+impl Default for SpamData {
+    fn default() -> Self {
+        Self { latency: Statistics::new("Latency".to_string(), 4096, 256, Duration::ZERO) }
+    }
+}
+
+impl SpamData {
+    pub fn track(&mut self, latency: Duration) {
+        self.latency.track(latency);
+    }
+
+    pub fn register_datapoint(&mut self) {
+        self.latency.register_datapoint(0, false);
+    }
+
+    pub fn latencies(&self) -> (Duration, Duration, Duration, Duration) {
+        (self.latency.min(), self.latency.avg(), self.latency.med(), self.latency.max())
+    }
+
+    pub fn avg_latency(&self) -> Duration {
+        self.latency.avg()
+    }
+
+    pub fn report(&self, frame: &mut Frame, area: Rect) {
+        let [top, bottom] = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(area);
+
+        self.latency.report("", frame, top);
+        self.latency.report_msg_per_sec(frame, bottom);
     }
 }

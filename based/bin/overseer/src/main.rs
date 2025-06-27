@@ -178,7 +178,6 @@ struct Overseer {
     data: Data,
     ui_data: UIData,
     mode: Mode,
-    tx_spam_account: Option<(ECDSASigner, u64)>,
 }
 impl Overseer {
     pub fn new(args: &OverseerArgs, rollup_config: RollupConfig) -> Self {
@@ -192,7 +191,6 @@ impl Overseer {
             ui_data: Default::default(),
             data: Data::new(rollup_config.clone(), uri_based_op_geth, rich_wallet_key, args.max_tx_send_retries),
             mode: Default::default(),
-            tx_spam_account: None,
         }
     }
 
@@ -205,14 +203,6 @@ impl Overseer {
     }
 
     pub fn update(&mut self, consumers: &mut OverseerConnections, slot_time: bool) {
-        match &mut self.tx_spam_account {
-            Some((account, nonce)) => {
-                *nonce = self.data.maybe_spam_more_txs(&mut consumers.walkie_talkie, account, *nonce);
-            }
-            None => {
-                self.tx_spam_account = self.data.airdrop_eth(&mut consumers.walkie_talkie).map(|account| (account, 0))
-            }
-        }
         self.data.update(consumers, slot_time);
     }
 
