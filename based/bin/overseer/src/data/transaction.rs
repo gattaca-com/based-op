@@ -1,7 +1,7 @@
 use alloy_primitives::{Address, B256};
 use bop_common::{
     telemetry::order::{IncludedInFrag, Ingested, Tx},
-    time::{Duration, Nanos},
+    time::{Duration, Nanos, Repeater},
 };
 use ratatui::{
     layout::{Constraint, Layout, Rect},
@@ -12,11 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::Data;
-use crate::{
-    collections::HasKey,
-    statistics::{MsgPer10Sec, Statistics},
-    ui::ToRow,
-};
+use crate::{collections::HasKey, statistics::Statistics, ui::ToRow};
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TransactionData {
     uuid: Uuid,
@@ -166,32 +162,31 @@ impl ToRow for SpammedTx {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct SpamData {
     latency: Statistics<Duration>,
+    point_registrator: Repeater,
 }
 
 impl Default for SpamData {
     fn default() -> Self {
-        Self { latency: Statistics::new("Latency".to_string(), 4096, 256, Duration::ZERO) }
+        Self {
+            latency: Statistics::new("Latency".to_string(), 4096, 256, Duration::ZERO),
+            point_registrator: Repeater::every(Duration::from_secs(1)),
+        }
     }
 }
 
 impl SpamData {
     pub fn track(&mut self, latency: Duration) {
         self.latency.track(latency);
-    }
-
-    pub fn register_datapoint(&mut self) {
-        self.latency.register_datapoint(0, false);
+        if self.point_registrator.fired() {
+            self.latency.register_datapoint(0, false);
+        }
     }
 
     pub fn latencies(&self) -> (Duration, Duration, Duration, Duration) {
         (self.latency.min(), self.latency.avg(), self.latency.med(), self.latency.max())
-    }
-
-    pub fn avg_latency(&self) -> Duration {
-        self.latency.avg()
     }
 
     pub fn report(&self, frame: &mut Frame, area: Rect) {

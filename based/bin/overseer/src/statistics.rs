@@ -124,7 +124,6 @@ impl<T: Statisticable> Statistics<T> {
             max: 0,
             avg: 0,
             tot: 0,
-            med: 0,
             offset: offset.into(),
             samples: 0,
             tot_count: 0,
