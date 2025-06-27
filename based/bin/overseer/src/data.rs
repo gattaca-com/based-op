@@ -68,7 +68,7 @@ impl TxSpammer {
         rich_wallet_key: Option<ECDSASigner>,
         chain_id: u64,
     ) -> Self {
-        Self { max_retries, uri_based_op_geth, rich_wallet_key, chain_id, tps: 150, ..Default::default() }
+        Self { max_retries, uri_based_op_geth, rich_wallet_key, chain_id, tps: 50, ..Default::default() }
     }
 
     fn airdrop_eth(&self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {

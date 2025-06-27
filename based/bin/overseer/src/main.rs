@@ -277,7 +277,7 @@ impl Overseer {
             (KeyCode::PageUp, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_up(),
             (KeyCode::PageDown, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_down(),
             (KeyCode::Char('-'), _, Mode::Overview | Mode::ChainInfo | Mode::TxSpammer) => {
-                self.data.tx_spammer.tps = self.data.tx_spammer.tps.saturating_sub(1);
+                self.data.tx_spammer.tps = self.data.tx_spammer.tps.saturating_sub(1).max(1);
             }
             (KeyCode::Char('+'), _, Mode::Overview | Mode::ChainInfo | Mode::TxSpammer) => {
                 self.data.tx_spammer.tps = self.data.tx_spammer.tps.saturating_add(1);
