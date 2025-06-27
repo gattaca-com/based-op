@@ -54,11 +54,11 @@ struct Gateway {
 }
 
 impl Gateway {
-    pub fn is_active(&self, gateway_inactivity_timeout_ms: u64) -> bool {
+    pub fn is_active(&self, gateway_inactivity_timeout: Duration) -> bool {
         match self.last_seen.as_ref() {
             Some(last_seen) => {
                 let elapsed = last_seen.elapsed();
-                elapsed < Duration::from_millis(gateway_inactivity_timeout_ms)
+                elapsed < gateway_inactivity_timeout
             }
             None => false,
         }
@@ -86,6 +86,7 @@ pub struct PortalServer {
     current_gateway_candidate: Arc<Mutex<Option<Gateway>>>,
     current_gateway: Arc<Mutex<Option<Gateway>>>,
     gateway_timeout: Duration,
+    gateway_timeout_inactivity: Duration,
     gateways: Arc<RwLock<Vec<Gateway>>>,
     new_payload_block_number: Arc<AtomicU64>,
     new_payload_block_hash: Arc<Mutex<B256>>,
@@ -123,6 +124,7 @@ impl PortalServer {
             current_gateway_candidate: Arc::new(Mutex::new(None)),
             current_gateway: Arc::new(Mutex::new(None)),
             gateway_timeout,
+            gateway_timeout_inactivity: Duration::from_millis(args.gateway_timeout_inactivity_ms),
             gateways,
             new_payload_block_number: Arc::new(AtomicU64::new(0)),
             new_payload_block_hash: Arc::new(Mutex::new(B256::ZERO)),
@@ -212,7 +214,7 @@ impl PortalServer {
     }
 
     fn gateways(&self) -> Vec<Gateway> {
-        self.gateways.read().clone()
+        self.gateways.read().clone().into_iter().filter(|g| g.is_active(self.gateway_timeout_inactivity)).collect()
     }
 
     async fn fetch_registered_gateways(&self) -> eyre::Result<()> {
@@ -276,7 +278,7 @@ impl PortalServer {
                     .await
                     .as_ref()
                     .unwrap()
-                    .is_active(self.args.gateway_inactivity_timeout_ms)
+                    .is_active(self.gateway_timeout_inactivity)
                 {
                     i = (i + 1) % self.gateways().len();
                     if i == index {
@@ -305,20 +307,11 @@ impl PortalServer {
                 error!("CRITICAL: Couldn't find the current gateway");
             }
         }
-        // match self.current_gateway.lock().await.replace() {
-        //     Some(old_gateway) => {
-        //         info!(?old_gateway, "updated current gateway");
-        //     }
-        //     None => {
-        //         error!("CRITICAL: Couldn't find the current gateway");
-        //     }
-        // }
         Ok(())
     }
 
     pub async fn refresh_gateway_list(&self) -> eyre::Result<()> {
         self.fetch_registered_gateways().await?;
-        // self.update_current_gateway_candidate(0, None).await?;
         Ok(())
     }
 
@@ -803,11 +796,14 @@ impl PortalApiServer for PortalServer {
 #[async_trait]
 impl RegistryApiServer for PortalServer {
     async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
+        if n_blocks_into_future == 0 {
+            return self.current_gateway().await;
+        }
         match self.registry_client.get_future_gateway(n_blocks_into_future).await {
             Ok(gateway) => Ok(gateway),
             Err(err) => {
-                error!(%err, "Failed to get future gateway");
-                Err(RpcError::Internal)
+                trace!(%err, "Failed to get future gateway");
+                Err(RpcError::Jsonrpsee(err))
             }
         }
     }
@@ -822,7 +818,7 @@ impl RegistryApiServer for PortalServer {
 
                 Ok((block_number, url, address, jwt_as_b256))
             }
-            None => Err(RpcError::Internal),
+            None => Err(RpcError::Jsonrpsee(ClientError::Custom("no gateways registered".to_string()))),
         }
     }
 
@@ -830,8 +826,8 @@ impl RegistryApiServer for PortalServer {
         match self.registry_client.registered_gateways().await {
             Ok(gateways) => Ok(gateways),
             Err(err) => {
-                error!(%err, "Failed to get registered gateways");
-                Err(RpcError::Internal)
+                trace!(%err, "Failed to get registered gateways");
+                Err(RpcError::Jsonrpsee(err))
             }
         }
     }
@@ -840,8 +836,7 @@ impl RegistryApiServer for PortalServer {
         match self.registry_client.register_gateway(gateway).await {
             Ok(()) => Ok(()),
             Err(err) => {
-                error!(%err, "Failed to register gateway");
-                Err(RpcError::Internal)
+                Err(RpcError::Jsonrpsee(err))
             }
         }
     }

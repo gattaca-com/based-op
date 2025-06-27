@@ -5,7 +5,7 @@ use jsonrpsee::{
     server::middleware::rpc::RpcServiceT,
     types::{
         ErrorObject, Params, Request, ResponsePayload,
-        error::{INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
+        error::INTERNAL_ERROR_CODE,
     },
 };
 use serde_json::value::RawValue;
@@ -139,23 +139,32 @@ where
                                 let payload = ResponsePayload::success(r);
                                 MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
                             }
-                            Err(err) => {
-                                error!(?err, "error forwarding {} request", req.method_name());
-
+                            Err(jsonrpsee::core::ClientError::Call(err)) => {
                                 MethodResponse::error(
                                     req.id,
-                                    ErrorObject::borrowed(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, None),
+                                    err,
                                 )
                             }
+                            Err(err) => {
+                                error!(?err, "error forwarding {} request", req.method_name());
+                                MethodResponse::error(
+                                    req.id,
+                                    ErrorObject::borrowed(INTERNAL_ERROR_CODE, &format!("{err}"), None))
+                            }
                         }
+                    }
+                    Err(jsonrpsee::core::ClientError::Call(err)) => {
+                        MethodResponse::error(
+                            req.id,
+                            err,
+                        )
                     }
                     Err(err) => {
                         error!(?err, "error forwarding {} request", req.method_name());
 
-                        MethodResponse::error(
-                            req.id,
-                            ErrorObject::borrowed(INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG, None),
-                        )
+                                MethodResponse::error(
+                                    req.id,
+                                    ErrorObject::borrowed(INTERNAL_ERROR_CODE, &format!("{err}"), None))
                     }
                 }
             }

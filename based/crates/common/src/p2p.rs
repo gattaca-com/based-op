@@ -227,11 +227,10 @@ mod tests {
             receipts_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             state_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             block_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
-            withdrawals_root: B256::ZERO,
         };
 
         let message = VersionedMessage::from(sealed);
         let hash = message.tree_hash_root();
-        // assert_eq!(hash, b256!("e86afda21ddc7338c7e84561681fde45e2ab55cce8cde3163e0ae5f1c378439e"));
+        assert_eq!(hash, b256!("e86afda21ddc7338c7e84561681fde45e2ab55cce8cde3163e0ae5f1c378439e"));
     }
 }

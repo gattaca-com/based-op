@@ -7,7 +7,7 @@ mod types;
 mod ui;
 mod utils;
 
-use std::io::stdout;
+use std::{collections::VecDeque, io::stdout};
 
 use alloy_primitives::{map::foldhash::HashMap, Address, B256, U256};
 use bop_common::{
@@ -65,6 +65,8 @@ pub struct OverseerArgs {
 
     #[arg(long, default_value = None)]
     pub rich_wallet_key: Option<B256>,
+    #[arg(long, default_value = "5")]
+    pub max_tx_send_retries: usize,
 }
 
 #[derive(Copy, Clone, Debug, Default, Display, FromRepr, EnumIter)]
@@ -117,24 +119,217 @@ impl Mode {
 struct PendingTransaction {
     sent_timestamp: Nanos,
     nonce: u64,
+    retries: usize,
     from_address: Address,
     tx_hash: Option<B256>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct TxSpammer {
+    // transfers sent for which we're waiting for receipt replies
+    pending_transfers: HashMap<CallRef, PendingTransaction>,
+    pending_retries: VecDeque<PendingTransaction>,
+    max_retries: usize,
+    uri_based_op_geth: Uri,
+    rich_wallet_key: Option<ECDSASigner>,
+    chain_id: u64,
+    max_pending: usize,
+}
+impl TxSpammer {
+    pub fn new(
+        max_retries: usize,
+        uri_based_op_geth: Uri,
+        rich_wallet_key: Option<ECDSASigner>,
+        chain_id: u64,
+    ) -> Self {
+        Self { max_retries, uri_based_op_geth, rich_wallet_key, chain_id, max_pending: 10, ..Default::default() }
+    }
+
+    fn airdrop_eth(&self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {
+        self.rich_wallet_key.as_ref().and_then(|signer| {
+            let new_signer = ECDSASigner::random();
+            let to_account = new_signer.address;
+            let value = U256::from(1_000_000_000_000_000u64);
+            if let Some(_callref) = signer.send_transfer(
+                walkie_talkie,
+                self.uri_based_op_geth.clone(),
+                self.chain_id,
+                to_account,
+                value,
+                None,
+            ) {
+                let mut resp_buf = Vec::new();
+                loop {
+                    walkie_talkie.gather_responses(&mut resp_buf);
+                    break;
+                }
+            } else {
+                tracing::warn!("airdrop: failed");
+            };
+            Some(new_signer)
+        })
+    }
+
+    fn send_transfer_to_self(&mut self, walkie_talkie: &mut WalkieTalkie, signer: &ECDSASigner, nonce: u64) -> bool {
+        let value = U256::from(1u64);
+        if let Some(callref) = signer.send_transfer(
+            walkie_talkie,
+            self.uri_based_op_geth.clone(),
+            self.chain_id,
+            signer.address,
+            value,
+            Some(nonce),
+        ) {
+            self.pending_transfers.insert(callref, PendingTransaction {
+                sent_timestamp: Nanos::now(),
+                retries: 0,
+                from_address: signer.address,
+                tx_hash: None,
+                nonce,
+            });
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn maybe_resend_later(&mut self, mut pending: PendingTransaction) {
+        if pending.retries < self.max_retries {
+            pending.retries += 1;
+            self.pending_retries.push_back(pending);
+        }
+    }
+
+    pub fn send_receipt_request(&mut self, walkie_talkie: &mut WalkieTalkie, pending: PendingTransaction) {
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "eth_getTransactionReceipt",
+            "params": [pending.tx_hash.unwrap()]
+        }))
+        .unwrap();
+        let Ok(req) = Request::builder()
+            .header("content-type", "application/json")
+            .method("POST")
+            .uri(self.uri_based_op_geth.clone())
+            .body(payload)
+        else {
+            tracing::warn!("couldn't create request");
+            self.maybe_resend_later(pending);
+            return;
+        };
+        let Ok(callref) = walkie_talkie.send(req).inspect_err(|e| {
+            tracing::warn!("issue sending nonce request to portal: {e}");
+        }) else {
+            self.maybe_resend_later(pending);
+            return;
+        };
+        self.pending_transfers.insert(callref, pending);
+    }
+
+    fn has_callref(&self, callref: &CallRef) -> bool {
+        self.pending_transfers.contains_key(callref)
+    }
+
+    fn is_status_ok(
+        &mut self,
+        resp: Response,
+        body: &Vec<u8>,
+        pending: PendingTransaction,
+    ) -> Option<PendingTransaction> {
+        if resp.status != 200 {
+            tracing::warn!(
+                "got response status {} for {pending:?}: {resp:?} - {}",
+                resp.status,
+                std::str::from_utf8(body).unwrap()
+            );
+            self.maybe_resend_later(pending);
+            return None;
+        }
+        Some(pending)
+    }
+
+    fn handle_response(
+        &mut self,
+        walkie_talkie: &mut WalkieTalkie,
+        resp: walkie_talkie::Result<(CallRef, Response, Vec<u8>)>,
+        f: impl FnOnce(SpammedTx),
+    ) {
+        let Ok((callref, res, body)) = resp.inspect_err(|e| {
+            tracing::warn!("got an issue when receiving a transaction response {:?}: {e}", e.callref());
+        }) else {
+            return;
+        };
+
+        let Some(pending) = self.pending_transfers.remove(&callref) else {
+            tracing::warn!("got transaction response for a callref I don't know about");
+            return;
+        };
+        let Some(mut pending) = self.is_status_ok(res, &body, pending) else {
+            return;
+        };
+
+        match &pending.tx_hash {
+            Some(_hash) => {
+                let Some(receipt) = serde_json::from_slice::<RpcResponse<Option<OpTransactionReceipt>>>(&body).ok()
+                else {
+                    tracing::warn!("issue parsing receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
+                    self.maybe_resend_later(pending);
+                    return;
+                };
+                let Some(receipt) = receipt.result.flatten() else {
+                    self.send_receipt_request(walkie_talkie, pending);
+                    return;
+                };
+
+                f(SpammedTx::new(
+                    pending.from_address,
+                    receipt.inner.transaction_hash,
+                    pending.nonce,
+                    receipt.inner.block_number.unwrap_or_default(),
+                    pending.sent_timestamp,
+                    Nanos::now(),
+                ));
+            }
+            None => {
+                let Some(hash) = serde_json::from_slice::<RpcResponse<B256>>(&body)
+                    .inspect_err(|e| {
+                        tracing::warn!(
+                            "couldn't parse eth_sendRawTransaction response from {}: {e}",
+                            String::from_utf8(body).unwrap_or_default()
+                        );
+                    })
+                    .ok()
+                    .and_then(|t| t.result)
+                else {
+                    self.maybe_resend_later(pending);
+                    return;
+                };
+                pending.tx_hash = Some(hash);
+                self.send_receipt_request(walkie_talkie, pending);
+            }
+        }
+    }
+
+    fn maybe_spam_more_txs(&mut self, walkie_talkie: &mut WalkieTalkie, signer: &ECDSASigner, mut nonce: u64) -> u64 {
+        while self.pending_transfers.len() < self.max_pending {
+            self.send_transfer_to_self(walkie_talkie, signer, nonce);
+            nonce += 1;
+        }
+        nonce
+    }
 }
 
 struct OverseerConnections {
     telemetry: Consumer<TelemetryUpdate>,
     walkie_talkie: WalkieTalkie,
+    results_buf: Vec<walkie_talkie::Result<(CallRef, Response, Vec<u8>)>>,
     runtime: tokio::runtime::Runtime,
     client_portal: HttpClient,
-    uri_based_op_geth: Uri,
     client_based_op_node: HttpClient,
     client_based_op_geth: HttpClient,
-    rich_wallet_key: Option<ECDSASigner>,
     rollup_config: RollupConfig,
-
-    // transfers sent for which we're waiting for receipt replies
-    pending_transfers: HashMap<CallRef, PendingTransaction>,
-    results_buf: Vec<walkie_talkie::Result<(CallRef, Response, Vec<u8>)>>,
+    tx_spammer: TxSpammer,
 }
 
 impl OverseerConnections {
@@ -152,24 +347,26 @@ impl OverseerConnections {
             .build(args.based_op_geth_url.clone())
             .expect("Couldn't initialize based-op-geth rpc client");
 
-        let rollup_config =
+        let rollup_config: RollupConfig =
             runtime.block_on(client_portal.rollup_config()).expect("couldn't read rollup_config").into();
+        let chain_id = rollup_config.l2_chain_id;
+
+        let uri_based_op_geth = args.based_op_geth_url.to_string().parse().expect("couldn't parse portal url");
+        let rich_wallet_key = args.rich_wallet_key.and_then(|k| {
+            ECDSASigner::try_from_secret(k.as_slice())
+                .inspect_err(|e| tracing::warn!("Couldn't generated ECDSASigner from rich wallet key: {e}"))
+                .ok()
+        });
 
         Self {
             walkie_talkie: WalkieTalkie::default(),
             telemetry: telemetry_queue().into(),
             runtime,
             client_portal,
-            uri_based_op_geth: args.based_op_geth_url.to_string().parse().expect("couldn't parse portal url"),
             client_based_op_node,
             client_based_op_geth,
-            rich_wallet_key: args.rich_wallet_key.and_then(|k| {
-                ECDSASigner::try_from_secret(k.as_slice())
-                    .inspect_err(|e| tracing::warn!("Couldn't generated ECDSASigner from rich wallet key: {e}"))
-                    .ok()
-            }),
             rollup_config,
-            pending_transfers: HashMap::default(),
+            tx_spammer: TxSpammer::new(args.max_tx_send_retries, uri_based_op_geth, rich_wallet_key, chain_id),
             results_buf: Vec::new(),
         }
     }
@@ -200,156 +397,25 @@ impl OverseerConnections {
     }
 
     pub fn airdrop_eth(&mut self) -> Option<ECDSASigner> {
-        self.rich_wallet_key.as_ref().and_then(|signer| {
-            let new_signer = ECDSASigner::random();
-            let to_account = new_signer.address;
-            let value = U256::from(1_000_000_000_000_000u64);
-            if let Some(_callref) = signer.send_transfer(
-                &mut self.walkie_talkie,
-                self.uri_based_op_geth.clone(),
-                self.rollup_config.l2_chain_id,
-                to_account,
-                value,
-                None,
-            ) {
-                let mut resp_buf = Vec::new();
-                loop {
-                    self.walkie_talkie.gather_responses(&mut resp_buf);
-                    break;
-                }
-            } else {
-                tracing::warn!("airdrop: failed");
-            };
-            Some(new_signer)
-        })
+        self.tx_spammer.airdrop_eth(&mut self.walkie_talkie)
     }
 
-    pub fn send_transfer_to_self(&mut self, signer: &ECDSASigner, nonce: u64) -> bool {
-        let value = U256::from(1u64);
-        if let Some(callref) = signer.send_transfer(
-            &mut self.walkie_talkie,
-            self.uri_based_op_geth.clone(),
-            self.rollup_config.l2_chain_id,
-            signer.address,
-            value,
-            Some(nonce),
-        ) {
-            self.pending_transfers.insert(callref, PendingTransaction {
-                sent_timestamp: Nanos::now(),
-                from_address: signer.address,
-                tx_hash: None,
-                nonce,
-            });
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn gather_pending_txs(&mut self, mut f: impl FnMut(SpammedTx)) {
+    pub fn gather_pending_txs<F: FnMut(SpammedTx)>(&mut self, mut f: F) {
         self.walkie_talkie.gather_responses(&mut self.results_buf);
         for res in self.results_buf.drain(..) {
-            let Ok((callref, res, body)) = res.inspect_err(|e| {
-                tracing::warn!("got an issue when receiving a transaction response {:?}: {e}", e.callref());
-            }) else {
-                continue;
+            let callref = match &res {
+                Ok((r, _, _)) => r,
+                Err(e) => e.callref(),
             };
 
-            let Some(mut pending) = self.pending_transfers.remove(&callref) else {
-                tracing::warn!("got transaction response for a callref I don't know about");
-                continue;
-            };
-            if res.status != 200 {
-                tracing::warn!(
-                    "got response status {} for {pending:?}: {res:?} - {}",
-                    res.status,
-                    String::from_utf8(body).unwrap_or_default()
-                );
-                continue;
-            }
-
-            match &pending.tx_hash {
-                Some(hash) => {
-                    let Some(receipt) = serde_json::from_slice::<RpcResponse<Option<OpTransactionReceipt>>>(&body).ok()
-                    else {
-                        tracing::warn!("issue parsing receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
-                        continue;
-                    };
-                    let Some(receipt) = receipt.result.flatten() else {
-                        let payload = serde_json::to_vec(&serde_json::json!({
-                            "id": 1,
-                            "jsonrpc": "2.0",
-                            "method": "eth_getTransactionReceipt",
-                            "params": [hash]
-                        }))
-                        .unwrap();
-                        let Ok(req) = Request::builder()
-                            .header("content-type", "application/json")
-                            .method("POST")
-                            .uri(self.uri_based_op_geth.clone())
-                            .body(payload)
-                        else {
-                            tracing::warn!("couldn't create request");
-                            continue;
-                        };
-                        let Ok(callref) = self.walkie_talkie.send(req).inspect_err(|e| {
-                            tracing::warn!("issue sending nonce request to portal: {e}");
-                        }) else {
-                            continue;
-                        };
-                        self.pending_transfers.insert(callref, pending);
-                        continue;
-                    };
-
-                    f(SpammedTx::new(
-                        pending.from_address,
-                        receipt.inner.transaction_hash,
-                        pending.nonce,
-                        receipt.inner.block_number.unwrap_or_default(),
-                        pending.sent_timestamp,
-                        Nanos::now(),
-                    ));
-                }
-                None => {
-                    let Some(hash) = serde_json::from_slice::<RpcResponse<B256>>(&body)
-                        .inspect_err(|e| {
-                            tracing::warn!(
-                                "couldn't parse eth_sendRawTransaction response from {}: {e}",
-                                String::from_utf8(body).unwrap_or_default()
-                            );
-                        })
-                        .ok()
-                        .and_then(|t| t.result)
-                    else {
-                        continue;
-                    };
-                    pending.tx_hash = Some(hash);
-
-                    let payload = serde_json::to_vec(&serde_json::json!({
-                        "id": 1,
-                        "jsonrpc": "2.0",
-                        "method": "eth_getTransactionReceipt",
-                        "params": [hash]
-                    }))
-                    .unwrap();
-                    let Ok(req) = Request::builder()
-                        .header("content-type", "application/json")
-                        .method("POST")
-                        .uri(self.uri_based_op_geth.clone())
-                        .body(payload)
-                    else {
-                        tracing::warn!("couldn't create request");
-                        continue;
-                    };
-                    let Ok(callref) = self.walkie_talkie.send(req).inspect_err(|e| {
-                        tracing::warn!("issue sending nonce request to portal: {e}");
-                    }) else {
-                        continue;
-                    };
-                    self.pending_transfers.insert(callref, pending);
-                }
+            if self.tx_spammer.has_callref(callref) {
+                self.tx_spammer.handle_response(&mut self.walkie_talkie, res, &mut f);
             }
         }
+    }
+
+    fn maybe_spam_more_txs(&mut self, signer: &ECDSASigner, nonce: u64) -> u64 {
+        self.tx_spammer.maybe_spam_more_txs(&mut self.walkie_talkie, signer, nonce)
     }
 }
 
@@ -383,10 +449,7 @@ impl Overseer {
     pub fn update(&mut self, consumers: &mut OverseerConnections, slot_time: bool) {
         match &mut self.tx_spam_account {
             Some((account, nonce)) => {
-                while consumers.pending_transfers.len() < 100 {
-                    consumers.send_transfer_to_self(account, *nonce);
-                    *nonce += 1;
-                }
+                *nonce = consumers.maybe_spam_more_txs(account, *nonce);
             }
             None => self.tx_spam_account = consumers.airdrop_eth().map(|account| (account, 0)),
         }
