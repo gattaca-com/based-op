@@ -133,7 +133,7 @@ struct TxSpammer {
     uri_based_op_geth: Uri,
     rich_wallet_key: Option<ECDSASigner>,
     chain_id: u64,
-    max_pending: usize,
+    tx_per_frag: usize,
     time_since_last_tx_send: Nanos,
 }
 impl TxSpammer {
@@ -143,7 +143,7 @@ impl TxSpammer {
         rich_wallet_key: Option<ECDSASigner>,
         chain_id: u64,
     ) -> Self {
-        Self { max_retries, uri_based_op_geth, rich_wallet_key, chain_id, max_pending: 10, ..Default::default() }
+        Self { max_retries, uri_based_op_geth, rich_wallet_key, chain_id, tx_per_frag: 40, ..Default::default() }
     }
 
     fn airdrop_eth(&self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {
@@ -333,7 +333,7 @@ impl TxSpammer {
         mut nonce: u64,
         mut f: impl FnMut(SpammedTx),
     ) -> u64 {
-        let capacity = self.max_pending.saturating_sub(self.pending_transfers.len());
+        let capacity = self.tx_per_frag.saturating_sub(self.pending_transfers.len());
         if capacity == 0 {
             return nonce;
         }
