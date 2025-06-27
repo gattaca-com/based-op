@@ -278,10 +278,10 @@ impl DivAssign<u64> for Nanos {
 }
 
 impl Div<Nanos> for Nanos {
-    type Output = Nanos;
+    type Output = u64;
 
-    fn div(self, rhs: Nanos) -> Nanos {
-        Nanos(self.0 / rhs.0)
+    fn div(self, rhs: Nanos) -> u64 {
+        self.0 / rhs.0
     }
 }
 

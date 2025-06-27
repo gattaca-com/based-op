@@ -134,6 +134,7 @@ struct TxSpammer {
     rich_wallet_key: Option<ECDSASigner>,
     chain_id: u64,
     max_pending: usize,
+    time_since_last_tx_send: Nanos,
 }
 impl TxSpammer {
     pub fn new(
@@ -336,11 +337,11 @@ impl TxSpammer {
         if capacity == 0 {
             return nonce;
         }
-        let time_per_tx = 200 * 2 / capacity; // frag time * rt
-        if time_per_tx == 0 {
+        let time_per_tx = (Nanos::from_millis(200 * 2) - self.time_since_last_tx_send.elapsed()) / capacity; // frag time * rt
+        if time_per_tx == Nanos::ZERO {
             return nonce;
         }
-        let tx_per_frame = 16 / time_per_tx; // 16ms / frame
+        let tx_per_frame = Nanos::from_millis(16) / time_per_tx; // 16ms / frame
 
         for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
