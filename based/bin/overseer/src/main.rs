@@ -266,7 +266,7 @@ impl Overseer {
             (KeyCode::Down | KeyCode::Char('j'), _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_down(),
             (KeyCode::PageUp, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_up(),
             (KeyCode::PageDown, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_down(),
-            (KeyCode::Enter, _, Mode::TxSpammer) => self.data.airdrop(walkie_talkie),
+            (KeyCode::Enter, _, Mode::TxSpammer) => self.data.toggle_spamming(walkie_talkie),
             (KeyCode::Char('-'), _, Mode::Overview | Mode::ChainInfo | Mode::TxSpammer) => {
                 self.data.tx_spammer.tps = self.data.tx_spammer.tps.saturating_sub(1).max(1);
             }

@@ -623,6 +623,7 @@ pub struct Data {
     pub peers_local_op_geth: Vec<OpGethPeer>,
 
     tx_spam_account: Option<(ECDSASigner, u64)>,
+    pub spamming: bool,
     pub spammed_txs: KeyedCircularBuffer<SpammedTx>,
     pub tx_spammer: TxSpammer,
     pub spam_data: SpamData,
@@ -666,6 +667,7 @@ impl Data {
             results_buf: Default::default(),
             spam_data: Default::default(),
             tx_spam_account: None,
+            spamming: false,
         }
     }
 
@@ -738,10 +740,12 @@ impl Data {
     }
 
     pub fn update(&mut self, consumers: &mut OverseerConnections, block_time: bool) {
-        if let Some((account, nonce)) = &mut self.tx_spam_account {
-            *nonce = self.tx_spammer.maybe_spam_more_txs(&mut consumers.walkie_talkie, account, *nonce, |tx| {
-                self.spammed_txs.insert(tx);
-            });
+        if self.spamming {
+            if let Some((account, nonce)) = &mut self.tx_spam_account {
+                *nonce = self.tx_spammer.maybe_spam_more_txs(&mut consumers.walkie_talkie, account, *nonce, |tx| {
+                    self.spammed_txs.insert(tx);
+                });
+            }
         }
         self.gather_pending_txs(&mut consumers.walkie_talkie);
 
@@ -921,10 +925,11 @@ impl Data {
             .nth(1)
     }
 
-    pub fn airdrop(&mut self, walkie_talkie: &mut WalkieTalkie) {
+    pub fn toggle_spamming(&mut self, walkie_talkie: &mut WalkieTalkie) {
         if self.tx_spam_account.is_none() {
             self.tx_spam_account = self.tx_spammer.airdrop_eth(walkie_talkie).map(|s| (s, 0));
         }
+        self.spamming = !self.spamming;
     }
 }
 
