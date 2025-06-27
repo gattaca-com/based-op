@@ -511,7 +511,13 @@ impl UIData {
         let _ = writeln!(
             &mut tw,
             "Wallet:\t{}",
-            data.tx_spam_account.as_ref().map(|(address, _)| address.address.to_string()).unwrap_or_default()
+            data.tx_spam_account.as_ref().map(|(address, _)| address.address.to_string()).unwrap_or_else(|| {
+                if data.tx_spammer.rich_wallet_key.is_some() {
+                    "Hit <enter> to start spamming".to_string()
+                } else {
+                    "Start Overseer with --rich-wallet-key to start spamming".to_string()
+                }
+            })
         );
 
         let _ = writeln!(
@@ -919,6 +925,12 @@ impl Data {
             .rev()
             .filter_map(|t| if let SystemNotification::StateChanged(_) = t.notification { Some(*t) } else { None })
             .nth(1)
+    }
+
+    pub fn airdrop(&mut self, walkie_talkie: &mut WalkieTalkie) {
+        if self.tx_spam_account.is_none() {
+            self.tx_spam_account = self.tx_spammer.airdrop_eth(walkie_talkie).map(|s| (s, 0));
+        }
     }
 }
 
