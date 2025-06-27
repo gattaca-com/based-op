@@ -267,6 +267,9 @@ impl TxSpammer {
         mut nonce: u64,
         mut f: impl FnMut(SpammedTx),
     ) -> u64 {
+        if self.tx_resetter.fired() {
+            self.n_txs_sent = 0
+        }
         let remaining_frames = self.tx_resetter.remaining() / Duration::from_millis(16);
         let remaining_txs = self.tps.saturating_sub(self.n_txs_sent);
         let tx_per_frame = remaining_txs as u64 / remaining_frames;
@@ -278,9 +281,6 @@ impl TxSpammer {
             } else {
                 break;
             }
-        }
-        if self.tx_resetter.fired() {
-            self.n_txs_sent = 0
         }
         nonce
     }
