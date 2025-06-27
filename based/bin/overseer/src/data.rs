@@ -276,11 +276,13 @@ impl TxSpammer {
 
         for _ in 0..tx_per_frame {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
+                self.n_txs_sent += 1;
                 f(tx);
                 nonce += 1;
             } else {
                 break;
             }
+
         }
         nonce
     }
