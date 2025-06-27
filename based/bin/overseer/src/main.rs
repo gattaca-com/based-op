@@ -347,6 +347,7 @@ impl TxSpammer {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
                 f(tx);
                 nonce += 1;
+                self.time_since_last_tx_send = Nanos::now();
             } else {
                 break;
             }
