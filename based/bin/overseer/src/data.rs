@@ -505,7 +505,7 @@ impl UIData {
     pub fn render_tx_spammer(&mut self, data: &Data, inner_area: Rect, frame: &mut Frame<'_>) {
         let [left, right] =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(inner_area);
-        let [left_top, left_bottom] = Layout::vertical([Constraint::Length(12), Constraint::Fill(1)]).areas(left);
+        let [left_top, left_bottom] = Layout::vertical([Constraint::Length(6), Constraint::Fill(1)]).areas(left);
 
         let mut tw = tabwriter::TabWriter::new(vec![]);
         let _ = writeln!(
