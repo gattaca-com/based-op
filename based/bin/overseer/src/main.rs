@@ -333,6 +333,9 @@ impl TxSpammer {
         mut f: impl FnMut(SpammedTx),
     ) -> u64 {
         let capacity = self.max_pending.saturating_sub(self.pending_transfers.len());
+        if capacity == 0 {
+            return nonce;
+        }
         let time_per_tx = 200 * 2 / capacity; // frag time * rt
         let tx_per_frame = time_per_tx / 16; // 16ms / frame
 
