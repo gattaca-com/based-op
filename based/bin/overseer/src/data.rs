@@ -1,14 +1,23 @@
-use std::io::Write;
+use std::{collections::VecDeque, io::Write};
 
-use alloy_primitives::Address;
+use alloy_primitives::{Address, B256, U256};
 use block::BlockData;
 use bop_common::{
     api::{OpGethPeer, OpPeerInfo, RollupConfig, SyncStatus},
-    communication::{queues_dir, Consumer, Queue},
+    communication::{
+        queues_dir,
+        walkie_talkie::{self, RpcResponse},
+        Consumer, Queue, WalkieTalkie,
+    },
+    signing::ECDSASigner,
     telemetry::{frag::Frag, order::Tx, system::SystemNotification, Telemetry},
     time::{Duration, TimingMessage},
+    typedefs::HashMap,
 };
 use frag::FragData;
+use http::{Request, Uri};
+use mio_httpc::{CallRef, Response};
+use op_alloy_rpc_types::OpTransactionReceipt;
 use ratatui::{buffer::Buffer, layout::Size, widgets::Wrap};
 use reqwest::Url;
 use system::SystemNotificationData;
@@ -29,6 +38,244 @@ pub mod block;
 pub mod frag;
 pub mod system;
 pub mod transaction;
+
+#[derive(Copy, Clone, Debug)]
+pub struct PendingTransaction {
+    sent_timestamp: Nanos,
+    nonce: u64,
+    retries: usize,
+    from_address: Address,
+    tx_hash: Option<B256>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TxSpammer {
+    // transfers sent for which we're waiting for receipt replies
+    pending_transfers: HashMap<CallRef, PendingTransaction>,
+    pending_retries: VecDeque<PendingTransaction>,
+    max_retries: usize,
+    uri_based_op_geth: Uri,
+    rich_wallet_key: Option<ECDSASigner>,
+    chain_id: u64,
+    pub tps: usize,
+    time_since_last_tx_send: Nanos,
+}
+
+impl TxSpammer {
+    pub fn new(
+        max_retries: usize,
+        uri_based_op_geth: Uri,
+        rich_wallet_key: Option<ECDSASigner>,
+        chain_id: u64,
+    ) -> Self {
+        Self { max_retries, uri_based_op_geth, rich_wallet_key, chain_id, tps: 150, ..Default::default() }
+    }
+
+    fn airdrop_eth(&self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {
+        self.rich_wallet_key.as_ref().and_then(|signer| {
+            let new_signer = ECDSASigner::random();
+            let to_account = new_signer.address;
+            let value = U256::from(1_000_000_000_000_000u64);
+            if let Some(_callref) = signer.send_transfer(
+                walkie_talkie,
+                self.uri_based_op_geth.clone(),
+                self.chain_id,
+                to_account,
+                value,
+                None,
+            ) {
+                let mut resp_buf = Vec::new();
+                loop {
+                    walkie_talkie.gather_responses(&mut resp_buf);
+                    break;
+                }
+            } else {
+                tracing::warn!("airdrop: failed");
+            };
+            Some(new_signer)
+        })
+    }
+
+    fn send_transfer_to_self(
+        &mut self,
+        walkie_talkie: &mut WalkieTalkie,
+        signer: &ECDSASigner,
+        nonce: u64,
+    ) -> Option<SpammedTx> {
+        let value = U256::from(1u64);
+        if let Some(callref) = signer.send_transfer(
+            walkie_talkie,
+            self.uri_based_op_geth.clone(),
+            self.chain_id,
+            signer.address,
+            value,
+            Some(nonce),
+        ) {
+            let sent_timestamp = Nanos::now();
+            self.pending_transfers.insert(callref, PendingTransaction {
+                sent_timestamp,
+                retries: 0,
+                from_address: signer.address,
+                tx_hash: None,
+                nonce,
+            });
+
+            Some(SpammedTx {
+                wallet: signer.address,
+                sent_timestamp,
+                nonce,
+                hash: None,
+                block: None,
+                receipt_timestamp: None,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn maybe_resend_later(&mut self, mut pending: PendingTransaction) {
+        if pending.retries < self.max_retries {
+            pending.retries += 1;
+            self.pending_retries.push_back(pending);
+        }
+    }
+
+    pub fn send_receipt_request(&mut self, walkie_talkie: &mut WalkieTalkie, pending: PendingTransaction) {
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "eth_getTransactionReceipt",
+            "params": [pending.tx_hash.unwrap()]
+        }))
+        .unwrap();
+        let Ok(req) = Request::builder()
+            .header("content-type", "application/json")
+            .method("POST")
+            .uri(self.uri_based_op_geth.clone())
+            .body(payload)
+        else {
+            tracing::warn!("couldn't create request");
+            self.maybe_resend_later(pending);
+            return;
+        };
+        let Ok(callref) = walkie_talkie.send(req).inspect_err(|e| {
+            tracing::warn!("issue sending nonce request to portal: {e}");
+        }) else {
+            self.maybe_resend_later(pending);
+            return;
+        };
+        self.pending_transfers.insert(callref, pending);
+    }
+
+    fn has_callref(&self, callref: &CallRef) -> bool {
+        self.pending_transfers.contains_key(callref)
+    }
+
+    fn is_status_ok(
+        &mut self,
+        resp: Response,
+        body: &Vec<u8>,
+        pending: PendingTransaction,
+    ) -> Option<PendingTransaction> {
+        if resp.status != 200 {
+            tracing::warn!(
+                "got response status {} for {pending:?}: {resp:?} - {}",
+                resp.status,
+                std::str::from_utf8(body).unwrap()
+            );
+            self.maybe_resend_later(pending);
+            return None;
+        }
+        Some(pending)
+    }
+
+    fn handle_response(
+        &mut self,
+        walkie_talkie: &mut WalkieTalkie,
+        resp: walkie_talkie::Result<(CallRef, Response, Vec<u8>)>,
+        f: impl FnOnce(SpammedTx),
+    ) {
+        let Ok((callref, res, body)) = resp.inspect_err(|e| {
+            tracing::warn!("got an issue when receiving a transaction response {:?}: {e}", e.callref());
+        }) else {
+            return;
+        };
+
+        let Some(pending) = self.pending_transfers.remove(&callref) else {
+            tracing::warn!("got transaction response for a callref I don't know about");
+            return;
+        };
+        let Some(mut pending) = self.is_status_ok(res, &body, pending) else {
+            return;
+        };
+
+        match &pending.tx_hash {
+            Some(_hash) => {
+                let Some(receipt) = serde_json::from_slice::<RpcResponse<Option<OpTransactionReceipt>>>(&body).ok()
+                else {
+                    tracing::warn!("issue parsing receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
+                    self.maybe_resend_later(pending);
+                    return;
+                };
+                let Some(receipt) = receipt.result.flatten() else {
+                    self.send_receipt_request(walkie_talkie, pending);
+                    return;
+                };
+
+                f(SpammedTx::new(
+                    pending.sent_timestamp,
+                    pending.from_address,
+                    pending.nonce,
+                    Some(receipt.inner.transaction_hash),
+                    Some(receipt.inner.block_number.unwrap_or_default()),
+                    Some(Nanos::now()),
+                ));
+            }
+            None => {
+                let Some(hash) = serde_json::from_slice::<RpcResponse<B256>>(&body)
+                    .inspect_err(|e| {
+                        tracing::warn!(
+                            "couldn't parse eth_sendRawTransaction response from {}: {e}",
+                            String::from_utf8(body).unwrap_or_default()
+                        );
+                    })
+                    .ok()
+                    .and_then(|t| t.result)
+                else {
+                    self.maybe_resend_later(pending);
+                    return;
+                };
+                pending.tx_hash = Some(hash);
+                self.send_receipt_request(walkie_talkie, pending);
+            }
+        }
+    }
+
+    pub fn maybe_spam_more_txs(
+        &mut self,
+        walkie_talkie: &mut WalkieTalkie,
+        signer: &ECDSASigner,
+        mut nonce: u64,
+        mut f: impl FnMut(SpammedTx),
+    ) -> u64 {
+        if self.time_since_last_tx_send == Nanos::default() {
+            self.time_since_last_tx_send = Nanos::now()
+        }
+        let time_per_tx = Nanos::from_secs(1) / self.tps;
+        let tx_per_frame = self.time_since_last_tx_send.elapsed() / time_per_tx;
+
+        for _ in 0..tx_per_frame {
+            if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
+                f(tx);
+                nonce += 1;
+                self.time_since_last_tx_send = Nanos::now();
+            } else {
+                break;
+            }
+        }
+        nonce
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct UIData {
@@ -329,12 +576,19 @@ pub struct Data {
     pub sync_status_local: (Nanos, SyncStatus),
     pub peers_local_op_node: Vec<OpPeerInfo>,
     pub peers_local_op_geth: Vec<OpGethPeer>,
+    pub tx_spammer: TxSpammer,
+    results_buf: Vec<walkie_talkie::Result<(CallRef, Response, Vec<u8>)>>,
 }
 impl Data {
     const NUM_DATAPOINTS: usize = 256;
     const SAMPLES_PER_MEDIAN: usize = 128;
 
-    pub fn new(rollup_config: RollupConfig) -> Self {
+    pub fn new(
+        rollup_config: RollupConfig,
+        uri_based_op_geth: Uri,
+        rich_wallet_key: Option<ECDSASigner>,
+        max_tx_send_retries: usize,
+    ) -> Self {
         Self {
             block_number: Default::default(),
             transactions: KeyedCircularBuffer::new(10_000),
@@ -348,17 +602,20 @@ impl Data {
             queue_checker: Repeater::every(Duration::from_secs(10)),
             syncstatus_poller: Repeater::every(Duration::from_secs(1)),
             flamegraph_resetter: Repeater::every(Duration::from_secs(60)),
+            tx_spammer: TxSpammer::new(
+                max_tx_send_retries,
+                uri_based_op_geth,
+                rich_wallet_key,
+                rollup_config.l2_chain_id,
+            ),
             rollup_config,
             sync_status_global: Default::default(),
             current_gateway: Default::default(),
             sync_status_local: Default::default(),
             peers_local_op_node: Default::default(),
             peers_local_op_geth: Default::default(),
+            results_buf: Default::default(),
         }
-    }
-
-    pub fn handle_spammed_tx(&mut self, tx: SpammedTx) {
-        self.spammed_txs.insert(tx);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -412,10 +669,34 @@ impl Data {
         self.transactions.insert(TransactionData::new(uuid, t, update));
     }
 
+    pub fn airdrop_eth(&mut self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {
+        self.tx_spammer.airdrop_eth(walkie_talkie)
+    }
+
+    pub fn gather_pending_txs(&mut self, walkie_talkie: &mut WalkieTalkie) {
+        walkie_talkie.gather_responses(&mut self.results_buf);
+        for res in self.results_buf.drain(..) {
+            let callref = match &res {
+                Ok((r, _, _)) => r,
+                Err(e) => e.callref(),
+            };
+
+            if self.tx_spammer.has_callref(callref) {
+                self.tx_spammer.handle_response(walkie_talkie, res, |tx| {
+                    self.spammed_txs.insert(tx);
+                });
+            }
+        }
+    }
+
+    pub fn maybe_spam_more_txs(&mut self, walkie_talkie: &mut WalkieTalkie, signer: &ECDSASigner, nonce: u64) -> u64 {
+        self.tx_spammer.maybe_spam_more_txs(walkie_talkie, signer, nonce, |tx| {
+            self.spammed_txs.insert(tx);
+        })
+    }
+
     pub fn update(&mut self, consumers: &mut OverseerConnections, block_time: bool) {
-        consumers.gather_pending_txs(|tx| {
-            self.handle_spammed_tx(tx);
-        });
+        self.gather_pending_txs(&mut consumers.walkie_talkie);
 
         while let Some(update) = consumers.telemetry.try_consume() {
             let (key, t, update) = update.into();

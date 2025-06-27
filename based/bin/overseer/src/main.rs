@@ -7,17 +7,14 @@ mod types;
 mod ui;
 mod utils;
 
-use std::{collections::VecDeque, io::stdout};
+use std::io::stdout;
 
-use alloy_primitives::{map::foldhash::HashMap, Address, B256, U256};
+use alloy_primitives::{Address, B256};
 use bop_common::{
     api::{
         self, OpGethPeer, OpNodeApiClient, OpNodeP2PApiClient, OpPeerInfo, RegistryApiClient, RollupConfig, SyncStatus,
     },
-    communication::{
-        walkie_talkie::{self, RpcResponse},
-        Consumer, WalkieTalkie,
-    },
+    communication::{Consumer, WalkieTalkie},
     config::{LoggingConfig, LoggingFlags},
     signing::ECDSASigner,
     telemetry::{telemetry_queue, TelemetryUpdate},
@@ -30,11 +27,8 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use data::{transaction::SpammedTx, Data, UIData};
-use http::{Request, Uri};
+use data::{Data, UIData};
 use jsonrpsee::{core::ClientError, http_client::HttpClient};
-use mio_httpc::{CallRef, Response};
-use op_alloy_rpc_types::OpTransactionReceipt;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Layout, Rect},
@@ -115,253 +109,14 @@ impl Mode {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-struct PendingTransaction {
-    sent_timestamp: Nanos,
-    nonce: u64,
-    retries: usize,
-    from_address: Address,
-    tx_hash: Option<B256>,
-}
-
-#[derive(Clone, Debug, Default)]
-struct TxSpammer {
-    // transfers sent for which we're waiting for receipt replies
-    pending_transfers: HashMap<CallRef, PendingTransaction>,
-    pending_retries: VecDeque<PendingTransaction>,
-    max_retries: usize,
-    uri_based_op_geth: Uri,
-    rich_wallet_key: Option<ECDSASigner>,
-    chain_id: u64,
-    tps: usize,
-    time_since_last_tx_send: Nanos,
-}
-impl TxSpammer {
-    pub fn new(
-        max_retries: usize,
-        uri_based_op_geth: Uri,
-        rich_wallet_key: Option<ECDSASigner>,
-        chain_id: u64,
-    ) -> Self {
-        Self { max_retries, uri_based_op_geth, rich_wallet_key, chain_id, tps: 150, ..Default::default() }
-    }
-
-    fn airdrop_eth(&self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {
-        self.rich_wallet_key.as_ref().and_then(|signer| {
-            let new_signer = ECDSASigner::random();
-            let to_account = new_signer.address;
-            let value = U256::from(1_000_000_000_000_000u64);
-            if let Some(_callref) = signer.send_transfer(
-                walkie_talkie,
-                self.uri_based_op_geth.clone(),
-                self.chain_id,
-                to_account,
-                value,
-                None,
-            ) {
-                let mut resp_buf = Vec::new();
-                loop {
-                    walkie_talkie.gather_responses(&mut resp_buf);
-                    break;
-                }
-            } else {
-                tracing::warn!("airdrop: failed");
-            };
-            Some(new_signer)
-        })
-    }
-
-    fn send_transfer_to_self(
-        &mut self,
-        walkie_talkie: &mut WalkieTalkie,
-        signer: &ECDSASigner,
-        nonce: u64,
-    ) -> Option<SpammedTx> {
-        let value = U256::from(1u64);
-        if let Some(callref) = signer.send_transfer(
-            walkie_talkie,
-            self.uri_based_op_geth.clone(),
-            self.chain_id,
-            signer.address,
-            value,
-            Some(nonce),
-        ) {
-            let sent_timestamp = Nanos::now();
-            self.pending_transfers.insert(callref, PendingTransaction {
-                sent_timestamp,
-                retries: 0,
-                from_address: signer.address,
-                tx_hash: None,
-                nonce,
-            });
-
-            Some(SpammedTx {
-                wallet: signer.address,
-                sent_timestamp,
-                nonce,
-                hash: None,
-                block: None,
-                receipt_timestamp: None,
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn maybe_resend_later(&mut self, mut pending: PendingTransaction) {
-        if pending.retries < self.max_retries {
-            pending.retries += 1;
-            self.pending_retries.push_back(pending);
-        }
-    }
-
-    pub fn send_receipt_request(&mut self, walkie_talkie: &mut WalkieTalkie, pending: PendingTransaction) {
-        let payload = serde_json::to_vec(&serde_json::json!({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "eth_getTransactionReceipt",
-            "params": [pending.tx_hash.unwrap()]
-        }))
-        .unwrap();
-        let Ok(req) = Request::builder()
-            .header("content-type", "application/json")
-            .method("POST")
-            .uri(self.uri_based_op_geth.clone())
-            .body(payload)
-        else {
-            tracing::warn!("couldn't create request");
-            self.maybe_resend_later(pending);
-            return;
-        };
-        let Ok(callref) = walkie_talkie.send(req).inspect_err(|e| {
-            tracing::warn!("issue sending nonce request to portal: {e}");
-        }) else {
-            self.maybe_resend_later(pending);
-            return;
-        };
-        self.pending_transfers.insert(callref, pending);
-    }
-
-    fn has_callref(&self, callref: &CallRef) -> bool {
-        self.pending_transfers.contains_key(callref)
-    }
-
-    fn is_status_ok(
-        &mut self,
-        resp: Response,
-        body: &Vec<u8>,
-        pending: PendingTransaction,
-    ) -> Option<PendingTransaction> {
-        if resp.status != 200 {
-            tracing::warn!(
-                "got response status {} for {pending:?}: {resp:?} - {}",
-                resp.status,
-                std::str::from_utf8(body).unwrap()
-            );
-            self.maybe_resend_later(pending);
-            return None;
-        }
-        Some(pending)
-    }
-
-    fn handle_response(
-        &mut self,
-        walkie_talkie: &mut WalkieTalkie,
-        resp: walkie_talkie::Result<(CallRef, Response, Vec<u8>)>,
-        f: impl FnOnce(SpammedTx),
-    ) {
-        let Ok((callref, res, body)) = resp.inspect_err(|e| {
-            tracing::warn!("got an issue when receiving a transaction response {:?}: {e}", e.callref());
-        }) else {
-            return;
-        };
-
-        let Some(pending) = self.pending_transfers.remove(&callref) else {
-            tracing::warn!("got transaction response for a callref I don't know about");
-            return;
-        };
-        let Some(mut pending) = self.is_status_ok(res, &body, pending) else {
-            return;
-        };
-
-        match &pending.tx_hash {
-            Some(_hash) => {
-                let Some(receipt) = serde_json::from_slice::<RpcResponse<Option<OpTransactionReceipt>>>(&body).ok()
-                else {
-                    tracing::warn!("issue parsing receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
-                    self.maybe_resend_later(pending);
-                    return;
-                };
-                let Some(receipt) = receipt.result.flatten() else {
-                    self.send_receipt_request(walkie_talkie, pending);
-                    return;
-                };
-
-                f(SpammedTx::new(
-                    pending.sent_timestamp,
-                    pending.from_address,
-                    pending.nonce,
-                    Some(receipt.inner.transaction_hash),
-                    Some(receipt.inner.block_number.unwrap_or_default()),
-                    Some(Nanos::now()),
-                ));
-            }
-            None => {
-                let Some(hash) = serde_json::from_slice::<RpcResponse<B256>>(&body)
-                    .inspect_err(|e| {
-                        tracing::warn!(
-                            "couldn't parse eth_sendRawTransaction response from {}: {e}",
-                            String::from_utf8(body).unwrap_or_default()
-                        );
-                    })
-                    .ok()
-                    .and_then(|t| t.result)
-                else {
-                    self.maybe_resend_later(pending);
-                    return;
-                };
-                pending.tx_hash = Some(hash);
-                self.send_receipt_request(walkie_talkie, pending);
-            }
-        }
-    }
-
-    fn maybe_spam_more_txs(
-        &mut self,
-        walkie_talkie: &mut WalkieTalkie,
-        signer: &ECDSASigner,
-        mut nonce: u64,
-        mut f: impl FnMut(SpammedTx),
-    ) -> u64 {
-        if self.time_since_last_tx_send == Nanos::default() {
-            self.time_since_last_tx_send = Nanos::now()
-        }
-        let time_per_tx = Nanos::from_secs(1) / self.tps;
-        let tx_per_frame = self.time_since_last_tx_send.elapsed() / time_per_tx;
-
-        for _ in 0..tx_per_frame {
-            if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
-                f(tx);
-                nonce += 1;
-                self.time_since_last_tx_send = Nanos::now();
-            } else {
-                break;
-            }
-        }
-        nonce
-    }
-}
-
 struct OverseerConnections {
     telemetry: Consumer<TelemetryUpdate>,
     walkie_talkie: WalkieTalkie,
-    results_buf: Vec<walkie_talkie::Result<(CallRef, Response, Vec<u8>)>>,
     runtime: tokio::runtime::Runtime,
     client_portal: HttpClient,
     client_based_op_node: HttpClient,
     client_based_op_geth: HttpClient,
     rollup_config: RollupConfig,
-    tx_spammer: TxSpammer,
 }
 
 impl OverseerConnections {
@@ -381,14 +136,6 @@ impl OverseerConnections {
 
         let rollup_config: RollupConfig =
             runtime.block_on(client_portal.rollup_config()).expect("couldn't read rollup_config").into();
-        let chain_id = rollup_config.l2_chain_id;
-
-        let uri_based_op_geth = args.based_op_geth_url.to_string().parse().expect("couldn't parse portal url");
-        let rich_wallet_key = args.rich_wallet_key.and_then(|k| {
-            ECDSASigner::try_from_secret(k.as_slice())
-                .inspect_err(|e| tracing::warn!("Couldn't generated ECDSASigner from rich wallet key: {e}"))
-                .ok()
-        });
 
         Self {
             walkie_talkie: WalkieTalkie::default(),
@@ -398,8 +145,6 @@ impl OverseerConnections {
             client_based_op_node,
             client_based_op_geth,
             rollup_config,
-            tx_spammer: TxSpammer::new(args.max_tx_send_retries, uri_based_op_geth, rich_wallet_key, chain_id),
-            results_buf: Vec::new(),
         }
     }
 
@@ -427,28 +172,6 @@ impl OverseerConnections {
     pub fn peers_based_op_geth(&self) -> Result<Vec<OpGethPeer>, ClientError> {
         self.runtime.block_on(api::OpGethAdminApiClient::peers(&self.client_based_op_geth))
     }
-
-    pub fn airdrop_eth(&mut self) -> Option<ECDSASigner> {
-        self.tx_spammer.airdrop_eth(&mut self.walkie_talkie)
-    }
-
-    pub fn gather_pending_txs<F: FnMut(SpammedTx)>(&mut self, mut f: F) {
-        self.walkie_talkie.gather_responses(&mut self.results_buf);
-        for res in self.results_buf.drain(..) {
-            let callref = match &res {
-                Ok((r, _, _)) => r,
-                Err(e) => e.callref(),
-            };
-
-            if self.tx_spammer.has_callref(callref) {
-                self.tx_spammer.handle_response(&mut self.walkie_talkie, res, &mut f);
-            }
-        }
-    }
-
-    fn maybe_spam_more_txs(&mut self, signer: &ECDSASigner, nonce: u64, f: impl FnMut(SpammedTx)) -> u64 {
-        self.tx_spammer.maybe_spam_more_txs(&mut self.walkie_talkie, signer, nonce, f)
-    }
 }
 
 struct Overseer {
@@ -457,19 +180,22 @@ struct Overseer {
     mode: Mode,
     tx_spam_account: Option<(ECDSASigner, u64)>,
 }
-
-impl From<RollupConfig> for Overseer {
-    fn from(rollup_config: RollupConfig) -> Self {
+impl Overseer {
+    pub fn new(args: &OverseerArgs, rollup_config: RollupConfig) -> Self {
+        let uri_based_op_geth = args.based_op_geth_url.to_string().parse().expect("couldn't parse portal url");
+        let rich_wallet_key = args.rich_wallet_key.and_then(|k| {
+            ECDSASigner::try_from_secret(k.as_slice())
+                .inspect_err(|e| tracing::warn!("Couldn't generated ECDSASigner from rich wallet key: {e}"))
+                .ok()
+        });
         Self {
             ui_data: Default::default(),
-            data: Data::new(rollup_config.clone()),
+            data: Data::new(rollup_config.clone(), uri_based_op_geth, rich_wallet_key, args.max_tx_send_retries),
             mode: Default::default(),
             tx_spam_account: None,
         }
     }
-}
 
-impl Overseer {
     pub fn block_duration(&self) -> Nanos {
         Nanos::from_secs(self.data.rollup_config.block_time)
     }
@@ -481,9 +207,11 @@ impl Overseer {
     pub fn update(&mut self, consumers: &mut OverseerConnections, slot_time: bool) {
         match &mut self.tx_spam_account {
             Some((account, nonce)) => {
-                *nonce = consumers.maybe_spam_more_txs(account, *nonce, |tx| self.data.handle_spammed_tx(tx));
+                *nonce = self.data.maybe_spam_more_txs(&mut consumers.walkie_talkie, account, *nonce);
             }
-            None => self.tx_spam_account = consumers.airdrop_eth().map(|account| (account, 0)),
+            None => {
+                self.tx_spam_account = self.data.airdrop_eth(&mut consumers.walkie_talkie).map(|account| (account, 0))
+            }
         }
         self.data.update(consumers, slot_time);
     }
@@ -548,6 +276,12 @@ impl Overseer {
             (KeyCode::Down | KeyCode::Char('j'), _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_down(),
             (KeyCode::PageUp, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_up(),
             (KeyCode::PageDown, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_down(),
+            (KeyCode::Char('-'), _, Mode::Overview | Mode::ChainInfo | Mode::TxSpammer) => {
+                self.data.tx_spammer.tps = self.data.tx_spammer.tps.saturating_sub(1);
+            }
+            (KeyCode::Char('+'), _, Mode::Overview | Mode::ChainInfo | Mode::TxSpammer) => {
+                self.data.tx_spammer.tps = self.data.tx_spammer.tps.saturating_add(1);
+            }
             (KeyCode::Char('m'), _, Mode::TimekeeperRealtime) => {
                 self.data.time_datas.toggle_render_options(RenderFlags::ShowMin)
             }
@@ -570,7 +304,7 @@ impl Overseer {
 
     fn render_footer(&self, area: Rect, frame: &mut Frame) {
         let txt = match self.mode {
-            Mode::Overview | Mode::ChainInfo | Mode::TxSpammer => "◄ ► change tab | Q to quit",
+            Mode::Overview | Mode::ChainInfo | Mode::TxSpammer => "◄ ► change tab | +- increase/decrease tps | Q to quit",
             Mode::TimekeeperRealtime => {
                 "◄ ► change tab | ▲ ▼ to select | m: min, a: avg, e: med, M: max | l: latency, b: business | f/PageUp/Down/Space to change slot | Q to quit"
             }
@@ -591,7 +325,7 @@ fn main() {
     tracing::info!("Overseer starting");
     let args = OverseerArgs::parse();
     let mut consumers = OverseerConnections::new(&args);
-    let mut overseer: Overseer = consumers.rollup_config.clone().into();
+    let mut overseer: Overseer = Overseer::new(&args, consumers.rollup_config.clone());
     let genesis_time = overseer.genesis_time();
     let block_duration = overseer.block_duration();
 
