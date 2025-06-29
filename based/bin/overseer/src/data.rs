@@ -288,8 +288,24 @@ impl TxSpammer {
 
         let tps = self.tps as f64;
         let tx_per_frame = tps / 60.0;
-        let tx_this_frame =
+        let mut tx_this_frame =
             (self.tx_resetter.elapsed().as_secs() * tps - self.n_txs_sent as f64 + tx_per_frame).ceil() as usize;
+
+        if tx_this_frame == 0 {
+            return nonce;
+        }
+        while let Some(to_resend) = self.pending_retries.pop_front() {
+            self.n_txs_sent += 1;
+            if to_resend.tx_hash.is_none() {
+                self.send_transfer_to_self(walkie_talkie, signer, to_resend.nonce);
+            } else {
+                self.send_receipt_request(walkie_talkie, to_resend)
+            }
+            tx_this_frame -= 1;
+            if tx_this_frame == 0 {
+                return nonce;
+            }
+        }
 
         for _ in 0..tx_this_frame.min(self.tps.saturating_sub(self.pending_transfers.len())) {
             if let Some(tx) = self.send_transfer_to_self(walkie_talkie, signer, nonce) {
