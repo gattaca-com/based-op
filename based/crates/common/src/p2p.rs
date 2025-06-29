@@ -1,7 +1,7 @@
-use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_primitives::{Address, B256, Bytes, U256};
 use revm::context::BlockEnv;
 use serde::{Deserialize, Serialize};
-use ssz_types::{typenum, VariableList};
+use ssz_types::{VariableList, typenum};
 use strum_macros::AsRefStr;
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;

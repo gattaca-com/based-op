@@ -5,12 +5,11 @@ use block::BlockData;
 use bop_common::{
     api::{OpGethPeer, OpPeerInfo, RollupConfig, SyncStatus},
     communication::{
-        queues_dir,
+        Consumer, Queue, WalkieTalkie, queues_dir,
         walkie_talkie::{self, RpcResponse},
-        Consumer, Queue, WalkieTalkie,
     },
     signing::ECDSASigner,
-    telemetry::{frag::Frag, order::Tx, system::SystemNotification, Telemetry},
+    telemetry::{Telemetry, frag::Frag, order::Tx, system::SystemNotification},
     time::{Duration, TimingMessage},
     typedefs::HashMap,
 };
@@ -25,13 +24,13 @@ use transaction::{SpamData, SpammedTx, TransactionData};
 use tui_scrollview::ScrollViewState;
 
 use crate::{
+    OverseerConnections,
     collections::{CircularBuffer, KeyedCircularBuffer},
     prelude::*,
     statistics::Statistics,
-    timekeeper::{clock_overhead, TimeKeeper, TimerDataState},
+    timekeeper::{TimeKeeper, TimerDataState, clock_overhead},
     ui::plot::RenderFlags,
     utils::empty_if_default,
-    OverseerConnections,
 };
 
 pub mod block;
@@ -82,7 +81,7 @@ impl TxSpammer {
     }
 
     fn airdrop_eth(&self, walkie_talkie: &mut WalkieTalkie) -> Option<ECDSASigner> {
-        self.rich_wallet_key.as_ref().and_then(|signer| {
+        self.rich_wallet_key.as_ref().map(|signer| {
             let new_signer = ECDSASigner::random();
             let to_account = new_signer.address;
             let value = U256::from(1_000_000_000_000_000u64);
@@ -104,7 +103,7 @@ impl TxSpammer {
             } else {
                 tracing::warn!("airdrop: failed");
             };
-            Some(new_signer)
+            new_signer
         })
     }
 
@@ -199,12 +198,7 @@ impl TxSpammer {
         self.pending_transfers.contains_key(callref)
     }
 
-    fn is_status_ok(
-        &mut self,
-        resp: Response,
-        body: &Vec<u8>,
-        pending: PendingTransaction,
-    ) -> Option<PendingTransaction> {
+    fn is_status_ok(&mut self, resp: Response, body: &[u8], pending: PendingTransaction) -> Option<PendingTransaction> {
         if resp.status != 200 {
             tracing::warn!(
                 "got response status {} for {pending:?}: {resp:?} - {}",
@@ -563,7 +557,7 @@ impl UIData {
         let _ = writeln!(
             &mut tw,
             "Last Sent Nonce:\t{}",
-            data.spammed_txs.iter().last().map(|t| t.nonce.to_string()).unwrap_or_default()
+            data.spammed_txs.iter().next_back().map(|t| t.nonce.to_string()).unwrap_or_default()
         );
         let _ = writeln!(
             &mut tw,
@@ -571,13 +565,12 @@ impl UIData {
             data.spammed_txs
                 .iter()
                 .rev()
-                .filter(|t| t.receipt_timestamp.is_some())
-                .next()
+                .find(|t| t.receipt_timestamp.is_some())
                 .map(|t| t.nonce.to_string())
                 .unwrap_or_default()
         );
 
-        let _ = writeln!(&mut tw, "Tps:\t{} (+- to increase/decrease)", data.tx_spammer.tps.to_string());
+        let _ = writeln!(&mut tw, "Tps:\t{} (+- to increase/decrease)", data.tx_spammer.tps);
 
         let (min, avg, med, max) = data.spam_data.latencies();
         let _ = writeln!(&mut tw, "Latency:\tAvg: {avg:>11}\tMin: {min:>11}\tMax: {max:>11}\tMed: {med:>11}");
@@ -959,13 +952,10 @@ impl Data {
     }
 
     fn current_state(&self) -> Option<SystemNotificationData> {
-        self.system.iter().rev().find_map(|t| {
-            if let SystemNotification::StateChanged(_) = t.notification {
-                Some(*t)
-            } else {
-                None
-            }
-        })
+        self.system
+            .iter()
+            .rev()
+            .find_map(|t| if let SystemNotification::StateChanged(_) = t.notification { Some(*t) } else { None })
     }
 
     fn last_state(&self) -> Option<SystemNotificationData> {

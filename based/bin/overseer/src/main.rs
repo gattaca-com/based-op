@@ -17,25 +17,25 @@ use bop_common::{
     communication::{Consumer, WalkieTalkie},
     config::{LoggingConfig, LoggingFlags},
     signing::ECDSASigner,
-    telemetry::{telemetry_queue, TelemetryUpdate},
-    time::{utils::renderloop_60_fps, Nanos},
+    telemetry::{TelemetryUpdate, telemetry_queue},
+    time::{Nanos, utils::renderloop_60_fps},
     utils::init_tracing,
 };
 use clap::Parser;
 use crossterm::{
-    event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{self, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use data::{Data, UIData};
 use jsonrpsee::{core::ClientError, http_client::HttpClient};
 use ratatui::{
+    Frame, Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Layout, Rect},
-    style::{palette::tailwind, Color, Stylize},
+    style::{Color, Stylize, palette::tailwind},
     text::Line,
     widgets::Tabs,
-    Frame, Terminal,
 };
 use reqwest::Url;
 use strum::IntoEnumIterator;
@@ -135,7 +135,7 @@ impl OverseerConnections {
             .expect("Couldn't initialize based-op-geth rpc client");
 
         let rollup_config: RollupConfig =
-            runtime.block_on(client_portal.rollup_config()).expect("couldn't read rollup_config").into();
+            runtime.block_on(client_portal.rollup_config()).expect("couldn't read rollup_config");
 
         Self {
             walkie_talkie: WalkieTalkie::default(),
@@ -295,7 +295,9 @@ impl Overseer {
 
     fn render_footer(&self, area: Rect, frame: &mut Frame) {
         let txt = match self.mode {
-            Mode::Overview | Mode::ChainInfo | Mode::TxSpammer => "◄ ► change tab | +- increase/decrease tps | Q to quit",
+            Mode::Overview | Mode::ChainInfo | Mode::TxSpammer => {
+                "◄ ► change tab | +- increase/decrease tps | Q to quit"
+            }
             Mode::TimekeeperRealtime => {
                 "◄ ► change tab | ▲ ▼ to select | m: min, a: avg, e: med, M: max | l: latency, b: business | f/PageUp/Down/Space to change slot | Q to quit"
             }

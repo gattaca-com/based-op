@@ -14,7 +14,7 @@ use super::Duration;
 use crate::time::global_clock;
 
 /// Nanos since unix epoch, good till 2554 I think
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, Hash)]
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Hash)]
 #[repr(C)]
 pub struct Nanos(pub u64);
 
@@ -291,11 +291,6 @@ impl DivAssign<Nanos> for Nanos {
     }
 }
 
-impl PartialEq for Nanos {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
 impl Eq for Nanos {}
 
 impl PartialOrd for Nanos {

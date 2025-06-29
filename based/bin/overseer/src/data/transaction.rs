@@ -4,9 +4,9 @@ use bop_common::{
     time::{Duration, Nanos, Repeater},
 };
 use ratatui::{
+    Frame,
     layout::{Constraint, Layout, Rect},
     text::Text,
-    Frame,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

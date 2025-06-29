@@ -1,6 +1,6 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 
-use http::{uri::Scheme, Request};
+use http::{Request, uri::Scheme};
 use mio::{Events, Poll, Registry};
 use mio_httpc::{Call, CallBuilder, CallRef, Httpc, RecvState, Response, SendState};
 use thiserror::Error;

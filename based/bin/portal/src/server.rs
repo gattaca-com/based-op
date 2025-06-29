@@ -835,9 +835,7 @@ impl RegistryApiServer for PortalServer {
     async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()> {
         match self.registry_client.register_gateway(gateway).await {
             Ok(()) => Ok(()),
-            Err(err) => {
-                Err(RpcError::Jsonrpsee(err))
-            }
+            Err(err) => Err(RpcError::Jsonrpsee(err)),
         }
     }
 }

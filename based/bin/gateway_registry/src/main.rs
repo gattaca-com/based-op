@@ -13,7 +13,11 @@ use bop_common::{
     utils::{init_tracing, wait_for_signal},
 };
 use clap::Parser;
-use jsonrpsee::{core::{async_trait, ClientError}, http_client::HttpClientBuilder, server::ServerBuilder};
+use jsonrpsee::{
+    core::{ClientError, async_trait},
+    http_client::HttpClientBuilder,
+    server::ServerBuilder,
+};
 use parking_lot::RwLock;
 use reqwest::Url;
 use thiserror::Error;

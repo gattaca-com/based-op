@@ -3,10 +3,7 @@ use jsonrpsee::{
     MethodResponse,
     core::{client::ClientT, traits::ToRpcParams},
     server::middleware::rpc::RpcServiceT,
-    types::{
-        ErrorObject, Params, Request, ResponsePayload,
-        error::INTERNAL_ERROR_CODE,
-    },
+    types::{ErrorObject, Params, Request, ResponsePayload, error::INTERNAL_ERROR_CODE},
 };
 use serde_json::value::RawValue;
 use tracing::{debug, error};

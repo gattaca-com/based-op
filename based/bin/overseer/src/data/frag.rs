@@ -1,6 +1,6 @@
 use bop_common::{
     eth::MicroEth,
-    telemetry::{order::IncludedInFrag, Frag},
+    telemetry::{Frag, order::IncludedInFrag},
     time::Nanos,
 };
 use ratatui::text::Text;
