@@ -64,7 +64,7 @@ pub struct PortalArgs {
 
     /// gateway inactivity timeout in milliseconds
     #[arg(long = "gateway.inactivity_timeout_ms", default_value_t = 3000)]
-    pub gateway_inactivity_timeout_ms: u64,
+    pub gateway_timeout_inactivity_ms: u64,
 }
 
 impl PortalArgs {

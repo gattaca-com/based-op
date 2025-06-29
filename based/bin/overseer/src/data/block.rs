@@ -3,7 +3,8 @@ use ratatui::{style::Style, text::Text};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{collections::HasKey, utils::empty_if_default};
+use super::Data;
+use crate::{collections::HasKey, ui::ToRow, utils::empty_if_default};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BlockData {
@@ -39,7 +40,25 @@ impl BlockData {
         ["Us", "Number", "# F", "# T", "Gas", "Payment", "Timestamp"].into_iter().map(|t| t.into())
     }
 
-    pub fn to_row(&self) -> Vec<Text<'_>> {
+    pub fn reset(&mut self) {
+        self.we_sequenced = false;
+        self.frags.clear();
+        self.payment = MicroEth(0);
+        self.gas_used = 0;
+        self.n_txs = 0;
+    }
+}
+
+impl HasKey for BlockData {
+    type Key = u64;
+
+    fn key(&self) -> &Self::Key {
+        &self.number
+    }
+}
+
+impl ToRow for BlockData {
+    fn to_row(&self, _data: &Data) -> Vec<Text<'_>> {
         let t_start = self.timestamp;
         // we remove the first frag which is anyway the one with all the force inclusion
         let frags = self.frags.len().saturating_sub(1);
@@ -57,21 +76,5 @@ impl BlockData {
             Text::from(empty_if_default(self.payment)).style(style),
             Text::from(t_start.with_fmt("%d %H:%M:%S%.3f")).style(style),
         ]
-    }
-
-    pub fn reset(&mut self) {
-        self.we_sequenced = false;
-        self.frags.clear();
-        self.payment = MicroEth(0);
-        self.gas_used = 0;
-        self.n_txs = 0;
-    }
-}
-
-impl HasKey for BlockData {
-    type Key = u64;
-
-    fn key(&self) -> &Self::Key {
-        &self.number
     }
 }
