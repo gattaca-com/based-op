@@ -220,7 +220,6 @@ impl TxSpammer {
         f: impl FnOnce(SpammedTx),
     ) {
         let Ok((callref, res, body)) = resp.inspect_err(|e| {
-            tracing::warn!("got an issue when receiving a transaction response {:?}: {e}", e.callref());
             if let Some(pending) = self.pending_transfers.remove(e.callref()) {
                 self.maybe_resend_later(pending);
             }
@@ -240,12 +239,12 @@ impl TxSpammer {
             Some(_hash) => {
                 let Some(receipt) = serde_json::from_slice::<RpcResponse<Option<OpTransactionReceipt>>>(&body).ok()
                 else {
-                    tracing::warn!("issue parsing receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
+                    tracing::debug!("issue parsing receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
                     self.maybe_resend_later(pending);
                     return;
                 };
                 let Some(receipt) = receipt.result.flatten() else {
-                    tracing::warn!("issue with receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
+                    tracing::debug!("issue with receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
 
                     self.maybe_resend_later(pending);
                     return;
@@ -264,7 +263,7 @@ impl TxSpammer {
             None => {
                 let Some(hash) = serde_json::from_slice::<RpcResponse<B256>>(&body)
                     .inspect_err(|e| {
-                        tracing::warn!(
+                        tracing::debug!(
                             "couldn't parse eth_sendRawTransaction response from {}: {e}",
                             std::str::from_utf8(&body).unwrap_or_default()
                         );
@@ -272,7 +271,7 @@ impl TxSpammer {
                     .ok()
                     .and_then(|t| t.result)
                 else {
-                    tracing::warn!(
+                    tracing::debug!(
                         "something went wrong with eth_sendRawTransaction response for {pending:?}: {}",
                         std::str::from_utf8(&body).unwrap_or_default()
                     );
