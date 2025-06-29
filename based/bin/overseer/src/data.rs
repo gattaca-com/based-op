@@ -112,33 +112,41 @@ impl TxSpammer {
         nonce: u64,
     ) -> Option<SpammedTx> {
         let value = U256::from(1u64);
-        if let Some(callref) = signer.send_transfer(
-            walkie_talkie,
-            self.uri_based_op_geth.clone(),
-            self.chain_id,
-            signer.address,
-            value,
-            Some(nonce),
-        ) {
-            let sent_timestamp = Nanos::now();
-            self.pending_transfers.insert(callref, PendingTransaction {
-                sent_timestamp,
-                retries: 0,
-                from_address: signer.address,
-                tx_hash: None,
-                nonce,
-            });
+        let mut n_tries = 5;
+        loop {
+            if let Some(callref) = signer.send_transfer(
+                walkie_talkie,
+                self.uri_based_op_geth.clone(),
+                self.chain_id,
+                signer.address,
+                value,
+                Some(nonce),
+            ) {
+                let sent_timestamp = Nanos::now();
+                self.pending_transfers.insert(callref, PendingTransaction {
+                    sent_timestamp,
+                    retries: 0,
+                    from_address: signer.address,
+                    tx_hash: None,
+                    nonce,
+                });
 
-            Some(SpammedTx {
-                wallet: signer.address,
-                sent_timestamp,
-                nonce,
-                hash: None,
-                block: None,
-                receipt_timestamp: None,
-            })
-        } else {
-            None
+                return Some(SpammedTx {
+                    wallet: signer.address,
+                    sent_timestamp,
+                    nonce,
+                    hash: None,
+                    block: None,
+                    receipt_timestamp: None,
+                });
+            } else {
+                n_tries -= 1;
+                std::thread::sleep(std::time::Duration::from_millis(2));
+                if n_tries == 0 {
+                    tracing::warn!("could not send tx from {} with nonce {nonce}", signer.address);
+                    return None;
+                }
+            }
         }
     }
 
