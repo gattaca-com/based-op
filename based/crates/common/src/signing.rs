@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, hash::Hash};
 
 use alloy_consensus::{SignableTransaction, Signed, TxEip1559};
 use alloy_eips::Encodable2718;
@@ -116,7 +116,7 @@ impl ECDSASigner {
         to_address: Address,
         value: U256,
         nonce: Option<u64>,
-    ) -> Option<CallRef> {
+    ) -> Option<(CallRef, B256)> {
         let nonce = nonce.or_else(|| self.nonce(walkie_talkie, uri.clone()))?;
         let max_gas_units = 21_000;
         let max_fee_per_gas = 10_000_000;
@@ -134,6 +134,7 @@ impl ECDSASigner {
         };
         let signed_tx = self.sign_tx(tx).unwrap();
         let tx = OpTxEnvelope::Eip1559(signed_tx);
+        let hash = *tx.hash();
         let envelope = hex::encode_prefixed(Bytes::from(tx.encoded_2718()));
 
         let Ok(payload) = serde_json::to_vec(&serde_json::json!({
@@ -159,6 +160,7 @@ impl ECDSASigner {
                 tracing::warn!("issue sending nonce request to portal: {e}");
             })
             .ok()
+            .map(|c| (c, hash))
     }
 }
 

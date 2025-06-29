@@ -117,7 +117,7 @@ impl TxSpammer {
         let value = U256::from(1u64);
         let mut n_tries = 5;
         loop {
-            if let Some(callref) = signer.send_transfer(
+            if let Some((callref, hash)) = signer.send_transfer(
                 walkie_talkie,
                 self.uri_based_op_geth.clone(),
                 self.chain_id,
@@ -130,7 +130,7 @@ impl TxSpammer {
                     sent_timestamp,
                     retries: 0,
                     from_address: signer.address,
-                    tx_hash: None,
+                    tx_hash: Some(hash),
                     nonce,
                 });
 
@@ -138,7 +138,7 @@ impl TxSpammer {
                     wallet: signer.address,
                     sent_timestamp,
                     nonce,
-                    hash: None,
+                    hash: Some(hash),
                     block: None,
                     receipt_timestamp: None,
                 });
