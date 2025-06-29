@@ -152,6 +152,7 @@ impl TxSpammer {
 
     pub fn maybe_resend_later(&mut self, mut pending: PendingTransaction) {
         if pending.retries < self.max_retries {
+            tracing::warn!("retrying {pending:?}");
             pending.retries += 1;
             self.pending_retries.push_back(pending);
         } else {
