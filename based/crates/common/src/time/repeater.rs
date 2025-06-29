@@ -46,6 +46,16 @@ impl Repeater {
     pub fn set_interval(&mut self, interval: Duration) {
         self.interval = interval
     }
+
+    #[inline]
+    pub fn elapsed(&self) -> Duration {
+        self.last_acted.elapsed()
+    }
+
+    #[inline]
+    pub fn remaining(&self) -> Duration {
+        self.interval.saturating_sub(self.last_acted.elapsed())
+    }
 }
 
 impl Add<Duration> for Repeater {
