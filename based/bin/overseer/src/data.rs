@@ -159,6 +159,7 @@ impl TxSpammer {
             self.pending_retries.push_back(pending);
         } else {
             tracing::debug!("{pending:?} failed after 5 reqs, keep retrying");
+            pending.tx_hash = None;
             pending.retries = 0;
             self.pending_retries.push_back(pending);
         }
