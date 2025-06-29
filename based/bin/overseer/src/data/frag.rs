@@ -7,7 +7,8 @@ use ratatui::text::Text;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::collections::HasKey;
+use super::Data;
+use crate::{collections::HasKey, ui::ToRow};
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FragData {
     pub uuid: Uuid,
@@ -38,23 +39,6 @@ impl FragData {
         ["Timestamp", "Seq", "# T", "Payment", "Gas", "Simtime"].into_iter().map(|t| t.into())
     }
 
-    pub fn to_block_table_row(&self) -> Vec<Text<'_>> {
-        let Frag::SorterStart { seq, .. } = &self.updates[0].1 else {
-            tracing::warn!("strange frag setup");
-            return vec![];
-        };
-        let (payment, gas_used, n_txs) = self.frag_stats().unwrap_or_default();
-
-        vec![
-            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
-            seq.to_string().into(),
-            n_txs.to_string().into(),
-            payment.to_string().into(),
-            gas_used.to_string().into(),
-            self.sim_time.to_string().into(),
-        ]
-    }
-
     pub fn block_number(&self) -> Option<u64> {
         self.updates.iter().find_map(|(_, u)| if let Frag::SorterStart { block, .. } = u { Some(*block) } else { None })
     }
@@ -75,5 +59,24 @@ impl HasKey for FragData {
 
     fn key(&self) -> &Self::Key {
         &self.uuid
+    }
+}
+
+impl ToRow for FragData {
+    fn to_row(&self, _data: &Data) -> Vec<Text<'_>> {
+        let Frag::SorterStart { seq, .. } = &self.updates[0].1 else {
+            tracing::warn!("strange frag setup");
+            return vec![];
+        };
+        let (payment, gas_used, n_txs) = self.frag_stats().unwrap_or_default();
+
+        vec![
+            self.updates[0].0.with_fmt("%d %H:%M:%S%.3f").into(),
+            seq.to_string().into(),
+            n_txs.to_string().into(),
+            payment.to_string().into(),
+            gas_used.to_string().into(),
+            self.sim_time.to_string().into(),
+        ]
     }
 }

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use alloy_consensus::TxEip1559;
 use alloy_eips::{Decodable2718, eip2718::Encodable2718};
-use alloy_primitives::{Address, Bytes, TxKind, U256, b256, hex};
+use alloy_primitives::{Address, TxKind, U256, b256, hex};
 use bop_common::{
     fabric::{CommitmentRequest, FRAG_COMMITMENT_TYPE, FabricGatewayApiClient},
     p2p::{SignedVersionedMessage, VersionedMessage},

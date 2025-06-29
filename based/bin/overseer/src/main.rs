@@ -9,13 +9,14 @@ mod utils;
 
 use std::io::stdout;
 
-use alloy_primitives::Address;
+use alloy_primitives::{Address, B256};
 use bop_common::{
     api::{
         self, OpGethPeer, OpNodeApiClient, OpNodeP2PApiClient, OpPeerInfo, RegistryApiClient, RollupConfig, SyncStatus,
     },
-    communication::Consumer,
+    communication::{Consumer, WalkieTalkie},
     config::{LoggingConfig, LoggingFlags},
+    signing::ECDSASigner,
     telemetry::{TelemetryUpdate, telemetry_queue},
     time::{Nanos, utils::renderloop_60_fps},
     utils::init_tracing,
@@ -55,6 +56,11 @@ pub struct OverseerArgs {
     /// The url of the based-op-geth running next to the based-gateway
     #[arg(long, default_value = "http://127.0.0.1:8645")]
     pub based_op_geth_url: Url,
+
+    #[arg(long, default_value = None)]
+    pub rich_wallet_key: Option<B256>,
+    #[arg(long, default_value = "100")]
+    pub max_tx_send_retries: usize,
 }
 
 #[derive(Copy, Clone, Debug, Default, Display, FromRepr, EnumIter)]
@@ -62,6 +68,8 @@ enum Mode {
     #[default]
     #[strum(to_string = "Overview")]
     Overview,
+    #[strum(to_string = "Tx Spammer")]
+    TxSpammer,
     #[strum(to_string = "Timing Realtime")]
     TimekeeperRealtime,
     #[strum(to_string = "Timing FlameGraph")]
@@ -93,6 +101,7 @@ impl Mode {
     const fn palette(self) -> tailwind::Palette {
         match self {
             Self::Overview => tailwind::NEUTRAL,
+            Self::TxSpammer => tailwind::RED,
             Self::TimekeeperRealtime => tailwind::FUCHSIA,
             Self::TimekeeperFlameGraph => tailwind::BLUE,
             Self::ChainInfo => tailwind::AMBER,
@@ -100,15 +109,17 @@ impl Mode {
     }
 }
 
-struct OverseerConsumers {
+struct OverseerConnections {
     telemetry: Consumer<TelemetryUpdate>,
+    walkie_talkie: WalkieTalkie,
     runtime: tokio::runtime::Runtime,
     client_portal: HttpClient,
     client_based_op_node: HttpClient,
     client_based_op_geth: HttpClient,
+    rollup_config: RollupConfig,
 }
 
-impl OverseerConsumers {
+impl OverseerConnections {
     pub fn new(args: &OverseerArgs) -> Self {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -123,9 +134,21 @@ impl OverseerConsumers {
             .build(args.based_op_geth_url.clone())
             .expect("Couldn't initialize based-op-geth rpc client");
 
-        Self { telemetry: telemetry_queue().into(), runtime, client_portal, client_based_op_node, client_based_op_geth }
+        let rollup_config: RollupConfig =
+            runtime.block_on(client_portal.rollup_config()).expect("couldn't read rollup_config");
+
+        Self {
+            walkie_talkie: WalkieTalkie::default(),
+            telemetry: telemetry_queue().into(),
+            runtime,
+            client_portal,
+            client_based_op_node,
+            client_based_op_geth,
+            rollup_config,
+        }
     }
 
+    #[allow(dead_code)]
     pub fn rollup_config(&self) -> Result<RollupConfig, ClientError> {
         self.runtime.block_on(self.client_portal.rollup_config())
     }
@@ -156,14 +179,21 @@ struct Overseer {
     ui_data: UIData,
     mode: Mode,
 }
-
-impl From<RollupConfig> for Overseer {
-    fn from(rollup_config: RollupConfig) -> Self {
-        Self { ui_data: Default::default(), data: Data::new(rollup_config.clone()), mode: Default::default() }
-    }
-}
-
 impl Overseer {
+    pub fn new(args: &OverseerArgs, rollup_config: RollupConfig) -> Self {
+        let uri_based_op_geth = args.based_op_geth_url.to_string().parse().expect("couldn't parse portal url");
+        let rich_wallet_key = args.rich_wallet_key.and_then(|k| {
+            ECDSASigner::try_from_secret(k.as_slice())
+                .inspect_err(|e| tracing::warn!("Couldn't generated ECDSASigner from rich wallet key: {e}"))
+                .ok()
+        });
+        Self {
+            ui_data: Default::default(),
+            data: Data::new(rollup_config.clone(), uri_based_op_geth, rich_wallet_key, args.max_tx_send_retries),
+            mode: Default::default(),
+        }
+    }
+
     pub fn block_duration(&self) -> Nanos {
         Nanos::from_secs(self.data.rollup_config.block_time)
     }
@@ -172,7 +202,7 @@ impl Overseer {
         Nanos::from_secs(self.data.rollup_config.genesis.l2_time)
     }
 
-    pub fn update(&mut self, consumers: &mut OverseerConsumers, slot_time: bool) {
+    pub fn update(&mut self, consumers: &mut OverseerConnections, slot_time: bool) {
         self.data.update(consumers, slot_time);
     }
 
@@ -190,6 +220,10 @@ impl Overseer {
         match self.mode {
             Mode::Overview => {
                 self.ui_data.render_overview(&self.data, inner_area, frame);
+            }
+
+            Mode::TxSpammer => {
+                self.ui_data.render_tx_spammer(&self.data, inner_area, frame);
             }
 
             Mode::TimekeeperRealtime => {
@@ -224,7 +258,7 @@ impl Overseer {
         );
     }
 
-    pub fn handle_key_events(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub fn handle_key_events(&mut self, walkie_talkie: &mut WalkieTalkie, code: KeyCode, modifiers: KeyModifiers) {
         match (code, modifiers, &self.mode) {
             (KeyCode::Right, _, _) => self.next_tab(),
             (KeyCode::Left, _, _) => self.previous_tab(),
@@ -232,6 +266,13 @@ impl Overseer {
             (KeyCode::Down | KeyCode::Char('j'), _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_down(),
             (KeyCode::PageUp, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_up(),
             (KeyCode::PageDown, _, Mode::ChainInfo) => self.ui_data.scroll_view_state.scroll_page_down(),
+            (KeyCode::Enter, _, Mode::TxSpammer) => self.data.toggle_spamming(walkie_talkie),
+            (KeyCode::Char('-'), _, Mode::Overview | Mode::ChainInfo | Mode::TxSpammer) => {
+                self.data.tx_spammer.tps = self.data.tx_spammer.tps.saturating_sub(1).max(1);
+            }
+            (KeyCode::Char('+'), _, Mode::Overview | Mode::ChainInfo | Mode::TxSpammer) => {
+                self.data.tx_spammer.tps = self.data.tx_spammer.tps.saturating_add(1);
+            }
             (KeyCode::Char('m'), _, Mode::TimekeeperRealtime) => {
                 self.data.time_datas.toggle_render_options(RenderFlags::ShowMin)
             }
@@ -254,7 +295,9 @@ impl Overseer {
 
     fn render_footer(&self, area: Rect, frame: &mut Frame) {
         let txt = match self.mode {
-            Mode::Overview | Mode::ChainInfo => "◄ ► change tab | Q to quit",
+            Mode::Overview | Mode::ChainInfo | Mode::TxSpammer => {
+                "◄ ► change tab | +- increase/decrease tps | Q to quit"
+            }
             Mode::TimekeeperRealtime => {
                 "◄ ► change tab | ▲ ▼ to select | m: min, a: avg, e: med, M: max | l: latency, b: business | f/PageUp/Down/Space to change slot | Q to quit"
             }
@@ -274,8 +317,8 @@ fn main() {
     let _guard = init_tracing(logging_config);
     tracing::info!("Overseer starting");
     let args = OverseerArgs::parse();
-    let mut consumers = OverseerConsumers::new(&args);
-    let mut overseer: Overseer = consumers.rollup_config().expect("couldn't read rollup_config").into();
+    let mut consumers = OverseerConnections::new(&args);
+    let mut overseer: Overseer = Overseer::new(&args, consumers.rollup_config.clone());
     let genesis_time = overseer.genesis_time();
     let block_duration = overseer.block_duration();
 
@@ -301,7 +344,7 @@ fn main() {
             if let KeyCode::Char('Q') = &code {
                 return false;
             }
-            overseer.handle_key_events(code, modifiers);
+            overseer.handle_key_events(&mut consumers.walkie_talkie, code, modifiers);
         }
         true
     });
