@@ -158,7 +158,7 @@ impl TxSpammer {
             pending.retries += 1;
             self.pending_retries.push_back(pending);
         } else {
-            tracing::warn!("{pending:?} failed after 5 reqs, keep retrying");
+            tracing::debug!("{pending:?} failed after 5 reqs, keep retrying");
             pending.retries = 0;
             self.pending_retries.push_back(pending);
         }
@@ -558,8 +558,19 @@ impl UIData {
 
         let _ = writeln!(
             &mut tw,
-            "Nonce:\t{}",
+            "Last Sent Nonce:\t{}",
             data.spammed_txs.iter().last().map(|t| t.nonce.to_string()).unwrap_or_default()
+        );
+        let _ = writeln!(
+            &mut tw,
+            "Last Receipt Nonce:\t{}",
+            data.spammed_txs
+                .iter()
+                .rev()
+                .filter(|t| t.receipt_timestamp.is_some())
+                .next()
+                .map(|t| t.nonce.to_string())
+                .unwrap_or_default()
         );
 
         let _ = writeln!(&mut tw, "Tps:\t{} (+- to increase/decrease)", data.tx_spammer.tps.to_string());
