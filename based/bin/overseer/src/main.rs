@@ -59,7 +59,7 @@ pub struct OverseerArgs {
 
     #[arg(long, default_value = None)]
     pub rich_wallet_key: Option<B256>,
-    #[arg(long, default_value = "5")]
+    #[arg(long, default_value = "100")]
     pub max_tx_send_retries: usize,
 }
 
