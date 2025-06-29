@@ -154,7 +154,10 @@ impl TxSpammer {
     }
 
     pub fn maybe_resend_later(&mut self, mut pending: PendingTransaction) {
-        if pending.nonce >= self.last_successful_nonce && pending.retries < self.max_retries {
+        if pending.nonce < self.last_successful_nonce {
+            return;
+        }
+        if pending.retries < self.max_retries {
             pending.retries += 1;
             self.pending_retries.push_back(pending);
         } else {
