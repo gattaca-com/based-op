@@ -60,6 +60,7 @@ pub struct TxSpammer {
     pub tps: usize,
     tx_resetter: Repeater,
     n_txs_sent: usize,
+    last_successful_nonce: u64,
 }
 
 impl TxSpammer {
@@ -151,8 +152,7 @@ impl TxSpammer {
     }
 
     pub fn maybe_resend_later(&mut self, mut pending: PendingTransaction) {
-        if pending.retries < self.max_retries {
-            tracing::warn!("retrying {pending:?}");
+        if pending.nonce >= self.last_successful_nonce && pending.retries < self.max_retries {
             pending.retries += 1;
             self.pending_retries.push_back(pending);
         } else {
@@ -243,9 +243,12 @@ impl TxSpammer {
                     return;
                 };
                 let Some(receipt) = receipt.result.flatten() else {
-                    self.send_receipt_request(walkie_talkie, pending);
+                    tracing::warn!("issue with receipt for {pending:?}: {}", String::from_utf8(body).unwrap());
+
+                    self.maybe_resend_later(pending);
                     return;
                 };
+                self.last_successful_nonce = self.last_successful_nonce.max(pending.nonce);
 
                 f(SpammedTx::new(
                     pending.sent_timestamp,
@@ -261,12 +264,16 @@ impl TxSpammer {
                     .inspect_err(|e| {
                         tracing::warn!(
                             "couldn't parse eth_sendRawTransaction response from {}: {e}",
-                            String::from_utf8(body).unwrap_or_default()
+                            std::str::from_utf8(&body).unwrap_or_default()
                         );
                     })
                     .ok()
                     .and_then(|t| t.result)
                 else {
+                    tracing::warn!(
+                        "something went wrong with eth_sendRawTransaction response for {pending:?}: {}",
+                        std::str::from_utf8(&body).unwrap_or_default()
+                    );
                     self.maybe_resend_later(pending);
                     return;
                 };
@@ -289,22 +296,17 @@ impl TxSpammer {
 
         let tps = self.tps as f64;
         let tx_per_frame = tps / 60.0;
-        let mut tx_this_frame =
+        let tx_this_frame =
             (self.tx_resetter.elapsed().as_secs() * tps - self.n_txs_sent as f64 + tx_per_frame).ceil() as usize;
 
         if tx_this_frame == 0 {
             return nonce;
         }
         while let Some(to_resend) = self.pending_retries.pop_front() {
-            self.n_txs_sent += 1;
             if to_resend.tx_hash.is_none() {
                 self.send_transfer_to_self(walkie_talkie, signer, to_resend.nonce);
             } else {
                 self.send_receipt_request(walkie_talkie, to_resend)
-            }
-            tx_this_frame -= 1;
-            if tx_this_frame == 0 {
-                return nonce;
             }
         }
 
