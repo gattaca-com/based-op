@@ -280,6 +280,7 @@ impl TxSpammer {
                     return;
                 };
                 pending.tx_hash = Some(hash);
+                self.last_successful_nonce = self.last_successful_nonce.max(pending.nonce);
                 self.send_receipt_request(walkie_talkie, pending);
             }
         }
