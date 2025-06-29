@@ -13,7 +13,11 @@ use bop_common::{
     utils::{init_tracing, wait_for_signal},
 };
 use clap::Parser;
-use jsonrpsee::{core::async_trait, http_client::HttpClientBuilder, server::ServerBuilder};
+use jsonrpsee::{
+    core::{ClientError, async_trait},
+    http_client::HttpClientBuilder,
+    server::ServerBuilder,
+};
 use parking_lot::RwLock;
 use reqwest::Url;
 use thiserror::Error;
@@ -176,7 +180,7 @@ impl RegistryApiServer for RegistryServer {
         let gateways = self.gateway_clients.read();
         let n_gateways = gateways.len();
         if n_gateways == 0 {
-            return Err(RpcError::NoReturn);
+            return Err(RpcError::Jsonrpsee(ClientError::Custom("No registered gateways".to_string())));
         }
         let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)? +
             n_blocks_into_the_future;

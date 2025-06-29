@@ -94,22 +94,19 @@ impl FragSequence {
 mod tests {
     use std::sync::Arc;
 
-    use alloy_consensus::{BlockHeader, Signed};
+    use alloy_consensus::BlockHeader;
     use alloy_eips::eip2718::Encodable2718;
     use alloy_primitives::Bytes;
-    use alloy_provider::ProviderBuilder;
     use alloy_rpc_types::engine::PayloadAttributes;
     use bop_common::{
         communication::Spine, db::DBFrag, shared::SharedState, time::Duration, transaction::Transaction,
         utils::initialize_test_tracing,
     };
     use bop_db::AlloyDB;
-    use op_alloy_consensus::{OpTxEnvelope, OpTypedTransaction};
     use op_alloy_rpc_types_engine::OpPayloadAttributes;
     use reqwest::Url;
     use reth_optimism_chainspec::BASE_SEPOLIA;
     use reth_optimism_evm::OpEvmConfig;
-    use reth_primitives_traits::{Block, SignedTransaction};
     use revm::context::ContextTr;
     use tracing::level_filters::LevelFilter;
 
