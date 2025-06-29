@@ -97,7 +97,9 @@ impl TxSpammer {
                 let mut resp_buf = Vec::new();
                 loop {
                     walkie_talkie.gather_responses(&mut resp_buf);
-                    break;
+                    if resp_buf.len() == 1 {
+                        break;
+                    }
                 }
             } else {
                 tracing::warn!("airdrop: failed");
