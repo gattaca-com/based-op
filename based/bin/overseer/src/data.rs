@@ -5,11 +5,12 @@ use block::BlockData;
 use bop_common::{
     api::{OpGethPeer, OpPeerInfo, RollupConfig, SyncStatus},
     communication::{
-        Consumer, Queue, WalkieTalkie, queues_dir,
+        queues_dir,
         walkie_talkie::{self, RpcResponse},
+        Consumer, Queue, WalkieTalkie,
     },
     signing::ECDSASigner,
-    telemetry::{Telemetry, frag::Frag, order::Tx, system::SystemNotification},
+    telemetry::{frag::Frag, order::Tx, system::SystemNotification, Telemetry},
     time::{Duration, TimingMessage},
     typedefs::HashMap,
 };
@@ -24,13 +25,13 @@ use transaction::{SpamData, SpammedTx, TransactionData};
 use tui_scrollview::ScrollViewState;
 
 use crate::{
-    OverseerConnections,
     collections::{CircularBuffer, KeyedCircularBuffer},
     prelude::*,
     statistics::Statistics,
-    timekeeper::{TimeKeeper, TimerDataState, clock_overhead},
+    timekeeper::{clock_overhead, TimeKeeper, TimerDataState},
     ui::plot::RenderFlags,
     utils::empty_if_default,
+    OverseerConnections,
 };
 
 pub mod block;
@@ -84,7 +85,7 @@ impl TxSpammer {
         self.rich_wallet_key.as_ref().map(|signer| {
             let new_signer = ECDSASigner::random();
             let to_account = new_signer.address;
-            let value = U256::from(1_000_000_000_000_000u64);
+            let value = U256::from(100_000_000_000_000_000u64);
             if let Some(_callref) = signer.send_transfer(
                 walkie_talkie,
                 self.uri_based_op_geth.clone(),
@@ -952,10 +953,13 @@ impl Data {
     }
 
     fn current_state(&self) -> Option<SystemNotificationData> {
-        self.system
-            .iter()
-            .rev()
-            .find_map(|t| if let SystemNotification::StateChanged(_) = t.notification { Some(*t) } else { None })
+        self.system.iter().rev().find_map(|t| {
+            if let SystemNotification::StateChanged(_) = t.notification {
+                Some(*t)
+            } else {
+                None
+            }
+        })
     }
 
     fn last_state(&self) -> Option<SystemNotificationData> {
