@@ -200,8 +200,7 @@ start-based-gateway: create-network
 	$(MAKE) start-overseer
 
 start-overseer: 
-	docker exec -it based-gateway overseer --portal-url $(PORTAL)
-
+	docker exec -it based-op-gateway overseer --portal-url $(PORTAL) --rich-wallet-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Only perform these parse-time checks if the user asked for deploy-chain
