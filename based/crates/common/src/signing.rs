@@ -3,7 +3,7 @@ use std::fmt;
 use alloy_consensus::{SignableTransaction, Signed, TxEip1559};
 use alloy_eips::Encodable2718;
 use alloy_network::TxSignerSync;
-use alloy_primitives::{Address, B256, Signature, U256, hex, hex::FromHexError};
+use alloy_primitives::{hex, hex::FromHexError, Address, Signature, B256, U256};
 use alloy_rlp::Bytes;
 use alloy_signer::SignerSync;
 use alloy_signer_local::PrivateKeySigner;
@@ -13,7 +13,7 @@ use op_alloy_consensus::OpTxEnvelope;
 use rand::RngCore;
 use revm_primitives::TxKind;
 
-use crate::communication::{WalkieTalkie, walkie_talkie::RpcResponse};
+use crate::communication::{walkie_talkie::RpcResponse, WalkieTalkie};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SignerError {
