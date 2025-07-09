@@ -67,7 +67,7 @@ impl<
         let db_sorting = State::new(DBSorting::new(db));
         let evm_sorting = evm_config.evm_with_env(db_sorting, EvmEnv::default());
 
-        Self { evm_sorting, evm_tof, evm_config: evm_config.clone(), id, regolith_active: true, allow_reverts } 
+        Self { evm_sorting, evm_tof, evm_config: evm_config.clone(), id, regolith_active: true, allow_reverts }
     }
 
     /// Simulates a transaction at the state of the `db` parameter.
@@ -162,15 +162,26 @@ where
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
             let (sender, nonce, state_id) = msg.sim_info();
             let curt = Instant::now();
-            let msg =
-                match msg {
-                    SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(
-                        Self::simulate_transaction(tx, db, &mut self.evm_sorting, self.regolith_active, true, self.allow_reverts),
-                    ),
-                    SequencerToSimulator::SimulateTxTof(tx, db) => SimulatorToSequencerMsg::TxPoolTopOfFrag(
-                        Self::simulate_transaction(tx, db, &mut self.evm_tof, self.regolith_active, true, self.allow_reverts),
-                    ),
-                };
+            let msg = match msg {
+                SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(Self::simulate_transaction(
+                    tx,
+                    db,
+                    &mut self.evm_sorting,
+                    self.regolith_active,
+                    true,
+                    self.allow_reverts,
+                )),
+                SequencerToSimulator::SimulateTxTof(tx, db) => {
+                    SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_transaction(
+                        tx,
+                        db,
+                        &mut self.evm_tof,
+                        self.regolith_active,
+                        true,
+                        self.allow_reverts,
+                    ))
+                }
+            };
             let _ = senders.send_timeout(
                 SimulatorToSequencer::new((sender, nonce), state_id, curt.elapsed(), msg),
                 Duration::from_millis(10),
