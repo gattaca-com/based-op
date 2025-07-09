@@ -28,21 +28,28 @@ jobs:
           cache-on-failure: true
           workspaces: based -> target
 
-      - name: Install Rust toolchain
+      # Install just command runner
+      - name: Install just
+        uses: extractions/setup-just@v3
+        with:
+          just-version: '1.40.0'
+
+      # Install the specific nightly toolchain and components
+      - name: Install nightly-2025-02-26 toolchain and components
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly-2025-02-26
           profile: minimal
           components: clippy, rustfmt
-          override: true
 
-      - name: Setup just
-        uses: extractions/setup-just@v2
-        with:
-          just-version: 1.5.0
+      # Run fmt check
+      - name: Run fmt check
+        run: |
+          cd ./repos/builder
+          just fmt-check
 
-      - name: Check formatting
-        run: just fmt-check
-
-      - name: Run clippy
-        run: just clippy
+      # Run clippy check  
+      - name: Run clippy check
+        run: |
+          cd ./repos/builder
+          just clippy
