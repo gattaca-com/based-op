@@ -360,6 +360,39 @@ mod tests {
         assert_eq!(buf.iter().sum::<u64>(), 4u64);
         assert_eq!(buf.iter().rev().sum::<u64>(), 4u64);
     }
+
+    #[test]
+    fn circular_buffer_nth() {
+        let mut buf: CircularBuffer<u64> = CircularBuffer::new(4);
+        assert_eq!(buf.nth(10), None);
+
+        let mut buf: CircularBuffer<u64> = CircularBuffer::new(4);
+        buf.push(4u64);
+        assert_eq!(buf.nth(10), None);
+
+        let mut buf: CircularBuffer<u64> = CircularBuffer::new(0);
+        buf.push(4u64);
+        assert_eq!(*buf.nth(0).unwrap(), 4u64);
+
+        let mut buf: CircularBuffer<u64> = CircularBuffer::new(0);
+        buf.push(4u64);
+        assert_eq!(buf.nth(10), None);
+
+        let mut buf: CircularBuffer<u64> = CircularBuffer::new(10);
+        buf.push(4u64);
+        buf.push(29u64); 
+        buf.push(66u64);
+        assert_eq!(*buf.nth(2).unwrap(), 66u64);
+
+        let mut buf: CircularBuffer<u64> = CircularBuffer::new(4);
+        buf.push(4u64);
+        buf.push(29u64);
+        buf.push(34u64);
+        buf.push(8u64);
+        assert_eq!(*buf.nth(2).unwrap(), 34_u64);
+        buf.push(8u64);
+        assert_eq!(*buf.nth(2).unwrap(), 8_u64);
+    }
 }
 /// CircularBuffer which can be accessed with hashed keys as well.
 #[derive(Debug, Clone)]
