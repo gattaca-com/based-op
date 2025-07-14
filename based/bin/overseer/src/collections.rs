@@ -380,7 +380,7 @@ mod tests {
 
         let mut buf: CircularBuffer<u64> = CircularBuffer::new(10);
         buf.push(4u64);
-        buf.push(29u64); 
+        buf.push(29u64);
         buf.push(66u64);
         assert_eq!(*buf.nth(2).unwrap(), 66u64);
 
