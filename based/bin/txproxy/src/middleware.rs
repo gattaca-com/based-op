@@ -3,16 +3,14 @@ use std::sync::Arc;
 use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
     MethodResponse,
-    core::{client::ClientT, params, traits::ToRpcParams},
+    core::{client::ClientT, traits::ToRpcParams},
     http_client::HttpClient,
     server::middleware::rpc::RpcServiceT,
-    types::{ErrorObject, Params, Request, ResponsePayload, error::INTERNAL_ERROR_CODE},
+    types::{ErrorObject, Request, ResponsePayload, error::INTERNAL_ERROR_CODE},
 };
 use parking_lot::RwLock;
 use serde_json::value::RawValue;
 use tracing::{debug, error, info};
-
-use crate::server::{AuthRpcClient, RpcClient};
 
 #[derive(Clone)]
 pub struct MultiplexingService {
@@ -52,6 +50,19 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
             }
 
             let clients_to_forward = forwarding_to_arc.read().clone();
+
+            if clients_to_forward.is_empty() {
+                error!("No forwarding clients available");
+                return MethodResponse::error(
+                    req.id,
+                    ErrorObject::owned(
+                        INTERNAL_ERROR_CODE,
+                        "No forwarding clients available".to_string(),
+                        Some("Please check your configuration".to_string()),
+                    ),
+                );
+            }
+
             let request_tasks = clients_to_forward
                 .into_iter()
                 .map(|client| {
@@ -63,11 +74,11 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
                         match r {
                             Ok(value) => {
                                 debug!(response = ?value, "Request processed successfully (individual)");
-                                return Ok(value);
+                                Ok(value)
                             }
                             Err(e) => {
                                 debug!(error = %e, "Error while processing request (individual)");
-                                return Err(e);
+                                Err(e)
                             }
                         }
                     }
@@ -80,18 +91,18 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
             match responses {
                 Ok((value, other_tasks)) => {
                     let payload = ResponsePayload::success(&value);
-                    let _ = tokio::task::spawn(async move {
+                    tokio::spawn(async move {
                         futures::future::join_all(other_tasks).await;
                     });
                     info!(response = ?payload, "Request processed successfully");
-                    return MethodResponse::response(req.id, payload.into(), 4_000_000_000usize);
+                    MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
                 }
                 Err(e) => {
                     error!(error = %e, "All clients failed to process request");
-                    return MethodResponse::error(
+                    MethodResponse::error(
                         req.id,
                         ErrorObject::owned(INTERNAL_ERROR_CODE, "Internal error".to_string(), Some(e.to_string())),
-                    );
+                    )
                 }
             }
         }

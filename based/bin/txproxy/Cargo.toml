@@ -25,3 +25,4 @@ tokio.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
+thiserror.workspace = true

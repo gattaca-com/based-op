@@ -1,56 +1,19 @@
-use std::{
-    fmt,
-    net::{IpAddr, SocketAddr},
-    str::FromStr,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-};
+use std::{net::SocketAddr, path::Path, sync::Arc};
 
-use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes, U256, hex};
-use alloy_rpc_types::{
-    BlockId, BlockNumberOrTag,
-    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
-};
-use bop_common::{
-    api::{
-        ControlApiClient, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient,
-        OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
-        RegistryApiServer,
-    },
-    communication::messages::{RpcError, RpcResult},
-    debug_panic,
-    time::{Duration, Instant},
-    utils::{uuid, wait_for_signal},
-};
+use bop_common::{time::Duration, utils::wait_for_signal};
 use jsonrpsee::{
     Methods,
-    core::{ClientError, async_trait},
-    http_client::{HttpClient, HttpClientBuilder, transport::HttpBackend},
+    http_client::{HttpClient, HttpClientBuilder},
     server::{RpcServiceBuilder, ServerBuilder},
 };
-use op_alloy_rpc_types::OpTransactionReceipt;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
 use parking_lot::RwLock;
 use reqwest::Url;
-use reqwest::get;
-use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
-use tokio::sync::Mutex;
+use thiserror::Error;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{Instrument, Level, debug, error, info, trace};
+use tracing::{error, info};
 
 use crate::{cli::TxProxyArgs, middleware::MultiplexingService};
-
-pub type RpcClient = jsonrpsee::http_client::HttpClient;
-pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
-
-#[derive(Clone)]
-pub struct TxReceiver {
-    pub client: HttpClient,
-}
 
 #[derive(Clone)]
 pub struct TxProxyServer {
@@ -81,6 +44,19 @@ impl TxProxyServer {
             .build(addr)
             .await?;
 
+        let url_list_refresher_task = tokio::spawn(async move {
+            loop {
+                let tx_receivers = refresh_tx_receivers(&self.args.tx_receivers_path).unwrap();
+                let clients = tx_receivers
+                    .iter()
+                    .map(|url| create_client(url.clone(), Duration::from_millis(1000)).unwrap())
+                    .collect();
+                self.set_forwarding_clients(clients);
+                info!(clients = tx_receivers.len(), "refreshed forwarding clients");
+                tokio::time::sleep(Duration::from_secs(5).into()).await;
+            }
+        });
+
         let server_handle = server.start(Methods::new());
 
         tokio::select! {
@@ -91,13 +67,40 @@ impl TxProxyServer {
             _ = wait_for_signal() => {
                 info!("received signal, shutting down");
             }
+
+            _ = url_list_refresher_task => {
+                error!("URL list refresher task stopped unexpectedly");
+            }
         }
 
         Ok(())
     }
 
-    pub fn add_forwarding_client(&self, client: HttpClient) {
+    pub fn set_forwarding_clients(&self, clients: Vec<HttpClient>) {
         let mut forwarding_clients = self.forward_to.write();
-        forwarding_clients.push(client);
+        *forwarding_clients = clients;
     }
+}
+
+fn create_client(url: Url, timeout: Duration) -> eyre::Result<HttpClient> {
+    let client = HttpClientBuilder::default()
+        .max_request_size(u32::MAX)
+        .max_response_size(u32::MAX)
+        .request_timeout(timeout.into())
+        .build(url)?;
+    Ok(client)
+}
+
+#[derive(Debug, Error)]
+enum ProxyError {
+    #[error("File system error {0}")]
+    FileSystem(#[from] std::io::Error),
+    #[error("parsing error {0}")]
+    Parse(#[from] serde_json::Error),
+}
+
+type Result<T> = std::result::Result<T, ProxyError>;
+
+fn refresh_tx_receivers(path: impl AsRef<Path>) -> Result<Vec<Url>> {
+    Ok(serde_json::from_reader(std::fs::File::open(path.as_ref())?)?)
 }
