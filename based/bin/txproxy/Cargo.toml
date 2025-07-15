@@ -7,7 +7,6 @@ version.workspace = true
 [dependencies]
 alloy-primitives.workspace = true
 alloy-rpc-types.workspace = true
-alloy.workspace = true
 bop-common.workspace = true
 clap.workspace = true
 eyre.workspace = true

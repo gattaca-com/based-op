@@ -28,7 +28,6 @@ inherits = "dev"
 opt-level = 3
 
 [workspace.dependencies]
-alloy = { version = "0.14.0", features = ["full"] }
 alloy-consensus = "0.14.0"
 alloy-eips = "0.14.0"
 alloy-network = "0.14.0"
