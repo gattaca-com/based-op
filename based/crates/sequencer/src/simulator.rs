@@ -48,6 +48,7 @@ pub struct Simulator<Db: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarke
     regolith_active: bool,
     /// How to create an EVM.
     evm_config: OpEvmConfig,
+    allow_reverts: bool,
     id: usize,
 }
 
@@ -58,7 +59,7 @@ impl<
         > + Clone,
 > Simulator<Db>
 {
-    pub fn new(db: DBFrag<Db>, evm_config: OpEvmConfig, id: usize) -> Self {
+    pub fn new(db: DBFrag<Db>, evm_config: OpEvmConfig, id: usize, allow_reverts: bool) -> Self {
         // Initialise with default evms. These will be overridden before the first sim by
         // `set_evm_for_new_block`.
         let db_tof = State::new(db.clone());
@@ -66,7 +67,7 @@ impl<
         let db_sorting = State::new(DBSorting::new(db));
         let evm_sorting = evm_config.evm_with_env(db_sorting, EvmEnv::default());
 
-        Self { evm_sorting, evm_tof, evm_config: evm_config.clone(), id, regolith_active: true }
+        Self { evm_sorting, evm_tof, evm_config: evm_config.clone(), id, regolith_active: true, allow_reverts }
     }
 
     /// Simulates a transaction at the state of the `db` parameter.
@@ -161,15 +162,26 @@ where
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
             let (sender, nonce, state_id) = msg.sim_info();
             let curt = Instant::now();
-            let msg =
-                match msg {
-                    SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(
-                        Self::simulate_transaction(tx, db, &mut self.evm_sorting, self.regolith_active, true, true),
-                    ),
-                    SequencerToSimulator::SimulateTxTof(tx, db) => SimulatorToSequencerMsg::TxPoolTopOfFrag(
-                        Self::simulate_transaction(tx, db, &mut self.evm_tof, self.regolith_active, true, true),
-                    ),
-                };
+            let msg = match msg {
+                SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(Self::simulate_transaction(
+                    tx,
+                    db,
+                    &mut self.evm_sorting,
+                    self.regolith_active,
+                    true,
+                    self.allow_reverts,
+                )),
+                SequencerToSimulator::SimulateTxTof(tx, db) => {
+                    SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_transaction(
+                        tx,
+                        db,
+                        &mut self.evm_tof,
+                        self.regolith_active,
+                        true,
+                        self.allow_reverts,
+                    ))
+                }
+            };
             let _ = senders.send_timeout(
                 SimulatorToSequencer::new((sender, nonce), state_id, curt.elapsed(), msg),
                 Duration::from_millis(10),

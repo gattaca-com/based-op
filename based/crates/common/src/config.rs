@@ -100,6 +100,10 @@ pub struct GatewayArgs {
         help = "Safety level to pass to supervisor, values: finalized, safe, local-safe, cross-unsafe, unsafe, invalid"
     )]
     pub supervisor_safety_level: Option<String>,
+
+    /// Simulator Allows reverts in simulations
+    #[arg(long = "simulator.allow_reverts", default_value_t = true)]
+    pub allow_reverts: bool,
 }
 
 impl GatewayArgs {
