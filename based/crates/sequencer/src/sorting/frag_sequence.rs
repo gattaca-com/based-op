@@ -205,7 +205,7 @@ mod tests {
         let (mut seq, mut sorting_db) = ctx.start_sequencing(attributes, sim_connections.senders());
 
         // Apply non-must include txs using simulator
-        let mut sim = Simulator::new(sim_db, evm_config, 0);
+        let mut sim = Simulator::new(sim_db, evm_config, 0, true);
         let simulator_evm_block_params = ctx.new_block_params();
         sim.update_evm_environments(simulator_evm_block_params);
 
