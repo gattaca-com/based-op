@@ -166,6 +166,17 @@ services:
     command: ["/bin/sh", "-c", "while true; do sleep 3600; docker restart op-batcher; done"]
     restart: unless-stopped
     network_mode: "host"
+
+  based-txproxy:
+    image: ghcr.io/gattaca-com/based-op/based-txproxy:latest
+    pull_policy: always
+    container_name: based-txproxy
+    network_mode: "host"
+    command:
+      - --tx_receivers.path=/config/tx_receivers.json
+      - --port=${TXPROXY_PORT}
+    restart: unless-stopped
+
 # ################################################################################
 # # Postgres for Blockscout
 # ################################################################################

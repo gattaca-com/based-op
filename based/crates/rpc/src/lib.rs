@@ -97,7 +97,8 @@ impl RpcServer {
             .build(addr_no_auth)
             .await
             .expect("failed to create eth RPC server");
-        let module = FabricGatewayApiServer::into_rpc(self);
+        let mut module = FabricGatewayApiServer::into_rpc(self.clone());
+        module.merge(MinimalEthApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         let server_handle_no_auth = server_no_auth.start(module);
 
         //TODO: Handle other communcation from sequencer ?
