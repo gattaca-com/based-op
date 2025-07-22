@@ -30,126 +30,55 @@ use jsonrpsee::{
 };
 use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
-use parking_lot::RwLock;
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{Instrument, Level, debug, error, info, trace};
 
-use crate::{cli::PortalArgs, middleware::ProxyService};
-
-pub type RpcClient = jsonrpsee::http_client::HttpClient;
-pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
-
-#[derive(Clone)]
-struct Gateway {
-    id: Url,
-    jwt: String,
-    address: Address,
-    client: AuthRpcClient,
-    ping: Arc<Duration>,
-    last_seen: Arc<Option<Instant>>,
-}
-
-impl Gateway {
-    pub fn is_active(&self, gateway_inactivity_timeout: Duration) -> bool {
-        match self.last_seen.as_ref() {
-            Some(last_seen) => {
-                let elapsed = last_seen.elapsed();
-                elapsed < gateway_inactivity_timeout
-            }
-            None => false,
-        }
-    }
-}
-
-impl fmt::Debug for Gateway {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.id)
-    }
-}
-
-impl Gateway {
-    fn new(id: Url, client: AuthRpcClient, jwt: String, address: Address) -> Self {
-        Self { id, jwt, client, ping: Arc::new(Duration::from_millis(0)), last_seen: Arc::new(None), address }
-    }
-}
+use crate::{
+    cli::PortalArgs,
+    clients::{AuthRpcClient, Gateway, GatewayInstance, GatewayManager, RpcClient, create_auth_client, create_client},
+    middleware::ProxyService,
+};
 
 #[derive(Clone)]
 pub struct PortalServer {
     fallback_eth_client: RpcClient,
     fallback_client: AuthRpcClient,
     op_node_client: RpcClient,
-    registry_client: RpcClient,
-    current_gateway_candidate: Arc<Mutex<Option<Gateway>>>,
-    current_gateway: Arc<Mutex<Option<Gateway>>>,
-    gateway_timeout: Duration,
-    gateway_timeout_inactivity: Duration,
-    gateways: Arc<RwLock<Vec<Gateway>>>,
+
+    gateway_manager: Arc<GatewayManager>,
+
+    new_payload_block_hash: Arc<RwLock<B256>>,
     new_payload_block_number: Arc<AtomicU64>,
-    new_payload_block_hash: Arc<Mutex<B256>>,
     current_block_number: Arc<AtomicU64>,
     args: Arc<PortalArgs>,
 }
 
 impl PortalServer {
     pub async fn new(args: PortalArgs) -> eyre::Result<Self> {
-        let fallback_jwt = args.fallback_jwt();
-
-        let fallback_eth_client =
-            create_client(args.fallback_eth_url.clone(), Duration::from_millis(args.fallback_timeout_ms))?;
-
-        let op_node_client = create_client(args.op_node_url.clone(), Duration::from_millis(args.fallback_timeout_ms))?;
-
-        let fallback_client = create_auth_client(
-            args.fallback_url.clone(),
-            fallback_jwt,
-            Duration::from_millis(args.fallback_timeout_ms),
-        )?;
-        let registry_client =
-            create_client(args.registry_url.clone(), Duration::from_millis(args.registry_timeout_ms))?;
-
-        let gateway_timeout = Duration::from_millis(args.gateway_timeout_ms);
-
-        let gateways = vec![];
-        let gateways = Arc::new(RwLock::new(gateways));
+        let timeout = Duration::from_millis(args.fallback_timeout_ms);
+        let fallback_eth_client = create_client(args.fallback_eth_url.clone(), timeout)?;
+        let op_node_client = create_client(args.op_node_url.clone(), timeout)?;
+        let fallback_client = create_auth_client(args.fallback_url.clone(), args.fallback_jwt(), timeout)?;
 
         let temp = Self {
             fallback_eth_client,
             fallback_client,
             op_node_client,
-            registry_client,
-            current_gateway_candidate: Arc::new(Mutex::new(None)),
-            current_gateway: Arc::new(Mutex::new(None)),
-            gateway_timeout,
-            gateway_timeout_inactivity: Duration::from_millis(args.gateway_timeout_inactivity_ms),
-            gateways,
+
+            gateway_manager: Arc::new(GatewayManager::new_from_args(&args)),
+
             new_payload_block_number: Arc::new(AtomicU64::new(0)),
-            new_payload_block_hash: Arc::new(Mutex::new(B256::ZERO)),
+            new_payload_block_hash: Arc::new(RwLock::new(B256::ZERO)),
             current_block_number: Arc::new(AtomicU64::new(0)),
             args: Arc::new(args),
         };
 
-        match temp.refresh_gateway_list().await {
-            Ok(_) => {
-                temp.update_current_gateway().await?;
-                info!("Successfully fetched registered gateways");
-            }
-            Err(err) => {
-                error!(%err, "Failed to fetch registered gateways");
-            }
-        }
-
-        match temp.registry_client.current_gateway().await {
-            Ok((block_number, _, _, _)) => {
-                temp.current_block_number.store(block_number, Ordering::Relaxed);
-            }
-            Err(err) => {
-                error!(%err, "Failed to get future gateway from registry");
-            }
-        };
+        let _ = temp.gateway_manager.update_gateway_list().await;
 
         Ok(temp)
     }
@@ -158,7 +87,7 @@ impl PortalServer {
         let fallback_client = self.fallback_client.clone();
         let fallback_eth_client = self.fallback_eth_client.clone();
         let op_node_client = self.op_node_client.clone();
-        let registry_client = self.registry_client.clone();
+        let registry_client = self.gateway_manager.registry_client.clone();
 
         let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| {
             ProxyService::new(
@@ -184,21 +113,19 @@ impl PortalServer {
             .await?;
 
         let mut module = EngineApiServer::into_rpc(self.clone());
-        module.merge(EthApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         module.merge(PortalApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        let server_handle = server.start(module);
 
+        let gateway_manager = Arc::clone(&self.gateway_manager);
         tokio::spawn(async move {
             loop {
-                match self.refresh_gateway_list().await {
-                    Ok(_) => {}
-                    Err(err) => {
-                        error!(%err, "Failed to fetch registered gateways");
-                    }
+                if let Err(err) = gateway_manager.update_gateway_list().await {
+                    error!(%err, "Failed to fetch registered gateways");
                 }
+                gateway_manager.health_check().await;
                 tokio::time::sleep(Duration::from_secs(1).into()).await;
             }
         });
-        let server_handle = server.start(module);
 
         tokio::select! {
             _ = server_handle.stopped() => {
@@ -213,119 +140,28 @@ impl PortalServer {
         Ok(())
     }
 
-    fn gateways(&self) -> Vec<Gateway> {
-        self.gateways.read().clone().into_iter().filter(|g| g.is_active(self.gateway_timeout_inactivity)).collect()
+    pub async fn on_new_payload(&self, block_number: u64, block_hash: B256) {
+        *self.new_payload_block_hash.write().await = block_hash;
     }
 
-    async fn fetch_registered_gateways(&self) -> eyre::Result<()> {
-        let mut gateways = vec![];
-        let registered_gateways = self.registry_client.registered_gateways().await?;
-        for (gateway_url, address, jwt_as_b256) in registered_gateways {
-            let jwt_str = hex::encode(jwt_as_b256);
-            let client = create_gateway_client(gateway_url, jwt_str.clone(), address, self.gateway_timeout);
-            if let Ok(client) = client {
-                gateways.push(client);
-            }
-        }
-
-        for gateway in gateways.iter_mut() {
-            let ping_start = Instant::now();
-            match ControlApiClient::heartbeat(&gateway.client).await {
-                Ok(_) => {
-                    let ping_duration = ping_start.elapsed();
-                    gateway.ping = Arc::new(ping_duration);
-                    gateway.last_seen = Arc::new(Some(Instant::now()));
-                    info!("successfully pinged gateway={} ping={:>9}", gateway.id, ping_duration.to_string());
-                }
-                Err(err) => {
-                    error!(%err, ?gateway, "failed to ping gateway");
-                }
-            }
-        }
-
-        *self.gateways.write() = gateways;
-        Ok(())
-    }
-
-    async fn update_current_gateway_candidate(
+    pub async fn on_fork_choice_updated(
         &self,
-        n_blocks_into_future: u64,
-        expected_block_number: Option<u64>,
-    ) -> eyre::Result<()> {
-        let (block_number, gateway_url, _, _) = self.registry_client.get_future_gateway(n_blocks_into_future).await?;
-        if let Some(expected_block_number) = expected_block_number {
-            if block_number != expected_block_number {
-                error!(
-                    "CRITICAL: The block number we got from the registry ({}) does not match the expected block number ({})",
-                    block_number, expected_block_number
-                );
-                panic!(
-                    "CRITICAL: The block number we got from the registry ({}) does not match the expected block number ({})",
-                    block_number, expected_block_number
-                );
-                // return Ok(());
-            }
+        fork_choice_state: &ForkchoiceState,
+        payload_attributes: &Option<OpPayloadAttributes>,
+    ) {
+        let new_payload_block_hash = *self.new_payload_block_hash.read().await;
+        debug!(?fork_choice_state, ?payload_attributes, ?new_payload_block_hash, "on_fork_choice_updated called");
+        if payload_attributes.is_some() && new_payload_block_hash == fork_choice_state.head_block_hash {
+            debug!("starting gateway manager decision");
+            self.gateway_manager.decide_current_gateway().await;
+            debug!("gateway manager decision completed");
         }
-        let current_gateway_index = self.gateways().iter().position(|g| g.id == gateway_url);
-        match current_gateway_index {
-            Some(index) => {
-                let gateway = self.gateways().get(index).cloned().unwrap();
-                *self.current_gateway_candidate.lock().await = Some(gateway);
-                let mut i = index;
-                while !self
-                    .current_gateway_candidate
-                    .lock()
-                    .await
-                    .as_ref()
-                    .unwrap()
-                    .is_active(self.gateway_timeout_inactivity)
-                {
-                    i = (i + 1) % self.gateways().len();
-                    if i == index {
-                        error!("CRITICAL: No gateway is available, all gateways are stale");
-                        return Ok(());
-                    }
-                    *self.current_gateway_candidate.lock().await = Some(self.gateways().get(i).cloned().unwrap());
-                }
-            }
-            None => {
-                error!(
-                    "CRITICAL: Couldn't find the current gateway in the list we got from the registry. This means the registry is inconsistent"
-                );
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn update_current_gateway(&self) -> eyre::Result<()> {
-        match self.current_gateway_candidate.lock().await.clone() {
-            Some(new_gateway) => {
-                self.current_gateway.lock().await.replace(new_gateway);
-            }
-            None => {
-                error!("CRITICAL: Couldn't find the current gateway");
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn refresh_gateway_list(&self) -> eyre::Result<()> {
-        self.fetch_registered_gateways().await?;
-        Ok(())
-    }
-
-    pub async fn on_fork(&self, expected_block_number: Option<u64>) -> eyre::Result<()> {
-        self.update_current_gateway_candidate(0, expected_block_number).await?;
-        self.update_current_gateway().await?;
-        self.current_block_number.store(0, Ordering::Relaxed);
-        Ok(())
     }
 
     async fn send_fcu(
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<OpPayloadAttributes>,
-        gateway: Gateway,
+        gateway: GatewayInstance,
     ) {
         match gateway.client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await {
             Ok(res) => {
@@ -338,184 +174,6 @@ impl PortalServer {
             Err(err) => trace!(%err, "Error: failed gateway"),
         }
         debug!(?gateway, "served fcu")
-    }
-}
-
-/// This is a temporary API to broacast transactions to both gateway and fallback. In practice this should not be
-/// receiving user facing calls so we need to find another way to do this
-#[async_trait]
-impl EthApiServer for PortalServer {
-    #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
-    async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
-        // send to gateways and fallback
-        for gateway in self.gateways() {
-            let bytes = bytes.clone();
-            tokio::spawn(async move {
-                if let Err(err) = gateway.client.send_raw_transaction(bytes).await {
-                    error!(%err, ?gateway, "eth_sendRawTransaction: failed to send to gateway");
-                }
-            });
-        }
-
-        let response = self.fallback_eth_client.send_raw_transaction(bytes).await?;
-        Ok(response)
-    }
-
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>> {
-        debug!(%hash, "new request");
-
-        let fallback_fut = tokio::spawn(
-            {
-                let client = self.fallback_client.clone();
-                async move { client.transaction_receipt(hash).await }
-            }
-            .in_current_span(),
-        );
-
-        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
-
-        let gateway_fut =
-            tokio::spawn({ async move { current_gateway.client.transaction_receipt(hash).await } }.in_current_span());
-
-        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
-        // ignore join errors
-        let fallback = fallback?;
-        let gateway = gateway?;
-
-        let payload = gateway.or(fallback)?;
-
-        Ok(payload)
-    }
-
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>> {
-        debug!(%number, full, "new request");
-
-        let fallback_fut = tokio::spawn(
-            {
-                let client = self.fallback_client.clone();
-                async move { client.block_by_number(number, full).await }
-            }
-            .in_current_span(),
-        );
-
-        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
-
-        let gateway_fut = tokio::spawn(
-            { async move { current_gateway.client.block_by_number(number, full).await } }.in_current_span(),
-        );
-
-        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
-        // ignore join errors
-        let fallback = fallback?;
-        let gateway = gateway?;
-
-        let payload = gateway.or(fallback)?;
-
-        Ok(payload)
-    }
-
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>> {
-        debug!(%hash, full, "new request");
-
-        let fallback_fut = tokio::spawn(
-            {
-                let client = self.fallback_client.clone();
-                async move { client.block_by_hash(hash, full).await }
-            }
-            .in_current_span(),
-        );
-        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
-        let gateway_fut =
-            tokio::spawn({ async move { current_gateway.client.block_by_hash(hash, full).await } }.in_current_span());
-
-        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
-        // ignore join errors
-        let fallback = fallback?;
-        let gateway = gateway?;
-
-        let payload = gateway.or(fallback)?;
-
-        Ok(payload)
-    }
-
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn block_number(&self) -> RpcResult<U256> {
-        debug!("block number request");
-
-        let fallback_fut = tokio::spawn(
-            {
-                let client = self.fallback_client.clone();
-                async move { client.block_number().await }
-            }
-            .in_current_span(),
-        );
-        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
-        let gateway_fut =
-            tokio::spawn({ async move { current_gateway.client.block_number().await } }.in_current_span());
-
-        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
-        // ignore join errors
-        let fallback = fallback?;
-        let gateway = gateway?;
-
-        let payload = gateway.or(fallback)?;
-
-        Ok(payload)
-    }
-
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
-        debug!(%address, ?block_number, "new request");
-
-        let fallback_fut = tokio::spawn(
-            {
-                let client = self.fallback_client.clone();
-                async move { client.transaction_count(address, block_number).await }
-            }
-            .in_current_span(),
-        );
-        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
-        let gateway_fut = tokio::spawn(
-            { async move { current_gateway.client.transaction_count(address, block_number).await } }.in_current_span(),
-        );
-
-        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
-        // ignore join errors
-        let fallback = fallback?;
-        let gateway = gateway?;
-
-        let payload = gateway.or(fallback)?;
-
-        Ok(payload)
-    }
-
-    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
-    async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
-        debug!(%address, ?block_number, "new request");
-
-        let fallback_fut = tokio::spawn(
-            {
-                let client = self.fallback_client.clone();
-                async move { client.balance(address, block_number).await }
-            }
-            .in_current_span(),
-        );
-        let Some(current_gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
-        let gateway_fut = tokio::spawn(
-            { async move { current_gateway.client.balance(address, block_number).await } }.in_current_span(),
-        );
-
-        let (fallback, gateway) = tokio::join!(fallback_fut, gateway_fut);
-        // ignore join errors
-        let fallback = fallback?;
-        let gateway = gateway?;
-
-        let payload = gateway.or(fallback)?;
-
-        Ok(payload)
     }
 }
 
@@ -537,27 +195,18 @@ impl EngineApiServer for PortalServer {
             debug!(%parent_block_hash, "new request (no attributes)");
         }
 
-        if payload_attributes.is_some() && *self.new_payload_block_hash.lock().await == parent_block_hash {
-            let new_block_number = self.new_payload_block_number.load(Ordering::Relaxed) + 1;
-            self.current_block_number.store(new_block_number, Ordering::Relaxed);
-            match self.on_fork(Some(new_block_number)).await {
-                Ok(_) => {}
-                Err(err) => {
-                    error!(%err, "failed to process new payload");
-                }
-            };
-        }
+        self.on_fork_choice_updated(&fork_choice_state, &payload_attributes).await;
 
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
-        if let Some(current_gateway) = self.current_gateway.as_ref().lock().await.clone() {
+        if let Some(current_gateway) = self.gateway_manager.current_gateway().await {
             if payload_attributes.is_some() {
                 // pick only one gateway for this block
                 tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, current_gateway).in_current_span());
             } else {
                 // send to all gateways
-                for gateway in self.gateways() {
+                for gateway in self.gateway_manager.gateways().await {
                     let payload_attributes = payload_attributes.clone();
                     tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span());
                 }
@@ -585,8 +234,8 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.payload_inner.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
-        self.new_payload_block_number.store(block_number, Ordering::Relaxed);
-        *self.new_payload_block_hash.lock().await = block_hash;
+
+        self.on_new_payload(block_number, block_hash).await;
 
         let response = self
             .fallback_client
@@ -595,7 +244,7 @@ impl EngineApiServer for PortalServer {
             .inspect_err(|e| tracing::error!("issue sending new_payload_v4 to el {e}"))?;
 
         // send to all gateways
-        for gateway in self.gateways() {
+        for gateway in self.gateway_manager.gateways().await {
             let payload = payload.clone();
             let requests = requests.clone();
             let versioned_hashes = versioned_hashes.clone();
@@ -642,8 +291,8 @@ impl EngineApiServer for PortalServer {
         let excess_blob_gas = payload.excess_blob_gas;
 
         debug!(block_number, %block_hash, gas_limit, gas_used, n_txs, n_withdrawals, blob_gas_used, excess_blob_gas, "new request");
-        self.new_payload_block_number.store(block_number, Ordering::Relaxed);
-        *self.new_payload_block_hash.lock().await = block_hash;
+
+        self.on_new_payload(block_number, block_hash).await;
 
         let response = self
             .fallback_client
@@ -651,7 +300,7 @@ impl EngineApiServer for PortalServer {
             .await?;
 
         // send to all gateways
-        for gateway in self.gateways() {
+        for gateway in self.gateway_manager.gateways().await {
             let payload = payload.clone();
             let versioned_hashes = versioned_hashes.clone();
 
@@ -686,7 +335,7 @@ impl EngineApiServer for PortalServer {
             async move { client.get_payload_v4(payload_id).await }
         });
 
-        let Some(gateway) = self.current_gateway.lock().await.clone() else { return Ok(fallback_fut.await??) };
+        let Some(gateway) = self.gateway_manager.current_gateway().await else { return Ok(fallback_fut.await??) };
 
         let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV4, _>> = tokio::spawn(
             {
@@ -733,8 +382,7 @@ impl EngineApiServer for PortalServer {
         if let Ok(gateway) = gateway.as_ref() {
             info!(
                 "block {}: successfully served from based-gateway {:?}",
-                gateway.execution_payload.payload_inner.payload_inner.payload_inner.block_number,
-                self.current_gateway.lock().await.as_ref().unwrap()
+                gateway.execution_payload.payload_inner.payload_inner.payload_inner.block_number, gateway
             );
         } else if let Ok(fallback) = fallback.as_ref() {
             info!(
@@ -790,82 +438,4 @@ impl PortalApiServer for PortalServer {
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String> {
         Ok(self.fallback_eth_client.node_info().await.map(|p| p.enode)?)
     }
-}
-
-// TODO: Implement this properly
-#[async_trait]
-impl RegistryApiServer for PortalServer {
-    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
-        if n_blocks_into_future == 0 {
-            return self.current_gateway().await;
-        }
-        match self.registry_client.get_future_gateway(n_blocks_into_future).await {
-            Ok(gateway) => Ok(gateway),
-            Err(err) => {
-                trace!(%err, "Failed to get future gateway");
-                Err(RpcError::Jsonrpsee(err))
-            }
-        }
-    }
-
-    async fn current_gateway(&self) -> RpcResult<(u64, Url, Address, B256)> {
-        match self.current_gateway.lock().await.as_ref() {
-            Some(gateway) => {
-                let block_number = self.current_block_number.load(Ordering::Relaxed);
-                let url = gateway.id.clone();
-                let address = gateway.address;
-                let jwt_as_b256 = gateway.jwt.as_bytes().try_into().map_err(|_| RpcError::Internal)?;
-
-                Ok((block_number, url, address, jwt_as_b256))
-            }
-            None => Err(RpcError::Jsonrpsee(ClientError::Custom("no gateways registered".to_string()))),
-        }
-    }
-
-    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
-        match self.registry_client.registered_gateways().await {
-            Ok(gateways) => Ok(gateways),
-            Err(err) => {
-                trace!(%err, "Failed to get registered gateways");
-                Err(RpcError::Jsonrpsee(err))
-            }
-        }
-    }
-
-    async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()> {
-        match self.registry_client.register_gateway(gateway).await {
-            Ok(()) => Ok(()),
-            Err(err) => Err(RpcError::Jsonrpsee(err)),
-        }
-    }
-}
-
-fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
-    let client = HttpClientBuilder::default()
-        .max_request_size(u32::MAX)
-        .max_response_size(u32::MAX)
-        .request_timeout(timeout.into())
-        .build(url)?;
-    Ok(client)
-}
-
-fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::Result<AuthRpcClient> {
-    let secret_layer = AuthClientLayer::new(jwt);
-    let middleware = tower::ServiceBuilder::default().layer(secret_layer);
-
-    let client = HttpClientBuilder::default()
-        .max_request_size(u32::MAX)
-        .max_response_size(u32::MAX)
-        .set_http_middleware(middleware)
-        .request_timeout(timeout.into())
-        .build(url)?;
-
-    Ok(client)
-}
-
-fn create_gateway_client(url: Url, jwt_str: String, address: Address, timeout: Duration) -> eyre::Result<Gateway> {
-    let jwt = JwtSecret::from_hex(&jwt_str).map_err(|_| eyre::eyre!("Invalid JWT secret"))?;
-    let client = create_auth_client(url.clone(), jwt, timeout)?;
-    let gateway_client = Gateway::new(url, client, jwt_str, address);
-    Ok(gateway_client)
 }
