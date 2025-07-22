@@ -7,7 +7,7 @@ use tracing::level_filters::LevelFilter;
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, name = "based-txproxy")]
 pub struct TxProxyArgs {
-    /// The port to run the portal on
+    /// The port to run the txproxy on
     #[arg(long = "port", default_value_t = 8090)]
     pub txproxy_port: u16,
     /// Enable debug logging
