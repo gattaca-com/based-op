@@ -15,14 +15,17 @@ use parking_lot::RwLock;
 use serde_json::value::RawValue;
 use tracing::{debug, error};
 
+use crate::server::FlowCounter;
+
 #[derive(Clone)]
 pub struct MultiplexingService {
     forwarding_to: Arc<RwLock<Vec<HttpClient>>>,
+    flow_counter: Arc<FlowCounter>,
 }
 
 impl MultiplexingService {
-    pub fn new(forwarding_to: Arc<RwLock<Vec<HttpClient>>>) -> Self {
-        Self { forwarding_to }
+    pub fn new(forwarding_to: Arc<RwLock<Vec<HttpClient>>>, flow_counter: Arc<FlowCounter>) -> Self {
+        Self { forwarding_to, flow_counter }
     }
 }
 
@@ -32,10 +35,13 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
     #[tracing::instrument(skip_all, name = "middleware")]
     fn call(&self, req: Request<'a>) -> Self::Future {
         let forwarding_to_arc = Arc::clone(&self.forwarding_to);
-
+        let flow_counter = Arc::clone(&self.flow_counter);
+        flow_counter.increment_total();
+        
         async move {
             let method = req.method_name().to_string();
             let Some(params_raw) = req.params else {
+                flow_counter.increment_failed_invalid_params();
                 return MethodResponse::error(
                     req.id,
                     ErrorObject::owned(INVALID_PARAMS_CODE, "Invalid request".to_string(), None::<()>),
@@ -45,10 +51,9 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
 
             debug!(%method, params = %params_raw, "Received request for method");
 
-            // TODO: add local telemetry
-
             if method != "eth_sendRawTransaction" {
-                error!(%method, "Unsupported method for multiplexing");
+                debug!(%method, "Unsupported method for multiplexing");
+                flow_counter.increment_failed_method_not_found();
                 return MethodResponse::error(
                     req.id,
                     ErrorObject::owned(
@@ -63,6 +68,7 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
 
             if clients_to_forward.is_empty() {
                 debug!("No forwarding clients available");
+                flow_counter.increment_failed_no_clients();
                 return MethodResponse::error(
                     req.id,
                     ErrorObject::owned(
@@ -101,10 +107,12 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
                     let payload = ResponsePayload::success(&value);
                     tokio::spawn(futures::future::join_all(other_tasks));
                     debug!(response = ?payload, "Request processed successfully");
+                    flow_counter.increment_success();
                     MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
                 }
                 Err(err) => {
                     error!(%err, "All clients failed to process request");
+                    flow_counter.increment_failed_all_clients();
                     MethodResponse::error(
                         req.id,
                         ErrorObject::owned(INTERNAL_ERROR_CODE, "Internal error".to_string(), Some(err.to_string())),
