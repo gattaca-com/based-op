@@ -5,7 +5,7 @@ use clap::{Parser, command};
 use tracing::level_filters::LevelFilter;
 
 #[derive(Parser, Debug, Clone)]
-#[command(version, about, name = "based-portal")]
+#[command(version, about, name = "based-txproxy")]
 pub struct TxProxyArgs {
     /// The port to run the portal on
     #[arg(long = "port", default_value_t = 8090)]
