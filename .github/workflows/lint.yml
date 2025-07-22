@@ -45,11 +45,9 @@ jobs:
       # Run fmt check
       - name: Run fmt check
         run: |
-          cd ./based
           just fmt-check
 
       # Run clippy check  
       - name: Run clippy check
         run: |
-          cd ./based
           just clippy
