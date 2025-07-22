@@ -209,33 +209,7 @@ impl EngineApiServer for PortalServer {
             .await
             .inspect_err(|e| tracing::error!("issue sending new_payload_v4 to el {e}"))?;
 
-        // send to all gateways
-        for gateway in self.gateway_manager.gateways().await {
-            let payload = payload.clone();
-            let requests = requests.clone();
-            let versioned_hashes = versioned_hashes.clone();
-
-            tokio::spawn(
-                async move {
-                    match gateway
-                        .client
-                        .new_payload_v4(payload, versioned_hashes, parent_beacon_block_root, requests)
-                        .await
-                    {
-                        Ok(res) => {
-                            if res.is_valid() {
-                                debug!(?gateway, ?res, "gateway response");
-                            } else {
-                                error!(?gateway, ?res, "gateway response");
-                            }
-                        }
-                        Err(ClientError::Call(_)) => {}
-                        Err(err) => error!(?gateway, %err, "failed gateway"),
-                    }
-                }
-                .in_current_span(),
-            );
-        }
+        self.gateway_manager.broadcast_new_payload_v4(payload, versioned_hashes, parent_beacon_block_root, requests).await;
 
         Ok(response)
     }
@@ -265,28 +239,7 @@ impl EngineApiServer for PortalServer {
             .new_payload_v3(payload.clone(), versioned_hashes.clone(), parent_beacon_block_root)
             .await?;
 
-        // send to all gateways
-        for gateway in self.gateway_manager.gateways().await {
-            let payload = payload.clone();
-            let versioned_hashes = versioned_hashes.clone();
-
-            tokio::spawn(
-                async move {
-                    match gateway.client.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await {
-                        Ok(res) => {
-                            if res.is_valid() {
-                                debug!(?gateway, ?res, "gateway response");
-                            } else {
-                                error!(?gateway, ?res, "gateway response");
-                            }
-                        }
-                        Err(ClientError::Call(_)) => {}
-                        Err(err) => error!(?gateway, %err, "failed gateway"),
-                    }
-                }
-                .in_current_span(),
-            );
-        }
+        self.gateway_manager.broadcast_new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await;
 
         Ok(response)
     }
