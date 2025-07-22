@@ -1,23 +1,19 @@
 use std::{
     fmt,
     net::SocketAddr,
-    sync::{
-        Arc,
-        atomic::AtomicU64,
-    },
+    sync::{Arc, atomic::AtomicU64},
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::B256;
-use alloy_rpc_types::{
-    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
-};
+use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
-    api::{EngineApiClient, EngineApiServer, OpGethAdminApiClient,
-        OpNodeApiClient, OpNodeP2PApiClient, PORTAL_CAPABILITIES, PortalApiServer,
+    api::{
+        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpNodeApiClient, OpNodeP2PApiClient,
+        PORTAL_CAPABILITIES, PortalApiServer,
     },
     communication::messages::{RpcError, RpcResult},
-    time::{Duration},
+    time::Duration,
     utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
@@ -25,6 +21,7 @@ use jsonrpsee::{
     server::{RpcServiceBuilder, ServerBuilder},
 };
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use std::sync::atomic::Ordering::Relaxed;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
@@ -34,7 +31,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use crate::{
     cli::PortalArgs,
     clients::{AuthRpcClient, GatewayManager, RpcClient, create_auth_client, create_client},
-    middleware::ProxyService,
+    middleware::EngineApiProxy,
 };
 
 #[derive(Clone)]
@@ -77,20 +74,13 @@ impl PortalServer {
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
-        let fallback_client = self.fallback_client.clone();
-        let fallback_eth_client = self.fallback_eth_client.clone();
-        let op_node_client = self.op_node_client.clone();
+        let geth_engine_client = self.fallback_client.clone();
         let registry_client = self.gateway_manager.registry_client.clone();
 
-        let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| {
-            ProxyService::new(
-                PORTAL_CAPABILITIES,
-                s,
-                fallback_eth_client.clone(),
-                fallback_client.clone(),
-                op_node_client.clone(),
-                registry_client.clone(),
-            )
+        let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| EngineApiProxy {
+            inner: s,
+            geth_client: geth_engine_client.clone(),
+            registry_client: registry_client.clone(),
         });
 
         // temp: remove when factoring out the portal
