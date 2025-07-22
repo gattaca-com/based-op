@@ -1571,6 +1571,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "based-txproxy"
+version = "0.1.0"
+dependencies = [
+ "alloy-eips 0.14.0",
+ "alloy-primitives",
+ "alloy-rpc-types",
+ "bop-common",
+ "clap",
+ "eyre",
+ "futures",
+ "jsonrpsee",
+ "op-alloy-rpc-types 0.14.1",
+ "op-alloy-rpc-types-engine 0.14.1",
+ "parking_lot",
+ "reqwest",
+ "reth-rpc-layer",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tower 0.4.13",
+ "tower-http",
+ "tracing",
+]
+
+[[package]]
 name = "bimap"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

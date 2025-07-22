@@ -6,11 +6,14 @@ use jsonrpsee::{
     core::{client::ClientT, traits::ToRpcParams},
     http_client::HttpClient,
     server::middleware::rpc::RpcServiceT,
-    types::{ErrorObject, Request, ResponsePayload, error::INTERNAL_ERROR_CODE},
+    types::{
+        ErrorObject, Request, ResponsePayload,
+        error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE, METHOD_NOT_FOUND_CODE},
+    },
 };
 use parking_lot::RwLock;
 use serde_json::value::RawValue;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 #[derive(Clone)]
 pub struct MultiplexingService {
@@ -28,21 +31,28 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
 
     #[tracing::instrument(skip_all, name = "middleware")]
     fn call(&self, req: Request<'a>) -> Self::Future {
-        //TODO: is this really the best way to do this?
         let forwarding_to_arc = Arc::clone(&self.forwarding_to);
 
-        let method = req.method_name().to_string();
-        let params_raw = req.params.unwrap().get().to_string();
-
         async move {
-            info!(method = %method, params = %params_raw, "Received request for method");
+            let method = req.method_name().to_string();
+            let Some(params_raw) = req.params else {
+                return MethodResponse::error(
+                    req.id,
+                    ErrorObject::owned(INVALID_PARAMS_CODE, "Invalid request".to_string(), None::<()>),
+                );
+            };
+            let params_raw = params_raw.get().to_string();
+
+            debug!(%method, params = %params_raw, "Received request for method");
+
+            // TODO: add local telemetry
 
             if method != "eth_sendRawTransaction" {
-                error!(method = %method, "Unsupported method for multiplexing: {}", method);
+                error!(%method, "Unsupported method for multiplexing");
                 return MethodResponse::error(
                     req.id,
                     ErrorObject::owned(
-                        INTERNAL_ERROR_CODE,
+                        METHOD_NOT_FOUND_CODE,
                         "Method not supported".to_string(),
                         Some("Only eth_sendRawTransaction is supported".to_string()),
                     ),
@@ -63,45 +73,41 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
                 );
             }
 
-            let request_tasks = clients_to_forward
-                .into_iter()
-                .map(|client| {
-                    let method = method.clone();
-                    let params = WrapParams::from_raw(params_raw.clone());
-                    async move {
-                        let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =
-                            client.request(method.as_str(), params).await;
-                        match r {
-                            Ok(value) => {
-                                debug!(response = ?value, "Request processed successfully (individual)");
-                                Ok(value)
-                            }
-                            Err(e) => {
-                                debug!(error = %e, "Error while processing request (individual)");
-                                Err(e)
-                            }
+            let request_tasks = clients_to_forward.iter().map(|client| {
+                let client = client.clone();
+                let method = method.clone();
+                let params = WrapParams::from_raw(params_raw.clone());
+                async move {
+                    let r: Result<serde_json::Value, jsonrpsee::core::ClientError> =
+                        client.request(method.as_str(), params).await;
+                    match r {
+                        Ok(value) => {
+                            debug!(response = ?value, "Request processed successfully (individual)");
+                            Ok(value)
+                        }
+                        Err(err) => {
+                            debug!(%err, "Error while processing request (individual)");
+                            Err(err)
                         }
                     }
-                    .boxed()
-                })
-                .collect::<Vec<_>>();
+                }
+                .boxed()
+            });
 
             let responses = futures::future::select_ok(request_tasks).await;
 
             match responses {
                 Ok((value, other_tasks)) => {
                     let payload = ResponsePayload::success(&value);
-                    tokio::spawn(async move {
-                        futures::future::join_all(other_tasks).await;
-                    });
-                    info!(response = ?payload, "Request processed successfully");
+                    tokio::spawn(futures::future::join_all(other_tasks));
+                    debug!(response = ?payload, "Request processed successfully");
                     MethodResponse::response(req.id, payload.into(), 4_000_000_000usize)
                 }
-                Err(e) => {
-                    error!(error = %e, "All clients failed to process request");
+                Err(err) => {
+                    error!(%err, "All clients failed to process request");
                     MethodResponse::error(
                         req.id,
-                        ErrorObject::owned(INTERNAL_ERROR_CODE, "Internal error".to_string(), Some(e.to_string())),
+                        ErrorObject::owned(INTERNAL_ERROR_CODE, "Internal error".to_string(), Some(err.to_string())),
                     )
                 }
             }
