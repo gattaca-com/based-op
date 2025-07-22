@@ -32,8 +32,6 @@ pub struct FlowCounter {
     pub failed_method_not_found: Arc<AtomicI64>,
     pub failed_no_clients: Arc<AtomicI64>,
     pub failed_all_clients: Arc<AtomicI64>,
-
-    pub start_time: Arc<RwLock<Instant>>,
 }
 
 impl Default for FlowCounter {
@@ -46,7 +44,6 @@ impl Default for FlowCounter {
             failed_method_not_found: Arc::new(AtomicI64::new(0)),
             failed_no_clients: Arc::new(AtomicI64::new(0)),
             failed_all_clients: Arc::new(AtomicI64::new(0)),
-            start_time: Arc::new(RwLock::new(Instant::now())),
         }
     }
 }
@@ -81,7 +78,6 @@ impl FlowCounter {
     }
 
     pub fn info_and_reset(&self) {
-        let elapsed = self.start_time.read().elapsed();
         info!(
             total = self.total.load(Ordering::Relaxed),
             success = self.success.load(Ordering::Relaxed),
@@ -101,7 +97,6 @@ impl FlowCounter {
         self.failed_method_not_found.store(0, Ordering::Relaxed);
         self.failed_no_clients.store(0, Ordering::Relaxed);
         self.failed_all_clients.store(0, Ordering::Relaxed);
-        *self.start_time.write() = Instant::now();
     }
 }
 
