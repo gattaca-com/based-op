@@ -36,8 +36,8 @@ use crate::{
 
 #[derive(Clone)]
 pub struct PortalServer {
-    fallback_eth_client: RpcClient,
-    fallback_client: AuthRpcClient,
+    geth_client: RpcClient,
+    geth_engine_client: AuthRpcClient,
     op_node_client: RpcClient,
 
     gateway_manager: Arc<GatewayManager>,
@@ -56,12 +56,10 @@ impl PortalServer {
         let fallback_client = create_auth_client(args.fallback_url.clone(), args.fallback_jwt(), timeout)?;
 
         let temp = Self {
-            fallback_eth_client,
-            fallback_client,
+            geth_client: fallback_eth_client,
+            geth_engine_client: fallback_client,
             op_node_client,
-
             gateway_manager: Arc::new(GatewayManager::new_from_args(&args)),
-
             new_payload_block_number: Arc::new(AtomicU64::new(0)),
             new_payload_block_hash: Arc::new(RwLock::new(B256::ZERO)),
             current_block_number: Arc::new(AtomicU64::new(0)),
@@ -74,7 +72,7 @@ impl PortalServer {
     }
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
-        let geth_engine_client = self.fallback_client.clone();
+        let geth_engine_client = self.geth_engine_client.clone();
         let registry_client = self.gateway_manager.registry_client.clone();
 
         let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| EngineApiProxy {
@@ -164,8 +162,7 @@ impl EngineApiServer for PortalServer {
 
         self.on_fork_choice_updated(&fork_choice_state, &payload_attributes).await;
 
-        let response =
-            self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
+        let response = self.geth_engine_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
         self.gateway_manager.send_fcu(fork_choice_state, payload_attributes).await;
 
@@ -194,12 +191,14 @@ impl EngineApiServer for PortalServer {
         self.on_new_payload(block_number, block_hash).await;
 
         let response = self
-            .fallback_client
+            .geth_engine_client
             .new_payload_v4(payload.clone(), versioned_hashes.clone(), parent_beacon_block_root, requests.clone())
             .await
             .inspect_err(|e| tracing::error!("issue sending new_payload_v4 to el {e}"))?;
 
-        self.gateway_manager.broadcast_new_payload_v4(payload, versioned_hashes, parent_beacon_block_root, requests).await;
+        self.gateway_manager
+            .broadcast_new_payload_v4(payload, versioned_hashes, parent_beacon_block_root, requests)
+            .await;
 
         Ok(response)
     }
@@ -225,9 +224,10 @@ impl EngineApiServer for PortalServer {
         self.on_new_payload(block_number, block_hash).await;
 
         let response = self
-            .fallback_client
+            .geth_engine_client
             .new_payload_v3(payload.clone(), versioned_hashes.clone(), parent_beacon_block_root)
-            .await?;
+            .await
+            .inspect_err(|e| tracing::error!("issue sending new_payload_v3 to el {e}"))?;
 
         self.gateway_manager.broadcast_new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await;
 
@@ -239,7 +239,7 @@ impl EngineApiServer for PortalServer {
         debug!(%payload_id, "new request");
 
         let fallback_fut = tokio::spawn({
-            let client = self.fallback_client.clone();
+            let client = self.geth_engine_client.clone();
 
             async move { client.get_payload_v4(payload_id).await }
         });
@@ -249,7 +249,7 @@ impl EngineApiServer for PortalServer {
         let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV4, _>> = tokio::spawn(
             {
                 // only get payload from previously picked gateway
-                let fallback_client = self.fallback_client.clone();
+                let fallback_client = self.geth_engine_client.clone();
 
                 async move {
                     let gateway_payload = gateway
@@ -345,6 +345,6 @@ impl PortalApiServer for PortalServer {
 
     /// The enode that can be used to sync with the op-geth
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String> {
-        Ok(self.fallback_eth_client.node_info().await.map(|p| p.enode)?)
+        Ok(self.geth_client.node_info().await.map(|p| p.enode)?)
     }
 }
