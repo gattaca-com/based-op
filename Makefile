@@ -59,7 +59,7 @@ docs: ## 📚 Build local docs
 	npm run build && \
 	npm run start
 
-build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry ## 🏗️ Build
+build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry build-txproxy ## 🏗️ Build
 
 build-portal: ## 🏗️ Build based portal
 	docker build -t local_based_portal -f ./based/portal.Dockerfile --build-context reth=./reth ./based
@@ -69,6 +69,9 @@ build-registry: ## 🏗️ Build based registry
 
 build-gateway: ## 🏗️ Build based gateway
 	docker build -t local_based_gateway -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
+
+build-txproxy: ## 🏗️ Build based txproxy
+	docker build -t local_based_txproxy -f ./based/txproxy.Dockerfile --build-context reth=./reth ./based
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t local_based_op_geth ../based-op-geth
@@ -332,6 +335,7 @@ start-main-node: create-network
 	@if [ ! -f .local_main_node/.env ]; then \
 	  cp main_node/env_example .local_main_node/.env; \
 	  cp main_node/compose* .local_main_node; \
+	  cp main_node/tx_receivers_example.json .local_main_node/config/tx_receivers.json; \
 	  $(MAKE) fix-compose; \
 	  echo "Initializing all components of a main sequencing node in ./.local_main_node ..."; \
 	  { \
