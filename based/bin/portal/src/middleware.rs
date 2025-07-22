@@ -8,7 +8,7 @@ use jsonrpsee::{
 use serde_json::value::RawValue;
 use tracing::{debug, error};
 
-use crate::server::{AuthRpcClient, RpcClient};
+use crate::clients::{AuthRpcClient, RpcClient};
 
 #[derive(Clone)]
 pub struct ProxyService<S> {
