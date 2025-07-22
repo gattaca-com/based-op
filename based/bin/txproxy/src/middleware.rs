@@ -52,7 +52,7 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
             let clients_to_forward = forwarding_to_arc.read().clone();
 
             if clients_to_forward.is_empty() {
-                error!("No forwarding clients available");
+                debug!("No forwarding clients available");
                 return MethodResponse::error(
                     req.id,
                     ErrorObject::owned(
