@@ -1,7 +1,5 @@
 use std::{
     fmt,
-    net::SocketAddr,
-    ops::Deref,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -9,38 +7,24 @@ use std::{
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes, U256, hex};
-use alloy_rpc_types::{
-    BlockId, BlockNumberOrTag,
-    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
-};
+use alloy_primitives::{Address, B256, hex};
+use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState};
 use bop_common::{
-    api::{
-        ControlApiClient, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient,
-        OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
-        RegistryApiServer,
-    },
-    communication::messages::{RpcError, RpcResult},
+    api::{ControlApiClient, EngineApiClient, RegistryApiClient},
     debug_panic,
     time::{Duration, Instant},
-    utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
-    Methods,
-    core::{ClientError, async_trait},
+    core::ClientError,
     http_client::{HttpClientBuilder, transport::HttpBackend},
-    server::{RpcServiceBuilder, ServerBuilder},
 };
-use op_alloy_rpc_types::OpTransactionReceipt;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
-use tokio::sync::{Mutex, RwLock};
-use tower::ServiceBuilder;
-use tower_http::cors::{Any, CorsLayer};
-use tracing::{Instrument, Level, debug, error, info, trace};
+use tokio::sync::RwLock;
+use tracing::{Instrument, debug, error, info, trace};
 
-use crate::{cli::PortalArgs};
+use crate::cli::PortalArgs;
 use indexmap::IndexMap;
 
 pub type RpcClient = jsonrpsee::http_client::HttpClient;
@@ -176,6 +160,7 @@ impl GatewayManager {
         None
     }
 
+    // this method should be called at the block transition (end of block / start of new block)
     pub async fn decide_current_gateway(&self) -> Option<GatewayInstance> {
         let gateways = self.gateways.read().await;
         match self.registry_client.current_gateway().await {
@@ -239,7 +224,7 @@ impl GatewayManager {
         match self.current_gateway().await {
             Some(gateway) => {
                 if gateway.is_active() {
-                    Self::_send_fcu(fork_choice_state, payload_attributes, gateway).await;
+                    tokio::spawn(Self::_send_fcu(fork_choice_state, payload_attributes, gateway));
                 } else {
                     error!("Current gateway is not active, cannot send fork choice update");
                 }
@@ -247,8 +232,7 @@ impl GatewayManager {
             None => {
                 for gateway in self.gateways.read().await.values() {
                     let payload_attributes = payload_attributes.clone();
-                    let gateway = gateway.clone();
-                    tokio::spawn(Self::_send_fcu(fork_choice_state, payload_attributes, gateway));
+                    tokio::spawn(Self::_send_fcu(fork_choice_state, payload_attributes, gateway.clone()));
                 }
             }
         }
@@ -342,4 +326,3 @@ pub fn create_auth_client(url: Url, jwt: JwtSecret, timeout: Duration) -> eyre::
 
     Ok(client)
 }
-

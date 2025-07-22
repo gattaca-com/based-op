@@ -3,44 +3,37 @@ use std::{
     net::SocketAddr,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::AtomicU64,
     },
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes, U256, hex};
+use alloy_primitives::B256;
 use alloy_rpc_types::{
-    BlockId, BlockNumberOrTag,
     engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
 };
 use bop_common::{
-    api::{
-        ControlApiClient, EngineApiClient, EngineApiServer, EthApiClient, EthApiServer, OpGethAdminApiClient,
-        OpNodeApiClient, OpNodeP2PApiClient, OpRpcBlock, PORTAL_CAPABILITIES, PortalApiServer, RegistryApiClient,
-        RegistryApiServer,
+    api::{EngineApiClient, EngineApiServer, OpGethAdminApiClient,
+        OpNodeApiClient, OpNodeP2PApiClient, PORTAL_CAPABILITIES, PortalApiServer,
     },
     communication::messages::{RpcError, RpcResult},
-    time::{Duration, Instant},
+    time::{Duration},
     utils::{uuid, wait_for_signal},
 };
 use jsonrpsee::{
     core::{ClientError, async_trait},
-    http_client::{HttpClientBuilder, transport::HttpBackend},
     server::{RpcServiceBuilder, ServerBuilder},
 };
-use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
-use reqwest::Url;
-use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
-use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{Instrument, Level, debug, error, info, trace};
+use std::sync::atomic::Ordering::Relaxed;
 
 use crate::{
     cli::PortalArgs,
-    clients::{AuthRpcClient, Gateway, GatewayInstance, GatewayManager, RpcClient, create_auth_client, create_client},
+    clients::{AuthRpcClient, GatewayManager, RpcClient, create_auth_client, create_client},
     middleware::ProxyService,
 };
 
@@ -142,6 +135,7 @@ impl PortalServer {
 
     pub async fn on_new_payload(&self, block_number: u64, block_hash: B256) {
         *self.new_payload_block_hash.write().await = block_hash;
+        self.new_payload_block_number.store(block_number, Relaxed);
     }
 
     pub async fn on_fork_choice_updated(
@@ -151,29 +145,12 @@ impl PortalServer {
     ) {
         let new_payload_block_hash = *self.new_payload_block_hash.read().await;
         debug!(?fork_choice_state, ?payload_attributes, ?new_payload_block_hash, "on_fork_choice_updated called");
-        if payload_attributes.is_some() && new_payload_block_hash == fork_choice_state.head_block_hash {
-            debug!("starting gateway manager decision");
-            self.gateway_manager.decide_current_gateway().await;
-            debug!("gateway manager decision completed");
-        }
-    }
 
-    async fn send_fcu(
-        fork_choice_state: ForkchoiceState,
-        payload_attributes: Option<OpPayloadAttributes>,
-        gateway: GatewayInstance,
-    ) {
-        match gateway.client.fork_choice_updated_v3(fork_choice_state, payload_attributes).await {
-            Ok(res) => {
-                if res.is_valid() {
-                    trace!(?gateway, ?res, "gateway response");
-                } else {
-                    trace!(?gateway, ?res, "Error: gateway response");
-                }
-            }
-            Err(err) => trace!(%err, "Error: failed gateway"),
+        if payload_attributes.is_some() && new_payload_block_hash == fork_choice_state.head_block_hash {
+            let block_number = self.new_payload_block_number.load(Relaxed);
+            self.current_block_number.store(block_number, Relaxed);
+            self.gateway_manager.decide_current_gateway().await;
         }
-        debug!(?gateway, "served fcu")
     }
 }
 
@@ -200,18 +177,7 @@ impl EngineApiServer for PortalServer {
         let response =
             self.fallback_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
-        if let Some(current_gateway) = self.gateway_manager.current_gateway().await {
-            if payload_attributes.is_some() {
-                // pick only one gateway for this block
-                tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, current_gateway).in_current_span());
-            } else {
-                // send to all gateways
-                for gateway in self.gateway_manager.gateways().await {
-                    let payload_attributes = payload_attributes.clone();
-                    tokio::spawn(Self::send_fcu(fork_choice_state, payload_attributes, gateway).in_current_span());
-                }
-            }
-        }
+        self.gateway_manager.send_fcu(fork_choice_state, payload_attributes).await;
 
         Ok(response)
     }
