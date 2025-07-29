@@ -2,12 +2,11 @@ use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
     MethodResponse,
     core::{client::ClientT, traits::ToRpcParams},
-    http_client::HttpClient,
     server::middleware::rpc::RpcServiceT,
     types::{ErrorObject, Params, Request, ResponsePayload, error::INTERNAL_ERROR_CODE},
 };
 use serde_json::value::RawValue;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use crate::clients::{AuthRpcClient, RpcClient};
 

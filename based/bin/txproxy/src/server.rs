@@ -1,8 +1,10 @@
 use std::{
     net::SocketAddr,
     path::Path,
-    sync::{Arc, atomic::AtomicI64},
-    time::Instant,
+    sync::{
+        Arc,
+        atomic::{AtomicI64, Ordering},
+    },
 };
 
 use bop_common::{time::Duration, utils::wait_for_signal};
@@ -13,7 +15,6 @@ use jsonrpsee::{
 };
 use parking_lot::RwLock;
 use reqwest::Url;
-use std::sync::atomic::Ordering;
 use thiserror::Error;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};

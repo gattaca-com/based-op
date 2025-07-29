@@ -5,12 +5,11 @@ use block::BlockData;
 use bop_common::{
     api::{OpGethPeer, OpPeerInfo, RollupConfig, SyncStatus},
     communication::{
-        queues_dir,
+        Consumer, Queue, WalkieTalkie, queues_dir,
         walkie_talkie::{self, RpcResponse},
-        Consumer, Queue, WalkieTalkie,
     },
     signing::ECDSASigner,
-    telemetry::{frag::Frag, order::Tx, system::SystemNotification, Telemetry},
+    telemetry::{Telemetry, frag::Frag, order::Tx, system::SystemNotification},
     time::{Duration, TimingMessage},
     typedefs::HashMap,
 };
@@ -25,13 +24,13 @@ use transaction::{SpamData, SpammedTx, TransactionData};
 use tui_scrollview::ScrollViewState;
 
 use crate::{
+    OverseerConnections,
     collections::{CircularBuffer, KeyedCircularBuffer},
     prelude::*,
     statistics::Statistics,
-    timekeeper::{clock_overhead, TimeKeeper, TimerDataState},
+    timekeeper::{TimeKeeper, TimerDataState, clock_overhead},
     ui::plot::RenderFlags,
     utils::empty_if_default,
-    OverseerConnections,
 };
 
 pub mod block;
@@ -953,13 +952,10 @@ impl Data {
     }
 
     fn current_state(&self) -> Option<SystemNotificationData> {
-        self.system.iter().rev().find_map(|t| {
-            if let SystemNotification::StateChanged(_) = t.notification {
-                Some(*t)
-            } else {
-                None
-            }
-        })
+        self.system
+            .iter()
+            .rev()
+            .find_map(|t| if let SystemNotification::StateChanged(_) = t.notification { Some(*t) } else { None })
     }
 
     fn last_state(&self) -> Option<SystemNotificationData> {
