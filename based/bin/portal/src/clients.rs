@@ -14,6 +14,7 @@ use bop_common::{
     debug_panic,
     time::{Duration, Instant},
 };
+use indexmap::IndexMap;
 use jsonrpsee::{
     core::ClientError,
     http_client::{HttpClientBuilder, transport::HttpBackend},
@@ -25,7 +26,6 @@ use tokio::sync::RwLock;
 use tracing::{Instrument, debug, error, info, trace};
 
 use crate::cli::PortalArgs;
-use indexmap::IndexMap;
 
 pub type RpcClient = jsonrpsee::http_client::HttpClient;
 pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
@@ -59,7 +59,7 @@ impl Gateway {
     }
 
     pub fn is_active(&self) -> bool {
-        return self.active.load(Ordering::Relaxed);
+        self.active.load(Ordering::Relaxed)
     }
 }
 
@@ -120,12 +120,12 @@ impl GatewayManager {
                 Some(gateway) => {
                     let gateway = Arc::make_mut(gateway);
                     gateway.jwt = jwt;
-                    gateway.address = address.clone();
+                    gateway.address = *address;
                     gateway.registry_index.store(index as u64, Ordering::Relaxed);
                 }
                 None => {
                     let client = create_auth_client(url.clone(), jwt, timeout)?;
-                    let gateway = Gateway::new(url.clone(), client, jwt, address.clone(), index);
+                    let gateway = Gateway::new(url.clone(), client, jwt, *address, index);
                     gateways.insert(url.clone(), Arc::new(gateway));
                 }
             }
@@ -198,10 +198,6 @@ impl GatewayManager {
         self.current_gateway.read().await.as_ref().cloned()
     }
 
-    pub async fn gateways(&self) -> Vec<GatewayInstance> {
-        self.gateways.read().await.values().cloned().collect()
-    }
-
     async fn _send_fcu(
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<OpPayloadAttributes>,
@@ -248,7 +244,6 @@ impl GatewayManager {
             let gateway = gateway.clone();
             let payload = payload.clone();
             let versioned_hashes = versioned_hashes.clone();
-            let parent_beacon_block_root = parent_beacon_block_root.clone();
             tokio::spawn(
                 async move {
                     match gateway.client.new_payload_v3(payload, versioned_hashes, parent_beacon_block_root).await {

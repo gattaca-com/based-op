@@ -7,9 +7,9 @@ use server::PortalServer;
 use tracing::info;
 
 mod cli;
+mod clients;
 mod middleware;
 mod server;
-mod clients;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
