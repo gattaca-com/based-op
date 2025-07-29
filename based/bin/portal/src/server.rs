@@ -26,7 +26,6 @@ use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{Instrument, Level, debug, error, info, trace};
-use std::sync::atomic::Ordering::Relaxed;
 
 use crate::{
     cli::PortalArgs,
