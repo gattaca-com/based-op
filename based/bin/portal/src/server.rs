@@ -1,7 +1,9 @@
 use std::{
-    fmt,
     net::SocketAddr,
-    sync::{Arc, atomic::AtomicU64},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering::Relaxed},
+    },
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
@@ -9,8 +11,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpNodeApiClient, OpNodeP2PApiClient,
-        PORTAL_CAPABILITIES, PortalApiServer,
+        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpNodeApiClient, OpNodeP2PApiClient, PortalApiServer,
     },
     communication::messages::{RpcError, RpcResult},
     time::Duration,
@@ -21,7 +22,6 @@ use jsonrpsee::{
     server::{RpcServiceBuilder, ServerBuilder},
 };
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
-use std::sync::atomic::Ordering::Relaxed;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
@@ -161,7 +161,8 @@ impl EngineApiServer for PortalServer {
 
         self.on_fork_choice_updated(&fork_choice_state, &payload_attributes).await;
 
-        let response = self.geth_engine_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
+        let response =
+            self.geth_engine_client.fork_choice_updated_v3(fork_choice_state, payload_attributes.clone()).await?;
 
         self.gateway_manager.send_fcu(fork_choice_state, payload_attributes).await;
 
