@@ -37,7 +37,7 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
         let forwarding_to_arc = Arc::clone(&self.forwarding_to);
         let flow_counter = Arc::clone(&self.flow_counter);
         flow_counter.increment_total();
-        
+
         async move {
             let method = req.method_name().to_string();
             let Some(params_raw) = req.params else {
