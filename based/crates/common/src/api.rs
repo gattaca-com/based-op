@@ -398,7 +398,7 @@ pub struct Protocols {
 #[serde(rename_all = "camelCase")]
 pub struct Eth {
     pub network: u64,
-    pub difficulty: u64,
+    pub difficulty: Option<u64>,
     pub genesis: String,
     pub config: EthConfig,
     pub head: String,
