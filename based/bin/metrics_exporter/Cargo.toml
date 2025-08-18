@@ -1,0 +1,11 @@
+[package]
+edition.workspace = true
+name = "based-metrics-exporter"
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+bop-common.workspace = true
+bop-metrics.workspace = true
+tokio.workspace = true
+clap.workspace = true
