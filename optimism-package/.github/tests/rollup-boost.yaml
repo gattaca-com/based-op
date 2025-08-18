@@ -1,7 +1,0 @@
-optimism_package:
-  chains:
-    - participants:
-        - el_type: op-geth
-      network_params:
-        name: op-rollup-one
-      mev_type: rollup-boost
