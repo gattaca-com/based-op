@@ -54,8 +54,8 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     info!(db_block, %db_hash, "starting gateway");
 
     let shared_state = SharedState::new(db_bop.clone().into());
-    let head_block_number = db_bop.head_block_number().expect("couldn't get head block number");
-    let start_fetch = if db_bop.head_block_hash().expect("couldn't get head block hash") == B256::ZERO {
+    let head_block_number = db_bop.head_block_number()?;
+    let start_fetch = if db_bop.head_block_hash()? == B256::ZERO {
         // genesis
         head_block_number
     } else {
@@ -63,7 +63,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     };
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
-    let (tx, _) = tokio::sync::broadcast::channel(10_000);
+    let (frag_broadcast_tx, _) = tokio::sync::broadcast::channel(10_000);
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -75,20 +75,25 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, &rt, tx.clone());
+            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone());
             move || rt.block_on(wait_for_signal())
         });
 
-        let state_clone = shared_state.clone();
         s.spawn(|| {
-            Sequencer::new(db_bop, state_clone, sequencer_config)
+            Sequencer::new(db_bop, shared_state.clone(), sequencer_config)
                 .run(spine.to_connections("Sequencer"), ActorConfig::default());
         });
 
-        let fragdb_clone = shared_state.as_ref().clone();
         if let Some(mode) = args.mock {
             s.spawn(|| {
-                MockFetcher::new(args.eth_client_url, start_fetch, start_fetch + 100, fragdb_clone, mode).run(
+                MockFetcher::new(
+                    args.eth_client_url,
+                    start_fetch,
+                    start_fetch + 100,
+                    shared_state.as_ref().clone(),
+                    mode,
+                )
+                .run(
                     spine.to_connections("BlockFetch"),
                     ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
                 );
@@ -105,7 +110,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         let root_peer_url = args.gossip_root_peer_url.clone();
         let gossip_signer_private_key = args.gossip_signer_private_key.map(|key| ECDSASigner::new(key).unwrap());
         s.spawn(|| {
-            Gossiper::new(root_peer_url, gossip_signer_private_key, tx).run(
+            Gossiper::new(root_peer_url, gossip_signer_private_key, frag_broadcast_tx).run(
                 spine.to_connections("Gossiper"),
                 ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
             );

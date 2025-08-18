@@ -53,10 +53,6 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
-[[bin]]
-name = "bulk-insert-headers"
-path = "bin/bulk_insert_headers.rs"
-
 [features]
 shmem = ["bop-common/shmem"]
 default = []
