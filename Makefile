@@ -78,6 +78,9 @@ build-txproxy: ## 🏗️ Build based txproxy
 build-metrics-exporter: ## 🏗️ Build metrics exporter
 	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based --load
 
+build-metrics-exporter: ## 🏗️ Build metrics exporter
+	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based
+
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t local_based_op_geth ../based-op-geth
 
@@ -206,7 +209,12 @@ start-based-gateway: create-network
 
 	@docker compose $(START_GATEWAY_COMPOSE_FILES) up -d
 	@docker compose $(START_MONITORING_COMPOSE_FILES) up -d
+	$(MAKE) start-metrics-exporter
 	$(MAKE) start-overseer
+
+start-metrics-exporter:
+	# TODO: use a ghcr.io image instead of a local one here
+	docker run -p 9000:9000 -d local_based_metrics_exporter --port 9000
 
 start-overseer: 
 	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key $(DUMMY_RICH_WALLET_PRIVATE_KEY)
@@ -409,6 +417,9 @@ start-registry: build-registry
 
 stop-based-gateway:
 	cd .local_gateway_and_follower && docker compose down
+
+stop-monitoring:
+	docker compose $(START_MONITORING_COMPOSE_FILES) down
 
 stop-main-node:
 	@if [ ! -d .local_main_node/config ]; then \
