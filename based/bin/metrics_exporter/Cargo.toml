@@ -1,6 +1,6 @@
 [package]
 edition.workspace = true
-name = "based-metrics-exporter"
+name = "bop-metrics-exporter"
 rust-version.workspace = true
 version.workspace = true
 

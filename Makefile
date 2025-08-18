@@ -19,6 +19,7 @@ IMAGE_OP_DEPLOYER:=ghcr.io/gattaca-com/based-optimism/based-op-deployer:latest
 
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
 START_MAIN_NODE_COMPOSE_FILES := -f .local_main_node/compose.yml
+START_MONITORING_COMPOSE_FILES := -f monitoring/compose.yml
 
 # Overridable Variables
 L1_CHAIN_ID?=11155111
@@ -72,6 +73,9 @@ build-gateway: ## 🏗️ Build based gateway
 
 build-txproxy: ## 🏗️ Build based txproxy
 	docker build -t local_based_txproxy -f ./based/txproxy.Dockerfile --build-context reth=./reth ./based
+
+build-metrics-exporter: ## 🏗️ Build metrics exporter
+	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t local_based_op_geth ../based-op-geth
@@ -200,7 +204,13 @@ start-based-gateway: create-network
       echo; echo
 
 	@docker compose $(START_GATEWAY_COMPOSE_FILES) up -d
+	@docker compose $(START_MONITORING_COMPOSE_FILES) up -d
+	$(MAKE) start-metrics-exporter
 	$(MAKE) start-overseer
+
+start-metrics-exporter:
+	# TODO: use a ghcr.io image instead of a local one here
+	docker run -p 9000:9000 -d local_based_metrics_exporter --port 9000
 
 start-overseer: 
 	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
@@ -379,9 +389,14 @@ start-registry: build-registry
 	$(MAKE) fix-compose
 	docker compose -f .local_main_node/compose.yml up -d based-registry 
 	$(MAKE) logs-registry
-	
+
 stop-based-gateway:
 	cd .local_gateway_and_follower && docker compose down
+	# also stop monitoring services, if they are running
+	$(MAKE) stop-monitoring
+
+stop-monitoring:
+	docker compose $(START_MONITORING_COMPOSE_FILES) down
 
 stop-main-node:
 	@if [ ! -d .local_main_node/config ]; then \

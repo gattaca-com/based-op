@@ -1569,16 +1569,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89e25b6adfb930f02d1981565a6e5d9c547ac15a96606256d3b59040e5cd4ca3"
 
 [[package]]
-name = "based-metrics-exporter"
-version = "0.1.0"
-dependencies = [
- "bop-common",
- "bop-metrics",
- "clap",
- "tokio",
-]
-
-[[package]]
 name = "based-portal"
 version = "0.1.0"
 dependencies = [
@@ -1954,6 +1944,16 @@ dependencies = [
  "metrics-exporter-prometheus",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "bop-metrics-exporter"
+version = "0.1.0"
+dependencies = [
+ "bop-common",
+ "bop-metrics",
+ "clap",
+ "tokio",
 ]
 
 [[package]]
