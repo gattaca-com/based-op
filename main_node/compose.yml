@@ -153,8 +153,7 @@ services:
     # Override inter-container URLs for bridge networking
     command:
       - --registry.path=/config/registry.json
-      - --portal.url=http://0.0.0.0:${OP_GETH_RPC_PORT}
-      - --portal.timeout_ms=100
+      - --eth_rpc_url=http://0.0.0.0:${OP_GETH_RPC_PORT}
       - --port=${REGISTRY_PORT}
     volumes: 
       - ./config:/config

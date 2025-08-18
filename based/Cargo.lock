@@ -3489,6 +3489,7 @@ name = "gateway-registry"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "alloy-provider",
  "bop-common",
  "clap",
  "eyre",
