@@ -6,8 +6,9 @@ use std::{
 };
 
 use alloy_primitives::{Address, B256, U256};
+use alloy_provider::{Provider, RootProvider};
 use bop_common::{
-    api::{EthApiClient, RegistryApiServer},
+    api::RegistryApiServer,
     communication::messages::{RpcError, RpcResult},
     config::{LoggingConfig, LoggingFlags},
     utils::{init_tracing, wait_for_signal},
@@ -15,7 +16,6 @@ use bop_common::{
 use clap::Parser;
 use jsonrpsee::{
     core::{ClientError, async_trait},
-    http_client::HttpClientBuilder,
     server::ServerBuilder,
 };
 use parking_lot::RwLock;
@@ -35,13 +35,9 @@ pub struct RegistryArgs {
     #[arg(long = "registry.path")]
     pub registry_path: std::path::PathBuf,
 
-    /// The url of the portal
-    #[arg(long = "portal.url", default_value = "http://0.0.0.0:8080")]
-    pub portal_url: Url,
-
-    /// Timeout when trying to contact the portal
-    #[arg(long = "portal.timeout_ms", default_value_t = 100)]
-    pub portal_timeout: u64,
+    /// Url to an eth_ RPC
+    #[arg(long = "eth_rpc_url", default_value = "http://0.0.0.0:8545")]
+    pub eth_url: Url,
 
     /// Enable debug logging
     #[arg(long)]
@@ -54,9 +50,11 @@ pub struct RegistryArgs {
     /// Each gateway gets selected for this number of consecutive L2 blocks
     #[arg(long = "gateway.update_interval_blocks", default_value_t = 30)]
     pub gateway_update_blocks: u64,
+
     /// Enable file logging
     #[arg(long = "log.enable_file_logging", default_value_t = true)]
     pub file_logging: bool,
+
     /// Prefix of log files
     #[arg(long = "log.prefix", default_value = "bop-portal.log")]
     pub log_prefix: String,
@@ -102,7 +100,7 @@ fn write_gateway_clients(path: Arc<PathBuf>, clients: &[(Url, Address, B256)]) {
 
 #[derive(Clone)]
 pub struct RegistryServer {
-    eth_client: RpcClient,
+    eth_client: RootProvider,
     // url, address, jwt secret
     gateway_clients: Arc<RwLock<Vec<(Url, Address, B256)>>>,
     gateway_update_blocks: u64,
@@ -114,7 +112,7 @@ pub struct RegistryServer {
 
 impl RegistryServer {
     pub fn new(args: RegistryArgs) -> eyre::Result<Self> {
-        let portal_eth_client = create_client(args.portal_url, Duration::from_millis(args.portal_timeout))?;
+        let eth_client = RootProvider::new_http(args.eth_url);
 
         let gateway_clients = Arc::new(RwLock::new(refresh_gateway_clients(&args.registry_path).unwrap_or_default()));
         let gateway_clients_cloned = gateway_clients.clone();
@@ -135,7 +133,7 @@ impl RegistryServer {
             }
         });
         Ok(Self {
-            eth_client: portal_eth_client,
+            eth_client,
             gateway_clients,
             gateway_update_blocks: args.gateway_update_blocks,
             registry_path,
@@ -175,8 +173,15 @@ impl RegistryApiServer for RegistryServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
     async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
         // let curblock = self.eth_client.block_number().await?;
-        let curblock =
-            if !self.use_mock_blocknumber { self.eth_client.block_number().await? } else { self.mock_blocknumber };
+        let curblock = if !self.use_mock_blocknumber {
+            self.eth_client
+                .get_block_number()
+                .await
+                .map(U256::from)
+                .map_err(|_| RpcError::Generic("failed to fetch current block number"))?
+        } else {
+            self.mock_blocknumber
+        };
         let gateways = self.gateway_clients.read();
         let n_gateways = gateways.len();
         if n_gateways == 0 {
@@ -208,15 +213,6 @@ impl RegistryApiServer for RegistryServer {
     }
 }
 
-fn create_client(url: Url, timeout: Duration) -> eyre::Result<RpcClient> {
-    let client = HttpClientBuilder::default()
-        .max_request_size(u32::MAX)
-        .max_response_size(u32::MAX)
-        .request_timeout(timeout)
-        .build(url)?;
-    Ok(client)
-}
-
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     let args = RegistryArgs::parse();
@@ -225,6 +221,6 @@ async fn main() -> eyre::Result<()> {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.registry_port);
     let server = RegistryServer::new(args.clone())?;
 
-    info!(%addr,  eth_client_url = %args.portal_url, "starting Based Registry");
+    info!(%addr,  eth_client_url = %args.eth_url, "starting Based Registry");
     server.run(addr).await
 }

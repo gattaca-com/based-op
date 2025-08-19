@@ -175,119 +175,76 @@ impl Deref for SimulatedTx {
 }
 
 impl Typed2718 for SimulatedTx {
-    #[doc = " Returns the EIP-2718 type flag."]
     fn ty(&self) -> u8 {
         self.tx.ty()
     }
 }
 
 impl TransactionTrait for SimulatedTx {
-    #[doc = " Get `chain_id`."]
     fn chain_id(&self) -> Option<ChainId> {
         self.tx.chain_id()
     }
 
-    #[doc = " Get `nonce`."]
     fn nonce(&self) -> u64 {
         self.tx.nonce()
     }
 
-    #[doc = " Get `gas_limit`."]
     fn gas_limit(&self) -> u64 {
         self.tx.gas_limit()
     }
 
-    #[doc = " Get `gas_price`."]
     fn gas_price(&self) -> Option<u128> {
         self.tx.gas_price()
     }
 
-    #[doc = " For dynamic fee transactions returns the maximum fee per gas the caller is willing to pay."]
-    #[doc = ""]
-    #[doc = " For legacy fee transactions this is `gas_price`."]
-    #[doc = ""]
-    #[doc = " This is also commonly referred to as the \"Gas Fee Cap\"."]
     fn max_fee_per_gas(&self) -> u128 {
         self.tx.max_fee_per_gas()
     }
 
-    #[doc = " For dynamic fee transactions returns the Priority fee the caller is paying to the block"]
-    #[doc = " author."]
-    #[doc = ""]
-    #[doc = " This will return `None` for legacy fee transactions"]
     fn max_priority_fee_per_gas(&self) -> Option<u128> {
         self.tx.max_priority_fee_per_gas()
     }
 
-    #[doc = " Max fee per blob gas for EIP-4844 transaction."]
-    #[doc = ""]
-    #[doc = " Returns `None` for non-eip4844 transactions."]
-    #[doc = ""]
-    #[doc = " This is also commonly referred to as the \"Blob Gas Fee Cap\"."]
     fn max_fee_per_blob_gas(&self) -> Option<u128> {
         self.tx.max_fee_per_blob_gas()
     }
 
-    #[doc = " Return the max priority fee per gas if the transaction is an dynamic fee transaction, and"]
-    #[doc = " otherwise return the gas price."]
-    #[doc = ""]
-    #[doc = " # Warning"]
-    #[doc = ""]
-    #[doc = " This is different than the `max_priority_fee_per_gas` method, which returns `None` for"]
-    #[doc = " legacy fee transactions."]
     fn priority_fee_or_price(&self) -> u128 {
         self.tx.priority_fee_or_price()
     }
 
-    #[doc = " Returns the effective gas price for the given base fee."]
-    #[doc = ""]
-    #[doc = " If the transaction is a legacy fee transaction, the gas price is returned."]
     fn effective_gas_price(&self, base_fee: Option<u64>) -> u128 {
         self.tx.effective_gas_price(base_fee)
     }
 
-    #[doc = " Returns `true` if the transaction supports dynamic fees."]
     fn is_dynamic_fee(&self) -> bool {
         self.tx.is_dynamic_fee()
     }
 
-    #[doc = " Returns the transaction kind."]
     fn kind(&self) -> TxKind {
         self.tx.kind()
     }
 
-    #[doc = " Returns true if the transaction is a contract creation."]
-    #[doc = " We don\'t provide a default implementation via `kind` as it copies the 21-byte"]
-    #[doc = " [`TxKind`] for this simple check. A proper implementation shouldn\'t allocate."]
     fn is_create(&self) -> bool {
         self.tx.is_create()
     }
 
-    #[doc = " Get `value`."]
     fn value(&self) -> U256 {
         self.tx.value()
     }
 
-    #[doc = " Get `data`."]
     fn input(&self) -> &Bytes {
         self.tx.input()
     }
 
-    #[doc = " Returns the EIP-2930 `access_list` for the particular transaction type. Returns `None` for"]
-    #[doc = " older transaction types."]
     fn access_list(&self) -> Option<&AccessList> {
         self.tx.access_list()
     }
 
-    #[doc = " Blob versioned hashes for eip4844 transaction. For previous transaction types this is"]
-    #[doc = " `None`."]
     fn blob_versioned_hashes(&self) -> Option<&[B256]> {
         self.tx.blob_versioned_hashes()
     }
 
-    #[doc = " Returns the [`SignedAuthorization`] list of the transaction."]
-    #[doc = ""]
-    #[doc = " Returns `None` if this transaction is not EIP-7702."]
     fn authorization_list(&self) -> Option<&[SignedAuthorization]> {
         self.tx.authorization_list()
     }
