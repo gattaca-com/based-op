@@ -112,7 +112,7 @@ pub struct RegistryServer {
 
 impl RegistryServer {
     pub fn new(args: RegistryArgs) -> eyre::Result<Self> {
-        let portal_eth_client = RootProvider::new_http(args.eth_url);
+        let eth_client = RootProvider::new_http(args.eth_url);
 
         let gateway_clients = Arc::new(RwLock::new(refresh_gateway_clients(&args.registry_path).unwrap_or_default()));
         let gateway_clients_cloned = gateway_clients.clone();
@@ -133,7 +133,7 @@ impl RegistryServer {
             }
         });
         Ok(Self {
-            eth_client: portal_eth_client,
+            eth_client,
             gateway_clients,
             gateway_update_blocks: args.gateway_update_blocks,
             registry_path,
