@@ -284,6 +284,9 @@ pub enum RpcError {
 
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    #[error("{0}")]
+    Generic(&'static str),
 }
 
 impl From<RpcError> for RpcErrorObject<'static> {
@@ -299,15 +302,23 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::Io(_) |
             RpcError::Serialization(_) |
             RpcError::NoReturn => internal_error(),
+
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
                 Some(error.to_string()),
             ),
+
             RpcError::NoCommitmentForRequest(slot) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
                 Some(format!("no commitment for request: {slot}")),
+            ),
+
+            RpcError::Generic(error) => RpcErrorObject::owned(
+                ErrorCode::InternalError.code(),
+                ErrorCode::InternalError.message(),
+                Some(error.to_string()),
             ),
         }
     }

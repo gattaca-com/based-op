@@ -1,14 +1,10 @@
 use std::collections::HashMap;
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes, U256};
-use alloy_rpc_types::{
-    BlockId, BlockNumberOrTag,
-    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
-};
+use alloy_primitives::{Address, B256, Bytes};
+use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
-use op_alloy_rpc_types::OpTransactionReceipt;
 use op_alloy_rpc_types_engine::{
     OpExecutionPayloadEnvelopeV3, OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes,
 };
@@ -25,12 +21,6 @@ pub const PORTAL_CAPABILITIES: &[&str] = &[
     "engine_newPayloadV3",
     "engine_newPayloadV4",
     "eth_sendRawTransaction",
-    // "eth_getTransactionReceipt",
-    // "eth_getBlockByNumber",
-    // "eth_getBlockByHash",
-    // "eth_blockNumber",
-    // "eth_getTransactionCount",
-    // "eth_getBalance",
 ];
 
 pub type OpRpcBlock = alloy_rpc_types::Block<OpTxEnvelope>;
@@ -86,45 +76,6 @@ pub trait EngineApi {
 
     #[method(name = "getPayloadV4")]
     async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4>;
-}
-
-/// The Eth API is used to interact with the EL directly.
-///
-/// This is a temporary API that the gateway implements to serve the latest preconf state, before a
-/// gossip protocol is implemented in op-node. Historical state will not be served from this API
-#[rpc(client, server, namespace = "eth")]
-pub trait EthApi {
-    /// Sends signed transaction, returning its hash
-    #[method(name = "sendRawTransaction")]
-    async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
-
-    // STORE
-
-    /// Returns the receipt of a transaction by transaction hash
-    #[method(name = "getTransactionReceipt")]
-    async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>>;
-
-    /// Returns a block with a given identifier
-    #[method(name = "getBlockByNumber")]
-    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>>;
-
-    /// Returns information about a block by hash.
-    #[method(name = "getBlockByHash")]
-    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>>;
-
-    // DB
-
-    /// Returns the number of most recent block
-    #[method(name = "blockNumber")]
-    async fn block_number(&self) -> RpcResult<U256>;
-
-    /// Returns the nonce of a given address at a given block number.
-    #[method(name = "getTransactionCount")]
-    async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256>;
-
-    /// Returns the balance of the account of given address.
-    #[method(name = "getBalance")]
-    async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256>;
 }
 
 #[rpc(client, server, namespace = "eth")]
