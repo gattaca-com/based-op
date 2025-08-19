@@ -7,5 +7,9 @@ version.workspace = true
 [dependencies]
 bop-common.workspace = true
 bop-metrics.workspace = true
+
 tokio.workspace = true
 clap.workspace = true
+
+tracing.workspace = true
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }

@@ -4,6 +4,7 @@ use bop_common::{
     communication::Consumer,
     telemetry::{Telemetry, TelemetryUpdate, Tx, telemetry_queue},
 };
+use tracing::trace;
 
 use crate::metrics::Metrics;
 
@@ -18,6 +19,7 @@ impl MetricsConsumer {
     pub async fn run(&mut self) {
         loop {
             while let Some(update) = self.telemetry.try_consume() {
+                trace!(?update, "Received telemetry update");
                 self.process_update(update);
             }
 
@@ -29,6 +31,7 @@ impl MetricsConsumer {
     fn process_update(&mut self, update: TelemetryUpdate) {
         match update.update {
             Telemetry::Tx(tx) => match tx {
+                Tx::AddedToPool => Metrics::increase_gateway_tx_added_to_pool_total(),
                 Tx::Included(_) => Metrics::increase_gateway_tx_included_total(),
                 _ => todo!(),
             },
