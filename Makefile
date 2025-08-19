@@ -78,7 +78,7 @@ build-metrics-exporter: ## 🏗️ Build metrics exporter
 	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based --load
 
 build-metrics-exporter: ## 🏗️ Build metrics exporter
-	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based --load
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t local_based_op_geth ../based-op-geth
@@ -213,7 +213,10 @@ start-based-gateway: create-network
 
 start-metrics-exporter:
 	# TODO: use a ghcr.io image instead of a local one here
-	docker run -p 9000:9000 -d local_based_metrics_exporter --port 9000
+	docker run -p 9000:9000 --name based-metrics-exporter --env RUST_LOG=bop_metrics_exporter=trace -d local_based_metrics_exporter --port 9000
+
+stop-metrics-exporter:
+	docker stop based-metrics-exporter && docker rm based-metrics-exporter
 
 start-overseer: 
 	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key $(DUMMY_RICH_WALLET_PRIVATE_KEY)

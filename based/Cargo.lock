@@ -1954,6 +1954,8 @@ dependencies = [
  "bop-metrics",
  "clap",
  "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
 ]
 
 [[package]]
