@@ -72,7 +72,7 @@ build-gateway: ## 🏗️ Build based gateway
 	docker build -t local_based_gateway -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-txproxy: ## 🏗️ Build based txproxy
-	docker build -t local_based_txproxy -f ./based/txproxy.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_txproxy -f ./based/txproxy.Dockerfile --build-context reth=./reth ./based --load
 
 build-metrics-exporter: ## 🏗️ Build metrics exporter
 	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based --load
@@ -205,15 +205,7 @@ start-based-gateway: create-network
 
 	@docker compose $(START_GATEWAY_COMPOSE_FILES) up -d
 	@docker compose $(START_MONITORING_COMPOSE_FILES) up -d
-	$(MAKE) start-metrics-exporter
 	$(MAKE) start-overseer
-
-start-metrics-exporter:
-	# TODO: use a ghcr.io image instead of a local one here
-	docker run -p 9000:9000 --name based-metrics-exporter --env RUST_LOG=bop_metrics_exporter=trace -d local_based_metrics_exporter --port 9000
-
-stop-metrics-exporter:
-	docker stop based-metrics-exporter && docker rm based-metrics-exporter
 
 start-overseer: 
 	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
@@ -373,6 +365,7 @@ start-main-node: create-network
 	@echo
 
 	@docker compose $(START_MAIN_NODE_COMPOSE_FILES) up -d
+	@docker compose $(START_MONITORING_COMPOSE_FILES) up -d
 	$(MAKE) logs-main-node
 
 start-portal: build-portal
@@ -397,10 +390,6 @@ stop-based-gateway:
 	cd .local_gateway_and_follower && docker compose down
 	# also stop monitoring services, if they are running
 	$(MAKE) stop-monitoring
-	$(MAKE) stop-metrics-exporter
-
-stop-monitoring:
-	docker compose $(START_MONITORING_COMPOSE_FILES) down
 
 stop-main-node:
 	@if [ ! -d .local_main_node/config ]; then \
@@ -408,6 +397,11 @@ stop-main-node:
 		exit 1; \
 	fi
 	docker compose -f .local_main_node/compose.yml down
+	# also stop monitoring services, if they are running
+	$(MAKE) stop-monitoring
+
+stop-monitoring:
+	docker compose $(START_MONITORING_COMPOSE_FILES) down
 
 stop-portal:
 	@if [ ! -d .local_main_node/config ]; then \

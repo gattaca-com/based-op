@@ -1,4 +1,18 @@
 services:
+  based-metrics-exporter:
+    image: local_based_metrics_exporter # TODO: use a ghcr.io image
+    container_name: based-metrics-exporter
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=bop_metrics_exporter=trace
+    volumes:
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
+    command:
+      - "--port=9000"
+    networks:
+      - monitoring
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
