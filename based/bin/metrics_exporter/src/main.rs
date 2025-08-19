@@ -1,5 +1,5 @@
 use bop_common::utils::wait_for_signal;
-use bop_metrics::{consumer::MetricsConsumer, install_prometheus_exporter};
+use bop_metrics::{MetricsConsumer, install_prometheus_exporter};
 use clap::Parser;
 use tracing::{info, level_filters::LevelFilter};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
@@ -25,7 +25,7 @@ async fn main() {
     install_prometheus_exporter(args.port);
     info!("Prometheus server started on port {}", args.port);
 
-    let mut consumer = MetricsConsumer::default();
+    let consumer = MetricsConsumer::default();
 
     // Start the metrics consumer loop
     tokio::select! {

@@ -1,7 +1,7 @@
 use metrics_exporter_prometheus::PrometheusBuilder;
 
 pub mod consumer;
-pub mod metrics;
+pub use consumer::MetricsConsumer;
 
 /// Installs the prometheus exporter on the given port.
 pub fn install_prometheus_exporter(port: u16) {
