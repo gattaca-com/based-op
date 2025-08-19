@@ -12,4 +12,4 @@ tokio.workspace = true
 clap.workspace = true
 
 tracing.workspace = true
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
+tracing-subscriber.workspace = true
