@@ -210,6 +210,15 @@ start-based-gateway: create-network
 start-overseer: 
 	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key $(DUMMY_RICH_WALLET_PRIVATE_KEY)
 
+start-spamoor:
+	docker run \
+		--network host \
+		--volume ./spamoor-config.yml:/etc/spamoor-config.yml \
+	ethpandaops/spamoor run \
+		/etc/spamoor-config.yml \
+		--privkey $(DUMMY_RICH_WALLET_PRIVATE_KEY) \
+		--rpchost http://0.0.0.0:$(LOCAL_GETH_PORT)
+
 # ────────────────────────────────────────────────────────────────────────────────
 # Only perform these parse-time checks if the user asked for deploy-chain
 # or start-main-node on the command line.
