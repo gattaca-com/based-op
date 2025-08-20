@@ -10,6 +10,7 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationResult, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
     db::{DBSorting, state::ensure_create2_deployer},
+    metrics::{Counter, Gauge, Histogram, Metric, MetricsUpdate},
     telemetry::{Telemetry, TelemetryUpdate},
     time::{Duration, Instant},
     transaction::{SimulatedTx, Transaction},
@@ -104,6 +105,7 @@ pub struct SortingData<Db> {
 
     pub telemetry: SortingTelemetry,
     pub telemetry_producer: Producer<TelemetryUpdate>,
+    pub metrics_producer: Producer<MetricsUpdate>,
 }
 
 impl<Db> SortingData<Db> {
@@ -143,6 +145,7 @@ impl<Db> SortingData<Db> {
             telemetry: Default::default(),
             uuid,
             telemetry_producer,
+            metrics_producer: data.metrics,
         }
     }
 
@@ -175,7 +178,15 @@ impl<Db> SortingData<Db> {
 
         trace!("handling sender {sender}");
         // handle errored sim
-        let Ok(simulated_tx) = simulated_tx.inspect_err(|e| tracing::trace!("error {e} for tx: {}", sender)) else {
+        let Ok(simulated_tx) = simulated_tx.inspect_err(|e| {
+            tracing::trace!("error {e} for tx: {}", sender);
+            // Send metric for simulation error
+            MetricsUpdate::send(
+                self.uuid,
+                Metric::IncrementCounter(Counter::SimulationErrors, 1),
+                &mut self.metrics_producer,
+            );
+        }) else {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             self.telemetry.n_sims_errored += 1;
             return;
@@ -187,6 +198,20 @@ impl<Db> SortingData<Db> {
             return;
         }
         self.telemetry.n_sims_succesful += 1;
+
+        // Send metrics for successful simulation result
+        MetricsUpdate::send(
+            self.uuid,
+            Metric::IncrementCounter(Counter::SimulationResultsReceived, 1),
+            &mut self.metrics_producer,
+        );
+
+        // Send metric for simulation latency
+        MetricsUpdate::send(
+            self.uuid,
+            Metric::RecordHistogram(Histogram::SimulationLatencyMs, simtime.as_millis()),
+            &mut self.metrics_producer,
+        );
 
         let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
             self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
@@ -219,6 +244,20 @@ impl<Db> SortingData<Db> {
                 gas_used: self.gas_used(),
             }),
             &mut self.telemetry_producer,
+        );
+
+        // Send metrics for fragment size and duration
+        MetricsUpdate::send(
+            self.uuid,
+            Metric::RecordHistogram(Histogram::GatewayFragTxCount, self.txs.len() as f64),
+            &mut self.metrics_producer,
+        );
+
+        let frag_duration = self.start_t.elapsed();
+        MetricsUpdate::send(
+            self.uuid,
+            Metric::RecordHistogram(Histogram::FragSealEndToEndMs, frag_duration.as_millis()),
+            &mut self.metrics_producer,
         );
     }
 }
@@ -265,12 +304,13 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
             return;
         }
         let mut i = self.tof_snapshot.len() - 1;
+        let mut sims_sent = 0;
         while self.in_flight_sims < n_sims_per_loop {
             // check if we even have enough gas left for next order
             if self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
                 self.tof_snapshot.swap_remove_back(i);
                 if i == 0 {
-                    return;
+                    break;
                 }
                 i -= 1;
                 continue;
@@ -281,11 +321,33 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
             senders.send(SequencerToSimulator::SimulateTx(tx_to_sim, self.state()));
             self.in_flight_sims += 1;
             self.telemetry.n_sims_sent += 1;
+            sims_sent += 1;
             if i == 0 {
-                return;
+                break;
             }
             i -= 1;
         }
+
+        // Send metrics for simulation requests
+        if sims_sent > 0 {
+            MetricsUpdate::send(
+                self.uuid,
+                Metric::IncrementCounter(Counter::SimulationRequestsSent, sims_sent),
+                &mut self.metrics_producer,
+            );
+        }
+
+        // Send metrics for simulation queue state
+        MetricsUpdate::send(
+            self.uuid,
+            Metric::SetGauge(Gauge::SimulationQueueDepth, self.tof_snapshot.len() as f64),
+            &mut self.metrics_producer,
+        );
+        MetricsUpdate::send(
+            self.uuid,
+            Metric::SetGauge(Gauge::SimulationInFlightCount, self.in_flight_sims as f64),
+            &mut self.metrics_producer,
+        );
     }
 
     pub fn state(&self) -> DBSorting<Db> {
@@ -302,11 +364,19 @@ impl<Db: DatabaseRef> SortingData<Db> {
             &mut self.telemetry_producer,
         );
 
+        let sim_time = tx.sim_time;
         let gas_used = tx.as_ref().result.gas_used();
         debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
 
         self.gas_remaining -= gas_used;
         self.txs.push(tx);
+
+        // Send metrics for transaction processing
+        MetricsUpdate::send(
+            self.uuid,
+            Metric::RecordHistogram(Histogram::TransactionProcessingEndToEndMs, sim_time.as_millis()),
+            &mut self.metrics_producer,
+        );
     }
 
     pub fn maybe_apply(&mut self, base_fee: u64) {

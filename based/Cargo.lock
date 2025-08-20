@@ -1971,6 +1971,7 @@ dependencies = [
  "revm-primitives",
  "rustc-hash 2.1.1",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
