@@ -214,7 +214,7 @@ start-spamoor:
 	docker run \
 		--network host \
 		--volume ./spamoor-config.yml:/etc/spamoor-config.yml \
-	ethpandaops/spamoor run \
+	ghcr.io/chainbound/spamoor-op-geth run \
 		/etc/spamoor-config.yml \
 		--privkey $(DUMMY_RICH_WALLET_PRIVATE_KEY) \
 		--rpchost http://0.0.0.0:$(LOCAL_GETH_PORT)
