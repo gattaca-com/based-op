@@ -125,7 +125,7 @@ impl MinimalEthApiServer for RpcServer {
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
         MetricsUpdate::send_ref(
             tx.uuid,
-            Metric::IncrementCounter(Counter::GatewayRpcIngressTxsTotal),
+            Metric::IncrementCounter(Counter::GatewayRpcIngressTxsTotal, 1),
             &self.metrics_producer,
         );
 

@@ -353,7 +353,7 @@ mod tests {
         buf.push(1u64);
         assert_eq!(buf.iter().sum::<u64>(), 3u64);
         assert_eq!(buf.iter().next(), Some(&2u64));
-        assert_eq!(buf.iter().rev().next(), Some(&1u64));
+        assert_eq!(buf.iter().next_back(), Some(&1u64));
         assert_eq!(buf.iter().rev().sum::<u64>(), 3u64);
 
         buf.iter_mut().for_each(|v| *v = 2);

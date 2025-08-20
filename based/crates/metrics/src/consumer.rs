@@ -103,12 +103,10 @@ impl MetricsConsumer {
     fn process_metrics_queue_update(&mut self, update: MetricsUpdate) {
         // Note: we use strum's `AsRefStr` to get the metric name as a snake_case string.
         // For instance, `Counter::GatewayIngressTxsTotal.as_ref()` => "gateway_ingress_txs_total".
-        //
-        // Values are extracted using the `value()` method for the enum.
         match update.metric {
-            Metric::IncrementCounter(counter) => counter!(format!("bop_{}", counter.as_ref())).increment(1),
-            Metric::SetGauge(gauge) => gauge!(format!("bop_{}", gauge.as_ref())).set(gauge.value()),
-            Metric::RecordHistogram(hist) => histogram!(format!("bop_{}", hist.as_ref())).record(hist.value()),
+            Metric::IncrementCounter(counter, inc) => counter!(format!("bop_{}", counter.as_ref())).increment(inc),
+            Metric::SetGauge(gauge, val) => gauge!(format!("bop_{}", gauge.as_ref())).set(val),
+            Metric::RecordHistogram(hist, val) => histogram!(format!("bop_{}", hist.as_ref())).record(val),
         }
     }
 }

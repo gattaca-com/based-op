@@ -243,7 +243,7 @@ fn tx_spammer() {
     let mut n = 0usize;
     while let Some((id, tstamp)) = pending.pop_front() {
         loop {
-            if let Some(_) = client.get_receipt(id) {
+            if client.get_receipt(id).is_some() {
                 tot += tstamp.elapsed();
                 n += 1;
                 break;

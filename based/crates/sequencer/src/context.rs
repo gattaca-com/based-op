@@ -8,6 +8,7 @@ use alloy_rpc_types::engine::{
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders},
     debug_panic,
+    metrics::{MetricsAggregator, MetricsUpdate, metrics_queue},
     p2p::{FragV0, SealV0},
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
@@ -75,6 +76,8 @@ pub struct SequencerContext<Db> {
     pub system_caller: SystemCaller<Arc<OpChainSpec>>,
     pub timers: SequencerTimers,
     pub telemetry: Producer<TelemetryUpdate>,
+    pub metrics: Producer<MetricsUpdate>,
+    pub metrics_aggregator: MetricsAggregator,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -97,6 +100,8 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             base_fee: Default::default(),
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
+            metrics: metrics_queue().into(),
+            metrics_aggregator: Default::default(),
         }
     }
 }
@@ -180,6 +185,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.as_ref().basefee,
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
+            &mut self.metrics_aggregator,
         ) {
             TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
         }
@@ -205,6 +211,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
         let seq = FragSequence::new(self.gas_limit(), self.block_number(), n_force_include_txs);
         let mut sorting = SortingData::new(&seq, self);
+
+        // Update block height metric
+        self.metrics_aggregator.set_block_height(self.block_number());
+
+        // Flush aggregated metrics periodically (every block)
+        self.metrics_aggregator.flush_to_queue(&mut self.metrics);
 
         // Apply must include
         sorting.apply_block_start_to_state(self, simulator_evm_block_params).expect("shouldn't fail");
@@ -321,6 +333,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
+
+        // Record block metrics in aggregator
+        self.metrics_aggregator.inc_block_built();
+        let block_duration = frag_seq.start_t.elapsed();
+        self.metrics_aggregator.record_block_duration(block_duration.as_millis());
+
         let payload_inner = ExecutionPayloadV3 {
             payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
             blob_gas_used: 0,
@@ -356,6 +374,9 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
 
         self.parent_header = block.header().clone();
         self.parent_hash = block.hash_slow();
+
+        // Update block height metric when syncing
+        self.metrics_aggregator.set_block_height(block.number());
 
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
         self.tx_pool.active_txs.clear();
