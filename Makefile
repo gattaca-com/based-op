@@ -19,6 +19,7 @@ IMAGE_OP_DEPLOYER:=ghcr.io/gattaca-com/based-optimism/based-op-deployer:latest
 
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
 START_MAIN_NODE_COMPOSE_FILES := -f .local_main_node/compose.yml
+START_MONITORING_COMPOSE_FILES := -f monitoring/compose.yml
 
 # Overridable Variables
 L1_CHAIN_ID?=11155111
@@ -71,7 +72,10 @@ build-gateway: ## 🏗️ Build based gateway
 	docker build -t local_based_gateway -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
 
 build-txproxy: ## 🏗️ Build based txproxy
-	docker build -t local_based_txproxy -f ./based/txproxy.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_txproxy -f ./based/txproxy.Dockerfile --build-context reth=./reth ./based --load
+
+build-metrics-exporter: ## 🏗️ Build metrics exporter
+	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based --load
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t local_based_op_geth ../based-op-geth
@@ -200,6 +204,7 @@ start-based-gateway: create-network
       echo; echo
 
 	@docker compose $(START_GATEWAY_COMPOSE_FILES) up -d
+	@docker compose $(START_MONITORING_COMPOSE_FILES) up -d
 	$(MAKE) start-overseer
 
 start-overseer: 
@@ -360,6 +365,7 @@ start-main-node: create-network
 	@echo
 
 	@docker compose $(START_MAIN_NODE_COMPOSE_FILES) up -d
+	@docker compose $(START_MONITORING_COMPOSE_FILES) up -d
 	$(MAKE) logs-main-node
 
 start-portal: build-portal
@@ -379,9 +385,11 @@ start-registry: build-registry
 	$(MAKE) fix-compose
 	docker compose -f .local_main_node/compose.yml up -d based-registry 
 	$(MAKE) logs-registry
-	
+
 stop-based-gateway:
 	cd .local_gateway_and_follower && docker compose down
+	# also stop monitoring services, if they are running
+	$(MAKE) stop-monitoring
 
 stop-main-node:
 	@if [ ! -d .local_main_node/config ]; then \
@@ -389,6 +397,11 @@ stop-main-node:
 		exit 1; \
 	fi
 	docker compose -f .local_main_node/compose.yml down
+	# also stop monitoring services, if they are running
+	$(MAKE) stop-monitoring
+
+stop-monitoring:
+	docker compose $(START_MONITORING_COMPOSE_FILES) down
 
 stop-portal:
 	@if [ ! -d .local_main_node/config ]; then \

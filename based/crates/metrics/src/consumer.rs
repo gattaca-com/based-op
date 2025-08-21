@@ -2,8 +2,9 @@ use std::time::Duration;
 
 use bop_common::{
     communication::Consumer,
-    telemetry::{Telemetry, TelemetryUpdate, Tx, telemetry_queue},
+    telemetry::{Telemetry, TelemetryUpdate, Tx, system::SystemNotification, telemetry_queue},
 };
+use tracing::trace;
 
 use crate::metrics::Metrics;
 
@@ -18,6 +19,7 @@ impl MetricsConsumer {
     pub async fn run(&mut self) {
         loop {
             while let Some(update) = self.telemetry.try_consume() {
+                trace!(?update, "Received telemetry update");
                 self.process_update(update);
             }
 
@@ -29,10 +31,25 @@ impl MetricsConsumer {
     fn process_update(&mut self, update: TelemetryUpdate) {
         match update.update {
             Telemetry::Tx(tx) => match tx {
+                Tx::AddedToPool => Metrics::increase_gateway_tx_added_to_pool_total(),
                 Tx::Included(_) => Metrics::increase_gateway_tx_included_total(),
-                _ => todo!(),
+                _ => {
+                    // TODO
+                }
             },
-            _ => todo!(),
+            Telemetry::System(system) => match system {
+                SystemNotification::StateChanged(state) => Metrics::set_sequencer_state(state),
+                SystemNotification::BlockSync(block_number, _gas_used) => {
+                    Metrics::set_block_sync_block_number(block_number)
+                }
+                SystemNotification::Sorting(block_number) => Metrics::set_sorting_block_number(block_number),
+                _ => {
+                    // TODO
+                }
+            },
+            _ => {
+                // TODO
+            }
         }
     }
 }
