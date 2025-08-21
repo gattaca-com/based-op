@@ -1,7 +1,7 @@
 use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
     MethodResponse,
-    core::{client::ClientT, traits::ToRpcParams},
+    core::{ClientError, client::ClientT, traits::ToRpcParams},
     server::middleware::rpc::RpcServiceT,
     types::{ErrorObject, Params, Request, ResponsePayload, error::INTERNAL_ERROR_CODE},
 };
@@ -41,7 +41,7 @@ where
                     external_call(registry_client.clone(), &req).await
                 }
                 _ => {
-                    debug!(method = %method, "Forwarding request to fallback client");
+                    debug!(method = %method, "Forwarding request to fallback client. request: {:?}", req);
                     external_call(fallback_client.clone(), &req).await
                 }
             }
@@ -69,12 +69,15 @@ where
             debug!(method = %req.method_name(), "Forwarding request to client");
             MethodResponse::response(req.id.clone(), payload.into(), 4_000_000_000usize)
         }
-        Err(e) => {
-            error!(error = %e, "Error calling client");
-            MethodResponse::error(
-                req.id.clone(),
-                ErrorObject::owned(INTERNAL_ERROR_CODE, "client error".to_string(), Some(e.to_string())),
-            )
+        Err(err) => {
+            error!(error = %err, "Error calling client");
+            match err {
+                ClientError::Call(e) => MethodResponse::error(req.id.clone(), e),
+                _ => MethodResponse::error(
+                    req.id.clone(),
+                    ErrorObject::owned(INTERNAL_ERROR_CODE, "client error".to_string(), Some(err.to_string())),
+                ),
+            }
         }
     }
 }
