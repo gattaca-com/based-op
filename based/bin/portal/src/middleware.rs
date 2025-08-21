@@ -15,6 +15,7 @@ pub struct EngineApiProxy<S> {
     pub inner: S,
     pub geth_client: AuthRpcClient,
     pub registry_client: RpcClient,
+    pub op_node_client: RpcClient,
 }
 
 impl<'a, S> RpcServiceT<'a> for EngineApiProxy<S>
@@ -29,6 +30,7 @@ where
         let method = req.method_name().to_string();
         let fallback_client = self.geth_client.clone();
         let registry_client = self.registry_client.clone();
+        let op_node_client = self.op_node_client.clone();
 
         async move {
             match req.method_name().split_once('_') {
@@ -43,6 +45,10 @@ where
                 Some(("registry", _)) => {
                     debug!(method = %method, "Received request in RegistryApiProxy");
                     external_call(registry_client.clone(), &req).await
+                }
+                Some(("optimism", _)) | Some(("opp2p", _)) => {
+                    debug!(method = %method, "Received request for OP node");
+                    external_call(op_node_client.clone(), &req).await
                 }
                 _ => {
                     debug!(method = %method, "Forwarding request to fallback client. request: {:?}", req);
