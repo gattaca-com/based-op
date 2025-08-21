@@ -1,6 +1,9 @@
 use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
-    core::{client::ClientT, traits::ToRpcParams, ClientError}, server::middleware::rpc::RpcServiceT, types::{error::INTERNAL_ERROR_CODE, ErrorObject, Params, Request, ResponsePayload}, MethodResponse
+    MethodResponse,
+    core::{ClientError, client::ClientT, traits::ToRpcParams},
+    server::middleware::rpc::RpcServiceT,
+    types::{ErrorObject, Params, Request, ResponsePayload, error::INTERNAL_ERROR_CODE},
 };
 use serde_json::value::RawValue;
 use tracing::{debug, error};
@@ -69,18 +72,11 @@ where
         Err(err) => {
             error!(error = %err, "Error calling client");
             match err {
-                ClientError::Call(e) => {
-                    MethodResponse::error(
-                        req.id.clone(),
-                        e
-                    )
-                }
-                _ => {                    
-                    MethodResponse::error(
-                        req.id.clone(),
-                        ErrorObject::owned(INTERNAL_ERROR_CODE, "client error".to_string(), Some(err.to_string())),
-                    )
-                }
+                ClientError::Call(e) => MethodResponse::error(req.id.clone(), e),
+                _ => MethodResponse::error(
+                    req.id.clone(),
+                    ErrorObject::owned(INTERNAL_ERROR_CODE, "client error".to_string(), Some(err.to_string())),
+                ),
             }
         }
     }
