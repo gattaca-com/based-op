@@ -174,6 +174,8 @@ services:
     command:
       - --tx_receivers.path=/config/tx_receivers.json
       - --port=${TXPROXY_PORT}
+    volumes: 
+      - ./config:/config
     restart: unless-stopped
 
 # ################################################################################
