@@ -32,6 +32,10 @@ where
 
         async move {
             match req.method_name().split_once('_') {
+                Some(("portal", _)) => {
+                    debug!(method = %method, "Received request in PortalApiProxy");
+                    inner.call(req).await
+                }
                 Some(("engine", _)) => {
                     debug!(method = %method, "Received request in EngineApiProxy");
                     inner.call(req).await
