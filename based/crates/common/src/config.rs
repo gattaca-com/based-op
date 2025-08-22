@@ -35,6 +35,8 @@ pub struct GatewayArgs {
     pub rpc_port: u16,
     #[arg(long = "rpc.port_no_auth", default_value_t = 9998)]
     pub rpc_port_no_auth: u16,
+    #[arg(long = "rpc.port_ws", default_value_t = 9999)]
+    pub rpc_port_ws: u16,
     #[arg(long = "rpc.jwt")]
     pub rpc_jwt: String,
     /// PortalApi RPC URL

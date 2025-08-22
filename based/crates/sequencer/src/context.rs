@@ -8,7 +8,7 @@ use alloy_rpc_types::engine::{
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders},
     debug_panic,
-    p2p::{FragV0, SealV0},
+    p2p::{FragV0, SealV0, StateUpdate},
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
     time::Timer,
@@ -154,7 +154,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         &mut self,
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
-    ) -> (FragV0, SortingData<Db>) {
+    ) -> (FragV0, Option<StateUpdate>, SortingData<Db>) {
         sorting_data.send_finished_telemetry();
         info!(
             frag_id = frag_seq.next_seq,
@@ -164,7 +164,8 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
-        (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
+        let (frag, maybe_state) = frag_seq.apply_sorted_frag(sorting_data, self);
+        (frag, maybe_state, SortingData::new(frag_seq, self))
     }
 }
 
@@ -203,7 +204,13 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         senders.send(simulator_evm_block_params.clone()).expect("should never fail");
         let n_force_include_txs =
             self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
-        let seq = FragSequence::new(self.gas_limit(), self.block_number(), n_force_include_txs);
+        let seq = FragSequence::new(
+            self.gas_limit(),
+            self.block_number(),
+            self.timestamp(),
+            self.base_fee(),
+            n_force_include_txs,
+        );
         let mut sorting = SortingData::new(&seq, self);
 
         // Apply must include
@@ -230,10 +237,14 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             .expect("couldn't construct the next evm env")
     }
 
-    pub fn seal_last_frag(&mut self, frag_seq: &mut FragSequence, last_frag: SortingData<Db>) -> FragV0 {
-        let (mut frag_msg, _) = self.seal_frag(last_frag, frag_seq);
+    pub fn seal_last_frag(
+        &mut self,
+        frag_seq: &mut FragSequence,
+        last_frag: SortingData<Db>,
+    ) -> (FragV0, Option<StateUpdate>) {
+        let (mut frag_msg, maybe_update, _) = self.seal_frag(last_frag, frag_seq);
         frag_msg.is_last = true;
-        frag_msg
+        (frag_msg, maybe_update)
     }
 
     /// Finalize the block after the last frag has been sealed

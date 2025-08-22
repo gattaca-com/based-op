@@ -31,7 +31,7 @@ impl Gossiper {
         Self { target_rpc, client, signer, frag_broadcast }
     }
 
-    fn gossip(&self, msg: p2p::VersionedMessage) {
+    fn gossip(&self, msg: p2p::VersionedMessageWithState) {
         let signed = msg.to_signed(&self.signer);
         let payload = signed.to_json();
 
