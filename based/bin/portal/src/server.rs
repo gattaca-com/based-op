@@ -73,11 +73,13 @@ impl PortalServer {
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
         let geth_engine_client = self.geth_engine_client.clone();
         let registry_client = self.gateway_manager.registry_client.clone();
+        let op_node_client = self.op_node_client.clone();
 
         let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| EngineApiProxy {
             inner: s,
             geth_client: geth_engine_client.clone(),
             registry_client: registry_client.clone(),
+            op_node_client: op_node_client.clone(),
         });
 
         // temp: remove when factoring out the portal
