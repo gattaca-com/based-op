@@ -7,7 +7,12 @@ use std::{
     },
 };
 
-use bop_common::{time::Duration, utils::wait_for_signal};
+use bop_common::{
+    communication::Producer,
+    metrics::{Counter, Gauge, Metric, MetricsUpdate, metrics_queue},
+    time::Duration,
+    utils::{uuid, wait_for_signal},
+};
 use jsonrpsee::{
     Methods,
     http_client::{HttpClient, HttpClientBuilder},
@@ -78,7 +83,7 @@ impl FlowCounter {
         self.failed.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn info_and_reset(&self) {
+    pub fn print_summary_and_reset(&self) {
         info!(
             total = self.total.load(Ordering::Relaxed),
             success = self.success.load(Ordering::Relaxed),
@@ -99,6 +104,57 @@ impl FlowCounter {
         self.failed_no_clients.store(0, Ordering::Relaxed);
         self.failed_all_clients.store(0, Ordering::Relaxed);
     }
+
+    pub fn send_metrics(&self, metrics: &Producer<MetricsUpdate>) {
+        let id = uuid();
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(Counter::TxProxyTotalRequests, self.total.load(Ordering::Relaxed) as u64),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(Counter::TxProxyTotalRequests, self.total.load(Ordering::Relaxed) as u64),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(Counter::TxProxyFailedRequests, self.failed.load(Ordering::Relaxed) as u64),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(
+                Counter::TxProxyFailedRequestsInvalidParams,
+                self.failed_invalid_params.load(Ordering::Relaxed) as u64,
+            ),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(
+                Counter::TxProxyFailedRequestsMethodNotFound,
+                self.failed_method_not_found.load(Ordering::Relaxed) as u64,
+            ),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(
+                Counter::TxProxyFailedRequestsNoClients,
+                self.failed_no_clients.load(Ordering::Relaxed) as u64,
+            ),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(
+                Counter::TxProxyFailedRequestsAllClients,
+                self.failed_all_clients.load(Ordering::Relaxed) as u64,
+            ),
+            metrics,
+        );
+    }
 }
 
 #[derive(Clone)]
@@ -106,6 +162,7 @@ pub struct TxProxyServer {
     forward_to: Arc<RwLock<Vec<HttpClient>>>,
     flow_counter: Arc<FlowCounter>,
     args: Arc<TxProxyArgs>,
+    metrics: Producer<MetricsUpdate>,
 }
 
 impl TxProxyServer {
@@ -114,6 +171,7 @@ impl TxProxyServer {
             forward_to: Arc::new(RwLock::new(vec![])),
             args: Arc::new(args),
             flow_counter: Arc::new(FlowCounter::default()),
+            metrics: metrics_queue().into(),
         };
 
         Ok(temp)
@@ -135,11 +193,13 @@ impl TxProxyServer {
             .build(addr)
             .await?;
 
+        let metrics = self.metrics;
         let flow_counter = Arc::clone(&self.flow_counter);
         let flow_counter_info_task = tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(60).into()).await;
-                flow_counter.info_and_reset();
+                flow_counter.send_metrics(&metrics);
+                flow_counter.print_summary_and_reset();
             }
         });
 
@@ -152,6 +212,11 @@ impl TxProxyServer {
                     .collect();
                 self.set_forwarding_clients(clients);
                 info!(clients = tx_receivers.len(), "refreshed forwarding clients");
+                MetricsUpdate::send_ref(
+                    uuid(),
+                    Metric::SetGauge(Gauge::TxProxyForwardingClients, tx_receivers.len() as f64),
+                    &metrics,
+                );
                 tokio::time::sleep(Duration::from_secs(5).into()).await;
             }
         });
