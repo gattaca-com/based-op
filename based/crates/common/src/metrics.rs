@@ -1,3 +1,4 @@
+use revm_primitives::Address;
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 use uuid::Uuid;
@@ -103,9 +104,9 @@ pub enum Gauge {
     TransactionPoolMemoryBytes,
 
     /// Current portal->gateway ping latency in milliseconds
-    PortalGatewayPingLatencyMs,
-    /// Current portal->gateway registry index
-    PortalCurrentGatewayRegistryIndex,
+    PortalGatewayPingLatencyMs(Address),
+    /// Current portal->gateway registry address
+    PortalCurrentGatewayRegistryAddress(Address),
 }
 
 /// A histogram is a metric that can be used to track the distribution of a value.

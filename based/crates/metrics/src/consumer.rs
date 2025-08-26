@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use bop_common::{
     communication::Consumer,
-    metrics::{Metric, MetricsUpdate, metrics_queue},
+    metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
     telemetry::{Frag, Telemetry, TelemetryUpdate, Tx, system::SystemNotification, telemetry_queue},
 };
 use metrics::{counter, gauge, histogram};
@@ -121,7 +121,18 @@ impl MetricsConsumer {
         // For instance, `Counter::GatewayIngressTxsTotal.as_ref()` => "gateway_ingress_txs_total".
         match update.metric {
             Metric::IncrementCounter(counter, inc) => counter!(format!("bop_{}", counter.as_ref())).increment(inc),
-            Metric::SetGauge(gauge, val) => gauge!(format!("bop_{}", gauge.as_ref())).set(val),
+            Metric::SetGauge(gauge, val) => {
+                let name = format!("bop_{}", gauge.as_ref());
+                match gauge {
+                    Gauge::PortalGatewayPingLatencyMs(address) => {
+                        gauge!(name, "address" => address.to_string()).set(val)
+                    }
+                    Gauge::PortalCurrentGatewayRegistryAddress(address) => {
+                        gauge!(name, "address" => address.to_string()).set(val)
+                    }
+                    _ => gauge!(name).set(val),
+                }
+            }
             Metric::RecordHistogram(hist, val) => histogram!(format!("bop_{}", hist.as_ref())).record(val),
         }
     }

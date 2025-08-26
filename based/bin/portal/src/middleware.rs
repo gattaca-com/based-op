@@ -1,6 +1,7 @@
 use bop_common::{
     communication::Producer,
     metrics::{Counter, Metric, MetricsUpdate},
+    utils::uuid,
 };
 use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
@@ -11,7 +12,6 @@ use jsonrpsee::{
 };
 use serde_json::value::RawValue;
 use tracing::{debug, error};
-use uuid::Uuid;
 
 use crate::clients::{AuthRpcClient, RpcClient};
 
@@ -38,7 +38,7 @@ where
         let registry_client = self.registry_client.clone();
         let op_node_client = self.op_node_client.clone();
 
-        let uuid = Uuid::new_v4();
+        let uuid = uuid();
         let metrics = self.metrics;
         MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::PortalTotalRequests, 1), &metrics);
 
