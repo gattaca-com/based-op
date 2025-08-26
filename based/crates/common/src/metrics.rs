@@ -64,8 +64,25 @@ pub enum Counter {
     SimulationResultsReceived,
     /// Total number of simulation errors
     SimulationErrors,
-    /// Total number of blocks built
-    BlocksBuilt,
+
+    /// Total number of requests received by the portal
+    PortalTotalRequests,
+    /// Total number of requests received by the portal
+    PortalApiRequests,
+    /// Total number of requests received by the portal
+    EngineApiRequests,
+    /// Total number of requests received by the portal
+    RegistryApiRequests,
+    /// Total number of requests received by the portal
+    OpNodeApiRequests,
+    /// Total number of requests received by the portal
+    FallbackApiRequests,
+    /// Total number of payloads served from gateway
+    PayloadsServedFromGateway,
+    /// Total number of payloads served from fallback
+    PayloadsServedFromFallback,
+    /// Total number of payloads that failed to be served
+    PayloadServeFailed,
 }
 
 /// A gauge is a metric that can be set to a specific value.
@@ -82,10 +99,13 @@ pub enum Gauge {
     SimulationInFlightCount,
     /// Current simulation queue depth
     SimulationQueueDepth,
-    /// Current number of active transactions
-    ActiveTransactionsCount,
     /// Current transaction pool memory usage in bytes
     TransactionPoolMemoryBytes,
+
+    /// Current portal->gateway ping latency in milliseconds
+    PortalGatewayPingLatencyMs,
+    /// Current portal->gateway registry index
+    PortalCurrentGatewayRegistryIndex,
 }
 
 /// A histogram is a metric that can be used to track the distribution of a value.
@@ -113,9 +133,9 @@ mod tests {
 
     #[test]
     fn test_metric_serialization() {
-        let metric = Counter::BlocksBuilt;
+        let metric = Counter::SimulationRequestsSent;
         let serialized = metric.as_ref();
-        assert_eq!(serialized, r#"blocks_built"#);
+        assert_eq!(serialized, r#"simulation_requests_sent"#);
 
         let simulation_metric = Counter::SimulationRequestsSent;
         let simulation_serialized = simulation_metric.as_ref();
