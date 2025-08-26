@@ -18,7 +18,6 @@ pub struct MetricsConsumer {
     metrics: Consumer<MetricsUpdate>,
 
     budget: u64,
-
     event_count_checkpoint: Instant,
     event_count_since_checkpoint: u64,
 }
@@ -105,10 +104,10 @@ impl MetricsConsumer {
                     histogram!("bop_frag_available_value").record(available_value.0 as f64);
                 }
                 Frag::SorterFinish { payment, best_order_value, n_txs, gas_used, .. } => {
-                    counter!("bop_frag_sorter_finish_total").increment(1);
+                    counter!("bop_frags_sealed").increment(1);
                     histogram!("bop_frag_payment").record(payment.0 as f64);
                     histogram!("bop_frag_gas_used").record(gas_used as f64);
-                    histogram!("bop_frag_transaction_count").record(n_txs as f64);
+                    histogram!("bop_frag_tx_count").record(n_txs as f64);
                     histogram!("bop_frag_best_order_value").record(best_order_value.0 as f64);
                 }
                 Frag::Commit => counter!("bop_sequencer_commit_frag_total").increment(1),
