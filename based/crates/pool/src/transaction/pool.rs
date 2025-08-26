@@ -5,7 +5,7 @@ use alloy_primitives::Address;
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders, messages::SequencerToSimulator},
     db::{DBFrag, DatabaseRead},
-    metrics::MetricsAggregator,
+    metrics::{Gauge, Metric, MetricsUpdate},
     telemetry::TelemetryUpdate,
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
@@ -40,7 +40,7 @@ impl TxPool {
         base_fee: u64,
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
-        metrics_aggregator: &mut MetricsAggregator,
+        metrics: &mut Producer<MetricsUpdate>,
     ) -> bool {
         let state_nonce = db.get_nonce(new_tx.sender()).expect("handle failed db");
         let nonce = new_tx.nonce();
@@ -95,13 +95,13 @@ impl TxPool {
             }
         }
 
-        // Update metrics in aggregator
-        metrics_aggregator.set_active_tx_count(self.active_txs.num_txs());
-
         let estimated_memory = self.pool_data.values().map(|tx_list| tx_list.mem_size()).sum::<usize>() +
             self.active_txs.txs.iter().map(|tx_list| tx_list.mem_size()).sum::<usize>();
-
-        metrics_aggregator.set_pool_memory_bytes(estimated_memory);
+        MetricsUpdate::send(
+            new_tx.uuid,
+            Metric::SetGauge(Gauge::TransactionPoolMemoryBytes, estimated_memory as f64),
+            metrics,
+        );
 
         true
     }

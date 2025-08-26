@@ -11,7 +11,6 @@ use bop_common::{
     config::GatewayArgs,
     db::DatabaseRead,
     fabric::FabricGatewayApiServer,
-    metrics::{Counter, Metric, MetricsUpdate, metrics_queue},
     p2p::SignedVersionedMessage,
     telemetry::{TelemetryUpdate, telemetry_queue},
     time::Duration,
@@ -47,7 +46,6 @@ struct RpcServer {
     engine_rpc_tx: Sender<EngineApi>,
     jwt: JwtSecret,
     telemetry_producer: Producer<TelemetryUpdate>,
-    metrics_producer: Producer<MetricsUpdate>,
     frag_receiver_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
 }
 
@@ -63,7 +61,6 @@ impl RpcServer {
             engine_timeout: Duration::from_secs(1),
             jwt,
             telemetry_producer: telemetry_queue().into(),
-            metrics_producer: metrics_queue().into(),
             frag_receiver_spawner,
         }
     }
@@ -123,11 +120,6 @@ impl MinimalEthApiServer for RpcServer {
 
         let tx = Arc::new(Transaction::decode(bytes)?);
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
-        MetricsUpdate::send_ref(
-            tx.uuid,
-            Metric::IncrementCounter(Counter::GatewayRpcIngressTxsTotal, 1),
-            &self.metrics_producer,
-        );
 
         let hash = tx.tx_hash();
         let _ = self.new_order_tx.send(tx.into());
