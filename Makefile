@@ -208,7 +208,7 @@ start-based-gateway: create-network
 	$(MAKE) start-overseer
 
 start-overseer: 
-	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key $(DUMMY_RICH_WALLET_PRIVATE_KEY)
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Only perform these parse-time checks if the user asked for deploy-chain
@@ -388,8 +388,6 @@ start-registry: build-registry
 
 stop-based-gateway:
 	cd .local_gateway_and_follower && docker compose down
-	# also stop monitoring services, if they are running
-	$(MAKE) stop-monitoring
 
 stop-main-node:
 	@if [ ! -d .local_main_node/config ]; then \
