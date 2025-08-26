@@ -11,7 +11,9 @@ use alloy_primitives::{Address, B256, hex};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState};
 use bop_common::{
     api::{ControlApiClient, EngineApiClient, RegistryApiClient},
+    communication::Producer,
     debug_panic,
+    metrics::{Gauge, Metric, MetricsUpdate},
     time::{Duration, Instant},
 };
 use indexmap::IndexMap;
@@ -24,6 +26,7 @@ use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
 use tokio::sync::RwLock;
 use tracing::{Instrument, debug, error, info, trace};
+use uuid::Uuid;
 
 use crate::cli::PortalArgs;
 
@@ -39,6 +42,7 @@ pub struct Gateway {
     pub ping: Arc<RwLock<Duration>>,
     pub active: Arc<AtomicBool>,
     pub registry_index: Arc<AtomicU64>,
+    pub metrics: Producer<MetricsUpdate>,
 }
 
 impl Gateway {
@@ -50,6 +54,11 @@ impl Gateway {
                 *self.ping.write().await = ping_duration;
                 self.active.store(true, Ordering::Relaxed);
                 info!("successfully pinged gateway={} ping={:>9}", self.url, ping_duration.to_string());
+                MetricsUpdate::send_ref(
+                    Uuid::new_v4(),
+                    Metric::SetGauge(Gauge::PortalGatewayPingLatencyMs, ping_duration.as_millis()),
+                    &self.metrics,
+                );
             }
             Err(err) => {
                 error!(%err, ?self, "failed to ping gateway");
@@ -70,7 +79,14 @@ impl fmt::Debug for Gateway {
 }
 
 impl Gateway {
-    fn new(url: Url, client: AuthRpcClient, jwt: JwtSecret, address: Address, registry_index: usize) -> Self {
+    fn new(
+        url: Url,
+        client: AuthRpcClient,
+        jwt: JwtSecret,
+        address: Address,
+        registry_index: usize,
+        metrics: Producer<MetricsUpdate>,
+    ) -> Self {
         Self {
             url,
             jwt,
@@ -79,6 +95,7 @@ impl Gateway {
             ping: Arc::new(RwLock::new(Duration::from_millis(0))),
             active: Arc::new(AtomicBool::new(false)),
             registry_index: Arc::new(AtomicU64::new(registry_index as u64)),
+            metrics,
         }
     }
 }
@@ -89,22 +106,24 @@ pub struct GatewayManager {
     gateways: Arc<RwLock<IndexMap<Url, GatewayInstance>>>,
     pub registry_client: RpcClient,
     current_gateway: Arc<RwLock<Option<GatewayInstance>>>,
+    pub metrics: Producer<MetricsUpdate>,
 }
 
 impl GatewayManager {
-    pub fn new(registry_client: RpcClient) -> Self {
+    pub fn new(registry_client: RpcClient, metrics: Producer<MetricsUpdate>) -> Self {
         Self {
             gateways: Arc::new(RwLock::new(IndexMap::new())),
             registry_client,
             current_gateway: Arc::new(RwLock::new(None)),
+            metrics,
         }
     }
 
-    pub fn new_from_args(args: &PortalArgs) -> Self {
+    pub fn new_from_args(args: &PortalArgs, metrics: Producer<MetricsUpdate>) -> Self {
         let registry_client_url = args.registry_url.clone();
         let timeout = Duration::from_millis(args.fallback_timeout_ms);
         let registry_client = create_client(registry_client_url, timeout).unwrap();
-        Self::new(registry_client)
+        Self::new(registry_client, metrics)
     }
 
     pub async fn update_gateway_list(&self) -> eyre::Result<()> {
@@ -125,7 +144,7 @@ impl GatewayManager {
                 }
                 None => {
                     let client = create_auth_client(url.clone(), jwt, timeout)?;
-                    let gateway = Gateway::new(url.clone(), client, jwt, *address, index);
+                    let gateway = Gateway::new(url.clone(), client, jwt, *address, index, self.metrics);
                     gateways.insert(url.clone(), Arc::new(gateway));
                 }
             }
@@ -169,6 +188,14 @@ impl GatewayManager {
                     let result = self.get_next_available_gateway(index).await;
                     if let Some(gateway) = &result {
                         self.current_gateway.write().await.replace(Arc::clone(gateway));
+                        MetricsUpdate::send_ref(
+                            Uuid::new_v4(),
+                            Metric::SetGauge(
+                                Gauge::PortalCurrentGatewayRegistryIndex,
+                                gateway.registry_index.load(Ordering::Relaxed) as f64,
+                            ),
+                            &self.metrics,
+                        );
                     }
                     result
                 }

@@ -1,3 +1,7 @@
+use bop_common::{
+    communication::Producer,
+    metrics::{Counter, Metric, MetricsUpdate},
+};
 use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
     MethodResponse,
@@ -7,6 +11,7 @@ use jsonrpsee::{
 };
 use serde_json::value::RawValue;
 use tracing::{debug, error};
+use uuid::Uuid;
 
 use crate::clients::{AuthRpcClient, RpcClient};
 
@@ -16,6 +21,7 @@ pub struct EngineApiProxy<S> {
     pub geth_client: AuthRpcClient,
     pub registry_client: RpcClient,
     pub op_node_client: RpcClient,
+    pub metrics: Producer<MetricsUpdate>,
 }
 
 impl<'a, S> RpcServiceT<'a> for EngineApiProxy<S>
@@ -32,26 +38,35 @@ where
         let registry_client = self.registry_client.clone();
         let op_node_client = self.op_node_client.clone();
 
+        let uuid = Uuid::new_v4();
+        let metrics = self.metrics;
+        MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::PortalTotalRequests, 1), &metrics);
+
         async move {
             match req.method_name().split_once('_') {
                 Some(("portal", _)) => {
                     debug!(method = %method, "Received request in PortalApiProxy");
+                    MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::PortalApiRequests, 1), &metrics);
                     inner.call(req).await
                 }
                 Some(("engine", _)) => {
                     debug!(method = %method, "Received request in EngineApiProxy");
+                    MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::EngineApiRequests, 1), &metrics);
                     inner.call(req).await
                 }
                 Some(("registry", _)) => {
                     debug!(method = %method, "Received request in RegistryApiProxy");
+                    MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::RegistryApiRequests, 1), &metrics);
                     external_call(registry_client.clone(), &req).await
                 }
                 Some(("optimism", _)) | Some(("opp2p", _)) => {
                     debug!(method = %method, "Received request for OP node");
+                    MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::OpNodeApiRequests, 1), &metrics);
                     external_call(op_node_client.clone(), &req).await
                 }
                 _ => {
                     debug!(method = %method, "Forwarding request to fallback client. request: {:?}", req);
+                    MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::FallbackApiRequests, 1), &metrics);
                     external_call(fallback_client.clone(), &req).await
                 }
             }
