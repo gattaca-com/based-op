@@ -41,7 +41,7 @@ services:
           --discovery.port=$OP_GETH_GOSSIP_PORT \
           --port=$OP_GETH_GOSSIP_PORT \
           --bootnodes=$MAIN_OP_GETH_ENODE \
-          --rollup.sequencerhttp=$PORTAL
+          --rollup.sequencerhttp=$TXPROXY
 
     volumes:
       - ./data/geth:/data/geth
@@ -74,7 +74,7 @@ services:
       - --p2p.listen.udp=$OP_NODE_GOSSIP_PORT
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --p2p.static=$MAIN_OP_NODE_GOSSIP_STATIC
-      - --rpc.enable-based 
+      - --rpc.enable-based
       - --registry=$PORTAL
       - --p2p.bootnodes=$MAIN_OP_NODE_ENR
       - --syncmode=execution-layer
@@ -98,7 +98,7 @@ services:
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
       - --gossip.root_peer_url=http://0.0.0.0:8547
-    volumes: 
+    volumes:
       - ./config:/config
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
