@@ -29,7 +29,7 @@ L2_CHAIN_ID?=$(shell \
 )
 L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
 PORTAL?=http://0.0.0.0:8080
-TX_PROXY?=http://0.0.0.0:8090
+TXPROXY?=http://0.0.0.0:8090
 L1_RPC_URL?=http://34.194.193.217:8545
 L1_BEACON_RPC_URL?=http://34.194.193.217:5052
 PUBLIC_IP?=$(shell curl ifconfig.me)
