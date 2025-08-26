@@ -6,7 +6,7 @@
     refill_amount: 1000000000000000000 # 1 ETH in wei
     refill_balance: 500000000000000000 # 0.5 ETH in wei
     refill_interval: 600 # 10 minutes
-    throughput: 400
+    throughput: 400 # Every 12 seconds
     max_pending: 800
     max_wallets: 200
     base_fee: 20 # gwei
@@ -22,7 +22,7 @@
     seed: erctx-demo
     refill_amount: 2000000000000000000 # 2 ETH
     refill_balance: 1000000000000000000 # 1 ETH
-    throughput: 100
+    throughput: 100 # Every 12 seconds
     max_pending: 200
     max_wallets: 100
     amount: 50
