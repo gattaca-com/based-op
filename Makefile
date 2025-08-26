@@ -213,6 +213,7 @@ start-overseer:
 
 start-spamoor:
 	docker run \
+		--pull always \
 		--network host \
 		--volume ./spamoor-config.yml:/etc/spamoor-config.yml \
 	ghcr.io/chainbound/spamoor-op-geth run \
