@@ -15,6 +15,7 @@ use bop_common::{
     debug_panic,
     metrics::{Gauge, Metric, MetricsUpdate},
     time::{Duration, Instant},
+    utils::uuid,
 };
 use indexmap::IndexMap;
 use jsonrpsee::{
@@ -26,7 +27,6 @@ use reqwest::Url;
 use reth_rpc_layer::{AuthClientLayer, AuthClientService, JwtSecret};
 use tokio::sync::RwLock;
 use tracing::{Instrument, debug, error, info, trace};
-use uuid::Uuid;
 
 use crate::cli::PortalArgs;
 
@@ -42,7 +42,6 @@ pub struct Gateway {
     pub ping: Arc<RwLock<Duration>>,
     pub active: Arc<AtomicBool>,
     pub registry_index: Arc<AtomicU64>,
-    pub metrics: Producer<MetricsUpdate>,
 }
 
 impl Gateway {
@@ -54,11 +53,6 @@ impl Gateway {
                 *self.ping.write().await = ping_duration;
                 self.active.store(true, Ordering::Relaxed);
                 info!("successfully pinged gateway={} ping={:>9}", self.url, ping_duration.to_string());
-                MetricsUpdate::send_ref(
-                    Uuid::new_v4(),
-                    Metric::SetGauge(Gauge::PortalGatewayPingLatencyMs, ping_duration.as_millis()),
-                    &self.metrics,
-                );
             }
             Err(err) => {
                 error!(%err, ?self, "failed to ping gateway");
@@ -79,14 +73,7 @@ impl fmt::Debug for Gateway {
 }
 
 impl Gateway {
-    fn new(
-        url: Url,
-        client: AuthRpcClient,
-        jwt: JwtSecret,
-        address: Address,
-        registry_index: usize,
-        metrics: Producer<MetricsUpdate>,
-    ) -> Self {
+    fn new(url: Url, client: AuthRpcClient, jwt: JwtSecret, address: Address, registry_index: usize) -> Self {
         Self {
             url,
             jwt,
@@ -95,7 +82,6 @@ impl Gateway {
             ping: Arc::new(RwLock::new(Duration::from_millis(0))),
             active: Arc::new(AtomicBool::new(false)),
             registry_index: Arc::new(AtomicU64::new(registry_index as u64)),
-            metrics,
         }
     }
 }
@@ -144,7 +130,7 @@ impl GatewayManager {
                 }
                 None => {
                     let client = create_auth_client(url.clone(), jwt, timeout)?;
-                    let gateway = Gateway::new(url.clone(), client, jwt, *address, index, self.metrics);
+                    let gateway = Gateway::new(url.clone(), client, jwt, *address, index);
                     gateways.insert(url.clone(), Arc::new(gateway));
                 }
             }
@@ -189,11 +175,8 @@ impl GatewayManager {
                     if let Some(gateway) = &result {
                         self.current_gateway.write().await.replace(Arc::clone(gateway));
                         MetricsUpdate::send_ref(
-                            Uuid::new_v4(),
-                            Metric::SetGauge(
-                                Gauge::PortalCurrentGatewayRegistryIndex,
-                                gateway.registry_index.load(Ordering::Relaxed) as f64,
-                            ),
+                            uuid(),
+                            Metric::SetGauge(Gauge::PortalCurrentGatewayRegistryAddress(gateway.address), 1.0),
                             &self.metrics,
                         );
                     }
