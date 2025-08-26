@@ -59,6 +59,14 @@ pub struct RegistryArgs {
     #[arg(long = "log.prefix", default_value = "bop-portal.log")]
     pub log_prefix: String,
 
+    /// Path for log files
+    #[arg(long = "log.dir", default_value = "/tmp")]
+    pub log_dir: PathBuf,
+
+    /// Maximum number of log files
+    #[arg(long = "log.max_files", default_value_t = 100)]
+    pub log_max_files: usize,
+
     /// mock blocknumber
     #[arg(long = "use_mock_blocknumber", default_value_t = false)]
     pub use_mock_blocknumber: bool,
@@ -74,8 +82,8 @@ impl From<&RegistryArgs> for LoggingConfig {
                 .unwrap_or(LevelFilter::INFO),
             flags: if args.file_logging { LoggingFlags::all() } else { LoggingFlags::StdOut },
             prefix: args.file_logging.then(|| args.log_prefix.clone()),
-            max_files: 100,
-            path: PathBuf::from("/tmp"),
+            max_files: args.log_max_files,
+            path: args.log_dir.clone(),
             filters: None,
         }
     }

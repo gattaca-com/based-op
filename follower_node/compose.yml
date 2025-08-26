@@ -98,10 +98,12 @@ services:
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
       - --gossip.root_peer_url=http://0.0.0.0:8547
+      - --log.dir=/var/log/app
     volumes:
       - ./config:/config
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
       - /dev/shm:/dev/shm
+      - /var/log/containers/based-op/based-gateway:/var/log/app
     network_mode: "host"
     restart: unless-stopped

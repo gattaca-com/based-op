@@ -42,6 +42,9 @@ services:
       - ./data/geth:/data/geth
       - ./config:/config
     restart: unless-stopped
+    labels:
+      - logs=enabled
+      - service=op-geth
 
   op-node:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.2
@@ -75,7 +78,6 @@ services:
       - --p2p.sequencer.key=${OP_NODE_SEQUENCER_KEY}
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --sequencer.enabled
-
     volumes:
       - ./data/node:/data/op-node
       - ./config:/config
@@ -83,6 +85,9 @@ services:
       - op-geth
       - based-portal
     restart: unless-stopped
+    labels:
+      - logs=enabled
+      - service=op-node
     
   op-batcher:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.13.2
@@ -109,6 +114,9 @@ services:
     depends_on:
       - op-node
     restart: unless-stopped
+    labels:
+      - logs=enabled
+      - service=op-batcher
 
   op-proposer:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.10.0
@@ -124,10 +132,12 @@ services:
       - --private-key=${OP_PROPOSER_PRIVATE_KEY}
       - --l1-eth-rpc=${L1_RPC_URL}
       - --proposal-interval=2s
-
     depends_on:
       - op-node
     restart: unless-stopped
+    labels:
+      - logs=enabled
+      - service=op-proposer
 
   based-portal:
     image: ghcr.io/gattaca-com/based-op/based-portal:latest 
@@ -141,8 +151,10 @@ services:
       - --op_node.url=http://0.0.0.0:${OP_NODE_RPC_PORT}
       - --registry.url=http://0.0.0.0:${REGISTRY_PORT}
       - --gateway.timeout_ms=200
+      - --log.dir=/var/log/app
     volumes:
       - ./config:/config
+      - /var/log/containers/based-op/based-portal:/var/log/app
     restart: unless-stopped
 
   based-registry:
@@ -155,8 +167,10 @@ services:
       - --registry.path=/config/registry.json
       - --eth_rpc_url=http://0.0.0.0:${OP_GETH_RPC_PORT}
       - --port=${REGISTRY_PORT}
+      - --log.dir=/var/log/app
     volumes: 
       - ./config:/config
+      - /var/log/containers/based-op/based-registry:/var/log/app
     restart: unless-stopped
     
   restarter:
@@ -174,8 +188,10 @@ services:
     command:
       - --tx_receivers.path=/config/tx_receivers.json
       - --port=${TXPROXY_PORT}
+      - --log.dir=/var/log/app
     volumes: 
       - ./config:/config
+      - /var/log/containers/based-op/based-
     restart: unless-stopped
 
 # ################################################################################
