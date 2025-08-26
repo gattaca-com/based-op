@@ -88,7 +88,7 @@ services:
     labels:
       - logs=enabled
       - service=op-node
-    
+
   op-batcher:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.13.2
     container_name: op-batcher
@@ -140,7 +140,7 @@ services:
       - service=op-proposer
 
   based-portal:
-    image: ghcr.io/gattaca-com/based-op/based-portal:latest 
+    image: ghcr.io/gattaca-com/based-op/based-portal:latest
     pull_policy: always
     container_name: based-portal
     network_mode: "host"
@@ -170,17 +170,22 @@ services:
       - --eth_rpc_url=http://0.0.0.0:${OP_GETH_RPC_PORT}
       - --port=${REGISTRY_PORT}
       - --log.dir=/var/log/app
-    volumes: 
+    volumes:
       - ./config:/config
       - /tmp:/tmp
       - /dev/shm:/dev/shm
       - /var/log/containers/based-op/based-registry:/var/log/app
     restart: unless-stopped
-    
+
   restarter:
     image: docker:cli
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
-    command: ["/bin/sh", "-c", "while true; do sleep 3600; docker restart op-batcher; done"]
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "while true; do sleep 3600; docker restart op-batcher; done",
+      ]
     restart: unless-stopped
     network_mode: "host"
 
@@ -193,13 +198,12 @@ services:
       - --tx_receivers.path=/config/tx_receivers.json
       - --port=${TXPROXY_PORT}
       - --log.dir=/var/log/app
-    volumes: 
+    volumes:
       - ./config:/config
       - /tmp:/tmp
       - /dev/shm:/dev/shm
       - /var/log/containers/based-op/based-txproxy:/var/log/app
     restart: unless-stopped
-
 # ################################################################################
 # # Postgres for Blockscout
 # ################################################################################
@@ -227,7 +231,7 @@ services:
 #       - /bin/sh
 #       - -c
 #       - bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()" && bin/blockscout start
-    
+
 #     network_mode: "host"
 #     depends_on:
 #       - op-node                  # need the L2 node up to serve RPC
