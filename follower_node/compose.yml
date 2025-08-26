@@ -41,7 +41,7 @@ services:
           --discovery.port=$OP_GETH_GOSSIP_PORT \
           --port=$OP_GETH_GOSSIP_PORT \
           --bootnodes=$MAIN_OP_GETH_ENODE \
-          --rollup.sequencerhttp=$TXPROXY
+          --rollup.sequencerhttp=$TX_PROXY
 
     volumes:
       - ./data/geth:/data/geth
