@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bop_common::{
     communication::Consumer,
@@ -6,7 +6,7 @@ use bop_common::{
     telemetry::{Frag, Telemetry, TelemetryUpdate, Tx, system::SystemNotification, telemetry_queue},
 };
 use metrics::{counter, gauge, histogram};
-use tracing::trace;
+use tracing::{info, trace};
 
 /// The number of units of budget to spend per loop iteration.
 /// Useful to avoid starving the consumers.
@@ -16,7 +16,11 @@ const LOOP_BUDGET: u64 = 10_000;
 pub struct MetricsConsumer {
     telemetry: Consumer<TelemetryUpdate>,
     metrics: Consumer<MetricsUpdate>,
+
     budget: u64,
+
+    event_count_checkpoint: Instant,
+    event_count_since_checkpoint: u64,
 }
 
 impl MetricsConsumer {
@@ -40,6 +44,7 @@ impl MetricsConsumer {
             while let Some(update) = self.telemetry.try_consume() {
                 trace!(?update, "Received telemetry update");
                 self.process_telemetry_queue_update(update);
+                self.event_count_since_checkpoint += 1;
                 if self.spend_budget() {
                     break;
                 }
@@ -48,9 +53,21 @@ impl MetricsConsumer {
             while let Some(update) = self.metrics.try_consume() {
                 trace!(?update, "Received metrics update");
                 self.process_metrics_queue_update(update);
+                self.event_count_since_checkpoint += 1;
                 if self.spend_budget() {
                     break;
                 }
+            }
+
+            // Update the event count every second
+            let elapsed = self.event_count_checkpoint.elapsed();
+            if elapsed >= Duration::from_millis(1000) {
+                let eps = self.event_count_since_checkpoint as f64 / elapsed.as_secs_f64();
+                gauge!("bop_metric_events_per_second").set(eps);
+                info!("Metric events/s: {:.2}", eps);
+
+                self.event_count_checkpoint = Instant::now();
+                self.event_count_since_checkpoint = 0;
             }
 
             tokio::time::sleep(Duration::from_millis(20)).await
@@ -113,6 +130,12 @@ impl MetricsConsumer {
 
 impl Default for MetricsConsumer {
     fn default() -> Self {
-        Self { telemetry: telemetry_queue().into(), metrics: metrics_queue().into(), budget: LOOP_BUDGET }
+        Self {
+            telemetry: telemetry_queue().into(),
+            metrics: metrics_queue().into(),
+            budget: LOOP_BUDGET,
+            event_count_checkpoint: Instant::now(),
+            event_count_since_checkpoint: 0,
+        }
     }
 }
