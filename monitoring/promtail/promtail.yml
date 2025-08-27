@@ -64,19 +64,6 @@ scrape_configs:
             level: level
             service: service
             msg: msg
-      - labels:
-          level:
-          env:
-          service:
     relabel_configs:
-      # Extract project/service from the file path
-      - source_labels: [__path__]
-        regex: .*/([^/]+)/([^/]+)/[^/]+\.jsonl
-        target_label: project
-        replacement: $1
-      - source_labels: [__path__]
-        regex: .*/([^/]+)/([^/]+)/[^/]+\.jsonl
-        target_label: service
-        replacement: $2
       - replacement: "${HOSTNAME}"
         target_label: host
