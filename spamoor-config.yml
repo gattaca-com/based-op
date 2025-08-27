@@ -30,6 +30,7 @@
   name: "Uniswap swaps"
   description: "type-2 swap transactions with uniswap v2 pools"
   config:
+    seed: uniswap-swaps-demo
     throughput: 1600
     max_pending: 800
     max_wallets: 50
