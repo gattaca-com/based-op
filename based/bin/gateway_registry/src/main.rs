@@ -56,7 +56,7 @@ pub struct RegistryArgs {
     pub file_logging: bool,
 
     /// Prefix of log files
-    #[arg(long = "log.prefix", default_value = "bop-portal.log")]
+    #[arg(long = "log.prefix", default_value = "bop-registry.log")]
     pub log_prefix: String,
 
     /// Path for log files

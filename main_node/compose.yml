@@ -191,7 +191,7 @@ services:
       - --log.dir=/var/log/app
     volumes: 
       - ./config:/config
-      - /var/log/containers/based-op/based-
+      - /var/log/containers/based-op/based-txproxy:/var/log/app
     restart: unless-stopped
 
 # ################################################################################
