@@ -37,9 +37,6 @@ pub struct GatewayArgs {
     pub rpc_port_no_auth: u16,
     #[arg(long = "rpc.jwt")]
     pub rpc_jwt: String,
-    /// PortalApi RPC URL
-    #[arg(long = "portal_rpc.url", default_value = "http://localhost:9998")]
-    pub portal_rpc_url: Url,
     /// Url to an L2 eth api rpc
     #[arg(long = "eth_client.url", default_value = "http://localhost:8545")]
     pub eth_client_url: Url,
