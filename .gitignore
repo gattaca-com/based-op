@@ -32,10 +32,9 @@ main_node/data
 follower_node/data
 follower_node/config
 follower_node/.env
-.local/
-.local_gateway_and_follower
-.local_main_node
-.local_main_node2
+
+.local*
+
 based/.envrc
 .envrc
 
