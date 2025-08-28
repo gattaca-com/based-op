@@ -1,31 +1,24 @@
 use std::{fmt::Debug, ops::RangeInclusive};
 
-use clap::ValueEnum;
 use url::Url;
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
-#[clap(rename_all = "kebab-case")]
-pub enum ChainName {
-    BaseMainnet,
-    BaseSepolia,
-    BasedOpSepolia,
-}
+use crate::chain::ChainName;
 
 #[derive(clap::Parser, Debug)]
 pub struct Args {
     /// The name of chain of which we want to replay blocks.
     #[clap(long, env = "BASED_OP_CHAIN_NAME")]
-    chain_name: ChainName,
+    pub chain_name: ChainName,
     /// The L2 execution layer RPC URL, needed to download the blocks to replay.
     #[clap(long, env = "BASED_OP_L2_EL_RPC_URL")]
-    l2_el_rpc_url: Url,
+    pub l2_el_rpc_url: Url,
     /// The inclusive range of blocks to replay, in the format 'start..=end'.
     #[clap(long, env = "BASED_OP_BLOCKS_RANGE", value_parser = range_inclusive_from_str)]
-    blocks_range: RangeInclusive<u64>,
+    pub blocks_range: RangeInclusive<u64>,
     /// An L2 execution layer bootnode, needed to connect to the network. It is optional for
     /// chains part of OP superchain.
     #[clap(long, env = "BASED_OP_L2_EL_BOOTNODE")]
-    l2_el_bootnode: Option<String>,
+    pub l2_el_bootnode: Option<String>,
 }
 
 impl Args {
