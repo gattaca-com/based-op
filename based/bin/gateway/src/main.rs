@@ -121,9 +121,11 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 let evm_config = evm_config.clone();
                 let connections = spine.to_connections(format!("Simulator-{id}"));
                 let db_frag = (&shared_state).into();
+                let min_loop_duration = Duration::from_micros(args.vsync_window_us as u64);
+                let actor_config = ActorConfig::default().with_min_loop_duration(min_loop_duration);
                 move || {
                     let simulator = Simulator::new(db_frag, evm_config, id, args.allow_reverts);
-                    simulator.run(connections, ActorConfig::default());
+                    simulator.run(connections, actor_config);
                 }
             });
         }
