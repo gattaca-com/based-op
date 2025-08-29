@@ -35,7 +35,6 @@ services:
           --authrpc.vhosts="*" \
           --authrpc.jwtsecret=/config/jwt \
           --syncmode=full \
-          --synctarget=$OP_GETH_SYNC_TARGET
           --rpc.allow-unprotected-txs \
           --allow-insecure-unlock \
           --discovery.port=$OP_GETH_GOSSIP_PORT \

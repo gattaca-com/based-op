@@ -3,6 +3,8 @@ use std::{
     process::{self, Command},
 };
 
+use alloy::rpc::types::engine::JwtSecret;
+
 use crate::chain::ChainName;
 
 pub fn ensure_chain_folder(chain_name: ChainName) -> io::Result<()> {
@@ -105,6 +107,16 @@ pub fn generate_rollup_file(chain_name: ChainName) -> io::Result<()> {
             fs::write(chain_name.rollup_file_path(), stdout)
         }
     }
+}
+
+pub fn read_jwt_file(chain_name: ChainName) -> io::Result<JwtSecret> {
+    let path = chain_name.jwt_file_path();
+
+    let jwt_str = fs::read_to_string(path)?;
+
+    let secret = JwtSecret::from_hex(&jwt_str).expect("to read valid jwt");
+
+    Ok(secret)
 }
 
 /// Converts a process::Output into an io::Result, printing the stdout on success
