@@ -81,7 +81,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn(|| {
             Sequencer::new(db_bop, shared_state.clone(), sequencer_config)
-                .run(spine.to_connections("Sequencer"), ActorConfig::default());
+                .run(spine.to_connections("Sequencer"), ActorConfig::default().with_min_loop_duration(Duration::from_micros(args.vsync_window_us as u64)));
         });
 
         if let Some(mode) = args.mock {
