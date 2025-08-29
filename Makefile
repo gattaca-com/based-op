@@ -211,6 +211,7 @@ start-based-gateway: create-network
 start-overseer: 
 	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key $(DUMMY_RICH_WALLET_PRIVATE_KEY)
 
+# start spamoor as a foreground process
 start-spamoor:
 	docker run \
 		--pull always \
@@ -219,7 +220,16 @@ start-spamoor:
 	ghcr.io/chainbound/spamoor-op-geth run \
 		/etc/spamoor-config.yml \
 		--privkey $(DUMMY_RICH_WALLET_PRIVATE_KEY) \
-		--rpchost http://0.0.0.0:$(BASED_OP_GETH_PORT)
+		--rpchost http://localhost:$(BASED_OP_GETH_PORT)
+
+# start spamoor daemon UI on port 8075
+start-spamoor-daemon:
+	docker run --rm --network host --entrypoint ./spamoor-daemon \
+		ghcr.io/chainbound/spamoor-op-geth \
+		--privkey $(DUMMY_RICH_WALLET_PRIVATE_KEY) \
+		--rpchost http://localhost:$(BASED_OP_GETH_PORT) \
+		--db /tmp/spamoor.db \
+		--port 8075 
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Only perform these parse-time checks if the user asked for deploy-chain
