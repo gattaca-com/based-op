@@ -154,6 +154,8 @@ services:
       - --log.dir=/var/log/app
     volumes:
       - ./config:/config
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
       - /var/log/containers/based-op/based-portal:/var/log/app
     restart: unless-stopped
 
@@ -170,6 +172,8 @@ services:
       - --log.dir=/var/log/app
     volumes: 
       - ./config:/config
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
       - /var/log/containers/based-op/based-registry:/var/log/app
     restart: unless-stopped
     
@@ -191,6 +195,8 @@ services:
       - --log.dir=/var/log/app
     volumes: 
       - ./config:/config
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
       - /var/log/containers/based-op/based-txproxy:/var/log/app
     restart: unless-stopped
 
