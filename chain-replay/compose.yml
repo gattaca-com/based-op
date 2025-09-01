@@ -39,7 +39,9 @@ services:
           --allow-insecure-unlock \
           --discovery.port=$OP_GETH_GOSSIP_PORT \
           --port=$OP_GETH_GOSSIP_PORT \
-          --bootnodes=$MAIN_OP_GETH_ENODE \
+          --op-network=$OP_GETH_NETWORK \
+          --nat=extip:$OP_GETH_EXTIP \
+          --log.vmodule=p2p=4 \
 
     volumes:
       - ./data/geth:/data/geth

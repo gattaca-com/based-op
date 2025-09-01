@@ -23,6 +23,12 @@ impl Display for ChainName {
     }
 }
 
+impl ChainName {
+    pub fn is_superchain(&self) -> bool {
+        (matches!(&self, Self::BaseSepolia) || matches!(&self, Self::BaseMainnet))
+    }
+}
+
 #[allow(dead_code)]
 impl ChainName {
     fn directory_path(&self) -> PathBuf {

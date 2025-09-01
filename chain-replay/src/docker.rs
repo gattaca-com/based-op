@@ -1,6 +1,9 @@
 use std::{io, process::Command};
 
-use crate::{chain::ChainName, utils::output_to_result};
+use crate::{
+    chain::ChainName,
+    utils::{get_ip, output_to_result},
+};
 
 /// Starts the based-op-geth service for the given chain, setting the sync target hash
 pub fn start_based_op_service(chain_name: ChainName) -> io::Result<()> {
@@ -15,7 +18,12 @@ pub fn start_based_op_service(chain_name: ChainName) -> io::Result<()> {
     let mut args = command_str.trim_matches('"').split(' ');
 
     let mut command = Command::new(args.next().expect("docker"));
-    let output = command.args(args).output()?;
+    command.args(args);
+    command.env("OP_GETH_EXTIP", get_ip().to_string());
+    if chain_name.is_superchain() {
+        command.env("OP_GETH_NETWORK", chain_name.to_string());
+    }
+    let output = command.output()?;
 
     output_to_result(&command_str, output)
 }

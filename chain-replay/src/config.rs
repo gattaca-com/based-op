@@ -9,16 +9,19 @@ pub struct Args {
     /// The name of chain of which we want to replay blocks.
     #[clap(long, env = "BASED_OP_CHAIN_NAME")]
     pub chain_name: ChainName,
+    /// The L2 engine RPC URL, needed to send CL messages.
+    #[clap(long, env = "BASED_OP_L2_ENGINE_RPC_URL")]
+    pub l2_engine_rpc_url: Url,
     /// The L2 execution layer RPC URL, needed to download the blocks to replay.
     #[clap(long, env = "BASED_OP_L2_EL_RPC_URL")]
     pub l2_el_rpc_url: Url,
-    /// The inclusive range of blocks to replay, in the format 'start..=end'.
-    #[clap(long, env = "BASED_OP_BLOCKS_RANGE", value_parser = range_inclusive_from_str)]
-    pub blocks_range: RangeInclusive<u64>,
     /// An L2 execution layer bootnode, needed to connect to the network. It is optional for
     /// chains part of OP superchain.
     #[clap(long, env = "BASED_OP_L2_EL_BOOTNODE")]
     pub l2_el_bootnode: Option<String>,
+    /// The inclusive range of blocks to replay, in the format 'start..=end'.
+    #[clap(long, env = "BASED_OP_BLOCKS_RANGE", value_parser = range_inclusive_from_str)]
+    pub blocks_range: RangeInclusive<u64>,
 }
 
 impl Args {

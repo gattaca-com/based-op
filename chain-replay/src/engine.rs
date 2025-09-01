@@ -3,7 +3,7 @@ use std::ops::Deref;
 use alloy::{
     primitives::{B256, Bytes},
     providers::RootProvider,
-    rpc::types::engine::{JwtSecret, PayloadStatus},
+    rpc::types::engine::{ForkchoiceState, ForkchoiceUpdated, JwtSecret, PayloadStatus},
     transports::TransportResult,
 };
 use alloy_rpc_client::RpcClient;
@@ -18,7 +18,7 @@ use alloy_transport_http::{
 use http_body_util::Full;
 use op_alloy_network::Optimism;
 use op_alloy_provider::ext::engine::OpEngineApi;
-use op_alloy_rpc_types_engine::OpExecutionPayloadV4;
+use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use tower::ServiceBuilder;
 use url::Url;
 
@@ -63,6 +63,19 @@ impl EngineClient {
             Optimism,
             Http<HyperAuthClient>,
         >>::new_payload_v4(self, payload, parent_beacon_block_root);
+
+        call.await
+    }
+
+    pub async fn fork_choice_update(
+        &self,
+        fork_choice_state: ForkchoiceState,
+        payload_attributes: Option<OpPayloadAttributes>,
+    ) -> TransportResult<ForkchoiceUpdated> {
+        let call = <RootProvider<Optimism> as OpEngineApi<
+            Optimism,
+            Http<HyperAuthClient>,
+        >>::fork_choice_updated_v3(self, fork_choice_state, payload_attributes);
 
         call.await
     }

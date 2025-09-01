@@ -49,6 +49,6 @@ pub fn execution_payload_v4_from_block(
     };
     OpExecutionPayloadV4 {
         payload_inner: v3,
-        withdrawals_root: EMPTY_WITHDRAWALS,
+        withdrawals_root: block.header.withdrawals_root.unwrap_or(EMPTY_WITHDRAWALS),
     }
 }
