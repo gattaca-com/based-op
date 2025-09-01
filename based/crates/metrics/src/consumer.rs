@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use bop_common::{
     communication::Consumer,
@@ -6,70 +6,69 @@ use bop_common::{
     telemetry::{Frag, Telemetry, TelemetryUpdate, Tx, system::SystemNotification, telemetry_queue},
 };
 use metrics::{counter, gauge, histogram};
-use tracing::{info, trace};
-
-/// The number of units of budget to spend per loop iteration.
-/// Useful to avoid starving the consumers.
-const LOOP_BUDGET: u64 = 500;
+use tokio::{sync::mpsc, time::Instant};
+use tracing::{error, info, trace};
 
 /// Consumes telemetry updates from shared memory queues, and converts them into metrics.
 pub struct MetricsConsumer {
     telemetry: Consumer<TelemetryUpdate>,
     metrics: Consumer<MetricsUpdate>,
-
-    budget: u64,
-    event_count_checkpoint: Instant,
-    event_count_since_checkpoint: u64,
 }
 
 impl MetricsConsumer {
-    /// Spends one unit of budget, and returns true if the budget is exhausted.
-    /// If the budget is exhausted, it is reset for the next iteration.
-    fn spend_budget(&mut self) -> bool {
-        self.budget -= 1;
-
-        let exhausted = self.budget == 0;
-        if exhausted {
-            self.budget = LOOP_BUDGET;
-        }
-
-        exhausted
-    }
-
     /// Runs the metrics consumer, consuming telemetry updates from shared queues,
     /// and converting them into metrics.
     pub async fn run(mut self) {
+        // Drain the queues concurrently.
+        let (telemetry_tx, mut telemetry_rx) = mpsc::channel(2048);
+        tokio::spawn(async move {
+            loop {
+                while let Some(update) = self.telemetry.try_consume() {
+                    trace!(?update, "Received telemetry update");
+                    if telemetry_tx.send(update).await.is_err() {
+                        error!("Telemetry channel is full, dropping update");
+                    }
+                }
+            }
+        });
+        let (metrics_tx, mut metrics_rx) = mpsc::channel(2048);
+        tokio::spawn(async move {
+            loop {
+                while let Some(update) = self.metrics.try_consume() {
+                    trace!(?update, "Received metrics update");
+                    if metrics_tx.send(update).await.is_err() {
+                        error!("Metrics channel is full, dropping update");
+                    }
+                }
+            }
+        });
+
+        let mut event_count_checkpoint = tokio::time::interval(Duration::from_millis(1000));
+        let mut event_count_last_checkpoint = Instant::now();
+        let mut event_count_since_checkpoint = 0;
+
         loop {
-            while let Some(update) = self.telemetry.try_consume() {
-                trace!(?update, "Received telemetry update");
-                self.process_telemetry_queue_update(update);
-                self.event_count_since_checkpoint += 1;
-                if self.spend_budget() {
-                    break;
+            tokio::select! {
+                Some(update) = telemetry_rx.recv() => {
+                    trace!(?update, "Received telemetry update");
+                    self.process_telemetry_queue_update(update);
+                    event_count_since_checkpoint += 1;
+                }
+                Some(update) = metrics_rx.recv() => {
+                    trace!(?update, "Received metrics update");
+                    self.process_metrics_queue_update(update);
+                    event_count_since_checkpoint += 1;
+                },
+                tick = event_count_checkpoint.tick() => {
+                    let elapsed = tick.duration_since(event_count_last_checkpoint);
+                    let eps = event_count_since_checkpoint as f64 / elapsed.as_secs_f64();
+                    gauge!("bop_metric_events_per_second").set(eps);
+                    info!("Metric events/s: {:.2}", eps);
+
+                    event_count_last_checkpoint = tick;
+                    event_count_since_checkpoint = 0;
                 }
             }
-
-            while let Some(update) = self.metrics.try_consume() {
-                trace!(?update, "Received metrics update");
-                self.process_metrics_queue_update(update);
-                self.event_count_since_checkpoint += 1;
-                if self.spend_budget() {
-                    break;
-                }
-            }
-
-            // Update the event count every second
-            let elapsed = self.event_count_checkpoint.elapsed();
-            if elapsed >= Duration::from_millis(1000) {
-                let eps = self.event_count_since_checkpoint as f64 / elapsed.as_secs_f64();
-                gauge!("bop_metric_events_per_second").set(eps);
-                info!("Metric events/s: {:.2}", eps);
-
-                self.event_count_checkpoint = Instant::now();
-                self.event_count_since_checkpoint = 0;
-            }
-
-            tokio::time::sleep(Duration::from_millis(20)).await
         }
     }
 
@@ -140,12 +139,6 @@ impl MetricsConsumer {
 
 impl Default for MetricsConsumer {
     fn default() -> Self {
-        Self {
-            telemetry: telemetry_queue().into(),
-            metrics: metrics_queue().into(),
-            budget: LOOP_BUDGET,
-            event_count_checkpoint: Instant::now(),
-            event_count_since_checkpoint: 0,
-        }
+        Self { telemetry: telemetry_queue().into(), metrics: metrics_queue().into() }
     }
 }
