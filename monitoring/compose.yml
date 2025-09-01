@@ -4,7 +4,7 @@ services:
     container_name: based-metrics-exporter
     restart: unless-stopped
     environment:
-      - RUST_LOG=bop_metrics_exporter=trace
+      - RUST_LOG=bop_metrics_exporter=trace,bop_metrics=info
     volumes:
       - /tmp:/tmp
       - /dev/shm:/dev/shm
