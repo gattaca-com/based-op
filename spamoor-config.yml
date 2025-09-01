@@ -1,0 +1,43 @@
+- scenario: eoatx
+  name: "High Volume ETH Transfers"
+  description: "Basic ETH transfers with 400 tx/slot throughput"
+  config:
+    seed: eoatx-demo
+    refill_amount: 1000000000000000000 # 1 ETH in wei
+    refill_balance: 500000000000000000 # 0.5 ETH in wei
+    refill_interval: 600 # 10 minutes
+    throughput: 400
+    max_pending: 800
+    max_wallets: 200
+    amount: 100 # 100 wei per transfer
+    random_amount: true
+    random_target: true
+
+- scenario: erctx
+  name: "ERC20 Token Spammer"
+  description: "Deploy and transfer ERC20 tokens"
+  config:
+    seed: erctx-demo
+    refill_amount: 2000000000000000000 # 2 ETH
+    refill_balance: 1000000000000000000 # 1 ETH
+    throughput: 100
+    max_pending: 200
+    max_wallets: 100
+    amount: 50
+    random_amount: true
+
+- scenario: uniswap-swaps
+  name: "Uniswap swaps"
+  description: "type-2 swap transactions with uniswap v2 pools"
+  config:
+    seed: uniswap-swaps-demo
+    throughput: 1600
+    max_pending: 800
+    max_wallets: 50
+    rebroadcast: 120
+    pair_count: 1
+    min_swap_amount: "100000000000000000"
+    max_swap_amount: "1000000000000000000000"
+    buy_ratio: 50
+    slippage: 50
+    sell_threshold: "100000000000000000000000"

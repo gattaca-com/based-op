@@ -28,7 +28,8 @@ L2_CHAIN_ID?=$(shell \
     echo $$((RAW % 50000 + 1)); \
 )
 L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
-PORTAL?=http://18.185.199.51:8080
+PORTAL?=http://0.0.0.0:8080
+TXPROXY?=http://0.0.0.0:8090
 L1_RPC_URL?=http://34.194.193.217:8545
 L1_BEACON_RPC_URL?=http://34.194.193.217:5052
 PUBLIC_IP?=$(shell curl ifconfig.me)
@@ -209,6 +210,26 @@ start-based-gateway: create-network
 
 start-overseer: 
 	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key $(DUMMY_RICH_WALLET_PRIVATE_KEY)
+
+# start spamoor as a foreground process
+start-spamoor:
+	docker run \
+		--pull always \
+		--network host \
+		--volume ./spamoor-config.yml:/etc/spamoor-config.yml \
+	ghcr.io/chainbound/spamoor-op-geth run \
+		/etc/spamoor-config.yml \
+		--privkey $(DUMMY_RICH_WALLET_PRIVATE_KEY) \
+		--rpchost http://localhost:$(BASED_OP_GETH_PORT)
+
+# start spamoor daemon UI on port 8075
+start-spamoor-daemon:
+	docker run --rm --network host --entrypoint ./spamoor-daemon \
+		ghcr.io/chainbound/spamoor-op-geth \
+		--privkey $(DUMMY_RICH_WALLET_PRIVATE_KEY) \
+		--rpchost http://localhost:$(BASED_OP_GETH_PORT) \
+		--db /tmp/spamoor.db \
+		--port 8075 
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Only perform these parse-time checks if the user asked for deploy-chain
@@ -461,10 +482,10 @@ FOLLOWER_NODE_HOST?=http://localhost
 BLOCK_NUMBER?=$(shell echo $$(( $$(cast block-number --rpc-url http://localhost:$(BOP_EL_PORT)) + 1 )))
 DUMMY_RICH_WALLET_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 DUMMY_TX=$(shell cast mktx --rpc-url  $(FOLLOWER_NODE_HOST):$(BOP_EL_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a | xxd -r -p | base64)
-LOCAL_GETH_PORT?=8645
+BASED_OP_GETH_PORT?=8645
 
 test-tx:
-	cast send --rpc-url  http://0.0.0.0:$(LOCAL_GETH_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a
+	cast send --rpc-url  http://0.0.0.0:$(BASED_OP_GETH_PORT) --private-key $(DUMMY_RICH_WALLET_PRIVATE_KEY) --value 1 0x7DDcC7c49D562997A68C98ae7Bb62eD1E8E4488a
 
 test-frag:
 	curl --request POST   --url $(FOLLOWER_NODE_HOST):$(BOP_NODE_PORT) --header 'Content-Type: application/json' \
