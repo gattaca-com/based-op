@@ -26,6 +26,10 @@ pub struct Args {
 
 impl Args {
     pub fn validate(self) -> Self {
+        if self.blocks_range.start() == &0 {
+            panic!("Block range cannot start from genesis, must be at least block #1");
+        }
+
         if self.l2_el_bootnode.is_none() && matches!(self.chain_name, ChainName::BasedOpSepolia) {
             panic!("L2 EL bootnode is required for based-op-sepolia");
         }
