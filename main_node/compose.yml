@@ -111,6 +111,9 @@ services:
       - --private-key=${OP_BATCHER_PRIVATE_KEY}
       - --max-blocks-per-span-batch=10
       - --data-availability-type=blobs
+      - --metrics.enabled=true
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=8008
     depends_on:
       - op-node
     restart: unless-stopped
@@ -132,6 +135,9 @@ services:
       - --private-key=${OP_PROPOSER_PRIVATE_KEY}
       - --l1-eth-rpc=${L1_RPC_URL}
       - --proposal-interval=2s
+      - --metrics.enabled=true
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=8009
     depends_on:
       - op-node
     restart: unless-stopped

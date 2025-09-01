@@ -101,14 +101,14 @@ impl MetricsConsumer {
                 Frag::SorterStart { block, available_value, .. } => {
                     counter!("bop_frag_sorter_start_total").increment(1);
                     gauge!("bop_frag_current_block_number").set(block as f64);
-                    histogram!("bop_frag_available_value").record(available_value.0 as f64);
+                    gauge!("bop_frag_available_value").set(available_value.0 as f64);
                 }
                 Frag::SorterFinish { payment, best_order_value, n_txs, gas_used, .. } => {
                     counter!("bop_frags_sealed").increment(1);
-                    histogram!("bop_frag_payment").record(payment.0 as f64);
-                    histogram!("bop_frag_gas_used").record(gas_used as f64);
-                    histogram!("bop_frag_tx_count").record(n_txs as f64);
-                    histogram!("bop_frag_best_order_value").record(best_order_value.0 as f64);
+                    gauge!("bop_frag_tx_count").set(n_txs as f64);
+                    gauge!("bop_frag_payment").set(payment.0 as f64);
+                    gauge!("bop_frag_gas_used").set(gas_used as f64);
+                    gauge!("bop_frag_best_order_value").set(best_order_value.0 as f64);
                 }
                 Frag::Commit => counter!("bop_sequencer_commit_frag_total").increment(1),
             },

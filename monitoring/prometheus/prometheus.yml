@@ -6,3 +6,9 @@ scrape_configs:
   - job_name: "bop-metrics-exporter"
     static_configs:
       - targets: ["based-metrics-exporter:9000"]
+  - job_name: "op-batcher"
+    static_configs:
+      - targets: ["172.17.0.1:8008"] # host subnet
+  - job_name: "op-proposer"
+    static_configs:
+      - targets: ["172.17.0.1:8009"] # host subnet

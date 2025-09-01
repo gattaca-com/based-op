@@ -8,7 +8,7 @@ use alloy_rpc_types::engine::{
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders},
     debug_panic,
-    metrics::{Gauge, Histogram, Metric, MetricsUpdate, metrics_queue},
+    metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
     p2p::{FragV0, SealV0},
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
@@ -82,10 +82,13 @@ pub struct SequencerContext<Db> {
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
     pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
-        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
+        let metrics = metrics_queue().into();
+
+        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone(), metrics);
         let system_caller = SystemCaller::new(config.evm_config.chain_spec().clone());
         Self {
             db,
+            metrics,
             shared_state,
             block_executor,
             config,
@@ -100,7 +103,6 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             base_fee: Default::default(),
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
-            metrics: metrics_queue().into(),
         }
     }
 }
@@ -337,7 +339,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let block_duration = frag_seq.start_t.elapsed().as_millis();
         MetricsUpdate::send(
             Uuid::new_v4(),
-            Metric::RecordHistogram(Histogram::GatewayBlockBuildDurationMs, block_duration),
+            Metric::SetGauge(Gauge::GatewayBlockBuildDurationMs, block_duration),
             &mut self.metrics,
         );
 

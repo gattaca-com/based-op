@@ -249,7 +249,7 @@ impl<Db> SortingData<Db> {
         // Send metrics for fragment size and duration
         MetricsUpdate::send(
             self.uuid,
-            Metric::RecordHistogram(Histogram::GatewayFragTxCount, self.txs.len() as f64),
+            Metric::SetGauge(Gauge::GatewayFragTxCount, self.txs.len() as f64),
             &mut self.metrics_producer,
         );
 

@@ -42,6 +42,7 @@ pub struct Gateway {
     pub ping: Arc<RwLock<Duration>>,
     pub active: Arc<AtomicBool>,
     pub registry_index: Arc<AtomicU64>,
+    pub metrics: Producer<MetricsUpdate>,
 }
 
 impl Gateway {
@@ -53,6 +54,11 @@ impl Gateway {
                 *self.ping.write().await = ping_duration;
                 self.active.store(true, Ordering::Relaxed);
                 info!("successfully pinged gateway={} ping={:>9}", self.url, ping_duration.to_string());
+                MetricsUpdate::send_ref(
+                    uuid(),
+                    Metric::SetGauge(Gauge::PortalGatewayPingLatencyMs(self.address), ping_duration.as_millis()),
+                    &self.metrics,
+                );
             }
             Err(err) => {
                 error!(%err, ?self, "failed to ping gateway");
@@ -73,7 +79,14 @@ impl fmt::Debug for Gateway {
 }
 
 impl Gateway {
-    fn new(url: Url, client: AuthRpcClient, jwt: JwtSecret, address: Address, registry_index: usize) -> Self {
+    fn new(
+        url: Url,
+        client: AuthRpcClient,
+        jwt: JwtSecret,
+        address: Address,
+        registry_index: usize,
+        metrics: Producer<MetricsUpdate>,
+    ) -> Self {
         Self {
             url,
             jwt,
@@ -82,6 +95,7 @@ impl Gateway {
             ping: Arc::new(RwLock::new(Duration::from_millis(0))),
             active: Arc::new(AtomicBool::new(false)),
             registry_index: Arc::new(AtomicU64::new(registry_index as u64)),
+            metrics,
         }
     }
 }
@@ -130,7 +144,7 @@ impl GatewayManager {
                 }
                 None => {
                     let client = create_auth_client(url.clone(), jwt, timeout)?;
-                    let gateway = Gateway::new(url.clone(), client, jwt, *address, index);
+                    let gateway = Gateway::new(url.clone(), client, jwt, *address, index, self.metrics);
                     gateways.insert(url.clone(), Arc::new(gateway));
                 }
             }

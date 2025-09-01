@@ -65,6 +65,8 @@ pub enum Counter {
     SimulationResultsReceived,
     /// Total number of simulation errors
     SimulationErrors,
+    /// Reorg detected in the gateway commit cycle
+    GatewayReorgDetected,
 
     /// Total number of requests received by the portal
     PortalTotalRequests,
@@ -115,6 +117,10 @@ pub enum Gauge {
     SimulationQueueDepth,
     /// Current transaction pool memory usage in bytes
     TransactionPoolMemoryBytes,
+    /// Count of transactions in a frag
+    GatewayFragTxCount,
+    /// Gateway block build duration in milliseconds
+    GatewayBlockBuildDurationMs,
 
     /// Current portal->gateway ping latency in milliseconds
     PortalGatewayPingLatencyMs(Address),
@@ -132,10 +138,6 @@ pub enum Gauge {
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum Histogram {
-    /// Gateway frag tx count
-    GatewayFragTxCount,
-    /// Gateway block build duration in milliseconds
-    GatewayBlockBuildDurationMs,
     /// Gateway simulation latency in milliseconds
     SimulationLatencyMs,
     /// Gateway frag sealing end-to-end time in milliseconds
