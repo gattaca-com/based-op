@@ -40,7 +40,7 @@ pub struct SortingTelemetry {
 }
 impl SortingTelemetry {
     #[tracing::instrument(skip_all, name = "sorting_telemetry")]
-    pub fn report(&self) {
+    pub fn report(&self, metrics_producer: &Producer<MetricsUpdate>) {
         tracing::info!(
             "{} total sims: {}% success, tot simtime {}",
             self.n_sims_sent,
@@ -50,6 +50,17 @@ impl SortingTelemetry {
                 (self.n_sims_succesful * 10000 / self.n_sims_sent) as f64 / 100.0
             },
             self.tot_sim_time
+        );
+
+        MetricsUpdate::send_ref(
+            Uuid::new_v4(),
+            Metric::SetGauge(Gauge::GatewaySortingSimsSent, self.n_sims_sent as f64),
+            metrics_producer,
+        );
+        MetricsUpdate::send_ref(
+            Uuid::new_v4(),
+            Metric::SetGauge(Gauge::GatewaySortingSimTime, self.tot_sim_time.as_millis()),
+            metrics_producer,
         );
     }
 }

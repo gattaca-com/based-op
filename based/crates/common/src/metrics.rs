@@ -121,6 +121,18 @@ pub enum Gauge {
     GatewayFragTxCount,
     /// Gateway block build duration in milliseconds
     GatewayBlockBuildDurationMs,
+    /// Gateway transactions per second (txs / ms)
+    GatewayTps,
+    /// Gateway MGas per second (MGas / s)
+    GatewayMGasS,
+    /// Gateway transactions per block
+    GatewayBlockTxCount,
+    /// Gateway gas used per block
+    GatewayBlockGasUsed,
+    /// Gateway simulations sent during sorting
+    GatewaySortingSimsSent,
+    /// Gateway total simulation time during sorting
+    GatewaySortingSimTime,
 
     /// Current portal->gateway ping latency in milliseconds
     PortalGatewayPingLatencyMs(Address),

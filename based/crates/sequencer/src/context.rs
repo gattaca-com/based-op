@@ -252,7 +252,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
 
     /// Finalize the block after the last frag has been sealed
     pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4) {
-        frag_seq.sorting_telemetry.report();
+        frag_seq.sorting_telemetry.report(&self.metrics);
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
         let (transactions, transactions_root, receipts_root, logs_bloom) =
@@ -328,20 +328,24 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             state_root,
             block_hash: v1.block_hash,
         };
-        let mgas = (gas_used / 10_000) as f64 / 100.0;
-        info!(
-            "sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)",
-            seal.block_number,
-            frag_seq.txs.len(),
-            mgas / frag_seq.start_t.elapsed().as_secs()
-        );
 
         let block_duration = frag_seq.start_t.elapsed().as_millis();
+        let mgas = (gas_used / 10_000) as f64 / 100.0;
+        let txs = frag_seq.txs.len() as f64;
+        let tps = txs / block_duration;
+        let mgas_s = mgas / frag_seq.start_t.elapsed().as_secs();
+        info!("sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)", seal.block_number, txs, mgas_s);
+
+        let uuid = Uuid::new_v4();
         MetricsUpdate::send(
-            Uuid::new_v4(),
+            uuid,
             Metric::SetGauge(Gauge::GatewayBlockBuildDurationMs, block_duration),
             &mut self.metrics,
         );
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockTxCount, txs), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockGasUsed, gas_used as f64), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayTps, tps), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayMGasS, mgas_s), &mut self.metrics);
 
         let payload_inner = ExecutionPayloadV3 {
             payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
