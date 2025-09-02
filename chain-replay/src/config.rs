@@ -1,3 +1,5 @@
+//! CLI arguments and configuration.
+
 use std::{fmt::Debug, ops::RangeInclusive};
 
 use url::Url;
@@ -15,10 +17,6 @@ pub struct Args {
     /// The L2 execution layer RPC URL, needed to download the blocks to replay.
     #[clap(long, env = "BASED_OP_L2_EL_RPC_URL")]
     pub l2_el_rpc_url: Url,
-    /// An L2 execution layer bootnode, needed to connect to the network. It is optional for
-    /// chains part of OP superchain.
-    #[clap(long, env = "BASED_OP_L2_EL_BOOTNODE")]
-    pub l2_el_bootnode: Option<String>,
     /// The inclusive range of blocks to replay, in the format 'start..=end'.
     #[clap(long, env = "BASED_OP_BLOCKS_RANGE", value_parser = range_inclusive_from_str)]
     pub blocks_range: RangeInclusive<u64>,
@@ -30,9 +28,6 @@ impl Args {
             panic!("Block range cannot start from genesis, must be at least block #1");
         }
 
-        if self.l2_el_bootnode.is_none() && matches!(self.chain_name, ChainName::BasedOpSepolia) {
-            panic!("L2 EL bootnode is required for based-op-sepolia");
-        }
         self
     }
 }

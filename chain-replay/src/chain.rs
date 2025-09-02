@@ -1,3 +1,5 @@
+//! Chain-specific information and paths to where data is saved.
+
 use std::{fmt::Display, path::PathBuf};
 
 use clap::ValueEnum;
@@ -26,6 +28,9 @@ impl Display for ChainName {
 impl ChainName {
     pub fn is_superchain(&self) -> bool {
         (matches!(&self, Self::BaseSepolia) || matches!(&self, Self::BaseMainnet))
+    }
+    pub fn is_based_op(&self) -> bool {
+        matches!(&self, Self::BasedOpSepolia)
     }
 }
 

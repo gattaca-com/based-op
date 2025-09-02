@@ -1,3 +1,5 @@
+//! Types and type utils to convert between types.
+
 use alloy::rpc::types::Block;
 
 use op_alloy_consensus::OpBlock;

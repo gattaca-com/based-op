@@ -1,14 +1,18 @@
-use std::ops::Deref;
+//! An engine client.
 
 use alloy::{
     primitives::{B256, Bytes},
-    providers::RootProvider,
-    rpc::types::engine::{
-        ExecutionPayloadInputV2, ForkchoiceState, ForkchoiceUpdated, JwtSecret, PayloadStatus,
+    providers::{Provider, RootProvider},
+    rpc::types::{
+        SyncStatus,
+        engine::{
+            ExecutionPayloadInputV2, ForkchoiceState, ForkchoiceUpdated, JwtSecret, PayloadStatus,
+        },
     },
     transports::TransportResult,
 };
 use alloy_rpc_client::RpcClient;
+use std::{ops::Deref, time::Duration};
 
 use alloy_transport_http::{
     AuthLayer, AuthService, Http, HyperClient,
@@ -21,6 +25,7 @@ use http_body_util::Full;
 use op_alloy_network::Optimism;
 use op_alloy_provider::ext::engine::OpEngineApi;
 use op_alloy_rpc_types_engine::{OpExecutionPayload, OpPayloadAttributes};
+use tokio::time::sleep;
 use tower::ServiceBuilder;
 use url::Url;
 
@@ -120,5 +125,19 @@ impl EngineClient {
         };
 
         call.await
+    }
+
+    /// Waits for the EL client to be synced.
+    pub async fn wait_for_sync(&self, poll_time: Duration) -> TransportResult<()> {
+        loop {
+            let sync_info = self.syncing().await?;
+            match sync_info {
+                SyncStatus::None => return Ok(()),
+                SyncStatus::Info(info) => {
+                    println!("Syncing: {info:?}");
+                }
+            }
+            sleep(poll_time).await;
+        }
     }
 }
