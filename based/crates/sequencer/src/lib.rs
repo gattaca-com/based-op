@@ -42,7 +42,7 @@ pub use config::SequencerConfig;
 use context::SequencerContext;
 pub use simulator::Simulator;
 use sorting::SortingData;
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 use uuid::Uuid;
 
 pub fn payload_to_block(
@@ -105,9 +105,10 @@ where
         });
 
         // handle new transaction
-        connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0 &&
-                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+        connections.receive_for(Duration::from_millis(10), |msg: Arc<Transaction>, senders| {
+            trace!("Received new transaction: {}", msg.hash());
+            if self.data.timestamp() != 0
+                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -132,6 +133,7 @@ where
 
         // handle engine API messages from rpc
         connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
+            trace!("Received engine api message: {msg:?}");
             let state = std::mem::take(&mut self.state);
             let cur_seq_state = telemetry::system::SequencerState::from(&state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
@@ -278,16 +280,16 @@ where
 
                 // NewPayload skipped some blocks. Signal to fetch them all and set state to syncing.
                 let payload_hash = payload.payload_inner.payload_inner.payload_inner.block_hash;
-                // Check if we have already committed this payload.
-                if payload_hash == ctx.db.head_block_hash().expect("couldn't get db head block hash") {
-                    return WaitingForForkChoiceWithAttributes;
-                }
-
                 let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
 
                 // Update sorting context
                 ctx.parent_header = block.header().clone();
                 ctx.parent_hash = payload_hash;
+
+                // Check if we have already committed this payload.
+                if payload_hash == ctx.db.head_block_hash().expect("couldn't get db head block hash") {
+                    return WaitingForForkChoiceWithAttributes;
+                }
 
                 // Commit the block
                 if let Some((start, stop)) = ctx.commit_block(&block) {
@@ -324,6 +326,10 @@ where
             WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
+                        trace!(
+                            "Received attributes {attributes:?}. ctx.parent_header: {:?}",
+                            ctx.parent_header.parent_hash
+                        );
                         // Don't start sequencing until we have a parent hash.
                         if ctx.parent_header.parent_hash == B256::ZERO {
                             return self;

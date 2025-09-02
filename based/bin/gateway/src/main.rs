@@ -13,7 +13,7 @@ use bop_db::{DatabaseRead, init_database};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
     Sequencer, SequencerConfig, Simulator,
-    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
+    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher, replay_fetcher::ReplayFetcher},
 };
 use clap::Parser;
 use revm_primitives::B256;
@@ -84,7 +84,21 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 .run(spine.to_connections("Sequencer"), ActorConfig::default());
         });
 
-        if let Some(mode) = args.mock {
+        if args.replay_args.is_some() {
+            s.spawn(|| {
+                let replay_args = args.replay_args.expect("some");
+                ReplayFetcher::new(
+                    db_block,
+                    args.eth_client_url,
+                    replay_args.l2_el_verifier_url,
+                    replay_args.replay_target,
+                )
+                .run(
+                    spine.to_connections("BlockFetch"),
+                    ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
+                );
+            });
+        } else if let Some(mode) = args.mock {
             s.spawn(|| {
                 MockFetcher::new(
                     args.eth_client_url,

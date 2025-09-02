@@ -12,7 +12,7 @@ use alloy::{
     transports::TransportResult,
 };
 use alloy_rpc_client::RpcClient;
-use std::{ops::Deref, time::Duration};
+use std::{borrow::Cow, ops::Deref, time::Duration};
 
 use alloy_transport_http::{
     AuthLayer, AuthService, Http, HyperClient,
@@ -130,6 +130,7 @@ impl EngineClient {
     /// Waits for the EL client to be synced.
     pub async fn wait_for_sync(&self, poll_time: Duration) -> TransportResult<()> {
         loop {
+            sleep(poll_time).await;
             let sync_info = self.syncing().await?;
             match sync_info {
                 SyncStatus::None => return Ok(()),
@@ -137,7 +138,18 @@ impl EngineClient {
                     println!("Syncing: {info:?}");
                 }
             }
-            sleep(poll_time).await;
         }
+    }
+
+    /// Reference: <https://geth.ethereum.org/docs/interacting-with-geth/rpc/ns-debug#debugsethead>
+    ///
+    /// After this call, you should make a FCU to also restore the safe and finalized hash.
+    pub async fn debug_set_head(&self, head: u64) -> TransportResult<()> {
+        let block_hex = format!("{:#x}", (head));
+        let call = self
+            .inner
+            .raw_request::<_, ()>(Cow::from("debug_setHead"), [block_hex]);
+
+        call.await
     }
 }

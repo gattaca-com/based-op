@@ -42,12 +42,10 @@ services:
           --port="${OP_GETH_GOSSIP_PORT}" \
           --nat="extip:${OP_GETH_EXTIP}"
 
-        # Bootnodes
         if [ -n "${OP_GETH_BOOTNODES:-}" ]; then
           set -- "$@" --bootnodes="${OP_GETH_BOOTNODES}"
         fi
 
-        # OP network (optional)
         if [ -n "${OP_GETH_NETWORK:-}" ]; then
           set -- "$@" --op-network="${OP_GETH_NETWORK}"
         fi
@@ -98,9 +96,11 @@ services:
     restart: unless-stopped
 
   based-gateway:
-    image: ghcr.io/gattaca-com/based-op/based-gateway:latest
-    pull_policy: always
+    image: local_based_gateway:debug
+    # pull_policy: always
     container_name: based-gateway
+    environment:
+      - RUST_LOG=${RUST_LOG_BOP_GATEWAY:-}
     command:
       - --rpc.port=$GATEWAY_PORT
       - --rpc.host=0.0.0.0
@@ -110,7 +110,9 @@ services:
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
       - --gossip.root_peer_url=http://0.0.0.0:8547
-      - --mock=Verification
+      - --chain-replay.target=${BOP_GATEWAY_REPLAY_TARGET}
+      - --chain-replay.l2-el-verifier-url=${BOP_GATEWAY_REPLAY_L2_EL_VERIFIER_URL}
+
     volumes:
       - ./config:/config
       - ./data/gateway:/data/gateway

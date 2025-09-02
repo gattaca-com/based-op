@@ -292,16 +292,16 @@ pub enum RpcError {
 impl From<RpcError> for RpcErrorObject<'static> {
     fn from(value: RpcError) -> Self {
         match value {
-            RpcError::Internal |
-            RpcError::Timeout(_) |
-            RpcError::ChannelClosed(_) |
-            RpcError::BroadcastChannelClosed |
-            RpcError::Jsonrpsee(_) |
-            RpcError::TokioJoin(_) |
-            RpcError::Db(_) |
-            RpcError::Io(_) |
-            RpcError::Serialization(_) |
-            RpcError::NoReturn => internal_error(),
+            RpcError::Internal
+            | RpcError::Timeout(_)
+            | RpcError::ChannelClosed(_)
+            | RpcError::BroadcastChannelClosed
+            | RpcError::Jsonrpsee(_)
+            | RpcError::TokioJoin(_)
+            | RpcError::Db(_)
+            | RpcError::Io(_)
+            | RpcError::Serialization(_)
+            | RpcError::NoReturn => internal_error(),
 
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
