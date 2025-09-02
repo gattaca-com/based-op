@@ -95,7 +95,7 @@ pub fn generate_rollup_file(chain_name: ChainName) -> io::Result<()> {
     match chain_name {
         ChainName::BasedOpSepolia => fs::copy(
             "../sepolia_genesis/rollup.json",
-            chain_name.genesis_file_path(),
+            chain_name.rollup_file_path(),
         )
         .map(|_| ()),
         chain => {
