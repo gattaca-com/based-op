@@ -83,7 +83,7 @@ impl FlowCounter {
         self.failed.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn print_summary_and_reset(&self) {
+    pub fn print_summary_send_metrics_and_reset(&self, metrics: &Producer<MetricsUpdate>) {
         info!(
             total = self.total.load(Ordering::Relaxed),
             success = self.success.load(Ordering::Relaxed),
@@ -94,6 +94,8 @@ impl FlowCounter {
             failed_all_clients = self.failed_all_clients.load(Ordering::Relaxed),
             "Flow statistics"
         );
+
+        self.send_metrics(metrics);
 
         // Reset counters
         self.total.store(0, Ordering::Relaxed);
@@ -198,8 +200,7 @@ impl TxProxyServer {
         let flow_counter_info_task = tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(60).into()).await;
-                flow_counter.send_metrics(&metrics);
-                flow_counter.print_summary_and_reset();
+                flow_counter.print_summary_send_metrics_and_reset(&metrics);
             }
         });
 
