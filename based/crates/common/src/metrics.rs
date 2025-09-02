@@ -84,6 +84,19 @@ pub enum Counter {
     PayloadsServedFromFallback,
     /// Total number of payloads that failed to be served
     PayloadServeFailed,
+
+    /// Total number of requests received by the txproxy
+    TxProxyTotalRequests,
+    /// Total number of requests that failed to be served by the txproxy
+    TxProxyFailedRequests,
+    /// Total number of requests that failed to be served by the txproxy
+    TxProxyFailedRequestsInvalidParams,
+    /// Total number of requests that failed to be served by the txproxy
+    TxProxyFailedRequestsMethodNotFound,
+    /// Total number of requests that failed to be served by the txproxy
+    TxProxyFailedRequestsNoClients,
+    /// Total number of requests that failed to be served by the txproxy
+    TxProxyFailedRequestsAllClients,
 }
 
 /// A gauge is a metric that can be set to a specific value.
@@ -107,6 +120,9 @@ pub enum Gauge {
     PortalGatewayPingLatencyMs(Address),
     /// Current portal->gateway registry address
     PortalCurrentGatewayRegistryAddress(Address),
+
+    /// Current number of forwarding clients
+    TxProxyForwardingClients,
 }
 
 /// A histogram is a metric that can be used to track the distribution of a value.

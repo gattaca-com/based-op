@@ -10,7 +10,7 @@ use tracing::{info, trace};
 
 /// The number of units of budget to spend per loop iteration.
 /// Useful to avoid starving the consumers.
-const LOOP_BUDGET: u64 = 10_000;
+const LOOP_BUDGET: u64 = 500;
 
 /// Consumes telemetry updates from shared memory queues, and converts them into metrics.
 pub struct MetricsConsumer {
