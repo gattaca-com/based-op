@@ -6,42 +6,53 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        # 1) if this directory lacks the geth chaindata, initialize it
+        # 1) initialize datadir if needed
         if [ ! -d /data/geth/geth/chaindata ]; then
           echo ">>> initializing geth datadir…"
           geth init \
             --state.scheme=hash \
             --datadir=/data/geth \
-            /config/genesis.json 
+            /config/genesis.json
         fi
-        # 2) then exec the real geth with all your flags
-        exec geth \
+
+        # 2) build argv with conditionals (POSIX sh)
+        set -- \
           --datadir=/data/geth \
           --gcmode=archive \
           --state.scheme=hash \
+          --syncmode=full \
+          --rpc.allow-unprotected-txs \
+          --allow-insecure-unlock \
           --http \
           --http.addr=0.0.0.0 \
-          --http.port=$OP_GETH_RPC_PORT \
+          --http.port="${OP_GETH_RPC_PORT}" \
           --http.vhosts="*" \
           --http.corsdomain="*" \
           --http.api="admin,engine,net,eth,web3,debug,miner,txpool" \
           --ws \
           --ws.addr=0.0.0.0 \
-          --ws.port=$OP_GETH_WS_PORT \
+          --ws.port="${OP_GETH_WS_PORT}" \
           --ws.api="admin,engine,net,eth,web3,debug,miner,txpool" \
           --ws.origins="*" \
-          --authrpc.port=$OP_GETH_ENGINE_RPC_PORT \
           --authrpc.addr=0.0.0.0 \
+          --authrpc.port="${OP_GETH_ENGINE_RPC_PORT}" \
           --authrpc.vhosts="*" \
           --authrpc.jwtsecret=/config/jwt \
-          --syncmode=full \
-          --rpc.allow-unprotected-txs \
-          --allow-insecure-unlock \
-          --discovery.port=$OP_GETH_GOSSIP_PORT \
-          --port=$OP_GETH_GOSSIP_PORT \
-          --op-network=$OP_GETH_NETWORK \
-          --nat=extip:$OP_GETH_EXTIP \
-          --log.vmodule=p2p=4 \
+          --discovery.port="${OP_GETH_GOSSIP_PORT}" \
+          --port="${OP_GETH_GOSSIP_PORT}" \
+          --nat="extip:${OP_GETH_EXTIP}"
+
+        # Bootnodes
+        if [ -n "${OP_GETH_BOOTNODES:-}" ]; then
+          set -- "$@" --bootnodes="${OP_GETH_BOOTNODES}"
+        fi
+
+        # OP network (optional)
+        if [ -n "${OP_GETH_NETWORK:-}" ]; then
+          set -- "$@" --op-network="${OP_GETH_NETWORK}"
+        fi
+
+        exec geth "$@"
 
     volumes:
       - ./data/geth:/data/geth
@@ -95,28 +106,15 @@ services:
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway
-      - --eth_client.url=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
+      - --eth_client.url=http://0.0.0.0:$OP_GETH_RPC_PORT
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
       - --gossip.root_peer_url=http://0.0.0.0:8547
+      - --mock=Verification
     volumes:
       - ./config:/config
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
       - /dev/shm:/dev/shm
     network_mode: "host"
-    restart: unless-stopped
-
-  based-registry:
-    image: ghcr.io/gattaca-com/based-op/based-registry:latest
-    pull_policy: always
-    container_name: based-registry
-    network_mode: "host"
-    # Override inter-container URLs for bridge networking
-    command:
-      - --registry.path=/config/registry.json
-      - --eth_rpc_url=http://0.0.0.0:${OP_GETH_RPC_PORT}
-      - --port=${REGISTRY_PORT}
-    volumes:
-      - ./config:/config
     restart: unless-stopped
