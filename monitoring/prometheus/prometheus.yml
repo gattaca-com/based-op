@@ -13,8 +13,11 @@ scrape_configs:
     static_configs:
       - targets: ["172.17.0.1:8009"] # host subnet
   - job_name: "based-op-geth"
+    scheme: http
+    metrics_path: "/debug/metrics/prometheus"
     static_configs:
-      - targets: ["172.17.0.1:8010/debug/metrics/prometheus"] # host subnet
+      - targets: ["172.17.0.1:8010"] # host subnet
+
   - job_name: "based-op-node"
     static_configs:
       - targets: ["172.17.0.1:8011"] # host subnet
