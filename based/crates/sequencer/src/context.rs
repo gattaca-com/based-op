@@ -329,11 +329,11 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             block_hash: v1.block_hash,
         };
 
-        let block_duration = frag_seq.start_t.elapsed().as_millis();
+        let block_duration = frag_seq.start_t.elapsed().as_secs();
         let mgas = (gas_used / 10_000) as f64 / 100.0;
         let txs = frag_seq.txs.len() as f64;
         let tps = txs / block_duration;
-        let mgas_s = mgas / frag_seq.start_t.elapsed().as_secs();
+        let mgas_s = mgas / block_duration;
         info!("sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)", seal.block_number, txs, mgas_s);
 
         let uuid = Uuid::new_v4();
