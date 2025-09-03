@@ -1,8 +1,9 @@
 use std::{fmt::Debug, ops::Deref, sync::Arc};
 
 use alloy_consensus::{Eip658Value, Receipt, Transaction as TransactionTrait, TxReceipt};
-use alloy_eips::{Typed2718, eip7702::SignedAuthorization};
+use alloy_eips::{eip7702::SignedAuthorization, Encodable2718, Typed2718};
 use alloy_primitives::{ChainId, U256};
+use alloy_rlp::BufMut;
 use alloy_rpc_types::{AccessList, TransactionReceipt};
 use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};
 use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
@@ -162,10 +163,9 @@ impl SimulatedTx {
     }
 
     pub fn estimated_tx_compressed_size(&self) -> u64 {
-        let temp = self.tx.tx.try_into_pooled()?;
-        let test: OpPooledTransaction = 0;
-
-        0
+        let mut buff = Vec::new();
+        self.tx.tx.encode_2718(&mut buff);
+        op_alloy_flz::tx_estimated_size_fjord(&buff)
     }
 }
 

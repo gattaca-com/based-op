@@ -72,6 +72,7 @@ moka = "0.12.10"
 op-alloy-consensus = { version = "=0.14.1", default-features = false, features = ["k256"] }
 op-alloy-network = "0.14.1"
 op-alloy-rpc-types = "0.14.1"
+op-alloy-flz = { version = "0.13.0", default-features = false }
 op-alloy-rpc-types-engine = { version = "0.14.1", default-features = false, features = ["serde"] }
 op-revm = "3.0.2"
 parking_lot = "0.12.3"
