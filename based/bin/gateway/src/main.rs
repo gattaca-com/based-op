@@ -66,8 +66,6 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     let evm_config = sequencer_config.evm_config.clone();
     let (frag_broadcast_tx, _) = tokio::sync::broadcast::channel(10_000);
 
-    let da_config = OpDAConfig::default();
-
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
             .worker_threads(10)
@@ -78,7 +76,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone(), da_config);
+            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone(), args.da_config.clone());
             move || rt.block_on(wait_for_signal())
         });
 

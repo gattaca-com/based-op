@@ -107,6 +107,7 @@ mod tests {
     use reqwest::Url;
     use reth_optimism_chainspec::BASE_SEPOLIA;
     use reth_optimism_evm::OpEvmConfig;
+    use reth_optimism_payload_builder::config::OpDAConfig;
     use revm::context::ContextTr;
     use tracing::level_filters::LevelFilter;
 
@@ -152,6 +153,7 @@ mod tests {
             simulate_tof_in_pools: false,
             commit_sealed_frags_to_db: false,
             supervisor: None,
+            da_config: OpDAConfig::default(),
         };
 
         // Create the alloydb.

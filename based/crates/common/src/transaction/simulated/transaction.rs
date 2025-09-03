@@ -7,6 +7,7 @@ use alloy_rpc_types::{AccessList, TransactionReceipt};
 use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};
 use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use op_revm::OpHaltReason;
+use reth_optimism_node::txpool::OpPooledTransaction;
 use reth_optimism_primitives::OpReceipt;
 use reth_primitives::ReceiptWithBloom;
 use revm::{context::result::ResultAndState, state::EvmState};
@@ -158,6 +159,13 @@ impl SimulatedTx {
             sim_time: self.sim_time,
             gas_used: self.gas_used(),
         }))
+    }
+
+    pub fn estimated_tx_compressed_size(&self) -> u64 {
+        let temp = self.tx.tx.try_into_pooled()?;
+        let test: OpPooledTransaction = 0;
+
+        0
     }
 }
 

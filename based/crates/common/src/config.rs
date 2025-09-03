@@ -105,6 +105,9 @@ pub struct GatewayArgs {
     /// Simulator Allows reverts in simulations
     #[arg(long = "simulator.allow_reverts", default_value_t = true)]
     pub allow_reverts: bool,
+
+    #[arg(skip = OpDAConfig::default())]
+    pub da_config: OpDAConfig
 }
 
 impl GatewayArgs {
