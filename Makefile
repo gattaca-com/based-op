@@ -416,8 +416,6 @@ stop-main-node:
 		exit 1; \
 	fi
 	docker compose -f .local_main_node/compose.yml down
-	# also stop monitoring services, if they are running
-	$(MAKE) stop-monitoring
 
 stop-monitoring:
 	docker compose $(START_MONITORING_COMPOSE_FILES) down
