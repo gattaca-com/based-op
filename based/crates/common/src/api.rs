@@ -172,6 +172,15 @@ pub trait OpGethAdminApi {
     async fn peers(&self) -> RpcResult<Vec<OpGethPeer>>;
 }
 
+#[rpc(client, server, namespace = "miner")]
+pub trait OpMinerExtApi {
+    /// The rollup config of the op-node
+    #[method(name = "setMaxDASize")]
+    async fn set_max_da_size(&self, max_tx_size: u64, max_block_size: u64) -> RpcResult<bool> {
+        Ok(false) // return false if not implimented
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RollupConfig {
     pub genesis: Genesis,

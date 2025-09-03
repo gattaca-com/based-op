@@ -3,20 +3,20 @@ use std::{net::SocketAddr, sync::Arc};
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
-    api::{ControlApiServer, EngineApiServer, MinimalEthApiServer},
+    api::{ControlApiServer, EngineApiServer, MinimalEthApiServer, OpMinerExtApiServer},
     communication::{
-        Producer, Sender, Spine,
-        messages::{EngineApi, RpcResult},
+        messages::{EngineApi, RpcResult}, Producer, Sender, Spine
     },
     config::GatewayArgs,
     db::DatabaseRead,
     fabric::FabricGatewayApiServer,
     p2p::SignedVersionedMessage,
-    telemetry::{TelemetryUpdate, telemetry_queue},
+    telemetry::{telemetry_queue, TelemetryUpdate},
     time::Duration,
     transaction::Transaction,
 };
 use jsonrpsee::{core::async_trait, server::ServerBuilder};
+use reth_optimism_payload_builder::config::OpDAConfig;
 use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
 use tokio::runtime::Runtime;
 use tracing::{Level, error, info, trace};
@@ -30,10 +30,11 @@ pub fn start_rpc<Db: DatabaseRead>(
     spine: &Spine<Db>,
     rt: &Runtime,
     rx_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
+    da_config: OpDAConfig
 ) {
     let addr_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
     let addr_no_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port_no_auth);
-    let server = RpcServer::new(spine, config.sequencer_jwt(), rx_spawner);
+    let server = RpcServer::new(spine, config.sequencer_jwt(), rx_spawner, da_config);
     rt.spawn(server.run(addr_auth, addr_no_auth));
 }
 
@@ -47,6 +48,7 @@ struct RpcServer {
     jwt: JwtSecret,
     telemetry_producer: Producer<TelemetryUpdate>,
     frag_receiver_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
+    da_config: OpDAConfig,
 }
 
 impl RpcServer {
@@ -54,6 +56,7 @@ impl RpcServer {
         spine: &Spine<Db>,
         jwt: JwtSecret,
         frag_receiver_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
+        da_config: OpDAConfig,
     ) -> Self {
         Self {
             new_order_tx: spine.into(),
@@ -62,6 +65,7 @@ impl RpcServer {
             jwt,
             telemetry_producer: telemetry_queue().into(),
             frag_receiver_spawner,
+            da_config,
         }
     }
 
@@ -85,6 +89,7 @@ impl RpcServer {
         let mut module = MinimalEthApiServer::into_rpc(self.clone());
         module.merge(EngineApiServer::into_rpc(self.clone().clone())).expect("failed to merge modules");
         module.merge(ControlApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        module.merge(OpMinerExtApiServer::into_rpc(self.clone())).expect("failed to merge modules");
 
         let server_handle_auth = server_auth.start(module);
 
@@ -131,5 +136,14 @@ impl MinimalEthApiServer for RpcServer {
 impl ControlApiServer for RpcServer {
     async fn heartbeat(&self) -> RpcResult<()> {
         Ok(())
+    }
+}
+
+#[async_trait]
+impl OpMinerExtApiServer for RpcServer {
+    async fn set_max_da_size(&self, max_tx_size: u64, max_block_size: u64) -> RpcResult<bool> {
+        info!(target: "rpc", "Setting max DA size: tx={}, block={}", max_tx_size, max_block_size);
+        self.da_config.set_max_da_size(max_tx_size, max_block_size);
+        Ok(true)
     }
 }
