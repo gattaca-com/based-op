@@ -17,7 +17,10 @@ use op_alloy_network::Optimism;
 
 use crate::{
     config::Args,
-    docker::{ensure_all_containers_down, start_based_gatway, start_based_op_geth_service},
+    docker::{
+        ensure_all_containers_down, start_based_gatway, start_based_op_geth_service,
+        start_based_op_node_service, start_based_registry,
+    },
     engine::EngineClient,
     types::execution_payload_from_block,
     utils::{ensure_chain_folder, read_jwt_file},
@@ -47,7 +50,7 @@ async fn main() {
     let parent_beacon_block_root = replay_block.header.parent_beacon_block_root;
 
     start_based_op_geth_service(args.chain_name).expect("to start based op service");
-    let sleep_time = Duration::from_secs(5);
+    let sleep_time = Duration::from_secs(3);
     println!("Waiting {sleep_time:?} for engine to be up...");
     tokio::time::sleep(sleep_time).await;
     let auth_el_client = EngineClient::new(args.l2_engine_rpc_url.clone(), jwt_secret);
@@ -98,7 +101,15 @@ async fn main() {
             .await
             .expect("make sync status calls");
 
-        println!("based-op-geth is now synced! Starting gateway in verification mode");
+        println!("based-op-geth is now synced!");
     }
+
+    println!("Starting based-registry");
+    start_based_registry(args.chain_name).expect("to start based-registry");
+
+    println!("Starting based-op-node");
+    start_based_op_node_service(args.chain_name).expect("to start based-op-node");
+
+    println!("Starting based-gateway");
     start_based_gatway(args).expect("to start gateway");
 }

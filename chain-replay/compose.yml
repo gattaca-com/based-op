@@ -40,7 +40,7 @@ services:
           --authrpc.jwtsecret=/config/jwt \
           --discovery.port="${OP_GETH_GOSSIP_PORT}" \
           --port="${OP_GETH_GOSSIP_PORT}" \
-          --nat="extip:${OP_GETH_EXTIP}"
+          --nat="extip:${OP_GETH_EXTIP}" \
 
         if [ -n "${OP_GETH_BOOTNODES:-}" ]; then
           set -- "$@" --bootnodes="${OP_GETH_BOOTNODES}"
@@ -58,6 +58,18 @@ services:
     restart: unless-stopped
     network_mode: "host"
 
+  based-registry:
+    image: local_based_registry
+    container_name: based-registry
+    network_mode: "host"
+    command:
+      - --registry.path=/config/registry.json
+      - --eth_rpc_url=http://0.0.0.0:${OP_GETH_RPC_PORT}
+      - --port=${REGISTRY_PORT}
+    volumes:
+      - ./config:/config
+    restart: unless-stopped
+
   based-op-node:
     image: ghcr.io/gattaca-com/based-optimism/based-op-node:latest
     pull_policy: always
@@ -65,34 +77,32 @@ services:
     network_mode: "host"
     command:
       - op-node
-      - --l2=http://0.0.0.0:$OP_GETH_ENGINE_RPC_PORT
+      - --l2=http://0.0.0.0:${OP_GETH_ENGINE_RPC_PORT}
       - --l2.jwt-secret=/config/jwt
       - --verifier.l1-confs=1
       - --rollup.config=/config/rollup.json
       - --rpc.addr=0.0.0.0
-      - --rpc.port=8547
+      - --rpc.port=${OP_NODE_RPC_PORT}
       - --rpc.enable-admin
-      - --l1=$L1_RPC_URL
+      - --l1=${L1_RPC_URL}
       - --l1.rpckind=standard
-      - --l1.beacon=$L1_BEACON_RPC_URL
-      - --p2p.advertise.ip=$OP_NODE_GOSSIP_IP
-      - --p2p.advertise.tcp=$OP_NODE_GOSSIP_PORT
-      - --p2p.advertise.udp=$OP_NODE_GOSSIP_PORT
+      - --l1.beacon=${L1_BEACON_RPC_URL}
+      - --p2p.advertise.ip=${OP_NODE_GOSSIP_IP}
+      - --p2p.advertise.tcp=${OP_NODE_GOSSIP_PORT}
+      - --p2p.advertise.udp=${OP_NODE_GOSSIP_PORT}
       - --p2p.listen.ip=0.0.0.0
-      - --p2p.listen.tcp=$OP_NODE_GOSSIP_PORT
-      - --p2p.listen.udp=$OP_NODE_GOSSIP_PORT
+      - --p2p.listen.tcp=${OP_NODE_GOSSIP_PORT}
+      - --p2p.listen.udp=${OP_NODE_GOSSIP_PORT}
       - --safedb.path=/data/op-node/op-node-beacon-data
-      # - --p2p.static=$MAIN_OP_NODE_GOSSIP_STATIC
-      - --p2p.discovery=false
+      # - --p2p.static=${MAIN_OP_NODE_GOSSIP_STATIC}
+      - --p2p.no-discovery=true
       - --rpc.enable-based
-      - --registry=$PORTAL
-      - --p2p.bootnodes=$MAIN_OP_NODE_ENR
+      - --registry=http://0.0.0.0:${REGISTRY_PORT}
+      # - --p2p.bootnodes=${MAIN_OP_NODE_ENR}
       - --syncmode=execution-layer
     volumes:
       - ./data/node:/data/op-node
       - ./config:/config
-    depends_on:
-      - based-op-geth
     restart: unless-stopped
 
   based-gateway:
@@ -102,14 +112,14 @@ services:
     environment:
       - RUST_LOG=${RUST_LOG_BOP_GATEWAY:-}
     command:
-      - --rpc.port=$GATEWAY_PORT
+      - --rpc.port=${GATEWAY_PORT}
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway
-      - --eth_client.url=http://0.0.0.0:$OP_GETH_RPC_PORT
+      - --eth_client.url=http://0.0.0.0:${OP_GETH_RPC_PORT}
       - --rpc.jwt=/config/jwt
-      - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
-      - --gossip.root_peer_url=http://0.0.0.0:8547
+      - --gossip.signer_private_key=${GATEWAY_SEQUENCING_KEY}
+      - --gossip.root_peer_url=http://0.0.0.0:${OP_NODE_RPC_PORT}
       - --chain-replay.target=${BOP_GATEWAY_REPLAY_TARGET}
       - --chain-replay.l2-el-verifier-url=${BOP_GATEWAY_REPLAY_L2_EL_VERIFIER_URL}
 

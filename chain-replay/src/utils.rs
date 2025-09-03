@@ -62,6 +62,15 @@ pub fn ensure_chain_folder(chain_name: ChainName) -> io::Result<()> {
         generate_rollup_file(chain_name)?;
     }
 
+    let registry_path = chain_name.registry_file_path();
+    if !fs::exists(registry_path.clone())? {
+        println!(
+            "Creating registry.json file for chain '{chain_name}' at: {:?}",
+            registry_path.clone()
+        );
+        fs::copy("registry.json", registry_path)?;
+    }
+
     Ok(())
 }
 

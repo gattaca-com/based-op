@@ -60,6 +60,10 @@ impl ChainName {
         self.config_directory_path().join("rollup.json")
     }
 
+    pub fn registry_file_path(&self) -> PathBuf {
+        self.config_directory_path().join("registry.json")
+    }
+
     pub fn env_file_path(&self) -> PathBuf {
         self.directory_path().join(".env")
     }
