@@ -1599,7 +1599,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "chain-replay-watchdog"
+name = "chain-replay-driver"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -1607,9 +1607,11 @@ dependencies = [
  "eyre",
  "kona-cli",
  "kona-disc",
+ "kona-genesis",
  "kona-node-service",
  "kona-registry",
  "libp2p",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tracing",
