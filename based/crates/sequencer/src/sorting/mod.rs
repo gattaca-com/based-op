@@ -5,11 +5,11 @@ use std::{
 
 use bop_common::transaction::{SimulatedTx, SimulatedTxList};
 use revm_primitives::{Address, U256};
+use tracing::debug;
 
 pub(crate) mod sorting_data;
 pub(crate) use sorting_data::SortingData;
 pub(crate) mod frag_sequence;
-
 pub(crate) use frag_sequence::FragSequence;
 
 #[derive(Clone, Debug, Default)]
@@ -80,12 +80,19 @@ impl ActiveOrders {
         self.orders[id].gas_limit().is_none_or(|gas| gas_remaining < gas)
     }
 
-    /// Checks whether we have enough DA remaining for order at id.
+    /// Checks whether the DA requirement for the order at `id` exceeds the available DA.
     pub fn da_too_large(&mut self, id: usize, da_remaining: Option<u64>) -> bool {
-        if da_remaining.is_none() {
-            return false;
+        match da_remaining {
+            Some(remaining) => {
+                let da = self.orders[id].estimated_da();
+                let too_large = da.is_none_or(|da| da > remaining);
+                if too_large {
+                    debug!(?id, ?da_remaining, ?da, "tx DA too large");
+                }
+                too_large
+            }
+            None => false,
         }
-        self.orders[id].estimated_da().is_none_or(|da| da > da_remaining.unwrap())
     }
 }
 
