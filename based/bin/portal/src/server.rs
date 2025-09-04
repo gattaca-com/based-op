@@ -11,7 +11,8 @@ use alloy_primitives::B256;
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpMinerExtApiServer, OpNodeApiClient, OpNodeP2PApiClient, PortalApiServer
+        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpMinerExtApiServer, OpNodeApiClient,
+        OpNodeP2PApiClient, PortalApiServer,
     },
     communication::messages::{RpcError, RpcResult},
     time::Duration,

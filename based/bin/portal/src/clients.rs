@@ -10,7 +10,7 @@ use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::{Address, B256, hex};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState};
 use bop_common::{
-    api::{ControlApiClient, EngineApiClient, RegistryApiClient, OpMinerExtApiClient},
+    api::{ControlApiClient, EngineApiClient, OpMinerExtApiClient, RegistryApiClient},
     debug_panic,
     time::{Duration, Instant},
 };
@@ -303,13 +303,8 @@ impl GatewayManager {
             let gateway = gateway.clone();
             tokio::spawn(
                 async move {
-                    match gateway
-                        .client
-                        .set_max_da_size(max_tx_size, max_block_size)
-                        .await
-                    {
-                        Err(err) => error!(?gateway, %err, "failed to forward miner_setMaxDASize"),
-                        _ => {}
+                    if let Err(err) = gateway.client.set_max_da_size(max_tx_size, max_block_size).await {
+                        error!(?gateway, %err, "failed to forward miner_setMaxDASize");
                     }
                 }
                 .in_current_span(),
