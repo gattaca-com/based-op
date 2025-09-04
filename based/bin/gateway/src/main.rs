@@ -19,7 +19,6 @@ use clap::Parser;
 use revm_primitives::B256;
 use tokio::runtime::Runtime;
 use tracing::{error, info};
-use reth_optimism_payload_builder::config::OpDAConfig;
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {

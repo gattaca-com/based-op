@@ -176,9 +176,7 @@ pub trait OpGethAdminApi {
 pub trait OpMinerExtApi {
     /// The rollup config of the op-node
     #[method(name = "setMaxDASize")]
-    async fn set_max_da_size(&self, max_tx_size: u64, max_block_size: u64) -> RpcResult<bool> {
-        Ok(false) // return false if not implimented
-    }
+    async fn set_max_da_size(&self, max_tx_size: u64, max_block_size: u64) -> RpcResult<bool>;
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

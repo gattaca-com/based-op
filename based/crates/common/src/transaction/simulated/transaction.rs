@@ -1,14 +1,12 @@
 use std::{fmt::Debug, ops::Deref, sync::Arc};
 
 use alloy_consensus::{Eip658Value, Receipt, Transaction as TransactionTrait, TxReceipt};
-use alloy_eips::{eip7702::SignedAuthorization, Encodable2718, Typed2718};
+use alloy_eips::{eip7702::SignedAuthorization, Typed2718};
 use alloy_primitives::{ChainId, U256};
-use alloy_rlp::BufMut;
 use alloy_rpc_types::{AccessList, TransactionReceipt};
 use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};
 use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use op_revm::OpHaltReason;
-use reth_optimism_node::txpool::OpPooledTransaction;
 use reth_optimism_primitives::OpReceipt;
 use reth_primitives::ReceiptWithBloom;
 use revm::{context::result::ResultAndState, state::EvmState};
