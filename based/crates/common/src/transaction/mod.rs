@@ -1,7 +1,7 @@
 pub mod simulated;
 pub mod tx_list;
 
-use std::{ops::Deref, sync::Arc};
+use std::{ops::Deref, sync::{Arc, OnceLock}};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
 use alloy_eips::{
@@ -30,11 +30,13 @@ pub struct Transaction {
     /// Recovered from the tx on initialisation.
     sender: Address,
     pub envelope: Bytes,
+
+    estimated_da_size: OnceLock<u64>,
 }
 
 impl Transaction {
     pub fn new(tx: OpTxEnvelope, sender: Address, envelope: Bytes) -> Self {
-        Self { tx, sender, envelope, uuid: Uuid::new_v4() }
+        Self { tx, sender, envelope, uuid: Uuid::new_v4(), estimated_da_size: OnceLock::new() }
     }
 
     #[inline]
@@ -204,7 +206,7 @@ impl Transaction {
             OpTxEnvelope::Deposit(sealed) => sealed.from,
         };
 
-        Ok(Self { sender, tx, envelope: bytes, uuid: Uuid::new_v4() })
+        Ok(Self { sender, tx, envelope: bytes, uuid: Uuid::new_v4(), estimated_da_size: OnceLock::new() })
     }
 
     pub fn encode(&self) -> Bytes {
@@ -228,6 +230,15 @@ impl Transaction {
 
     pub fn to_ingested_telemetry(&self) -> Telemetry {
         Telemetry::Tx(Tx::Ingested(Ingested { sender: self.sender, nonce: self.nonce(), hash: self.tx_hash() }))
+    }
+
+    // port from reth_op_txpool. calculate estimated DA of tx
+    pub fn estimated_tx_compressed_size(&self) -> u64 {
+        *self.estimated_da_size.get_or_init(|| {
+            let mut buff = Vec::new();
+            self.tx.encode_2718(&mut buff);
+            op_alloy_flz::tx_estimated_size_fjord(&buff)
+        })
     }
 }
 
@@ -259,6 +270,6 @@ impl From<OpTransactionSigned> for Transaction {
     fn from(value: OpTransactionSigned) -> Self {
         let sender = value.recover_signer().expect("could not recover signer");
         let envelope = value.encoded_2718().into();
-        Self { tx: value, sender, envelope, uuid: Uuid::new_v4() }
+        Self { tx: value, sender, envelope, uuid: Uuid::new_v4(), estimated_da_size: OnceLock::new() }
     }
 }

@@ -23,6 +23,7 @@ use reth_evm::{
     execute::{BlockExecutionError, ProviderError},
 };
 use reth_optimism_evm::OpBlockExecutionError;
+use reth_optimism_payload_builder::config::OpDAConfig;
 use revm_primitives::{Address, U256};
 use tracing::trace;
 use uuid::Uuid;
@@ -81,6 +82,7 @@ pub struct SortingData<Db> {
     /// Frag state with applied txs
     pub db: DBSorting<Db>,
     pub gas_remaining: u64,
+    pub da_config: OpDAConfig,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
     /// Sort frag until, and then commit
@@ -138,6 +140,7 @@ impl<Db> SortingData<Db> {
             next_to_be_applied: None,
             tof_snapshot,
             gas_remaining: seq.gas_remaining,
+            da_config: data.config.da_config.clone(),
             txs: vec![],
             start_t: Instant::now(),
             telemetry: Default::default(),
@@ -266,8 +269,16 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         }
         let mut i = self.tof_snapshot.len() - 1;
         while self.in_flight_sims < n_sims_per_loop {
+            // check if tx DA is smaller than max allowed
+            let tx_to_sim = self.tof_snapshot[i].next_to_sim_read_only();
+            let too_big = match (self.da_config.max_da_tx_size(), tx_to_sim) {
+                (Some(max_da_tx_size), Some(tx)) => {
+                    tx.estimated_tx_compressed_size() > max_da_tx_size
+                }
+                _ => false
+            };
             // check if we even have enough gas left for next order
-            if self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
+            if too_big || self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
                 self.tof_snapshot.swap_remove_back(i);
                 if i == 0 {
                     return;

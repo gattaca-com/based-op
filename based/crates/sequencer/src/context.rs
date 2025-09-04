@@ -203,7 +203,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         senders.send(simulator_evm_block_params.clone()).expect("should never fail");
         let n_force_include_txs =
             self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
-        let seq = FragSequence::new(self.gas_limit(), self.block_number(), n_force_include_txs);
+        let max_block_da = self.config.da_config.max_da_block_size();
+        let seq = FragSequence::new(self.gas_limit(), max_block_da, self.block_number(), n_force_include_txs);
         let mut sorting = SortingData::new(&seq, self);
 
         // Apply must include

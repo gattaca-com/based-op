@@ -12,6 +12,7 @@ use crate::context::SequencerContext;
 pub struct FragSequence {
     pub start_t: Instant,
     pub gas_remaining: u64,
+    pub da_remaining: Option<u64>,
     pub gas_used: u64,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
@@ -24,10 +25,11 @@ pub struct FragSequence {
     pub sorting_telemetry: SortingTelemetry,
 }
 impl FragSequence {
-    pub fn new(gas_remaining: u64, block_number: u64, n_force_include_txs: usize) -> Self {
+    pub fn new(gas_remaining: u64, da_remaining: Option<u64>, block_number: u64, n_force_include_txs: usize) -> Self {
         Self {
             start_t: Instant::now(),
             gas_remaining,
+            da_remaining,
             gas_used: 0,
             payment: U256::ZERO,
             txs: vec![],
@@ -47,6 +49,10 @@ impl FragSequence {
         self.gas_remaining -= gas_used;
         self.payment += in_sort.payment();
         let uuid = in_sort.uuid;
+        self.da_remaining = self.da_remaining.map(|da| {
+            let used_da: u64 = in_sort.txs.iter().map(|tx| tx.tx.estimated_tx_compressed_size()).sum();
+            da.saturating_sub(used_da)
+        });
 
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {

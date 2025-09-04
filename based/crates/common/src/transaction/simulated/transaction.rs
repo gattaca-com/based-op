@@ -161,12 +161,6 @@ impl SimulatedTx {
             gas_used: self.gas_used(),
         }))
     }
-
-    pub fn estimated_tx_compressed_size(&self) -> u64 {
-        let mut buff = Vec::new();
-        self.tx.tx.encode_2718(&mut buff);
-        op_alloy_flz::tx_estimated_size_fjord(&buff)
-    }
 }
 
 impl AsRef<ResultAndState<OpHaltReason>> for SimulatedTx {

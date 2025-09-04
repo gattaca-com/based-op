@@ -82,6 +82,10 @@ impl SimulatedTxList {
         self.current.as_ref().map(|t| t.tx.clone()).or_else(|| self.pending.pop_front())
     }
 
+    pub fn next_to_sim_read_only(&self) -> Option<Arc<Transaction>> {
+        self.current.as_ref().map(|t| t.tx.clone()).or_else(|| self.pending.peek().cloned())
+    }
+
     pub fn sender(&self) -> Address {
         self.pending.sender()
     }
