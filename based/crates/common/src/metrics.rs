@@ -150,6 +150,8 @@ pub enum Gauge {
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum Histogram {
+    /// Gateway commit block duration in milliseconds
+    GatewayCommitBlockDurationMs,
     /// Gateway simulation latency in milliseconds
     SimulationLatencyMs,
     /// Gateway frag sealing end-to-end time in milliseconds

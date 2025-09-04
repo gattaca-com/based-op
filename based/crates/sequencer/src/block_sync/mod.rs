@@ -5,7 +5,7 @@ use bop_common::{
     communication::{Producer, messages::BlockSyncError},
     db::{DatabaseRead, DatabaseWrite},
     eth::MicroEth,
-    metrics::{Counter, Metric, MetricsUpdate},
+    metrics::{Counter, Histogram, Metric, MetricsUpdate},
     telemetry::{
         self, TelemetryUpdate,
         order::{IncludedInFrag, Ingested},
@@ -151,6 +151,12 @@ impl BlockSync {
             n_txs = block.body().transactions.len(),
             total_t = %self.timers.total.elapsed(),
         );
+        MetricsUpdate::send_ref(
+            Uuid::new_v4(),
+            Metric::RecordHistogram(Histogram::GatewayCommitBlockDurationMs, self.timers.total.elapsed().as_millis()),
+            &self.metrics,
+        );
+
         tracing::debug!(
             "commit block took: {} (caches: {}, state_changes: {}, trie_updates: {}, header_write: {}, db_commit: {})",
             self.timers.total.elapsed(),
