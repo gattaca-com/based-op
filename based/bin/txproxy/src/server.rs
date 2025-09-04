@@ -84,18 +84,50 @@ impl FlowCounter {
     }
 
     pub fn print_summary_send_metrics_and_reset(&self, metrics: &Producer<MetricsUpdate>) {
+        let total = self.total.load(Ordering::Relaxed);
+        let success = self.success.load(Ordering::Relaxed);
+        let failed = self.failed.load(Ordering::Relaxed);
+        let failed_invalid_params = self.failed_invalid_params.load(Ordering::Relaxed);
+        let failed_method_not_found = self.failed_method_not_found.load(Ordering::Relaxed);
+        let failed_no_clients = self.failed_no_clients.load(Ordering::Relaxed);
+        let failed_all_clients = self.failed_all_clients.load(Ordering::Relaxed);
+
         info!(
-            total = self.total.load(Ordering::Relaxed),
-            success = self.success.load(Ordering::Relaxed),
-            failed = self.failed.load(Ordering::Relaxed),
-            failed_invalid_params = self.failed_invalid_params.load(Ordering::Relaxed),
-            failed_method_not_found = self.failed_method_not_found.load(Ordering::Relaxed),
-            failed_no_clients = self.failed_no_clients.load(Ordering::Relaxed),
-            failed_all_clients = self.failed_all_clients.load(Ordering::Relaxed),
+            total,
+            success,
+            failed,
+            failed_invalid_params,
+            failed_method_not_found,
+            failed_no_clients,
+            failed_all_clients,
             "Flow statistics"
         );
 
-        self.send_metrics(metrics);
+        let id = uuid();
+
+        MetricsUpdate::send_ref(id, Metric::IncrementCounter(Counter::TxProxyTotalRequests, total as u64), metrics);
+        MetricsUpdate::send_ref(id, Metric::IncrementCounter(Counter::TxProxyTotalRequests, success as u64), metrics);
+        MetricsUpdate::send_ref(id, Metric::IncrementCounter(Counter::TxProxyFailedRequests, failed as u64), metrics);
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(Counter::TxProxyFailedRequestsInvalidParams, failed_invalid_params as u64),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(Counter::TxProxyFailedRequestsMethodNotFound, failed_method_not_found as u64),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(Counter::TxProxyFailedRequestsNoClients, failed_no_clients as u64),
+            metrics,
+        );
+        MetricsUpdate::send_ref(
+            id,
+            Metric::IncrementCounter(Counter::TxProxyFailedRequestsAllClients, failed_all_clients as u64),
+            metrics,
+        );
 
         // Reset counters
         self.total.store(0, Ordering::Relaxed);
@@ -105,57 +137,6 @@ impl FlowCounter {
         self.failed_method_not_found.store(0, Ordering::Relaxed);
         self.failed_no_clients.store(0, Ordering::Relaxed);
         self.failed_all_clients.store(0, Ordering::Relaxed);
-    }
-
-    pub fn send_metrics(&self, metrics: &Producer<MetricsUpdate>) {
-        let id = uuid();
-        MetricsUpdate::send_ref(
-            id,
-            Metric::IncrementCounter(Counter::TxProxyTotalRequests, self.total.load(Ordering::Relaxed) as u64),
-            metrics,
-        );
-        MetricsUpdate::send_ref(
-            id,
-            Metric::IncrementCounter(Counter::TxProxyTotalRequests, self.total.load(Ordering::Relaxed) as u64),
-            metrics,
-        );
-        MetricsUpdate::send_ref(
-            id,
-            Metric::IncrementCounter(Counter::TxProxyFailedRequests, self.failed.load(Ordering::Relaxed) as u64),
-            metrics,
-        );
-        MetricsUpdate::send_ref(
-            id,
-            Metric::IncrementCounter(
-                Counter::TxProxyFailedRequestsInvalidParams,
-                self.failed_invalid_params.load(Ordering::Relaxed) as u64,
-            ),
-            metrics,
-        );
-        MetricsUpdate::send_ref(
-            id,
-            Metric::IncrementCounter(
-                Counter::TxProxyFailedRequestsMethodNotFound,
-                self.failed_method_not_found.load(Ordering::Relaxed) as u64,
-            ),
-            metrics,
-        );
-        MetricsUpdate::send_ref(
-            id,
-            Metric::IncrementCounter(
-                Counter::TxProxyFailedRequestsNoClients,
-                self.failed_no_clients.load(Ordering::Relaxed) as u64,
-            ),
-            metrics,
-        );
-        MetricsUpdate::send_ref(
-            id,
-            Metric::IncrementCounter(
-                Counter::TxProxyFailedRequestsAllClients,
-                self.failed_all_clients.load(Ordering::Relaxed) as u64,
-            ),
-            metrics,
-        );
     }
 }
 
