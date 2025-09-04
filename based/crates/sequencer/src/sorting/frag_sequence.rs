@@ -3,6 +3,7 @@ use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
 use bop_common::{p2p::FragV0, telemetry::TelemetryUpdate, time::Instant, transaction::SimulatedTx};
 use revm_primitives::{B256, Bytes};
+use tracing::debug;
 
 use super::{SortingData, sorting_data::SortingTelemetry};
 use crate::context::SequencerContext;
@@ -53,6 +54,8 @@ impl FragSequence {
             let used_da: u64 = in_sort.txs.iter().map(|tx| tx.tx.estimated_tx_compressed_size()).sum();
             da.saturating_sub(used_da)
         });
+
+        debug!(?self.gas_remaining, ?self.da_remaining, ?self.payment, "frag sequence updated");
 
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {
