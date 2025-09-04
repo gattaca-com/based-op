@@ -79,6 +79,14 @@ impl ActiveOrders {
     pub fn not_enough_gas(&mut self, id: usize, gas_remaining: u64) -> bool {
         self.orders[id].gas_limit().is_none_or(|gas| gas_remaining < gas)
     }
+
+    /// Checks whether we have enough DA remaining for order at id.
+    pub fn da_too_large(&mut self, id: usize, da_remaining: Option<u64>) -> bool {
+        if da_remaining.is_none() {
+            return false;
+        }
+        self.orders[id].estimated_da().is_none_or(|da| da > da_remaining.unwrap())
+    }
 }
 
 impl Deref for ActiveOrders {

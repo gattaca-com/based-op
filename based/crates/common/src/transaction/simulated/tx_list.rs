@@ -125,6 +125,13 @@ impl SimulatedTxList {
     pub fn gas_limit(&self) -> Option<u64> {
         self.current.as_ref().map(|c| c.gas_limit()).or_else(|| self.pending.peek().map(|t| t.gas_limit()))
     }
+
+    pub fn estimated_da(&self) -> Option<u64> {
+        self.current
+            .as_ref()
+            .map(|c| c.tx.estimated_tx_compressed_size())
+            .or_else(|| self.pending.peek().map(|t| t.estimated_tx_compressed_size()))
+    }
 }
 
 impl From<SimulatedTx> for SimulatedTxList {

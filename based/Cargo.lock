@@ -1927,7 +1927,6 @@ dependencies = [
  "op-alloy-rpc-types 0.14.1",
  "reqwest",
  "reth-optimism-chainspec",
- "reth-optimism-payload-builder",
  "reth-primitives",
  "reth-rpc-builder",
  "revm-primitives",

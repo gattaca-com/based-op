@@ -1,7 +1,7 @@
 use std::{fmt::Debug, ops::Deref, sync::Arc};
 
 use alloy_consensus::{Eip658Value, Receipt, Transaction as TransactionTrait, TxReceipt};
-use alloy_eips::{eip7702::SignedAuthorization, Typed2718};
+use alloy_eips::{Typed2718, eip7702::SignedAuthorization};
 use alloy_primitives::{ChainId, U256};
 use alloy_rpc_types::{AccessList, TransactionReceipt};
 use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};

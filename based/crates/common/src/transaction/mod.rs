@@ -1,7 +1,10 @@
 pub mod simulated;
 pub mod tx_list;
 
-use std::{ops::Deref, sync::{Arc, OnceLock}};
+use std::{
+    ops::Deref,
+    sync::{Arc, OnceLock},
+};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
 use alloy_eips::{

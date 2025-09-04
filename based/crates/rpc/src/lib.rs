@@ -5,13 +5,14 @@ use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
     api::{ControlApiServer, EngineApiServer, MinimalEthApiServer, OpMinerExtApiServer},
     communication::{
-        messages::{EngineApi, RpcResult}, Producer, Sender, Spine
+        Producer, Sender, Spine,
+        messages::{EngineApi, RpcResult},
     },
     config::GatewayArgs,
     db::DatabaseRead,
     fabric::FabricGatewayApiServer,
     p2p::SignedVersionedMessage,
-    telemetry::{telemetry_queue, TelemetryUpdate},
+    telemetry::{TelemetryUpdate, telemetry_queue},
     time::Duration,
     transaction::Transaction,
 };
@@ -30,7 +31,7 @@ pub fn start_rpc<Db: DatabaseRead>(
     spine: &Spine<Db>,
     rt: &Runtime,
     rx_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
-    da_config: OpDAConfig
+    da_config: OpDAConfig,
 ) {
     let addr_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
     let addr_no_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port_no_auth);

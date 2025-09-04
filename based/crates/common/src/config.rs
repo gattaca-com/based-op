@@ -107,7 +107,7 @@ pub struct GatewayArgs {
     pub allow_reverts: bool,
 
     #[arg(skip = OpDAConfig::default())]
-    pub da_config: OpDAConfig
+    pub da_config: OpDAConfig,
 }
 
 impl GatewayArgs {

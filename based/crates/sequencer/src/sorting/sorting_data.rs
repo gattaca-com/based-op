@@ -270,13 +270,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         let mut i = self.tof_snapshot.len() - 1;
         while self.in_flight_sims < n_sims_per_loop {
             // check if tx DA is smaller than max allowed
-            let tx_to_sim = self.tof_snapshot[i].next_to_sim_read_only();
-            let too_big = match (self.da_config.max_da_tx_size(), tx_to_sim) {
-                (Some(max_da_tx_size), Some(tx)) => {
-                    tx.estimated_tx_compressed_size() > max_da_tx_size
-                }
-                _ => false
-            };
+            let too_big = self.tof_snapshot.da_too_large(i, self.da_config.max_da_tx_size());
             // check if we even have enough gas left for next order
             if too_big || self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
                 self.tof_snapshot.swap_remove_back(i);
