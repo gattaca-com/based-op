@@ -1,5 +1,5 @@
 [package]
-name = "chain-replay"
+name = "chain-replay-spawner"
 version = "0.1.0"
 edition = "2024"
 
