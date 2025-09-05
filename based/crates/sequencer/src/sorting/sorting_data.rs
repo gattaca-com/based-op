@@ -25,7 +25,7 @@ use reth_evm::{
 use reth_optimism_evm::OpBlockExecutionError;
 use reth_optimism_payload_builder::config::OpDAConfig;
 use revm_primitives::{Address, U256};
-use tracing::trace;
+use tracing::{debug, trace};
 use uuid::Uuid;
 
 use super::FragSequence;
@@ -83,6 +83,7 @@ pub struct SortingData<Db> {
     pub db: DBSorting<Db>,
     pub gas_remaining: u64,
     pub da_config: OpDAConfig,
+    pub da_remaining: Option<u64>,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
     /// Sort frag until, and then commit
@@ -132,6 +133,8 @@ impl<Db> SortingData<Db> {
             &mut telemetry_producer,
         );
 
+        debug!(da_remaining = seq.da_remaining, gas_remaining = seq.gas_remaining, "new sorting data created");
+
         Self {
             db,
             until: Instant::now() + data.config.frag_duration,
@@ -141,6 +144,7 @@ impl<Db> SortingData<Db> {
             tof_snapshot,
             gas_remaining: seq.gas_remaining,
             da_config: data.config.da_config.clone(),
+            da_remaining: seq.da_remaining,
             txs: vec![],
             start_t: Instant::now(),
             telemetry: Default::default(),
@@ -270,7 +274,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         let mut i = self.tof_snapshot.len() - 1;
         while self.in_flight_sims < n_sims_per_loop {
             // check if tx DA is smaller than max allowed
-            let too_big = self.tof_snapshot.da_too_large(i, self.da_config.max_da_tx_size());
+            let too_big = self.tof_snapshot.da_too_big(i, self.da_remaining, self.da_config.max_da_tx_size());
             // check if we even have enough gas left for next order
             if too_big || self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
                 self.tof_snapshot.swap_remove_back(i);
@@ -311,6 +315,7 @@ impl<Db: DatabaseRef> SortingData<Db> {
         debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
 
         self.gas_remaining -= gas_used;
+        self.da_remaining = self.da_remaining.map(|da| da.saturating_sub(tx.tx.estimated_tx_compressed_size()));
         self.txs.push(tx);
     }
 
@@ -375,6 +380,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
 
             evm.db_mut().commit_txs(std::iter::once(&mut simulated_tx));
             self.gas_remaining -= simulated_tx.gas_used();
+            self.da_remaining =
+                self.da_remaining.map(|da| da.saturating_sub(simulated_tx.tx.estimated_tx_compressed_size()));
             self.payment += simulated_tx.payment;
             self.txs.push(simulated_tx);
         }

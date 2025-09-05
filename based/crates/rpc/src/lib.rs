@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use alloy_primitives::{B256, Bytes};
+use alloy_primitives::{B256, Bytes, U64};
 use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
     api::{ControlApiServer, EngineApiServer, MinimalEthApiServer, OpMinerExtApiServer},
@@ -142,8 +142,10 @@ impl ControlApiServer for RpcServer {
 
 #[async_trait]
 impl OpMinerExtApiServer for RpcServer {
-    async fn set_max_da_size(&self, max_tx_size: u64, max_block_size: u64) -> RpcResult<bool> {
+    async fn set_max_da_size(&self, max_tx_size: U64, max_block_size: U64) -> RpcResult<bool> {
         info!(target: "rpc", "Setting max DA size: tx={}, block={}", max_tx_size, max_block_size);
+        let max_tx_size = max_tx_size.try_into().unwrap();
+        let max_block_size = max_block_size.try_into().unwrap();
         self.da_config.set_max_da_size(max_tx_size, max_block_size);
         Ok(true)
     }

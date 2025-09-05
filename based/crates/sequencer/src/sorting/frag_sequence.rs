@@ -13,8 +13,9 @@ use crate::context::SequencerContext;
 pub struct FragSequence {
     pub start_t: Instant,
     pub gas_remaining: u64,
-    pub da_remaining: Option<u64>,
     pub gas_used: u64,
+    pub da_remaining: Option<u64>,
+    pub da_used: u64,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
     /// Next frag index
@@ -30,8 +31,9 @@ impl FragSequence {
         Self {
             start_t: Instant::now(),
             gas_remaining,
-            da_remaining,
             gas_used: 0,
+            da_remaining,
+            da_used: 0,
             payment: U256::ZERO,
             txs: vec![],
             block_number,
@@ -55,13 +57,16 @@ impl FragSequence {
             da.saturating_sub(used_da)
         });
 
-        debug!(?self.gas_remaining, ?self.da_remaining, ?self.payment, "frag sequence updated");
+        let in_sort_txs = in_sort.txs.len();
 
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
+            self.da_used += tx.tx.estimated_tx_compressed_size();
             self.txs.push(tx);
         }
+
+        debug!(?self.gas_remaining, ?self.da_remaining, ?self.gas_used, ?self.da_used, ?in_sort_txs, "frag sequence updated");
 
         TelemetryUpdate::send(
             uuid,

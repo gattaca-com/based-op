@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes};
+use alloy_primitives::{Address, B256, Bytes, U64};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
@@ -176,7 +176,7 @@ pub trait OpGethAdminApi {
 pub trait OpMinerExtApi {
     /// The rollup config of the op-node
     #[method(name = "setMaxDASize")]
-    async fn set_max_da_size(&self, max_tx_size: u64, max_block_size: u64) -> RpcResult<bool>;
+    async fn set_max_da_size(&self, max_tx_size: U64, max_block_size: U64) -> RpcResult<bool>;
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

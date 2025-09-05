@@ -27,7 +27,7 @@ use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use reth_provider::StorageRootProvider;
 use revm_primitives::{B256, Bytes, U256, b256};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
 
@@ -160,7 +160,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
             frag_id = frag_seq.next_seq,
             txs = sorting_data.txs.len(),
             frag_time =% sorting_data.start_t.elapsed(),
-            "sealing frag"
+            "sealing frag",
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
@@ -205,6 +205,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
         let max_block_da = self.config.da_config.max_da_block_size();
         let seq = FragSequence::new(self.gas_limit(), max_block_da, self.block_number(), n_force_include_txs);
+
+        debug!("new frag sequence");
         let mut sorting = SortingData::new(&seq, self);
 
         // Apply must include

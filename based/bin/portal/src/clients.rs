@@ -7,7 +7,7 @@ use std::{
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, hex};
+use alloy_primitives::{Address, B256, U64, hex};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState};
 use bop_common::{
     api::{ControlApiClient, EngineApiClient, OpMinerExtApiClient, RegistryApiClient},
@@ -298,7 +298,7 @@ impl GatewayManager {
         }
     }
 
-    pub async fn broadcast_set_max_da_size(&self, max_tx_size: u64, max_block_size: u64) {
+    pub async fn broadcast_set_max_da_size(&self, max_tx_size: U64, max_block_size: U64) {
         for gateway in self.gateways.read().await.values() {
             let gateway = gateway.clone();
             tokio::spawn(

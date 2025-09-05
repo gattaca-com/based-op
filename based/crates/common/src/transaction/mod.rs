@@ -237,11 +237,9 @@ impl Transaction {
 
     // port from reth_op_txpool. calculate estimated DA of tx
     pub fn estimated_tx_compressed_size(&self) -> u64 {
-        *self.estimated_da_size.get_or_init(|| {
-            let mut buff = Vec::new();
-            self.tx.encode_2718(&mut buff);
-            op_alloy_flz::tx_estimated_size_fjord(&buff)
-        })
+        *self
+            .estimated_da_size
+            .get_or_init(|| op_alloy_flz::tx_estimated_size_fjord(&self.envelope).wrapping_div(1_000_000))
     }
 }
 
