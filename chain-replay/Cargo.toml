@@ -1,0 +1,38 @@
+[package]
+name = "chain-replay-spawner"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+alloy = { version = "1.0.27", features = ["provider-engine-api"] }
+alloy-consensus = { version = "1.0.27" }
+alloy-network = { version = "1.0.27" }
+alloy-rpc-client = { version = "1.0.27" }
+alloy-transport-http = { version = "1.0.27", features = ["jwt-auth"] }
+clap = { version = "4.5.46", features = ["derive", "env"] }
+discv5 = { version = "0.9.1" }
+dotenvy = "0.15.7"
+eyre = { version = "0.6.12" }
+http-body-util = { version = "0.1.3" }
+kona-disc = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads" }
+kona-engine = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads" }
+kona-genesis = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads", features = [
+  "serde",
+] }
+kona-gossip = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads" }
+kona-node-service = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads" }
+# kona-registry = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads" }
+kona-sources = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads" }
+libp2p = { version = "0.56.0" }
+# op-alloy = { version = "0.18.14" }
+op-alloy-consensus = { version = "0.18.14" }
+op-alloy-network = { version = "0.18.14" }
+op-alloy-provider = { version = "0.18.14" }
+op-alloy-rpc-types = { version = "0.18.14" }
+op-alloy-rpc-types-engine = { version = "0.18.14" }
+serde_json = { version = "1.0.143" }
+tokio = { version = "1.47.1", features = ["full"] }
+tokio-util = { version = "0.7.16" }
+tracing = { version = "0.1.41" }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+url = { version = "2.5.7" }

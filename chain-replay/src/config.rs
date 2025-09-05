@@ -2,23 +2,40 @@
 
 use std::{fmt::Debug, ops::RangeInclusive};
 
+use alloy::{rpc::types::engine::JwtSecret, signers::local::PrivateKeySigner};
 use url::Url;
 
 use crate::chain::ChainName;
 
-#[derive(clap::Parser, Debug)]
+#[derive(clap::Parser, Debug, Clone)]
 pub struct Args {
+    /// The url of the gateway to send transactions to, non-authenticated.
+    #[arg(long, env = "BOP_CHAIN_REPLAY_GATEWAY_URL")]
+    pub gateway_url: Url,
+    /// The url of the gateway to engine API messages to, authenticated.
+    #[arg(long, env = "BOP_CHAIN_REPLAY_GATEWAY_AUTH_URL")]
+    pub gateway_auth_url: Url,
+    #[arg(long, env = "BOP_CHAIN_REPLAY_GATEWAY_AUTH_JWT")]
+    pub gateway_auth_jwt: JwtSecret,
     /// The name of chain of which we want to replay blocks.
-    #[clap(long, env = "BASED_OP_CHAIN_NAME")]
+    #[clap(long, env = "BOP_REPLAY_CHAIN_NAME")]
     pub chain_name: ChainName,
     /// The L2 engine RPC URL, needed to send CL messages.
-    #[clap(long, env = "BASED_OP_L2_ENGINE_RPC_URL")]
+    #[clap(long, env = "BOP_REPLAY_L2_ENGINE_RPC_URL")]
     pub l2_engine_rpc_url: Url,
     /// The L2 execution layer RPC URL, needed to download the blocks to replay.
-    #[clap(long, env = "BASED_OP_L2_EL_RPC_URL")]
-    pub l2_el_rpc_url: Url,
+    #[clap(long, env = "BOP_REPLAY_L2_EL_RPC_URL")]
+    pub l2_el_verifier_url: Url,
+    #[arg(long, env = "BOP_REPLAY_P2P_SEQUENCER_KEY")]
+    pub p2p_sequencer_key: PrivateKeySigner,
+    /// Port to listen for gossip on.
+    #[arg(long, default_value = "9099", env = "BOP_REPLAY_GOSSIP_PORT")]
+    pub gossip_port: u16,
+    /// Port to listen for discovery on.
+    #[arg(long, default_value = "9098", env = "BOP_REPLAY_DISC_PORT")]
+    pub disc_port: u16,
     /// The inclusive range of blocks to replay, in the format 'start..=end'.
-    #[clap(long, env = "BASED_OP_BLOCKS_RANGE", value_parser = range_inclusive_from_str)]
+    #[clap(long, env = "BOP_REPLAY_BLOCKS_RANGE", value_parser = range_inclusive_from_str)]
     pub blocks_range: RangeInclusive<u64>,
 }
 

@@ -11,10 +11,7 @@ use crate::{
 /// Docker compose down for all containers spun up via the chain compose file.
 pub fn ensure_all_containers_down(chain_name: ChainName) -> io::Result<()> {
     let compose_file_path = chain_name.compose_file_path();
-    let command_str = format!(
-        "docker compose --file {} down",
-        compose_file_path.to_string_lossy()
-    );
+    let command_str = format!("docker compose --file {} down", compose_file_path.to_string_lossy());
     let mut args = command_str.trim_matches('"').split(' ');
 
     let mut command = Command::new(args.next().expect("docker"));
@@ -82,18 +79,14 @@ pub fn start_based_op_node_service(chain_name: ChainName) -> io::Result<()> {
 
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
+    // command.env("OP_NODE_GOSSIP_IP", get_ip().to_string());
     let output = command.output()?;
 
     output_to_result(&command_str, output)
 }
 
 pub fn start_based_gatway(args: Args) -> io::Result<()> {
-    let Args {
-        chain_name,
-        l2_el_rpc_url,
-        blocks_range,
-        ..
-    } = args;
+    let Args { chain_name, l2_el_verifier_url: l2_el_rpc_url, blocks_range, .. } = args;
 
     let compose_file_path = chain_name.compose_file_path();
     let env_file_path = chain_name.env_file_path();
@@ -108,10 +101,7 @@ pub fn start_based_gatway(args: Args) -> io::Result<()> {
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
     command.env("BOP_GATEWAY_REPLAY_TARGET", blocks_range.end().to_string());
-    command.env(
-        "BOP_GATEWAY_REPLAY_L2_EL_VERIFIER_URL",
-        l2_el_rpc_url.to_string(),
-    );
+    command.env("BOP_GATEWAY_REPLAY_L2_EL_VERIFIER_URL", l2_el_rpc_url.to_string());
     let output = command.output()?;
 
     output_to_result(&command_str, output)
