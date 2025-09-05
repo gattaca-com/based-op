@@ -6,6 +6,7 @@ use std::{
 };
 
 use alloy::rpc::types::engine::JwtSecret;
+use tracing::info;
 
 use crate::chain::ChainName;
 
@@ -65,7 +66,7 @@ pub fn read_jwt_file(chain_name: ChainName) -> io::Result<JwtSecret> {
 pub fn output_to_result(command_str: &str, output: process::Output) -> io::Result<()> {
     if output.status.success() {
         let text = String::from_utf8_lossy(&output.stdout);
-        println!("Command {command_str} executed successfully: {text}");
+        info!("Command {command_str} executed successfully: {text}");
         Ok(())
     } else {
         let text = String::from_utf8_lossy(&output.stderr);

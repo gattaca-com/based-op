@@ -7,6 +7,7 @@ use alloy::{
 };
 use alloy_network::Network;
 use tokio::time::sleep;
+use tracing::debug;
 
 /// Waits for the EL client to be synced.
 pub async fn wait_for_sync<N: Network>(
@@ -19,7 +20,7 @@ pub async fn wait_for_sync<N: Network>(
         match sync_info {
             SyncStatus::None => return Ok(()),
             SyncStatus::Info(info) => {
-                println!("Syncing: {info:?}");
+                debug!("EL syncing: {info:?}");
             }
         }
     }

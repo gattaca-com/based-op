@@ -1,5 +1,5 @@
 [package]
-name = "chain-replay-spawner"
+name = "chain-replay"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,13 +7,10 @@ edition = "2024"
 alloy = { version = "1.0.27", features = ["provider-engine-api"] }
 alloy-consensus = { version = "1.0.27" }
 alloy-network = { version = "1.0.27" }
-alloy-rpc-client = { version = "1.0.27" }
-alloy-transport-http = { version = "1.0.27", features = ["jwt-auth"] }
 clap = { version = "4.5.46", features = ["derive", "env"] }
 discv5 = { version = "0.9.1" }
 dotenvy = "0.15.7"
 eyre = { version = "0.6.12" }
-http-body-util = { version = "0.1.3" }
 kona-disc = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads" }
 kona-engine = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads" }
 kona-genesis = { git = "https://github.com/thedevbirb/kona", branch = "lore/chore/unsafe-payloads", features = [

@@ -1674,19 +1674,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "chain-replay-spawner"
+name = "chain-replay"
 version = "0.1.0"
 dependencies = [
  "alloy",
  "alloy-consensus",
  "alloy-network",
- "alloy-rpc-client",
- "alloy-transport-http",
  "clap",
  "discv5",
  "dotenvy",
  "eyre",
- "http-body-util",
  "kona-disc",
  "kona-engine",
  "kona-genesis",

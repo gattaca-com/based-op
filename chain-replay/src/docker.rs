@@ -36,11 +36,11 @@ pub fn start_based_op_geth_service(chain_name: ChainName) -> io::Result<()> {
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
     let ip = get_ip().to_string();
-    command.env("OP_GETH_EXTIP", ip);
+    command.env("BOP_REPLAY_BASED_OP_GETH_EXTIP", ip);
     if chain_name.is_superchain() {
-        command.env("OP_GETH_NETWORK", chain_name.to_string());
+        command.env("BOP_REPLAY_BASED_OP_GETH_NETWORK", chain_name.to_string());
     } else if chain_name.is_based_op() {
-        command.env("OP_GETH_BOOTNODES", "enode://6439c0a0cad6b87b032d4e5bb401c5e34b91472eb33b6dbf6c09ed326dc9489d874ab0cacbd3e0f9f89dc7bcb32d66f09a040fb71505f68112037d48d782a509@18.185.199.51:30303");
+        command.env("BOP_REPLAY_BASED_OP_GETH_BOOTNODES", "enode://6439c0a0cad6b87b032d4e5bb401c5e34b91472eb33b6dbf6c09ed326dc9489d874ab0cacbd3e0f9f89dc7bcb32d66f09a040fb71505f68112037d48d782a509@18.185.199.51:30303");
     }
     let output = command.output()?;
 
@@ -79,7 +79,7 @@ pub fn start_based_op_node_service(chain_name: ChainName) -> io::Result<()> {
 
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
-    // command.env("OP_NODE_GOSSIP_IP", get_ip().to_string());
+    // command.env("BOP_REPLAY_BASED_OP_NODE_GOSSIP_IP", get_ip().to_string());
     let output = command.output()?;
 
     output_to_result(&command_str, output)
@@ -100,8 +100,8 @@ pub fn start_based_gatway(args: Args) -> io::Result<()> {
 
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
-    command.env("BOP_GATEWAY_REPLAY_TARGET", blocks_range.end().to_string());
-    command.env("BOP_GATEWAY_REPLAY_L2_EL_VERIFIER_URL", l2_el_rpc_url.to_string());
+    command.env("BOP_REPLAY_GATEWAY_REPLAY_TARGET", blocks_range.end().to_string());
+    command.env("BOP_REPLAY_GATEWAY_REPLAY_L2_EL_VERIFIER_URL", l2_el_rpc_url.to_string());
     let output = command.output()?;
 
     output_to_result(&command_str, output)

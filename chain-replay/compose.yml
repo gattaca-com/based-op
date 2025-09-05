@@ -25,29 +25,29 @@ services:
           --allow-insecure-unlock \
           --http \
           --http.addr=0.0.0.0 \
-          --http.port="${OP_GETH_RPC_PORT}" \
+          --http.port="${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}" \
           --http.vhosts="*" \
           --http.corsdomain="*" \
           --http.api="admin,engine,net,eth,web3,debug,miner,txpool" \
           --ws \
           --ws.addr=0.0.0.0 \
-          --ws.port="${OP_GETH_WS_PORT}" \
+          --ws.port="${BOP_REPLAY_BASED_OP_GETH_WS_PORT}" \
           --ws.api="admin,engine,net,eth,web3,debug,miner,txpool" \
           --ws.origins="*" \
           --authrpc.addr=0.0.0.0 \
-          --authrpc.port="${OP_GETH_ENGINE_RPC_PORT}" \
+          --authrpc.port="${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}" \
           --authrpc.vhosts="*" \
           --authrpc.jwtsecret=/config/jwt \
-          --discovery.port="${OP_GETH_GOSSIP_PORT}" \
-          --port="${OP_GETH_GOSSIP_PORT}" \
-          --nat="extip:${OP_GETH_EXTIP}" \
+          --discovery.port="${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}" \
+          --port="${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}" \
+          --nat="extip:${BOP_REPLAY_BASED_OP_GETH_EXTIP}" \
 
-        if [ -n "${OP_GETH_BOOTNODES:-}" ]; then
-          set -- "$@" --bootnodes="${OP_GETH_BOOTNODES}"
+        if [ -n "${BOP_REPLAY_BASED_OP_GETH_BOOTNODES:-}" ]; then
+          set -- "$@" --bootnodes="${BOP_REPLAY_BASED_OP_GETH_BOOTNODES}"
         fi
 
-        if [ -n "${OP_GETH_NETWORK:-}" ]; then
-          set -- "$@" --op-network="${OP_GETH_NETWORK}"
+        if [ -n "${BOP_REPLAY_BASED_OP_GETH_NETWORK:-}" ]; then
+          set -- "$@" --op-network="${BOP_REPLAY_BASED_OP_GETH_NETWORK}"
         fi
 
         exec geth "$@"
@@ -64,8 +64,8 @@ services:
     network_mode: "host"
     command:
       - --registry.path=/config/registry.json
-      - --eth_rpc_url=http://0.0.0.0:${OP_GETH_RPC_PORT}
-      - --port=${REGISTRY_PORT}
+      - --eth_rpc_url=http://0.0.0.0:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
+      - --port=${BOP_REPLAY_REGISTRY_PORT}
     volumes:
       - ./config:/config
     restart: unless-stopped
@@ -79,28 +79,27 @@ services:
       GOLOG_LOG_LEVEL: "debug"
     command:
       - op-node
-      - --l2=http://0.0.0.0:${OP_GETH_ENGINE_RPC_PORT}
+      - --l2=http://0.0.0.0:${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}
       - --l2.jwt-secret=/config/jwt
       - --verifier.l1-confs=1
       - --rollup.config=/config/rollup.json
       - --rpc.addr=0.0.0.0
-      - --rpc.port=${OP_NODE_RPC_PORT}
+      - --rpc.port=${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
       - --rpc.enable-admin
-      - --l1=${L1_RPC_URL}
+      - --l1=${BOP_REPLAY_L1_RPC_URL}
       - --l1.rpckind=standard
-      - --l1.beacon=${L1_BEACON_RPC_URL}
-      - --p2p.advertise.ip=${OP_NODE_GOSSIP_IP}
-      - --p2p.advertise.tcp=${OP_NODE_GOSSIP_PORT}
-      - --p2p.advertise.udp=${OP_NODE_GOSSIP_PORT}
+      - --l1.beacon=${BOP_REPLAY_L1_BEACON_RPC_URL}
+      - --p2p.advertise.ip=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_IP}
+      - --p2p.advertise.tcp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
+      - --p2p.advertise.udp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
       - --p2p.listen.ip=0.0.0.0
-      - --p2p.listen.tcp=${OP_NODE_GOSSIP_PORT}
-      - --p2p.listen.udp=${OP_NODE_GOSSIP_PORT}
+      - --p2p.listen.tcp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
+      - --p2p.listen.udp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --p2p.static=/ip4/127.0.0.1/tcp/32303/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
       - --p2p.no-discovery=true
       - --rpc.enable-based
-      - --registry=http://0.0.0.0:${REGISTRY_PORT}
-      # - --p2p.bootnodes=${MAIN_OP_NODE_ENR}
+      - --registry=http://0.0.0.0:${BOP_REPLAY_REGISTRY_PORT}
       - --syncmode=execution-layer
       - --log.level=debug
       - --unsafe-allow-old-payloads=true
@@ -114,18 +113,18 @@ services:
     # pull_policy: always
     container_name: based-gateway
     environment:
-      - RUST_LOG=${RUST_LOG_BOP_GATEWAY:-}
+      - RUST_LOG=${BOP_REPLAY_RUST_LOG_BOP_GATEWAY:-}
     command:
-      - --rpc.port=${GATEWAY_PORT}
+      - --rpc.port=${BOP_REPLAY_GATEWAY_PORT}
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway
-      - --eth_client.url=http://0.0.0.0:${OP_GETH_RPC_PORT}
+      - --eth_client.url=http://0.0.0.0:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
       - --rpc.jwt=/config/jwt
-      - --gossip.signer_private_key=${GATEWAY_SEQUENCING_KEY}
-      - --gossip.root_peer_url=http://0.0.0.0:${OP_NODE_RPC_PORT}
-      - --chain-replay.target=${BOP_GATEWAY_REPLAY_TARGET}
-      - --chain-replay.l2-el-verifier-url=${BOP_GATEWAY_REPLAY_L2_EL_VERIFIER_URL}
+      - --gossip.signer_private_key=${BOP_REPLAY_GATEWAY_SEQUENCING_KEY}
+      - --gossip.root_peer_url=http://0.0.0.0:${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
+      - --chain-replay.target=${BOP_REPLAY_GATEWAY_REPLAY_TARGET}
+      - --chain-replay.l2-el-verifier-url=${BOP_REPLAY_GATEWAY_REPLAY_L2_EL_VERIFIER_URL}
 
     volumes:
       - ./config:/config

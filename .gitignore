@@ -37,6 +37,7 @@ follower_node/.env
 
 based/.envrc
 .envrc
+.env
 
 based/data
 based/genesis.json

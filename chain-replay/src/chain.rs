@@ -3,10 +3,11 @@
 use std::{fmt::Display, fs, io, path::PathBuf};
 
 use clap::ValueEnum;
+use tracing::info;
 
 use crate::utils::{generate_genesis_file, generate_rollup_file};
 
-const LOCAL_CONFIG_PREFIX: &str = "../../.local_gateway_and_follower";
+const LOCAL_CONFIG_PREFIX: &str = "../.local_gateway_and_follower";
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 #[clap(rename_all = "kebab-case")]
@@ -75,25 +76,25 @@ pub fn ensure_chain_folder(chain_name: ChainName) -> io::Result<()> {
     let config_dir_path = chain_name.config_directory_path();
 
     if !fs::exists(&config_dir_path)? {
-        println!("Creating config directory for chain '{chain_name}' at: {config_dir_path:?}");
+        info!("Creating config directory for chain '{chain_name}' at: {config_dir_path:?}");
         fs::create_dir_all(config_dir_path)?;
     }
 
     let jwt_path = chain_name.jwt_file_path();
     if !fs::exists(jwt_path.clone())? {
-        println!("Creating JWT file for chain '{chain_name}' at: {:?}", jwt_path.clone());
+        info!("Creating JWT file for chain '{chain_name}' at: {:?}", jwt_path.clone());
         fs::copy("jwt", jwt_path)?;
     }
 
     let env_path = chain_name.env_file_path();
     if !fs::exists(env_path.clone())? {
-        println!("Creating .env file for chain '{chain_name}' at: {:?}", env_path.clone());
+        info!("Creating .env file for chain '{chain_name}' at: {:?}", env_path.clone());
         fs::copy(".env.example", env_path)?;
     }
 
     let compose_path = chain_name.compose_file_path();
     if !fs::exists(compose_path.clone())? {
-        println!(
+        info!(
             "Creating docker-compose file for chain '{chain_name}' at: {:?}",
             compose_path.clone()
         );
@@ -102,25 +103,19 @@ pub fn ensure_chain_folder(chain_name: ChainName) -> io::Result<()> {
 
     let genesis_path = chain_name.genesis_file_path();
     if !fs::exists(genesis_path.clone())? {
-        println!(
-            "Creating genesis.json file for chain '{chain_name}' at: {:?}",
-            genesis_path.clone()
-        );
+        info!("Creating genesis.json file for chain '{chain_name}' at: {:?}", genesis_path.clone());
         generate_genesis_file(chain_name)?;
     }
 
     let rollup_path = chain_name.rollup_file_path();
     if !fs::exists(rollup_path.clone())? {
-        println!(
-            "Creating rollup.json file for chain '{chain_name}' at: {:?}",
-            rollup_path.clone()
-        );
+        info!("Creating rollup.json file for chain '{chain_name}' at: {:?}", rollup_path.clone());
         generate_rollup_file(chain_name)?;
     }
 
     let registry_path = chain_name.registry_file_path();
     if !fs::exists(registry_path.clone())? {
-        println!(
+        info!(
             "Creating registry.json file for chain '{chain_name}' at: {:?}",
             registry_path.clone()
         );

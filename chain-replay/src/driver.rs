@@ -23,14 +23,16 @@ use libp2p::{
 use op_alloy_network::Optimism;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 use crate::{config::Args, types::execution_payload_envelope_from_block};
 
 pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
-    let rollup_file_json = fs::read_to_string("")?;
-    let rollup_config: RollupConfig = serde_json::from_str(&rollup_file_json)?;
+    info!("🎈✣ Starting Kona Sequencer node\n\n");
+
+    let rollup_config_string = fs::read_to_string(args.chain_name.rollup_file_path())?;
+    let rollup_config: RollupConfig = serde_json::from_str(&rollup_config_string)?;
 
     let l2_el_verifier =
         ProviderBuilder::<_, _, Optimism>::default().connect_http(args.l2_el_verifier_url);
@@ -46,8 +48,6 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
 
     let mut gossip_addr = Multiaddr::from(gossip.ip());
     gossip_addr.push(libp2p::multiaddr::Protocol::Tcp(gossip.port()));
-
-    info!("Node public key: {}", args.p2p_sequencer_key.address());
 
     let disc_ip = Ipv4Addr::UNSPECIFIED;
     let disc_addr = LocalNode::new(
@@ -167,7 +167,7 @@ pub async fn wait_for_peers(network_inbound: &NetworkInboundData, expected_peers
             continue;
         };
 
-        info!("discv5_peer_count, {discv5_peer_count:?}");
+        debug!("discv5_peer_count, {discv5_peer_count:?}");
 
         if gossip_peer_count >= expected_peers_count {
             info!(
@@ -203,7 +203,7 @@ pub async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
             continue;
         };
 
-        info!("Peer dump: {peer_dump:?}");
+        debug!("Peer dump: {peer_dump:?}");
 
         tokio::time::sleep(retry_time).await;
     }
