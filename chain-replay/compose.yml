@@ -109,11 +109,11 @@ services:
     restart: unless-stopped
 
   based-gateway:
-    image: local_based_gateway:debug
+    image: local_based_gateway:rollback
     # pull_policy: always
     container_name: based-gateway
     environment:
-      - RUST_LOG=${BOP_REPLAY_RUST_LOG_BOP_GATEWAY:-}
+      - RUST_LOG=${BOP_RELAY_RUST_LOG_GATEWAY:-}
     command:
       - --rpc.port=${BOP_REPLAY_GATEWAY_PORT}
       - --rpc.host=0.0.0.0
@@ -123,8 +123,8 @@ services:
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=${BOP_REPLAY_GATEWAY_SEQUENCING_KEY}
       - --gossip.root_peer_url=http://0.0.0.0:${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
-      - --chain-replay.target=${BOP_REPLAY_GATEWAY_REPLAY_TARGET}
-      - --chain-replay.l2-el-verifier-url=${BOP_REPLAY_GATEWAY_REPLAY_L2_EL_VERIFIER_URL}
+      - --chain-replay.blocks-range=${BOP_REPLAY_BLOCKS_RANGE}
+      - --chain-replay.l2-el-verifier-url=${BOP_REPLAY_L2_EL_VERIFIER_URL}
 
     volumes:
       - ./config:/config

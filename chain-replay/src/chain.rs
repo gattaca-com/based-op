@@ -43,6 +43,14 @@ impl ChainName {
         PathBuf::from(format!("{LOCAL_CONFIG_PREFIX}_{self}"))
     }
 
+    pub fn data_directory_path(&self) -> PathBuf {
+        self.directory_path().join("data")
+    }
+
+    pub fn gateway_data_directory_path(&self) -> PathBuf {
+        self.data_directory_path().join("gateway")
+    }
+
     pub fn config_directory_path(&self) -> PathBuf {
         self.directory_path().join("config")
     }

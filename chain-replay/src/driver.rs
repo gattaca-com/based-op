@@ -35,9 +35,9 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
     let rollup_config: RollupConfig = serde_json::from_str(&rollup_config_string)?;
 
     let l2_el_verifier =
-        ProviderBuilder::<_, _, Optimism>::default().connect_http(args.l2_el_verifier_url);
+        ProviderBuilder::<_, _, Optimism>::default().connect_http(args.l2_el_verifier_url.clone());
     let _gateway_auth_client = EngineClient::new_http(
-        args.gateway_url,
+        args.gateway_url.clone(),
         Url::from_str("http://0.0.0.0:1234")?, // NOTE: we don't use the L1
         Arc::new(rollup_config.clone()),
         args.gateway_auth_jwt,
@@ -128,17 +128,21 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
 
     let expected_peers_count = 1;
 
-    let block = l2_el_verifier
-        .get_block_by_number(alloy::eips::BlockNumberOrTag::Number(*args.blocks_range.start()))
+    // NOTE: it is N-1 because N will be inserted via frags.
+    let first_block_to_gossip = l2_el_verifier
+        .get_block_by_number(alloy::eips::BlockNumberOrTag::Number(
+            args.blocks_range.start().saturating_sub(1),
+        ))
         .full()
         .await?
         .expect("to find block");
-    let payload = execution_payload_envelope_from_block(block);
+    let payload = execution_payload_envelope_from_block(first_block_to_gossip);
 
     info!(target = expected_peers_count, "Waiting until we have enough peers");
     wait_for_peers(&network_inbound_data, expected_peers_count).await;
 
     info!("Gossiping payload with block number {}", payload.execution_payload.block_number());
+    network_inbound_data.gossip_payload_tx.send(payload).await?;
 
     let p2p_rpc = network_inbound_data.p2p_rpc.clone();
 

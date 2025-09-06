@@ -2,6 +2,8 @@
 
 use std::{io, process::Command};
 
+use tracing::info;
+
 use crate::{
     chain::ChainName,
     config::Args,
@@ -87,6 +89,11 @@ pub fn start_based_op_node_service(chain_name: ChainName) -> io::Result<()> {
 
 pub fn start_based_gatway(args: Args) -> io::Result<()> {
     let Args { chain_name, l2_el_verifier_url: l2_el_rpc_url, blocks_range, .. } = args;
+
+    let path = "/tmp/bop_queues/";
+    info!("Cleaning up {path} contents");
+    let output = Command::new("rm").arg("-rf").arg(path).output()?;
+    output_to_result(&format!("rm -rf {path}"), output)?;
 
     let compose_file_path = chain_name.compose_file_path();
     let env_file_path = chain_name.env_file_path();
