@@ -1,12 +1,17 @@
 use std::{
     fs,
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    ops::RangeInclusive,
     str::FromStr as _,
     sync::Arc,
     time::Duration,
 };
 
-use alloy::providers::{Provider as _, ProviderBuilder};
+use alloy::{
+    providers::{Provider as _, ProviderBuilder, RootProvider},
+    rpc::types::engine::JwtSecret,
+};
+use eyre::Context as _;
 use kona_disc::LocalNode;
 use kona_engine::EngineClient;
 use kona_genesis::RollupConfig;
@@ -26,7 +31,40 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use crate::{config::Args, types::execution_payload_envelope_from_block};
+use crate::{config::Args, engine::EngineExt, types::execution_payload_envelope_from_block};
+
+pub struct Clients {
+    based_op_geth: RootProvider<Optimism>,
+    l2_el_verifier: RootProvider<Optimism>,
+    gateway: RootProvider<Optimism>,
+    gateway_auth: EngineClient,
+}
+
+pub fn create_clients(
+    based_op_geth_url: Url,
+    l2_el_verifier_url: Url,
+    gateway_url: Url,
+    gateway_auth_url: Url,
+    gateway_auth_jwt: JwtSecret,
+    rollup_config: RollupConfig,
+) -> eyre::Result<Clients> {
+    let based_op_geth =
+        ProviderBuilder::<_, _, Optimism>::default().connect_http(based_op_geth_url);
+    let l2_el_verifier =
+        ProviderBuilder::<_, _, Optimism>::default().connect_http(l2_el_verifier_url);
+    let gateway = ProviderBuilder::<_, _, Optimism>::default().connect_http(gateway_url);
+
+    let gateway_auth = EngineClient::new_http(
+        gateway_auth_url,
+        Url::from_str("http://0.0.0.0:1234")?, // NOTE: we don't use the L1
+        Arc::new(rollup_config),
+        gateway_auth_jwt,
+    );
+
+    let clients = Clients { based_op_geth, l2_el_verifier, gateway, gateway_auth };
+
+    Ok(clients)
+}
 
 pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
     info!("🎈✣ Starting Kona Sequencer node\n\n");
@@ -34,14 +72,22 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
     let rollup_config_string = fs::read_to_string(args.chain_name.rollup_file_path())?;
     let rollup_config: RollupConfig = serde_json::from_str(&rollup_config_string)?;
 
-    let l2_el_verifier =
-        ProviderBuilder::<_, _, Optimism>::default().connect_http(args.l2_el_verifier_url.clone());
-    let _gateway_auth_client = EngineClient::new_http(
-        args.gateway_url.clone(),
-        Url::from_str("http://0.0.0.0:1234")?, // NOTE: we don't use the L1
-        Arc::new(rollup_config.clone()),
+    let based_op_geth_port_string =
+        std::env::var("BOP_REPLAY_BASED_OP_GETH_RPC_PORT").wrap_err("based-op-geth port set")?;
+    let based_op_geth_port =
+        u64::from_str(based_op_geth_port_string.trim()).wrap_err("valid based-op-geth port")?;
+    let based_op_geth_url = Url::from_str(&format!("http://0.0.0.0:{based_op_geth_port}"))
+        .wrap_err("valid based-op-geth url")?;
+
+    let clients = create_clients(
+        based_op_geth_url,
+        args.l2_el_verifier_url,
+        args.gateway_url,
+        args.gateway_auth_url,
         args.gateway_auth_jwt,
-    );
+        rollup_config.clone(),
+    )
+    .wrap_err("failed to create clients")?;
 
     let gossip = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), args.gossip_port);
     info!(target: "gossip", "Starting gossip driver on {:?}", gossip);
@@ -112,6 +158,15 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
 
     tasks.push(handle);
 
+    let address = args.p2p_sequencer_key.address();
+    let signer = network_inbound_data.signer.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let _ = signer.send(address).await;
+        }
+    });
+
     info!("Gossip driver started, receiving blocks.");
     tasks.push(tokio::spawn(async move {
         loop {
@@ -129,7 +184,8 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
     let expected_peers_count = 1;
 
     // NOTE: it is N-1 because N will be inserted via frags.
-    let first_block_to_gossip = l2_el_verifier
+    let first_block_to_gossip = clients
+        .l2_el_verifier
         .get_block_by_number(alloy::eips::BlockNumberOrTag::Number(
             args.blocks_range.start().saturating_sub(1),
         ))
@@ -142,13 +198,31 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
     wait_for_peers(&network_inbound_data, expected_peers_count).await;
 
     info!("Gossiping payload with block number {}", payload.execution_payload.block_number());
-    network_inbound_data.gossip_payload_tx.send(payload).await?;
+    network_inbound_data.gossip_payload_tx.send(payload.clone()).await?;
+
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    info!("Sending the same payload also to the gateway");
+
+    // NOTE: we're ignoring possible error responses, because the gateway code return an internal
+    // error on purpose.
+    // Reference: <https://github.com/gattaca-com/based-op/blob/9585a9044d9abeadce8e4af7eb624e43f8c1e0b8/based/crates/rpc/src/engine.rs#L55-L67>
+    //
+    // For some reason, after this call the gateway silently dies and restarts.
+    let _ = clients
+        .gateway_auth
+        .new_payload(payload.execution_payload, payload.parent_beacon_block_root)
+        .await;
 
     let p2p_rpc = network_inbound_data.p2p_rpc.clone();
 
     tasks.push(tokio::spawn(async {
         print_peers(p2p_rpc).await;
     }));
+
+    run_verification_body(clients, args.blocks_range)
+        .await
+        .wrap_err("failed to run verification")?;
 
     join_all(tasks).await;
     Ok(())
@@ -211,4 +285,119 @@ pub async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
 
         tokio::time::sleep(retry_time).await;
     }
+}
+
+pub async fn run_verification_body(
+    clients: Clients,
+    blocks_range: RangeInclusive<u64>,
+) -> eyre::Result<()> {
+    let transactions_in_attributes = false;
+    let no_tx_pool = Some(true);
+
+    for block_num in blocks_range {
+        // let head_block_number = self.next_block.saturating_sub(1);
+        //
+        // let prev_block =
+        //     self.executor.block_on(fetch_block(head_block_number, &self.verification_provider));
+        // debug!("Fetched previous block {} for newPayload + FCU", prev_block.number());
+        //
+        // let (new_payload_prev_block, _, fcu) = messages::EngineApi::messages_from_block(
+        //     &prev_block,
+        //     transactions_in_attributes,
+        //     no_tx_pool,
+        // );
+        //
+        // let block_to_build =
+        //     self.executor.block_on(fetch_block(self.next_block, &self.verification_provider));
+        //
+        // debug!("Fetched block {} to replay", block_to_build.number());
+        //
+        // // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
+        // connections.send(new_payload_prev_block);
+        // Duration::from_millis(1000).sleep();
+        //
+        // let txs_for_pool: Vec<_> = Transaction::from_block(&block_to_build);
+        //
+        // // WaitingForForkchoiceWithAttributes -> Sorting
+        // connections.send(fcu);
+        //
+        // for t in txs_for_pool {
+        //     connections.send(t);
+        //     Duration::from_millis(10).sleep();
+        // }
+        //
+        // Duration::from_millis(2000).sleep();
+        //
+        // let (block_tx, mut block_rx) = oneshot::channel();
+        // // Sorting -> WaitingForNewPayload
+        // connections
+        //     .send(EngineApi::GetPayloadV4 { payload_id: PayloadId::new([0; 8]), res: block_tx });
+        // Duration::from_millis(100).sleep();
+        // let curt = Instant::now();
+        // let mut sealed_block = loop {
+        //     if let Ok(sealed_block) = block_rx.try_recv() {
+        //         break sealed_block;
+        //     }
+        //     if curt.elapsed() > Duration::from_secs(2) {
+        //         tracing::warn!("couldn't get block");
+        //         return;
+        //     }
+        // };
+        //
+        // let hash = block_to_build.hash_slow();
+        // let hash1 =
+        //     sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash;
+        // if hash1 != hash {
+        //     sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.transactions =
+        //         vec![];
+        //     let receipt = sealed_block
+        //         .execution_payload
+        //         .payload_inner
+        //         .payload_inner
+        //         .payload_inner
+        //         .receipts_root;
+        //     if receipt == block_to_build.receipts_root {
+        //         info!("receipts match");
+        //     } else {
+        //         info!(our=%receipt, block = %block_to_build.receipts_root, "receipts don't match");
+        //         debug_assert!(false, "receipts don't match");
+        //     };
+        //
+        //     let gas_used =
+        //         sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.gas_used;
+        //
+        //     if gas_used == block_to_build.gas_used() {
+        //         info!("gas_used matches")
+        //     } else {
+        //         info!(our=%gas_used, block = %block_to_build.gas_used(), "gas_used doesn't match");
+        //         debug_assert!(false, "gas_used doesn't match");
+        //     };
+        //
+        //     let state_root =
+        //         sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.state_root;
+        //
+        //     if state_root == block_to_build.state_root() {
+        //         info!("state_root matches")
+        //     } else {
+        //         info!(our=%state_root, block = %block_to_build.state_root(), "state_root doesn't match");
+        //         debug_assert!(false, "state_root doesn't match");
+        //     };
+        //
+        //     // println!("ACTUAL BLOCK:");
+        // }
+        //
+        // assert_eq!(
+        //     sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash,
+        //     block_to_build.hash_slow(),
+        //     "{block_to_build:#?} vs {sealed_block:#?}"
+        // );
+        //
+        // // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
+        // // connections.send(new_payload);
+        // // connections.send(fcu_1);
+        //
+        // self.next_block += 1;
+    }
+
+    Ok(())
 }
