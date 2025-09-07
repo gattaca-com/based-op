@@ -85,10 +85,14 @@ pub fn extract_stdout(command_str: &str, output: process::Output) -> io::Result<
     Err(io::Error::other(format!("Command {command_str} failed: {text}")))
 }
 
-/// Get the machine IP address by running `curl ifconfig.me`. Panics on failure.
+/// Get the machine IP address by running `curl -4 ifconfig.me`. Panics on failure.
 pub fn get_ip() -> Ipv4Addr {
-    let out =
-        Command::new("curl").arg("ifconfig.me").output().expect("to run curl ifconfig.me").stdout;
+    let out = Command::new("curl")
+        .arg("-4")
+        .arg("ifconfig.me")
+        .output()
+        .expect("to run curl ifconfig.me")
+        .stdout;
     let text = String::from_utf8_lossy(&out);
     Ipv4Addr::from_str(&text).expect("valid ipv4 addr")
 }
