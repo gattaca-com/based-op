@@ -9,7 +9,7 @@ use bop_common::{
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
-use bop_db::{DatabaseRead, init_database};
+use bop_db::{DatabaseRead, DatabaseWrite as _, init_database};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
     Sequencer, SequencerConfig, Simulator,
@@ -18,7 +18,7 @@ use bop_sequencer::{
 use clap::Parser;
 use revm_primitives::B256;
 use tokio::runtime::Runtime;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
@@ -65,6 +65,18 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     let evm_config = sequencer_config.evm_config.clone();
     let (frag_broadcast_tx, _) = tokio::sync::broadcast::channel(10_000);
 
+    if let Some(ref range) = args.replay_args.replay_blocks_range {
+        warn!(?range, "Replay range found. Performing DB rollback if necessary");
+        // Example: if start is 1000, then we should rollback to 998
+        while db_bop.head_block_number()? > range.start().saturating_sub(2) {
+            // FIXME: last write doesn't really work it seems, maybe because of the inner
+            // self.reset_provider(); That is, reading with op-reth seems that only one block is
+            // dropped.
+            db_bop.roll_back_head()?;
+        }
+        info!(db_block = db_bop.head_block_number()?, db_hash = ?db_bop.head_block_hash()?, "New database head");
+    }
+
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
             .worker_threads(10)
@@ -84,21 +96,18 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 .run(spine.to_connections("Sequencer"), ActorConfig::default());
         });
 
-        if args.replay_args.is_some() {
-            s.spawn(|| {
-                let replay_args = args.replay_args.expect("some");
-                ReplayFetcher::new(
-                    db_block,
-                    args.eth_client_url,
-                    replay_args.l2_el_verifier_url,
-                    replay_args.replay_target,
-                )
-                .run(
-                    spine.to_connections("BlockFetch"),
-                    ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
-                );
-            });
-        } else if let Some(mode) = args.mock {
+        // if args.replay_args.is_some() {
+        // s.spawn(|| {
+        //     let l2_el_verifier_url =
+        //         args.replay_args.clone().expect("replay args").l2_el_verifier_url.expect("l2 el");
+        //     let blocks_range =
+        //         args.replay_args.expect("replay args").replay_blocks_range.expect("replay blocks range");
+        //     ReplayFetcher::new(db_block, args.eth_client_url, l2_el_verifier_url, blocks_range).run(
+        //         spine.to_connections("BlockFetch"),
+        //         ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
+        //     );
+        // });
+        if let Some(mode) = args.mock {
             s.spawn(|| {
                 MockFetcher::new(
                     args.eth_client_url,

@@ -24,6 +24,10 @@ pub const DEFAULT_TRACING_ENV_FILTERS: &[&str] = &[
     "storage::db::mdbx=info",
 ];
 
+pub trait Summary {
+    fn summary(&self) -> String;
+}
+
 /// Builds an environment filter for logging. Uses a default set of filters plus some optional
 /// extras.
 pub fn build_env_filter(default_level: LevelFilter, env_filters: Option<String>) -> EnvFilter {

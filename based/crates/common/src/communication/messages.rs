@@ -24,6 +24,7 @@ use crate::{
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
     typedefs::*,
+    utils::Summary,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
@@ -165,6 +166,28 @@ pub enum EngineApi {
     NewPayloadV4 { payload: OpExecutionPayloadV4, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
     GetPayloadV4 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV4> },
 }
+
+impl Summary for EngineApi {
+    fn summary(&self) -> String {
+        match self {
+            Self::ForkChoiceUpdatedV3 { fork_choice_state, payload_attributes } => {
+                format!(
+                    "FCUv3, head_block_hash = {}, with_attributes = {}",
+                    fork_choice_state.head_block_hash,
+                    payload_attributes.is_some()
+                )
+            }
+            Self::NewPayloadV4 { payload, .. } => {
+                let inner = &payload.payload_inner.payload_inner.payload_inner;
+                format!("NewPayloadV4, number = {}, hash = {:?}", inner.block_number, inner.block_hash)
+            }
+            Self::GetPayloadV4 { payload_id, .. } => {
+                format!("GetPayloadV4, payload_id = {:?}", payload_id)
+            }
+        }
+    }
+}
+
 impl EngineApi {
     pub fn messages_from_block(
         block: &BlockSyncMessage,

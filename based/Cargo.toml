@@ -17,10 +17,10 @@ opt-level = 3
 split-debuginfo = "off"
 
 [profile.dev]
-panic = "abort"
+panic = "unwind"
 
 [profile.release]
-panic = "abort"
+panic = "unwind"
 
 
 [profile.release-with-debug]
@@ -31,7 +31,9 @@ opt-level = 3
 alloy-consensus = "0.14.0"
 alloy-eips = "0.14.0"
 alloy-network = "0.14.0"
-alloy-primitives = { version = "1.0.0", default-features = false, features = ["getrandom"] }
+alloy-primitives = { version = "1.0.0", default-features = false, features = [
+  "getrandom",
+] }
 alloy-provider = "0.14.0"
 alloy-rlp = "0.3.11"
 alloy-rpc-types = { version = "0.14.0", features = ["engine"] }
@@ -69,10 +71,14 @@ kona-rpc = { git = "https://github.com/op-rs/kona", rev = "88c80aa46975d196c711d
 mio = { features = ["net", "os-poll"], version = "1.0.4" }
 mio_httpc = { features = ["native"], version = "0.10.6" }
 moka = "0.12.10"
-op-alloy-consensus = { version = "=0.14.1", default-features = false, features = ["k256"] }
+op-alloy-consensus = { version = "=0.14.1", default-features = false, features = [
+  "k256",
+] }
 op-alloy-network = "0.14.1"
 op-alloy-rpc-types = "0.14.1"
-op-alloy-rpc-types-engine = { version = "0.14.1", default-features = false, features = ["serde"] }
+op-alloy-rpc-types-engine = { version = "0.14.1", default-features = false, features = [
+  "serde",
+] }
 op-revm = "3.0.2"
 parking_lot = "0.12.3"
 paste = "0.1.18"
@@ -88,7 +94,9 @@ reth-db-api = { path = "../reth/crates/storage/db-api" }
 reth-db-common = { path = "../reth/crates/storage/db-common" }
 reth-evm = { path = "../reth/crates/evm" }
 reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
-reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = ["test-utils"] }
+reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
+  "test-utils",
+] }
 reth-node-types = { path = "../reth/crates/node/types" }
 reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
 reth-optimism-cli = { path = "../reth/crates/optimism/cli" }
@@ -99,7 +107,9 @@ reth-optimism-node = { path = "../reth/crates/optimism/node" }
 reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
 reth-primitives = { path = "../reth/crates/primitives" }
 reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
-reth-provider = { path = "../reth/crates/storage/provider", features = ["test-utils"] }
+reth-provider = { path = "../reth/crates/storage/provider", features = [
+  "test-utils",
+] }
 reth-revm = { path = "../reth/crates/revm" }
 reth-rpc-builder = { path = "../reth/crates/rpc/rpc-builder" }
 reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
@@ -107,14 +117,22 @@ reth-stages-types = { path = "../reth/crates/stages/types" }
 reth-storage-api = { path = "../reth/crates/storage/storage-api" }
 reth-storage-errors = { path = "../reth/crates/storage/errors" }
 reth-trie = { path = "../reth/crates/trie/trie" }
-reth-trie-common = { path = "../reth/crates/trie/common", features = ["test-utils"] }
+reth-trie-common = { path = "../reth/crates/trie/common", features = [
+  "test-utils",
+] }
 reth-trie-db = { path = "../reth/crates/trie/db" }
 reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
-revm = { version = "22.0.1", features = ["optional_balance_check", "secp256k1", "std"], default-features = false }
+revm = { version = "22.0.1", features = [
+  "optional_balance_check",
+  "secp256k1",
+  "std",
+], default-features = false }
 revm-handler = "3.0.0"
 revm-inspector = "3.0.0"
 revm-interpreter = "18.0.0"
-revm-primitives = { version = "18.0.0", features = ["std"], default-features = false }
+revm-primitives = { version = "18.0.0", features = [
+  "std",
+], default-features = false }
 rustc-hash = "2.0.0"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.137"

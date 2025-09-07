@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use alloy_consensus::BlockHeader;
 use alloy_provider::Provider as _;
 use alloy_rpc_types::engine::PayloadId;
@@ -13,7 +15,7 @@ use bop_common::{
 };
 use reqwest::Url;
 use tokio::{runtime::Runtime, sync::oneshot};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::{
     AlloyProvider,
@@ -35,9 +37,10 @@ use super::{
 #[derive(Debug)]
 pub struct ReplayFetcher {
     executor: Runtime,
-    next_block: u64,
+    db_block_at_startup: u64,
     sync_until: u64,
-    replay_target: u64,
+    next_block: u64,
+    blocks_range: RangeInclusive<u64>,
     batch_size: u64,
     /// The local provider which expresses the local view of the chain, at a shorter height.
     local_provider: AlloyProvider,
@@ -45,7 +48,12 @@ pub struct ReplayFetcher {
     verification_provider: AlloyProvider,
 }
 impl ReplayFetcher {
-    pub fn new(db_block: u64, local_provider_url: Url, verification_provider_url: Url, replay_target: u64) -> Self {
+    pub fn new(
+        db_block: u64,
+        local_provider_url: Url,
+        verification_provider_url: Url,
+        blocks_range: RangeInclusive<u64>,
+    ) -> Self {
         let executor = tokio::runtime::Builder::new_current_thread()
             .worker_threads(1)
             .enable_all()
@@ -57,9 +65,10 @@ impl ReplayFetcher {
 
         Self {
             executor,
+            db_block_at_startup: db_block,
+            sync_until: *blocks_range.start(),
             next_block: db_block + 1,
-            sync_until: db_block + 1,
-            replay_target,
+            blocks_range,
             batch_size: 20,
             local_provider,
             verification_provider,
@@ -75,115 +84,120 @@ impl ReplayFetcher {
         // }
     }
 
-    /// After the local chain is synced up to `self.sync_until`, start replaying the chain by
-    /// sequencing and verifying we end up in the same state.
-    fn run_verification_body<Db: DatabaseRead>(&mut self, connections: &mut SpineConnections<Db>) {
-        while connections.receive(|msg, _| {
-            self.handle_fetch(msg);
-        }) {}
-
-        let transactions_in_attributes = false;
-        let no_tx_pool = Some(true);
-
-        if self.next_block < self.replay_target {
-            let head_block_number = self.next_block.saturating_sub(1);
-
-            let prev_block = self.executor.block_on(fetch_block(head_block_number, &self.verification_provider));
-            debug!("Fetched previous block {} for newPayload + FCU", prev_block.number());
-
-            let (new_payload_prev_block, _, fcu) =
-                messages::EngineApi::messages_from_block(&prev_block, transactions_in_attributes, no_tx_pool);
-
-            let block_to_build = self.executor.block_on(fetch_block(self.next_block, &self.verification_provider));
-
-            debug!("Fetched block {} to replay", block_to_build.number());
-
-            // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
-            connections.send(new_payload_prev_block);
-            Duration::from_millis(1000).sleep();
-
-            let txs_for_pool: Vec<_> = Transaction::from_block(&block_to_build);
-
-            // WaitingForForkchoiceWithAttributes -> Sorting
-            connections.send(fcu);
-
-            for t in txs_for_pool {
-                connections.send(t);
-                Duration::from_millis(10).sleep();
-            }
-
-            Duration::from_millis(2000).sleep();
-
-            let (block_tx, mut block_rx) = oneshot::channel();
-            // Sorting -> WaitingForNewPayload
-            connections.send(EngineApi::GetPayloadV4 { payload_id: PayloadId::new([0; 8]), res: block_tx });
-            Duration::from_millis(100).sleep();
-            let curt = Instant::now();
-            let mut sealed_block = loop {
-                if let Ok(sealed_block) = block_rx.try_recv() {
-                    break sealed_block;
-                }
-                if curt.elapsed() > Duration::from_secs(2) {
-                    tracing::warn!("couldn't get block");
-                    return;
-                }
-            };
-
-            let hash = block_to_build.hash_slow();
-            let hash1 = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash;
-            if hash1 != hash {
-                sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.transactions = vec![];
-                let receipt = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.receipts_root;
-                if receipt == block_to_build.receipts_root {
-                    info!("receipts match");
-                } else {
-                    info!(our=%receipt, block = %block_to_build.receipts_root, "receipts don't match");
-                    debug_assert!(false, "receipts don't match");
-                };
-
-                let gas_used = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.gas_used;
-
-                if gas_used == block_to_build.gas_used() {
-                    info!("gas_used matches")
-                } else {
-                    info!(our=%gas_used, block = %block_to_build.gas_used(), "gas_used doesn't match");
-                    debug_assert!(false, "gas_used doesn't match");
-                };
-
-                let state_root = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.state_root;
-
-                if state_root == block_to_build.state_root() {
-                    info!("state_root matches")
-                } else {
-                    info!(our=%state_root, block = %block_to_build.state_root(), "state_root doesn't match");
-                    debug_assert!(false, "state_root doesn't match");
-                };
-
-                // println!("ACTUAL BLOCK:");
-            }
-
-            assert_eq!(
-                sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash,
-                block_to_build.hash_slow(),
-                "{block_to_build:#?} vs {sealed_block:#?}"
-            );
-
-            // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
-            // connections.send(new_payload);
-            // connections.send(fcu_1);
-
-            self.next_block += 1;
-        }
-    }
+    ///// After the local chain is synced up to `self.sync_until`, start replaying the chain by
+    ///// sequencing and verifying we end up in the same state.
+    //fn run_verification_body<Db: DatabaseRead>(&mut self, connections: &mut SpineConnections<Db>) {
+    //    while connections.receive(|msg, _| {
+    //        self.handle_fetch(msg);
+    //    }) {}
+    //
+    //    let transactions_in_attributes = false;
+    //    let no_tx_pool = Some(true);
+    //
+    //    if self.next_block < self.blocks_range {
+    //        let head_block_number = self.next_block.saturating_sub(1);
+    //
+    //        let prev_block = self.executor.block_on(fetch_block(head_block_number, &self.verification_provider));
+    //        debug!("Fetched previous block {} for newPayload + FCU", prev_block.number());
+    //
+    //        let (new_payload_prev_block, _, fcu) =
+    //            messages::EngineApi::messages_from_block(&prev_block, transactions_in_attributes, no_tx_pool);
+    //
+    //        let block_to_build = self.executor.block_on(fetch_block(self.next_block, &self.verification_provider));
+    //
+    //        debug!("Fetched block {} to replay", block_to_build.number());
+    //
+    //        // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
+    //        connections.send(new_payload_prev_block);
+    //        Duration::from_millis(1000).sleep();
+    //
+    //        let txs_for_pool: Vec<_> = Transaction::from_block(&block_to_build);
+    //
+    //        // WaitingForForkchoiceWithAttributes -> Sorting
+    //        connections.send(fcu);
+    //
+    //        for t in txs_for_pool {
+    //            connections.send(t);
+    //            Duration::from_millis(10).sleep();
+    //        }
+    //
+    //        Duration::from_millis(2000).sleep();
+    //
+    //        let (block_tx, mut block_rx) = oneshot::channel();
+    //        // Sorting -> WaitingForNewPayload
+    //        connections.send(EngineApi::GetPayloadV4 { payload_id: PayloadId::new([0; 8]), res: block_tx });
+    //        Duration::from_millis(100).sleep();
+    //        let curt = Instant::now();
+    //        let mut sealed_block = loop {
+    //            if let Ok(sealed_block) = block_rx.try_recv() {
+    //                break sealed_block;
+    //            }
+    //            if curt.elapsed() > Duration::from_secs(2) {
+    //                tracing::warn!("couldn't get block");
+    //                return;
+    //            }
+    //        };
+    //
+    //        let hash = block_to_build.hash_slow();
+    //        let hash1 = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash;
+    //        if hash1 != hash {
+    //            sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.transactions = vec![];
+    //            let receipt = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.receipts_root;
+    //            if receipt == block_to_build.receipts_root {
+    //                info!("receipts match");
+    //            } else {
+    //                info!(our=%receipt, block = %block_to_build.receipts_root, "receipts don't match");
+    //                debug_assert!(false, "receipts don't match");
+    //            };
+    //
+    //            let gas_used = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.gas_used;
+    //
+    //            if gas_used == block_to_build.gas_used() {
+    //                info!("gas_used matches")
+    //            } else {
+    //                info!(our=%gas_used, block = %block_to_build.gas_used(), "gas_used doesn't match");
+    //                debug_assert!(false, "gas_used doesn't match");
+    //            };
+    //
+    //            let state_root = sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.state_root;
+    //
+    //            if state_root == block_to_build.state_root() {
+    //                info!("state_root matches")
+    //            } else {
+    //                info!(our=%state_root, block = %block_to_build.state_root(), "state_root doesn't match");
+    //                debug_assert!(false, "state_root doesn't match");
+    //            };
+    //
+    //            // println!("ACTUAL BLOCK:");
+    //        }
+    //
+    //        assert_eq!(
+    //            sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash,
+    //            block_to_build.hash_slow(),
+    //            "{block_to_build:#?} vs {sealed_block:#?}"
+    //        );
+    //
+    //        // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
+    //        // connections.send(new_payload);
+    //        // connections.send(fcu_1);
+    //
+    //        self.next_block += 1;
+    //    }
+    //}
 }
 
 impl<Db: DatabaseRead> Actor<Db> for ReplayFetcher {
-    fn on_init(&mut self, _connections: &mut SpineConnections<Db>) {
-        let local_head = self.executor.block_on(async {
-            self.local_provider.get_block_number().await.expect("failed to fetch last block, is the RPC url correct?")
-        });
-
-        self.sync_until = local_head;
+    fn on_init(&mut self, connections: &mut SpineConnections<Db>) {
+        if self.db_block_at_startup > *self.blocks_range.start() {
+            warn!("Gateway head is higher than replay range start. Performing rollback");
+            // Rollback at the right point.
+            self.executor.block_on(async_fetch_blocks_and_send_sequentially(
+                self.blocks_range.start().saturating_sub(1),
+                self.blocks_range.start().saturating_sub(1),
+                connections.senders(),
+                &self.verification_provider,
+            ));
+        }
     }
 
     fn loop_body(&mut self, connections: &mut SpineConnections<Db>) {
@@ -196,9 +210,6 @@ impl<Db: DatabaseRead> Actor<Db> for ReplayFetcher {
                 &self.verification_provider,
             ));
             self.next_block = stop + 1;
-        } else {
-            // We're done with syncing, we can start replaying.
-            self.run_verification_body(connections);
         }
 
         while connections.receive(|msg, _| {

@@ -4,6 +4,12 @@ name = "bop-gateway"
 rust-version.workspace = true
 version.workspace = true
 
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"
+
 [dependencies]
 alloy-eips.workspace = true
 alloy-provider.workspace = true
