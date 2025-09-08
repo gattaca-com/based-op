@@ -56,12 +56,16 @@ services:
       - ./data/geth:/data/geth
       - ./config:/config
     restart: unless-stopped
-    network_mode: "host"
+    ports:
+      - "${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_WS_PORT}:${BOP_REPLAY_BASED_OP_GETH_WS_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}:${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}/tcp"
+      - "${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}/udp"
 
   bop-replay-based-registry:
     image: local_based_registry
     container_name: bop-replay-based-registry
-    network_mode: "host"
     command:
       - --registry.path=/config/registry.json
       - --eth_rpc_url=http://0.0.0.0:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
@@ -69,11 +73,12 @@ services:
     volumes:
       - ./config:/config
     restart: unless-stopped
+    ports:
+      - "${BOP_REPLAY_REGISTRY_PORT}:${BOP_REPLAY_REGISTRY_PORT}"
 
   bop-replay-based-op-node:
     image: ghcr.io/chainbound/op-node:586ab88da3cc0b0123e987c58bf5ed92a946b029
     container_name: bop-replay-based-op-node
-    network_mode: "host"
     environment:
       GOLOG_LOG_LEVEL: "debug"
     command:
@@ -106,6 +111,10 @@ services:
       - ./data/node:/data/op-node
       - ./config:/config
     restart: unless-stopped
+    ports:
+      - "${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}:${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}/tcp"
+      - "${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}/udp"
 
   bop-replay-based-gateway:
     image: local_based_gateway:rollback
@@ -131,5 +140,7 @@ services:
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
       - /dev/shm:/dev/shm
-    network_mode: "host"
     restart: unless-stopped
+    ports:
+      - "${BOP_REPLAY_GATEWAY_PORT}:${BOP_REPLAY_GATEWAY_PORT}"
+      - "${BOP_REPLAY_GATEWAY_PORT_NO_AUTH}:${BOP_REPLAY_GATEWAY_PORT_NO_AUTH}"
