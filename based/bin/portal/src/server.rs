@@ -15,6 +15,7 @@ use bop_common::{
         OpNodeP2PApiClient, PortalApiServer,
     },
     communication::messages::{RpcError, RpcResult},
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     time::Duration,
     utils::{uuid, wait_for_signal},
 };
@@ -22,7 +23,7 @@ use jsonrpsee::{
     core::{ClientError, async_trait},
     server::{RpcServiceBuilder, ServerBuilder},
 };
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
@@ -239,7 +240,7 @@ impl EngineApiServer for PortalServer {
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
-    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4> {
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4Patch> {
         debug!(%payload_id, "new request");
 
         let fallback_fut = tokio::spawn({
@@ -250,7 +251,7 @@ impl EngineApiServer for PortalServer {
 
         let Some(gateway) = self.gateway_manager.current_gateway().await else { return Ok(fallback_fut.await??) };
 
-        let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV4, _>> = tokio::spawn(
+        let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV4Patch, _>> = tokio::spawn(
             {
                 // only get payload from previously picked gateway
                 let fallback_client = self.geth_engine_client.clone();

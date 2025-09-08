@@ -10,7 +10,7 @@ use alloy_rpc_types::engine::{
     PayloadId,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
 use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
@@ -20,6 +20,7 @@ use thiserror::Error;
 use tokio::sync::oneshot::{self};
 
 use crate::{
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::{DBFrag, DBSorting},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
@@ -163,7 +164,7 @@ impl<T> From<InternalMessage<T>> for Nanos {
 pub enum EngineApi {
     ForkChoiceUpdatedV3 { fork_choice_state: ForkchoiceState, payload_attributes: Option<Box<OpPayloadAttributes>> },
     NewPayloadV4 { payload: OpExecutionPayloadV4, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
-    GetPayloadV4 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV4> },
+    GetPayloadV4 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV4Patch> },
 }
 impl EngineApi {
     pub fn messages_from_block(
