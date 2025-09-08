@@ -1,0 +1,117 @@
+name: Release Docker Images (staging)
+
+on:
+  push:
+    branches: [staging]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    strategy:
+      matrix:
+        image:
+          - name: based-gateway-staging
+            context: based
+            file: based/gateway.Dockerfile
+            build-contexts: 'reth=./reth'
+          - name: key-to-address-staging
+            context: based
+            file: based/key_to_address.Dockerfile
+            build-contexts: 'reth=./reth'
+          - name: based-registry-staging
+            context: based
+            file: based/registry.Dockerfile
+            build-contexts: 'reth=./reth'
+          - name: based-portal-staging
+            context: based
+            file: based/portal.Dockerfile
+            build-contexts: 'reth=./reth'
+          - name: based-txproxy-staging
+            context: based
+            file: based/txproxy.Dockerfile
+            build-contexts: 'reth=./reth'
+        platform:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+      fail-fast: false
+
+    name: Build & Push ${{ matrix.image.name }} (${{ matrix.platform.arch }})
+    runs-on: ${{ matrix.platform.runner }}
+    env:
+      IMAGE_REG: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+      - uses: docker/setup-buildx-action@v3
+        with:
+          builder: multiarch-builder
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & Push ${{ matrix.image.name }}
+        uses: docker/build-push-action@v6
+        with:
+          platforms: linux/${{ matrix.platform.arch == 'arm64' && 'arm64/v8' || matrix.platform.arch }}
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_REG }}/${{ matrix.image.name }}:${{ github.sha }}-${{ matrix.platform.arch }}
+            ${{ !contains(github.sha, 'rc') && format('{0}/{1}:latest-{2}', env.IMAGE_REG, matrix.image.name, matrix.platform.arch) || '' }}
+          cache-from: type=registry,ref=${{ env.IMAGE_REG }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }}
+          cache-to: type=registry,ref=${{ env.IMAGE_REG }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }},mode=max
+          build-contexts: ${{ matrix.image.build-contexts }}
+
+  create-manifest:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image:
+          - based-gateway-staging
+          - key-to-address-staging
+          - based-registry-staging
+          - based-portal-staging
+          - based-txproxy-staging
+
+    env:
+      IMAGE_REG: ghcr.io/${{ github.repository }}
+
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create & Push Multi-Arch Manifests
+        run: |
+          ghcr="ghcr.io/${{ github.repository }}"
+          tag="${{ github.sha }}"
+          name="${{ matrix.image }}"
+
+          # Use buildx imagetools to create multi-arch manifest
+          docker buildx imagetools create \
+            --tag $ghcr/$name:$tag \
+            $ghcr/$name:$tag-amd64 \
+            $ghcr/$name:$tag-arm64
+
+          if [[ ! "$tag" =~ "rc" ]]; then
+            docker buildx imagetools create \
+              --tag $ghcr/$name:latest \
+              $ghcr/$name:latest-amd64 \
+              $ghcr/$name:latest-arm64
+          fi

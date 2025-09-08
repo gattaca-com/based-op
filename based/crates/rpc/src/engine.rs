@@ -4,9 +4,10 @@ use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpd
 use bop_common::{
     api::EngineApiServer,
     communication::messages::{self, RpcError, RpcResult},
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
 };
 use jsonrpsee::core::async_trait;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use tokio::sync::oneshot;
 use tracing::{Level, trace};
 
@@ -67,7 +68,7 @@ impl EngineApiServer for RpcServer {
     }
 
     #[tracing::instrument(skip_all, ret(level = Level::TRACE))]
-    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4> {
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4Patch> {
         trace!(%payload_id, "new request");
 
         let (tx, rx) = oneshot::channel();

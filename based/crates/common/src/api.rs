@@ -5,14 +5,12 @@ use alloy_primitives::{Address, B256, Bytes, U64};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
-use op_alloy_rpc_types_engine::{
-    OpExecutionPayloadEnvelopeV3, OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes,
-};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpExecutionPayloadV4, OpPayloadAttributes};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::communication::messages::RpcResult;
+use crate::{communication::messages::RpcResult, custom_v4::OpExecutionPayloadEnvelopeV4Patch};
 
 pub const PORTAL_CAPABILITIES: &[&str] = &[
     "engine_forkchoiceUpdatedV3",
@@ -75,7 +73,7 @@ pub trait EngineApi {
     }
 
     #[method(name = "getPayloadV4")]
-    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4>;
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4Patch>;
 }
 
 #[rpc(client, server, namespace = "eth")]

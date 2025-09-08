@@ -7,6 +7,7 @@ use alloy_rpc_types::engine::{
 };
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders},
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     debug_panic,
     p2p::{FragV0, SealV0},
     shared::SharedState,
@@ -17,7 +18,7 @@ use bop_common::{
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use op_revm::OpSpecId;
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{ConfigureEvm, block::SystemCaller, env::EvmEnv, execute::ProviderError};
@@ -240,7 +241,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
     }
 
     /// Finalize the block after the last frag has been sealed
-    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4) {
+    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4Patch) {
         frag_seq.sorting_telemetry.report();
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
@@ -329,7 +330,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             blob_gas_used: 0,
             excess_blob_gas: 0,
         };
-        (seal, OpExecutionPayloadEnvelopeV4 {
+        (seal, OpExecutionPayloadEnvelopeV4Patch {
             execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
                 payload_inner,
                 withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
