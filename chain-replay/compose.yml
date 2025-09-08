@@ -1,8 +1,8 @@
 services:
-  based-op-geth:
+  bop-replay-based-op-geth:
     image: ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest
     pull_policy: always
-    container_name: based-op-geth
+    container_name: bop-replay-based-op-geth
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -58,9 +58,9 @@ services:
     restart: unless-stopped
     network_mode: "host"
 
-  based-registry:
+  bop-replay-based-registry:
     image: local_based_registry
-    container_name: based-registry
+    container_name: bop-replay-based-registry
     network_mode: "host"
     command:
       - --registry.path=/config/registry.json
@@ -70,10 +70,10 @@ services:
       - ./config:/config
     restart: unless-stopped
 
-  based-op-node:
+  bop-replay-based-op-node:
     image: ghcr.io/chainbound/op-node:89ebda4de8a8a384c39e2a000f8ba61320e6be4d
     # pull_policy: always
-    container_name: based-op-node
+    container_name: bop-replay-based-op-node
     network_mode: "host"
     environment:
       GOLOG_LOG_LEVEL: "debug"
@@ -108,10 +108,10 @@ services:
       - ./config:/config
     restart: unless-stopped
 
-  based-gateway:
+  bop-replay-based-gateway:
     image: local_based_gateway:rollback
     # pull_policy: always
-    container_name: based-gateway
+    container_name: bop-replay-based-gateway
     environment:
       - RUST_LOG=${BOP_RELAY_RUST_LOG_GATEWAY:-}
     command:

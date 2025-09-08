@@ -29,7 +29,7 @@ pub fn start_based_op_geth_service(chain_name: ChainName) -> io::Result<()> {
     let env_file_path = chain_name.env_file_path();
 
     let command_str = format!(
-        "docker compose --file {} --env-file {} up -d based-op-geth",
+        "docker compose --file {} --env-file {} up -d bop-replay-based-op-geth",
         compose_file_path.to_string_lossy(),
         env_file_path.to_string_lossy()
     );
@@ -54,7 +54,7 @@ pub fn start_based_registry(chain_name: ChainName) -> io::Result<()> {
     let env_file_path = chain_name.env_file_path();
 
     let command_str = format!(
-        "docker compose --file {} --env-file {} up -d based-registry",
+        "docker compose --file {} --env-file {} up -d bop-replay-based-registry",
         compose_file_path.to_string_lossy(),
         env_file_path.to_string_lossy()
     );
@@ -73,7 +73,7 @@ pub fn start_based_op_node_service(chain_name: ChainName) -> io::Result<()> {
     let env_file_path = chain_name.env_file_path();
 
     let command_str = format!(
-        "docker compose --file {} --env-file {} up -d based-op-node",
+        "docker compose --file {} --env-file {} up -d bop-replay-based-op-node",
         compose_file_path.to_string_lossy(),
         env_file_path.to_string_lossy()
     );
@@ -99,7 +99,7 @@ pub fn start_based_gatway(args: Args) -> io::Result<()> {
     let env_file_path = chain_name.env_file_path();
 
     let command_str = format!(
-        "docker compose --file {} --env-file {} up -d based-gateway",
+        "docker compose --file {} --env-file {} up -d bop-replay-based-gateway",
         compose_file_path.to_string_lossy(),
         env_file_path.to_string_lossy()
     );
