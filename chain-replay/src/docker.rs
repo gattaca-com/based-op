@@ -2,8 +2,6 @@
 
 use std::{io, process::Command};
 
-use tracing::info;
-
 use crate::{
     chain::ChainName,
     config::Args,
@@ -81,7 +79,7 @@ pub fn start_based_op_node_service(chain_name: ChainName) -> io::Result<()> {
 
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
-    // command.env("BOP_REPLAY_BASED_OP_NODE_GOSSIP_IP", get_ip().to_string());
+    command.env("BOP_REPLAY_KONA_SEQUENCER_IP", get_ip().to_string());
     let output = command.output()?;
 
     output_to_result(&command_str, output)

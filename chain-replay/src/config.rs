@@ -32,12 +32,17 @@ pub struct Args {
     #[arg(
         long,
         default_value = "9099",
-        env = "BOP_REPLAY_GOSSIP_PORT",
-        id = "BOP_REPLAY_GOSSIP_PORT"
+        env = "BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT",
+        id = "BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT"
     )]
     pub gossip_port: u16,
     /// Port to listen for discovery on.
-    #[arg(long, default_value = "9098", env = "BOP_REPLAY_DISC_PORT", id = "BOP_REPLAY_DISC_PORT")]
+    #[arg(
+        long,
+        default_value = "9098",
+        env = "BOP_REPLAY_KONA_SEQUENCER_DISCOVERY_PORT",
+        id = "BOP_REPLAY_KONA_SEQUENCER_DISCOVERY_PORT"
+    )]
     pub disc_port: u16,
     /// The inclusive range of blocks to replay, in the format 'start..=end'.
     #[clap(

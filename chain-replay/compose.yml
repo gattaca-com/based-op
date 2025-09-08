@@ -100,7 +100,7 @@ services:
       - --p2p.listen.tcp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
       - --p2p.listen.udp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
       - --safedb.path=/data/op-node/op-node-beacon-data
-      - --p2p.static=/ip4/127.0.0.1/tcp/32303/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
+      - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
       - --p2p.no-discovery=true
       - --rpc.enable-based
       - --registry=http://bop-replay-based-registry:${BOP_REPLAY_REGISTRY_PORT}
