@@ -68,7 +68,7 @@ services:
     container_name: bop-replay-based-registry
     command:
       - --registry.path=/config/registry.json
-      - --eth_rpc_url=http://0.0.0.0:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
+      - --eth_rpc_url=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
       - --port=${BOP_REPLAY_REGISTRY_PORT}
     volumes:
       - ./config:/config
@@ -83,7 +83,7 @@ services:
       GOLOG_LOG_LEVEL: "debug"
     command:
       - op-node
-      - --l2=http://0.0.0.0:${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}
+      - --l2=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}
       - --l2.jwt-secret=/config/jwt
       - --verifier.l1-confs=1
       - --rollup.config=/config/rollup.json
@@ -103,7 +103,7 @@ services:
       - --p2p.static=/ip4/127.0.0.1/tcp/32303/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
       - --p2p.no-discovery=true
       - --rpc.enable-based
-      - --registry=http://0.0.0.0:${BOP_REPLAY_REGISTRY_PORT}
+      - --registry=http://bop-replay-based-registry:${BOP_REPLAY_REGISTRY_PORT}
       - --syncmode=execution-layer
       - --log.level=debug
       - --unsafe-allow-old-payloads=true
@@ -128,10 +128,10 @@ services:
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway
-      - --eth_client.url=http://0.0.0.0:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
+      - --eth_client.url=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=${BOP_REPLAY_GATEWAY_SEQUENCING_KEY}
-      - --gossip.root_peer_url=http://0.0.0.0:${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
+      - --gossip.root_peer_url=http://bop-replay-based-op-node:${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
       - --chain-replay.blocks-range=${BOP_REPLAY_BLOCKS_RANGE}
       - --chain-replay.l2-el-verifier-url=${BOP_REPLAY_L2_EL_VERIFIER_URL}
 
