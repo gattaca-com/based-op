@@ -7,6 +7,5 @@ version.workspace = true
 [dependencies]
 bop-common.workspace = true
 tokio.workspace = true
-metrics-exporter-prometheus = "0.16.2"
 tracing.workspace = true
-metrics = "0.24.1"
+metrics.workspace = true

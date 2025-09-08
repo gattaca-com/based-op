@@ -9,6 +9,7 @@ use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders},
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     debug_panic,
+    metrics::{Gauge, Histogram, Metric, MetricsUpdate, metrics_queue},
     p2p::{FragV0, SealV0},
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
@@ -29,6 +30,7 @@ use reth_optimism_forks::{OpHardfork, OpHardforks};
 use reth_provider::StorageRootProvider;
 use revm_primitives::{B256, Bytes, U256, b256};
 use tracing::{debug, info};
+use uuid::Uuid;
 
 use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
 
@@ -76,6 +78,7 @@ pub struct SequencerContext<Db> {
     pub system_caller: SystemCaller<Arc<OpChainSpec>>,
     pub timers: SequencerTimers,
     pub telemetry: Producer<TelemetryUpdate>,
+    pub metrics: Producer<MetricsUpdate>,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -98,6 +101,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             base_fee: Default::default(),
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
+            metrics: metrics_queue().into(),
         }
     }
 }
@@ -181,6 +185,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.as_ref().basefee,
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
+            &mut self.metrics,
         ) {
             TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
         }
@@ -209,6 +214,13 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
 
         debug!("new frag sequence");
         let mut sorting = SortingData::new(&seq, self);
+
+        // Update block height metric
+        MetricsUpdate::send(
+            Uuid::new_v4(),
+            Metric::SetGauge(Gauge::GatewayBlockHeight, self.block_number() as f64),
+            &mut self.metrics,
+        );
 
         // Apply must include
         sorting.apply_block_start_to_state(self, simulator_evm_block_params).expect("shouldn't fail");
@@ -325,6 +337,14 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             frag_seq.txs.len(),
             mgas / frag_seq.start_t.elapsed().as_secs()
         );
+
+        let block_duration = frag_seq.start_t.elapsed().as_millis();
+        MetricsUpdate::send(
+            Uuid::new_v4(),
+            Metric::RecordHistogram(Histogram::GatewayBlockBuildDurationMs, block_duration),
+            &mut self.metrics,
+        );
+
         let payload_inner = ExecutionPayloadV3 {
             payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
             blob_gas_used: 0,
@@ -360,6 +380,13 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
 
         self.parent_header = block.header().clone();
         self.parent_hash = block.hash_slow();
+
+        // Update block height metric when syncing
+        MetricsUpdate::send(
+            Uuid::new_v4(),
+            Metric::SetGauge(Gauge::GatewayBlockHeight, block.number() as f64),
+            &mut self.metrics,
+        );
 
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
         self.tx_pool.active_txs.clear();

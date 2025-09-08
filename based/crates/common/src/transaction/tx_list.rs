@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, ops::Deref, sync::Arc};
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
+use reth_primitives_traits::InMemorySize;
 use revm_primitives::Address;
 
 use crate::transaction::Transaction;
@@ -133,6 +134,12 @@ impl TxList {
     #[inline]
     pub fn get(&self, nonce: &u64) -> Option<&Arc<Transaction>> {
         self.txs.binary_search_by_key(nonce, |tx| tx.nonce()).ok().map(|index| &self.txs[index])
+    }
+
+    /// Returns the total memory size of the transactions in the list, in bytes.
+    #[inline]
+    pub fn mem_size(&self) -> usize {
+        self.txs.iter().map(|tx| tx.size()).sum()
     }
 
     /// Pushes a transaction onto the end of the list.

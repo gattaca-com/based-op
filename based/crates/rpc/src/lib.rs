@@ -126,6 +126,7 @@ impl MinimalEthApiServer for RpcServer {
 
         let tx = Arc::new(Transaction::decode(bytes)?);
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
+
         let hash = tx.tx_hash();
         let _ = self.new_order_tx.send(tx.into());
 
