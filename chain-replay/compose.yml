@@ -117,7 +117,7 @@ services:
       - "${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}/udp"
 
   bop-replay-based-gateway:
-    image: local_based_gateway:rollback
+    image: local_based_gateway
     # pull_policy: always
     container_name: bop-replay-based-gateway
     environment:
