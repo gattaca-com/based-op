@@ -56,6 +56,9 @@ pub struct GatewayArgs {
     /// Number of sims per loop
     #[arg(long = "sequencer.sim_threads", default_value_t = 5)]
     pub sim_threads: usize,
+    /// vsync window in micros
+    #[arg(long = "sequencer.vsync_window_us", default_value_t = 10)]
+    pub vsync_window_us: usize,
     /// Database location
     #[arg(long = "db.datadir")]
     pub db_datadir: PathBuf,
