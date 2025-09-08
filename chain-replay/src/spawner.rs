@@ -1,19 +1,19 @@
-use std::{
-    fs, io,
-    process::{Command, ExitStatus},
-    sync::Arc,
-    time::Duration,
-};
+use std::{fs, io, sync::Arc, time::Duration};
 
 use alloy::{
     eips::BlockNumberOrTag,
     providers::{Provider, ProviderBuilder},
     rpc::types::engine::ForkchoiceState,
 };
+use alloy_genesis::Genesis;
 use eyre::Context as _;
 use kona_engine::EngineClient;
 use kona_genesis::RollupConfig;
 use op_alloy_network::Optimism;
+use reth_db::open_db_read_only;
+use reth_optimism_chainspec::OpChainSpec;
+use reth_optimism_node::OpNode;
+use reth_provider::{BlockNumReader, providers::StaticFileProvider};
 use tracing::{debug, info};
 use url::Url;
 
@@ -27,7 +27,7 @@ use crate::{
     engine::EngineExt as _,
     rpc::{debug_set_head, wait_for_sync},
     types::execution_payload_envelope_from_block,
-    utils::{extract_stdout, read_jwt_file},
+    utils::read_jwt_file,
 };
 
 /// Responsible for spinning up all follower nodes via docker:
@@ -141,66 +141,47 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
 
     info!("Waiting for gateway to sync");
     // For some weird rollback commitments reason, we provide +1 here.
-    wait_for_gateway_sync(args.chain_name, sync_target_block_number + 1)
+    wait_for_gateway_sync(args.chain_name, sync_target_block_number)
+        .await
         .wrap_err("failed to check gateway sync status")?;
     info!("Gateway synced!");
 
     Ok(())
 }
 
-/// Waits until the "CanonicalHeaders" table in the gateway database has the provided number of
-/// entries, which correspond to the desired sync or rollback.
-///
-/// Requires `op-reth` to available in `$PATH`.
-///
-/// ### Implementation notes
-///
-/// The output of the `op-reth db stats` table looks as follows:
-///
-/// ```text
-/// | Table Name                 | # Entries | Branch Pages | Leaf Pages | Overflow Pages | Total Size |
-/// |----------------------------|-----------|--------------|------------|----------------|------------|
-/// | AccountChangeSets          | 4037      | 2            | 40         | 0              | 168 KiB    |
-/// ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ...
-/// | CanonicalHeaders           | 998       | 1            | 14         | 0              | 60 KiB     |
-/// ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ...
-/// | -------------------------- | --------- | ------------ | ---------- | -------------- | ---------- |
-/// | Tables                     |           |              |            |                | 5 MiB      |
-/// | Freelist                   | 2543      |              |            |                | 9.9 MiB    |
-/// ```
-///
-/// So in order to extract the number of entries in the `CanonicalHeaders` table we grep for such
-/// table name, we trim whitespaces, and we get the third match with `awk` using
-/// `--field-separator=\|`.
-///
-/// It's a bit hackish, but avoids a lot of boilerplate code needed to just the head block.
-pub fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> io::Result<()> {
+/// Waits until the gateway is synced by opening a read-only connection to the Reth database and
+/// querying it.
+pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> io::Result<()> {
     let data_path = chain_name.gateway_data_directory_path();
-    let data_path_string = data_path.to_string_lossy();
     let genesis_file_path = chain_name.genesis_file_path();
-    let genesis_file_path_string = genesis_file_path.to_string_lossy();
+    let genesis_json_string = fs::read_to_string(genesis_file_path)?;
 
-    let mut head = 0;
+    let genesis: Genesis = serde_json::from_str(&genesis_json_string)?;
+    let chain_spec: OpChainSpec = genesis.into();
 
-    let mut is_op_reth_in_path = Command::new("which");
-    if !is_op_reth_in_path.arg("op-reth").spawn()?.wait()?.success() {
-        panic!("op-reth not found in path. Please download a binary from Reth Github releases");
-    }
+    let db_path = data_path.join("db");
+    let static_files_dir = data_path.join("static_files");
 
-    let command_str = format!(
-        "op-reth db --datadir {data_path_string} --chain {genesis_file_path_string} stats | grep CanonicalHeaders | tr -d \' \' | awk --field-separator=\\| \'{{ print $3 }}\'"
-    );
+    let factory = OpNode::provider_factory_builder()
+        .db(Arc::new(open_db_read_only(db_path, Default::default()).expect("to open reth db")))
+        .chainspec(Arc::new(chain_spec))
+        .static_file(
+            StaticFileProvider::read_only(static_files_dir, false).expect("to open static files"),
+        )
+        .build_provider_factory();
 
+    let mut head = factory.best_block_number().expect("to read best block number from db");
+    let sleep_time = Duration::from_secs(5);
     while head != sync_target {
-        let mut command = Command::new("sh");
-        command.arg("-c").arg(&command_str);
-        let output = command.output()?;
+        debug!(
+            gateway_head = head,
+            target = sync_target,
+            "Gateway is syncing, re-checking in {sleep_time:?}..."
+        );
 
-        let stdout = extract_stdout(&command_str, output)?;
-        let text = String::from_utf8_lossy(&stdout);
-        head =
-            (text.trim()).parse::<u64>().unwrap_or_else(|_| panic!("valid u64 str, got: {}", text));
-        debug!(gateway_head = head, target = sync_target, "Gateway is syncing...");
+        tokio::time::sleep(sleep_time).await;
+
+        head = factory.best_block_number().expect("to read best block number from db");
     }
 
     Ok(())
