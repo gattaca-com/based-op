@@ -8,8 +8,9 @@ use std::{
 };
 
 use alloy::{
-    providers::{Provider as _, ProviderBuilder, RootProvider},
-    rpc::types::engine::JwtSecret,
+    eips::Encodable2718,
+    providers::{Provider as _, ProviderBuilder, RootProvider, ext::EngineApi},
+    rpc::types::engine::{ForkchoiceState, JwtSecret, PayloadId},
 };
 use eyre::Context as _;
 use kona_disc::LocalNode;
@@ -26,12 +27,17 @@ use libp2p::{
     identity::secp256k1::{self, SecretKey},
 };
 use op_alloy_network::Optimism;
+use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelope;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use crate::{config::Args, engine::EngineExt, types::execution_payload_envelope_from_block};
+use crate::{
+    config::Args,
+    engine::EngineExt,
+    types::{execution_payload_envelope_from_block, op_attributes_from_block},
+};
 
 pub struct Clients {
     based_op_geth: RootProvider<Optimism>,
@@ -291,112 +297,55 @@ pub async fn run_verification_body(
     clients: Clients,
     blocks_range: RangeInclusive<u64>,
 ) -> eyre::Result<()> {
-    let transactions_in_attributes = false;
-    let no_tx_pool = Some(true);
-
     for block_num in blocks_range {
-        // let head_block_number = self.next_block.saturating_sub(1);
-        //
-        // let prev_block =
-        //     self.executor.block_on(fetch_block(head_block_number, &self.verification_provider));
-        // debug!("Fetched previous block {} for newPayload + FCU", prev_block.number());
-        //
-        // let (new_payload_prev_block, _, fcu) = messages::EngineApi::messages_from_block(
-        //     &prev_block,
-        //     transactions_in_attributes,
-        //     no_tx_pool,
-        // );
-        //
-        // let block_to_build =
-        //     self.executor.block_on(fetch_block(self.next_block, &self.verification_provider));
-        //
-        // debug!("Fetched block {} to replay", block_to_build.number());
-        //
-        // // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
-        // connections.send(new_payload_prev_block);
-        // Duration::from_millis(1000).sleep();
-        //
-        // let txs_for_pool: Vec<_> = Transaction::from_block(&block_to_build);
-        //
-        // // WaitingForForkchoiceWithAttributes -> Sorting
-        // connections.send(fcu);
-        //
-        // for t in txs_for_pool {
-        //     connections.send(t);
-        //     Duration::from_millis(10).sleep();
-        // }
-        //
-        // Duration::from_millis(2000).sleep();
-        //
-        // let (block_tx, mut block_rx) = oneshot::channel();
-        // // Sorting -> WaitingForNewPayload
-        // connections
-        //     .send(EngineApi::GetPayloadV4 { payload_id: PayloadId::new([0; 8]), res: block_tx });
-        // Duration::from_millis(100).sleep();
-        // let curt = Instant::now();
-        // let mut sealed_block = loop {
-        //     if let Ok(sealed_block) = block_rx.try_recv() {
-        //         break sealed_block;
-        //     }
-        //     if curt.elapsed() > Duration::from_secs(2) {
-        //         tracing::warn!("couldn't get block");
-        //         return;
-        //     }
-        // };
-        //
-        // let hash = block_to_build.hash_slow();
-        // let hash1 =
-        //     sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash;
-        // if hash1 != hash {
-        //     sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.transactions =
-        //         vec![];
-        //     let receipt = sealed_block
-        //         .execution_payload
-        //         .payload_inner
-        //         .payload_inner
-        //         .payload_inner
-        //         .receipts_root;
-        //     if receipt == block_to_build.receipts_root {
-        //         info!("receipts match");
-        //     } else {
-        //         info!(our=%receipt, block = %block_to_build.receipts_root, "receipts don't match");
-        //         debug_assert!(false, "receipts don't match");
-        //     };
-        //
-        //     let gas_used =
-        //         sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.gas_used;
-        //
-        //     if gas_used == block_to_build.gas_used() {
-        //         info!("gas_used matches")
-        //     } else {
-        //         info!(our=%gas_used, block = %block_to_build.gas_used(), "gas_used doesn't match");
-        //         debug_assert!(false, "gas_used doesn't match");
-        //     };
-        //
-        //     let state_root =
-        //         sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.state_root;
-        //
-        //     if state_root == block_to_build.state_root() {
-        //         info!("state_root matches")
-        //     } else {
-        //         info!(our=%state_root, block = %block_to_build.state_root(), "state_root doesn't match");
-        //         debug_assert!(false, "state_root doesn't match");
-        //     };
-        //
-        //     // println!("ACTUAL BLOCK:");
-        // }
-        //
-        // assert_eq!(
-        //     sealed_block.execution_payload.payload_inner.payload_inner.payload_inner.block_hash,
-        //     block_to_build.hash_slow(),
-        //     "{block_to_build:#?} vs {sealed_block:#?}"
-        // );
-        //
-        // // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
-        // // connections.send(new_payload);
-        // // connections.send(fcu_1);
-        //
-        // self.next_block += 1;
+        info!("Replaying block {block_num}");
+
+        let (prev_block, block) = tokio::join!(
+            clients.l2_el_verifier.get_block_by_number(block_num.saturating_sub(1).into()).full(),
+            clients.l2_el_verifier.get_block_by_number(block_num.into()).full()
+        );
+        let Some(prev_block) = prev_block? else {
+            return Err(eyre::eyre!("Block {} not found", block_num.saturating_sub(1)));
+        };
+        let Some(block) = block? else {
+            return Err(eyre::eyre!("Block {} not found", block_num));
+        };
+
+        let raw_txs = block
+            .transactions
+            .clone()
+            .into_transactions()
+            .map(|t| t.inner.inner.into_inner().encoded_2718())
+            .collect::<Vec<_>>();
+
+        let fcs = ForkchoiceState { head_block_hash: prev_block.header.hash, ..Default::default() };
+        let op_attributes = op_attributes_from_block(&block);
+
+        // WaitingForForkchoiceWithAttributes -> Sorting
+        // NOTE: we don't check error here because of the no response policy from the gateway.
+        let _ = clients.gateway_auth.fork_choice_update(fcs, Some(op_attributes), true).await;
+
+        for t in raw_txs {
+            let _ = clients.gateway.send_raw_transaction(&t).await?;
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+
+        // Sorting -> WaitingForNewPayload
+        let sealed_block = clients.gateway_auth.get_payload_v4(PayloadId::default()).await?;
+
+        let hash = block.hash();
+        let sealed_block_inner = &sealed_block.execution_payload.payload_inner.payload_inner;
+
+        info!("block fetched {block:?}");
+
+        if sealed_block_inner.block_hash != hash {
+            panic!("Block mismatch: our = {:#?}, target = {:#?}", sealed_block, block);
+        }
+
+        // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
+        let OpExecutionPayloadEnvelope { execution_payload, parent_beacon_block_root } =
+            execution_payload_envelope_from_block(block);
+        clients.gateway_auth.new_payload(execution_payload, parent_beacon_block_root).await?;
     }
 
     Ok(())
