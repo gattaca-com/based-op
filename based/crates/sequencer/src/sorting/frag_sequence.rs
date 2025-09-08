@@ -198,7 +198,7 @@ mod tests {
             if index < 10 {
                 must_include_txs.push(rlp_tx);
             } else {
-                let bop_tx = Arc::new(Transaction::new(signed_tx.clone(), sender, rlp_tx.into()));
+                let bop_tx = Arc::new(Transaction::new(signed_tx.clone(), sender, rlp_tx));
                 non_must_include_txs.push(bop_tx);
             }
         }

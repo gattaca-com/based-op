@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use alloy_consensus::Transaction as AlloyTransactionTrait;
+use reth_primitives_traits::InMemorySize;
 use revm_primitives::{Address, B256, U256};
 
 use crate::transaction::{Transaction, TxList, simulated::transaction::SimulatedTx};
@@ -131,6 +132,12 @@ impl SimulatedTxList {
             .as_ref()
             .map(|c| c.tx.estimated_tx_compressed_size())
             .or_else(|| self.pending.peek().map(|t| t.estimated_tx_compressed_size()))
+    }
+
+    /// Returns the total memory size of the transactions in the list, in bytes.
+    #[inline]
+    pub fn mem_size(&self) -> usize {
+        self.current.as_ref().map(|c| c.tx.size()).unwrap_or_default() + self.pending.mem_size()
     }
 }
 
