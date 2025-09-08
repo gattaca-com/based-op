@@ -72,10 +72,6 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
     let parent_beacon_block_root = block_to_sync.header.parent_beacon_block_root;
 
     start_based_op_geth_service(args.chain_name).wrap_err("to start based op service")?;
-    let sleep_time = Duration::from_secs(3);
-    info!("Waiting {sleep_time:?} for engine to be up...");
-    tokio::time::sleep(sleep_time).await;
-
     let auth_el_client = EngineClient::new_http(
         args.l2_engine_rpc_url.clone(),
         Url::parse("http://0.0.0.0:1234").unwrap(), // NOTE: we don't use the L1
@@ -83,12 +79,13 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
         jwt_secret,
     );
 
+    info!("Waiting for engine to be up...");
+    let highest_known_block = wait_for_based_op_geth_up(&auth_el_client).await?;
+
     let execution_payload_envelope = execution_payload_envelope_from_block(block_to_sync);
     let execution_payload = execution_payload_envelope.execution_payload;
     let is_at_least_v3 = execution_payload.as_v3().is_some();
 
-    let highest_known_block =
-        auth_el_client.get_block_number().await.wrap_err("get block number from engine")?;
     info!("Current block number of local geth: {highest_known_block}");
 
     let should_sync = highest_known_block < sync_target_block_number;
@@ -185,4 +182,22 @@ pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> i
     }
 
     Ok(())
+}
+
+pub async fn wait_for_based_op_geth_up(auth_el_client: &EngineClient) -> eyre::Result<u64> {
+    let attempts = 10;
+
+    let mut e = Ok(());
+
+    for _ in 1..=attempts {
+        match auth_el_client.get_block_number().await {
+            Ok(block) => return Ok(block),
+            Err(err) => {
+                e = Err(err);
+                tokio::time::sleep(Duration::from_secs(3)).await;
+            }
+        }
+    }
+
+    Err(eyre::eyre!("based-op-geth is still not up after {attempts} attempts: {e:?}"))
 }
