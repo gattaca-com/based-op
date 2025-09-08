@@ -1915,7 +1915,11 @@ version = "0.1.0"
 dependencies = [
  "alloy-consensus 0.14.0",
  "alloy-eips 0.14.0",
+ "alloy-primitives",
  "alloy-provider",
+ "alloy-rpc-types",
+ "alloy-signer",
+ "alloy-signer-local",
  "bop-common",
  "bop-db",
  "bop-rpc",
