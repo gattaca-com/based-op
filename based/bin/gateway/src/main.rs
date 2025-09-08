@@ -75,7 +75,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone());
+            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone(), args.da_config.clone());
             move || rt.block_on(wait_for_signal())
         });
 

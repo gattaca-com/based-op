@@ -6,6 +6,7 @@ use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_cli::chainspec::OpChainSpecParser;
+use reth_optimism_payload_builder::config::OpDAConfig;
 use revm_primitives::B256;
 use strum_macros::EnumString;
 use tracing::level_filters::LevelFilter;
@@ -104,6 +105,9 @@ pub struct GatewayArgs {
     /// Simulator Allows reverts in simulations
     #[arg(long = "simulator.allow_reverts", default_value_t = true)]
     pub allow_reverts: bool,
+
+    #[arg(skip = OpDAConfig::default())]
+    pub da_config: OpDAConfig,
 }
 
 impl GatewayArgs {

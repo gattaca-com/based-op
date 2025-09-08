@@ -7,11 +7,12 @@ use std::{
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::B256;
+use alloy_primitives::{B256, U64};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpNodeApiClient, OpNodeP2PApiClient, PortalApiServer,
+        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpMinerExtApiServer, OpNodeApiClient,
+        OpNodeP2PApiClient, PortalApiServer,
     },
     communication::messages::{RpcError, RpcResult},
     time::Duration,
@@ -96,6 +97,7 @@ impl PortalServer {
 
         let mut module = EngineApiServer::into_rpc(self.clone());
         module.merge(PortalApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        module.merge(OpMinerExtApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         let server_handle = server.start(module);
 
         let gateway_manager = Arc::clone(&self.gateway_manager);
@@ -348,5 +350,14 @@ impl PortalApiServer for PortalServer {
     /// The enode that can be used to sync with the op-geth
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String> {
         Ok(self.geth_client.node_info().await.map(|p| p.enode)?)
+    }
+}
+
+#[async_trait]
+impl OpMinerExtApiServer for PortalServer {
+    async fn set_max_da_size(&self, max_tx_size: U64, max_block_size: U64) -> RpcResult<bool> {
+        debug!(?max_tx_size, ?max_block_size, "set max DA size");
+        self.gateway_manager.broadcast_set_max_da_size(max_tx_size, max_block_size).await;
+        Ok(true)
     }
 }
