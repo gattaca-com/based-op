@@ -1,4 +1,4 @@
-use std::{fs, io, sync::Arc, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -10,10 +10,10 @@ use eyre::Context as _;
 use kona_engine::EngineClient;
 use kona_genesis::RollupConfig;
 use op_alloy_network::Optimism;
-use reth_db::open_db_read_only;
+use reth_db::{CanonicalHeaders, cursor::DbCursorRO, open_db_read_only};
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_node::OpNode;
-use reth_provider::{BlockNumReader, providers::StaticFileProvider};
+use reth_provider::providers::StaticFileProvider;
 use tracing::{debug, info};
 use url::Url;
 
@@ -148,7 +148,7 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
 
 /// Waits until the gateway is synced by opening a read-only connection to the Reth database and
 /// querying it.
-pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> io::Result<()> {
+pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> eyre::Result<()> {
     let data_path = chain_name.gateway_data_directory_path();
     let genesis_file_path = chain_name.genesis_file_path();
     let genesis_json_string = fs::read_to_string(genesis_file_path)?;
@@ -167,7 +167,17 @@ pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> i
         )
         .build_provider_factory();
 
-    let mut head = factory.best_block_number().expect("to read best block number from db");
+    let provider = factory.provider()?;
+
+    let latest_header = || -> eyre::Result<u64> {
+        let mut binding = provider.tx_ref().new_cursor::<CanonicalHeaders>()?;
+        let walker = binding.walk(None);
+        let res = walker.into_iter().last().unwrap();
+        let (number, _hash) = res.last().unwrap()?;
+        Ok(number)
+    };
+
+    let mut head = latest_header()?;
     let sleep_time = Duration::from_secs(5);
     while head != sync_target {
         debug!(
@@ -178,7 +188,7 @@ pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> i
 
         tokio::time::sleep(sleep_time).await;
 
-        head = factory.best_block_number().expect("to read best block number from db");
+        head = latest_header()?;
     }
 
     Ok(())
