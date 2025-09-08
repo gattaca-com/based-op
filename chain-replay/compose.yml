@@ -71,8 +71,7 @@ services:
     restart: unless-stopped
 
   bop-replay-based-op-node:
-    image: ghcr.io/chainbound/op-node:89ebda4de8a8a384c39e2a000f8ba61320e6be4d
-    # pull_policy: always
+    image: ghcr.io/chainbound/op-node:586ab88da3cc0b0123e987c58bf5ed92a946b029
     container_name: bop-replay-based-op-node
     network_mode: "host"
     environment:
