@@ -52,19 +52,19 @@ impl FragSequence {
         self.gas_remaining -= gas_used;
         self.payment += in_sort.payment();
         let uuid = in_sort.uuid;
-        self.da_remaining = self.da_remaining.map(|da| {
-            let used_da: u64 = in_sort.txs.iter().map(|tx| tx.tx.estimated_tx_compressed_size()).sum();
-            da.saturating_sub(used_da)
-        });
 
         let in_sort_txs = in_sort.txs.len();
+        let mut in_sort_da_used = 0;
 
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
-            self.da_used += tx.tx.estimated_tx_compressed_size();
+            in_sort_da_used += tx.tx.estimated_tx_compressed_size();
             self.txs.push(tx);
         }
+
+        self.da_used += in_sort_da_used;
+        self.da_remaining = self.da_remaining.map(|d| d.saturating_sub(in_sort_da_used));
 
         debug!(?self.gas_remaining, ?self.da_remaining, ?self.gas_used, ?self.da_used, ?in_sort_txs, "frag sequence updated");
 

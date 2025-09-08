@@ -44,8 +44,8 @@ where
                 }
                 Some(("miner", _)) => {
                     debug!(method = %method, "Received request in MinerApiProxy");
-                    external_call(fallback_client.clone(), &req).await;
-                    inner.call(req).await
+                    inner.call(req).await;
+                    external_call(fallback_client.clone(), &req).await
                 }
                 Some(("registry", _)) => {
                     debug!(method = %method, "Received request in RegistryApiProxy");
