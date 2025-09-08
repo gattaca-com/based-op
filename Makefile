@@ -368,7 +368,7 @@ start-main-node: create-network
 	  $(MAKE) fix-compose; \
 	  echo "Initializing all components of a main sequencing node in ./.local_main_node ..."; \
 	  { \
-	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i --rm imega/jq -r '.implementationsDeployment.disputeGameFactoryImplAddress' /config/state.json)"; \
+	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i --rm imega/jq -r '.opChainDeployments[0].disputeGameFactoryProxyAddress' /config/state.json)"; \
 	    echo "NETWORK_ID=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i --rm imega/jq -r '.l2_chain_id' /config/rollup.json)"; \
 	    echo "L1_RPC_URL=$(L1_RPC_URL)"; \
 	    echo "L1_BEACON_RPC_URL=$(L1_BEACON_RPC_URL)"; \
