@@ -65,6 +65,9 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     let evm_config = sequencer_config.evm_config.clone();
     let (frag_broadcast_tx, _) = tokio::sync::broadcast::channel(10_000);
 
+    let sequencer_vsync_window = Duration::from_micros(args.vsync_window_us as u64);
+    let simulator_vsync_window = Duration::from_micros(args.vsync_window_us as u64);
+
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
             .worker_threads(10)
@@ -75,13 +78,15 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone());
+            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone(), args.da_config.clone());
             move || rt.block_on(wait_for_signal())
         });
 
         s.spawn(|| {
-            Sequencer::new(db_bop, shared_state.clone(), sequencer_config)
-                .run(spine.to_connections("Sequencer"), ActorConfig::default());
+            Sequencer::new(db_bop, shared_state.clone(), sequencer_config).run(
+                spine.to_connections("Sequencer"),
+                ActorConfig::default().with_min_loop_duration(sequencer_vsync_window),
+            );
         });
 
         if let Some(mode) = args.mock {
@@ -123,7 +128,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 let db_frag = (&shared_state).into();
                 move || {
                     let simulator = Simulator::new(db_frag, evm_config, id, args.allow_reverts);
-                    simulator.run(connections, ActorConfig::default());
+                    simulator.run(connections, ActorConfig::default().with_min_loop_duration(simulator_vsync_window));
                 }
             });
         }

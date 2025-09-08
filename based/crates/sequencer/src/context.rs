@@ -7,6 +7,7 @@ use alloy_rpc_types::engine::{
 };
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders},
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     debug_panic,
     metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
     p2p::{FragV0, SealV0},
@@ -18,7 +19,7 @@ use bop_common::{
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use op_revm::OpSpecId;
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{ConfigureEvm, block::SystemCaller, env::EvmEnv, execute::ProviderError};
@@ -28,7 +29,7 @@ use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use reth_provider::StorageRootProvider;
 use revm_primitives::{B256, Bytes, U256, b256};
-use tracing::info;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
@@ -166,7 +167,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
             frag_id = frag_seq.next_seq,
             txs = sorting_data.txs.len(),
             frag_time =% sorting_data.start_t.elapsed(),
-            "sealing frag"
+            "sealing frag",
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
@@ -210,7 +211,10 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         senders.send(simulator_evm_block_params.clone()).expect("should never fail");
         let n_force_include_txs =
             self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
-        let seq = FragSequence::new(self.gas_limit(), self.block_number(), n_force_include_txs);
+        let max_block_da = self.config.da_config.max_da_block_size();
+        let seq = FragSequence::new(self.gas_limit(), max_block_da, self.block_number(), n_force_include_txs);
+
+        debug!("new frag sequence");
         let mut sorting = SortingData::new(&seq, self);
 
         // Update block height metric
@@ -251,7 +255,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
     }
 
     /// Finalize the block after the last frag has been sealed
-    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4) {
+    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4Patch) {
         frag_seq.sorting_telemetry.report(&self.metrics);
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
@@ -352,7 +356,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             blob_gas_used: 0,
             excess_blob_gas: 0,
         };
-        (seal, OpExecutionPayloadEnvelopeV4 {
+        (seal, OpExecutionPayloadEnvelopeV4Patch {
             execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
                 payload_inner,
                 withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),

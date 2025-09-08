@@ -54,6 +54,12 @@ where
                     MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::EngineApiRequests, 1), &metrics);
                     inner.call(req).await
                 }
+                Some(("miner", _)) => {
+                    debug!(method = %method, "Received request in MinerApiProxy");
+                    let res = external_call(fallback_client.clone(), &req).await;
+                    inner.call(req).await;
+                    res
+                }
                 Some(("registry", _)) => {
                     debug!(method = %method, "Received request in RegistryApiProxy");
                     MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::RegistryApiRequests, 1), &metrics);
