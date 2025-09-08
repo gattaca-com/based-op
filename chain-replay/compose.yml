@@ -114,6 +114,7 @@ services:
     environment:
       - RUST_LOG=${BOP_RELAY_RUST_LOG_GATEWAY:-}
     command:
+      - --rpc.port_no_auth=${BOP_REPLAY_GATEWAY_PORT_NO_AUTH}
       - --rpc.port=${BOP_REPLAY_GATEWAY_PORT}
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
