@@ -154,7 +154,7 @@ pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> i
     let genesis_json_string = fs::read_to_string(genesis_file_path)?;
 
     let genesis: Genesis = serde_json::from_str(&genesis_json_string)?;
-    let chain_spec: OpChainSpec = genesis.into();
+    let chain_spec = OpChainSpec::from_genesis(genesis);
 
     let db_path = data_path.join("db");
     let static_files_dir = data_path.join("static_files");
