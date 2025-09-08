@@ -1,4 +1,9 @@
-use std::{fs, io, process::Command, sync::Arc, time::Duration};
+use std::{
+    fs, io,
+    process::{Command, ExitStatus},
+    sync::Arc,
+    time::Duration,
+};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -176,6 +181,11 @@ pub fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> io::Res
     let genesis_file_path_string = genesis_file_path.to_string_lossy();
 
     let mut head = 0;
+
+    let mut is_op_reth_in_path = Command::new("which");
+    if !is_op_reth_in_path.arg("op-reth").spawn()?.wait()?.success() {
+        panic!("op-reth not found in path. Please download a binary from Reth Github releases");
+    }
 
     let command_str = format!(
         "op-reth db --datadir {data_path_string} --chain {genesis_file_path_string} stats | grep CanonicalHeaders | tr -d \' \' | awk --field-separator=\\| \'{{ print $3 }}\'"
