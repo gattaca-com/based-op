@@ -6,6 +6,7 @@ use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_cli::chainspec::OpChainSpecParser;
+use reth_optimism_payload_builder::config::OpDAConfig;
 use revm_primitives::B256;
 use strum_macros::EnumString;
 use tracing::level_filters::LevelFilter;
@@ -52,6 +53,9 @@ pub struct GatewayArgs {
     /// Number of sims per loop
     #[arg(long = "sequencer.sim_threads", default_value_t = 5)]
     pub sim_threads: usize,
+    /// vsync window in micros
+    #[arg(long = "sequencer.vsync_window_us", default_value_t = 10)]
+    pub vsync_window_us: usize,
     /// Database location
     #[arg(long = "db.datadir")]
     pub db_datadir: PathBuf,
@@ -103,6 +107,9 @@ pub struct GatewayArgs {
     /// Simulator Allows reverts in simulations
     #[arg(long = "simulator.allow_reverts", default_value_t = true)]
     pub allow_reverts: bool,
+
+    #[arg(skip = OpDAConfig::default())]
+    pub da_config: OpDAConfig,
 }
 
 impl GatewayArgs {

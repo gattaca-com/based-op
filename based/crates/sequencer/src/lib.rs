@@ -10,8 +10,9 @@ use bop_common::{
     actor::Actor,
     communication::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
-        messages::{self, BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
+        messages::{BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage},
     shared::SharedState,
@@ -19,11 +20,9 @@ use bop_common::{
     time::{Duration, Repeater},
     transaction::Transaction,
     typedefs::{BlockSyncMessage, DatabaseRef},
-    utils::Summary as _,
 };
 use bop_db::DatabaseRead;
-use op_alloy_consensus::OpBlock;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::{SignedTransaction, block::TestBlock};
@@ -92,8 +91,7 @@ where
 {
     fn loop_body(&mut self, connections: &mut Connections<SendersSpine<Db>, ReceiversSpine<Db>>) {
         // handle block sync
-        connections.receive_for(Duration::from_millis(10), |msg: RecoveredBlock<OpBlock>, senders| {
-            trace!(number = msg.number(), hash = ?msg.hash(), "Received block");
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             let state = std::mem::take(&mut self.state);
             let cur_seq_state = telemetry::system::SequencerState::from(&state);
             self.state = state.handle_block_sync(msg, &mut self.data, senders);
@@ -108,8 +106,7 @@ where
         });
 
         // handle new transaction
-        connections.receive_for(Duration::from_millis(10), |msg: Arc<Transaction>, senders| {
-            trace!(hash = ?msg.hash(), "Received transaction");
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             if self.data.timestamp() != 0
                 && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
@@ -135,8 +132,7 @@ where
         });
 
         // handle engine API messages from rpc
-        connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
-            trace!(summary = msg.summary(), "Received Engine API message");
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             let state = std::mem::take(&mut self.state);
             let cur_seq_state = telemetry::system::SequencerState::from(&state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);
@@ -398,7 +394,7 @@ where
     /// 4. Returns payload to consensus layer
     fn handle_get_payload_engine_api(
         self,
-        res: oneshot::Sender<OpExecutionPayloadEnvelopeV4>,
+        res: oneshot::Sender<OpExecutionPayloadEnvelopeV4Patch>,
         ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {

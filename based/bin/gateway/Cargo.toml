@@ -13,6 +13,11 @@ panic = "unwind"
 [dependencies]
 alloy-eips.workspace = true
 alloy-provider.workspace = true
+alloy-primitives.workspace = true
+alloy-signer.workspace = true
+alloy-signer-local.workspace = true
+alloy-rpc-types.workspace = true
+
 bop-common.workspace = true
 bop-db.workspace = true
 bop-rpc.workspace = true

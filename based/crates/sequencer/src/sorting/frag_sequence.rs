@@ -3,6 +3,7 @@ use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
 use bop_common::{p2p::FragV0, telemetry::TelemetryUpdate, time::Instant, transaction::SimulatedTx};
 use revm_primitives::{B256, Bytes};
+use tracing::debug;
 
 use super::{SortingData, sorting_data::SortingTelemetry};
 use crate::context::SequencerContext;
@@ -13,6 +14,8 @@ pub struct FragSequence {
     pub start_t: Instant,
     pub gas_remaining: u64,
     pub gas_used: u64,
+    pub da_remaining: Option<u64>,
+    pub da_used: u64,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
     /// Next frag index
@@ -24,11 +27,13 @@ pub struct FragSequence {
     pub sorting_telemetry: SortingTelemetry,
 }
 impl FragSequence {
-    pub fn new(gas_remaining: u64, block_number: u64, n_force_include_txs: usize) -> Self {
+    pub fn new(gas_remaining: u64, da_remaining: Option<u64>, block_number: u64, n_force_include_txs: usize) -> Self {
         Self {
             start_t: Instant::now(),
             gas_remaining,
             gas_used: 0,
+            da_remaining,
+            da_used: 0,
             payment: U256::ZERO,
             txs: vec![],
             block_number,
@@ -48,11 +53,20 @@ impl FragSequence {
         self.payment += in_sort.payment();
         let uuid = in_sort.uuid;
 
+        let in_sort_txs = in_sort.txs.len();
+        let mut in_sort_da_used = 0;
+
         let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
+            in_sort_da_used += tx.tx.estimated_tx_compressed_size();
             self.txs.push(tx);
         }
+
+        self.da_used += in_sort_da_used;
+        self.da_remaining = self.da_remaining.map(|d| d.saturating_sub(in_sort_da_used));
+
+        debug!(?self.gas_remaining, ?self.da_remaining, ?self.gas_used, ?self.da_used, ?in_sort_txs, "frag sequence updated");
 
         TelemetryUpdate::send(
             uuid,
@@ -107,6 +121,7 @@ mod tests {
     use reqwest::Url;
     use reth_optimism_chainspec::BASE_SEPOLIA;
     use reth_optimism_evm::OpEvmConfig;
+    use reth_optimism_payload_builder::config::OpDAConfig;
     use revm::context::ContextTr;
     use tracing::level_filters::LevelFilter;
 
@@ -152,6 +167,7 @@ mod tests {
             simulate_tof_in_pools: false,
             commit_sealed_frags_to_db: false,
             supervisor: None,
+            da_config: OpDAConfig::default(),
         };
 
         // Create the alloydb.

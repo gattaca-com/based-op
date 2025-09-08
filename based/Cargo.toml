@@ -17,10 +17,10 @@ opt-level = 3
 split-debuginfo = "off"
 
 [profile.dev]
-panic = "unwind"
+panic = "abort"
 
 [profile.release]
-panic = "unwind"
+panic = "abort"
 
 
 [profile.release-with-debug]
@@ -76,6 +76,7 @@ op-alloy-consensus = { version = "=0.14.1", default-features = false, features =
 ] }
 op-alloy-network = "0.14.1"
 op-alloy-rpc-types = "0.14.1"
+op-alloy-flz = { version = "0.13.0", default-features = false }
 op-alloy-rpc-types-engine = { version = "0.14.1", default-features = false, features = [
   "serde",
 ] }
@@ -105,6 +106,7 @@ reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
 reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
 reth-optimism-node = { path = "../reth/crates/optimism/node" }
 reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
+reth-optimism-payload-builder = { path = "../reth/crates/optimism/payload" }
 reth-primitives = { path = "../reth/crates/primitives" }
 reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
 reth-provider = { path = "../reth/crates/storage/provider", features = [

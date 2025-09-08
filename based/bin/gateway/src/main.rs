@@ -69,13 +69,13 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
         warn!(?range, "Replay range found. Performing DB rollback if necessary");
         // Example: if start is 1000, then we should rollback to 998
         while db_bop.head_block_number()? > range.start().saturating_sub(2) {
-            // FIXME: last write doesn't really work it seems, maybe because of the inner
-            // self.reset_provider(); That is, reading with op-reth seems that only one block is
-            // dropped.
             db_bop.roll_back_head()?;
         }
         info!(db_block = db_bop.head_block_number()?, db_hash = ?db_bop.head_block_hash()?, "New database head");
     }
+
+    let sequencer_vsync_window = Duration::from_micros(args.vsync_window_us as u64);
+    let simulator_vsync_window = Duration::from_micros(args.vsync_window_us as u64);
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -87,26 +87,17 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone());
+            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone(), args.da_config.clone());
             move || rt.block_on(wait_for_signal())
         });
 
         s.spawn(|| {
-            Sequencer::new(db_bop, shared_state.clone(), sequencer_config)
-                .run(spine.to_connections("Sequencer"), ActorConfig::default());
+            Sequencer::new(db_bop, shared_state.clone(), sequencer_config).run(
+                spine.to_connections("Sequencer"),
+                ActorConfig::default().with_min_loop_duration(sequencer_vsync_window),
+            );
         });
 
-        // if args.replay_args.is_some() {
-        // s.spawn(|| {
-        //     let l2_el_verifier_url =
-        //         args.replay_args.clone().expect("replay args").l2_el_verifier_url.expect("l2 el");
-        //     let blocks_range =
-        //         args.replay_args.expect("replay args").replay_blocks_range.expect("replay blocks range");
-        //     ReplayFetcher::new(db_block, args.eth_client_url, l2_el_verifier_url, blocks_range).run(
-        //         spine.to_connections("BlockFetch"),
-        //         ActorConfig::default().with_min_loop_duration(Duration::from_millis(10)),
-        //     );
-        // });
         if let Some(mode) = args.mock {
             s.spawn(|| {
                 MockFetcher::new(
@@ -146,7 +137,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
                 let db_frag = (&shared_state).into();
                 move || {
                     let simulator = Simulator::new(db_frag, evm_config, id, args.allow_reverts);
-                    simulator.run(connections, ActorConfig::default());
+                    simulator.run(connections, ActorConfig::default().with_min_loop_duration(simulator_vsync_window));
                 }
             });
         }
