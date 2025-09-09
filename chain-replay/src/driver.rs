@@ -20,7 +20,7 @@ use eyre::Context as _;
 use kona_disc::LocalNode;
 use kona_engine::EngineClient;
 use kona_genesis::RollupConfig;
-use kona_gossip::P2pRpcRequest;
+use kona_gossip::{P2pRpcRequest, default_config_builder};
 use kona_node_service::{
     NetworkActor, NetworkConfig, NetworkContext, NetworkInboundData, NodeActor,
 };
@@ -221,15 +221,7 @@ fn init_network_actor(
         discovery_interval: Duration::from_secs(1),
         discovery_randomize: None,
         keypair,
-        // Messages are sent to libp2p anonymously and checked in OP consensus. If we sign a
-        // message, they will get rejected with a `unexpected signature` message.
-        // References:
-        // * <https://github.com/gattaca-com/based-optimism/blob/1e803a46f9c8ddfcee795cd59c0d638d28cb904e/op-node/p2p/gossip.go#L185>
-        // * <https://github.com/libp2p/go-libp2p-pubsub/blob/ab876fc71c34e89a7f0c8f4e361720ca9fa8588a/pubsub.go#L1393-L1423>
-        gossip_config: libp2p::gossipsub::ConfigBuilder::default()
-            .validation_mode(libp2p::gossipsub::ValidationMode::Anonymous)
-            .build()
-            .expect("valid config"),
+        gossip_config: default_config_builder().build().expect("valid default config"),
         scoring: Default::default(),
         topic_scoring: Default::default(),
         monitor_peers: Default::default(),
