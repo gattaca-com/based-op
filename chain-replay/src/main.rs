@@ -29,7 +29,10 @@ async fn main() {
 }
 
 pub async fn run(args: Args) -> eyre::Result<()> {
-    info!("Starting chain replication for blocks {:?}", args.blocks_range);
+    info!(
+        "Starting chain replication for blocks {:?} on chain {}",
+        args.blocks_range, args.chain_name
+    );
 
     spin_up_follower_nodes(args.clone()).await?;
     start_kona_sequencer_node(args).await?;
