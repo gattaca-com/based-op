@@ -357,18 +357,24 @@ async fn run_verification_body(
         let sealed_block_inner = &sealed_block.execution_payload.payload_inner.payload_inner;
 
         if sealed_block_inner.block_hash != hash {
-            // Our follower node should have this block in its canonical chain by now.
-            let based_op_geth_block = clients
-                .based_op_geth
-                .get_block_by_number(block_num.into())
-                .full()
-                .await?
-                .expect("to find sealed block in bop-geth");
-            show_block_mismatches(based_op_geth_block, block);
-            panic!(
-                "Block mismatch: our = {:#?} vs target = {:#?}",
-                sealed_block_inner.block_hash, hash
-            );
+            // Our follower node should have this block in a reasonable time-frame
+            let mut attempts = 0;
+            let based_op_geth_block = loop {
+                let Some(block) =
+                    clients.based_op_geth.get_block_by_number(block_num.into()).full().await?
+                else {
+                    if attempts == 10 {
+                        panic!("failed to fetch sealed block {block_num} from bop-geth");
+                    } else {
+                        attempts += 1;
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+                break block;
+            };
+            show_block_mismatches(&based_op_geth_block, &block);
+            panic!("Block mismatch:\n\nour    = {:?}\n\ntarget = {:?}", based_op_geth_block, block);
         }
 
         // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
@@ -382,8 +388,8 @@ async fn run_verification_body(
 
 /// Compares two blocks and prints mismatches found.
 fn show_block_mismatches(
-    produced_block: Block<op_alloy_rpc_types::Transaction>,
-    target: Block<op_alloy_rpc_types::Transaction>,
+    produced_block: &Block<op_alloy_rpc_types::Transaction>,
+    target: &Block<op_alloy_rpc_types::Transaction>,
 ) {
     if produced_block.header.parent_hash != target.header.parent_hash {
         error!(
@@ -484,7 +490,7 @@ fn show_block_mismatches(
         .transactions
         .clone()
         .into_transactions()
-        .zip(target.transactions.into_transactions())
+        .zip(target.transactions.clone().into_transactions())
         .enumerate()
     {
         let produced_tx = produced_tx.inner.inner;
