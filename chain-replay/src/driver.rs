@@ -344,10 +344,15 @@ async fn run_verification_body(
         // NOTE: we don't check error here because of the no response policy from the gateway.
         let _ = clients.gateway_auth.fork_choice_update(fcs, Some(op_attributes), true).await;
 
-        for t in raw_txs {
-            let _ = clients.gateway.send_raw_transaction(&t).await?;
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
+        let _ = tokio::time::timeout(Duration::from_secs(2), async {
+            for t in raw_txs {
+                let _ =
+                    clients.gateway.send_raw_transaction(&t).await.expect("to send tx to gateway");
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await; // Let the timeout hit.
+        })
+        .await;
 
         // Sorting -> WaitingForNewPayload
         let sealed_block = clients.gateway_auth.get_payload_v4(PayloadId::default()).await?;
