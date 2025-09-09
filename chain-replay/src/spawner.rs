@@ -150,41 +150,44 @@ pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> e
     let genesis_json_string = fs::read_to_string(genesis_file_path)?;
 
     let genesis: Genesis = serde_json::from_str(&genesis_json_string)?;
-    let chain_spec = OpChainSpec::from_genesis(genesis);
+    let chain_spec = Arc::new(OpChainSpec::from_genesis(genesis));
 
     let db_path = data_path.join("db");
     let static_files_dir = data_path.join("static_files");
 
-    let factory = OpNode::provider_factory_builder()
-        .db(Arc::new(open_db_read_only(db_path, Default::default()).expect("to open reth db")))
-        .chainspec(Arc::new(chain_spec))
-        .static_file(
-            StaticFileProvider::read_only(static_files_dir, false).expect("to open static files"),
-        )
-        .build_provider_factory();
+    let mut head: Option<u64> = None;
 
-    let provider = factory.provider()?;
+    while head.map(|h| h != sync_target).unwrap_or(true) {
+        let factory = OpNode::provider_factory_builder()
+            .db(Arc::new(
+                open_db_read_only(db_path.clone(), Default::default()).expect("to open reth db"),
+            ))
+            .chainspec(chain_spec.clone())
+            .static_file(
+                StaticFileProvider::read_only(static_files_dir.clone(), false)
+                    .expect("to open static files"),
+            )
+            .build_provider_factory();
 
-    let latest_header = || -> eyre::Result<u64> {
-        let mut binding = provider.tx_ref().new_cursor::<CanonicalHeaders>()?;
-        let walker = binding.walk(None);
-        let res = walker.into_iter().last().unwrap();
-        let (number, _hash) = res.last().unwrap()?;
-        Ok(number)
-    };
+        let provider = factory.provider()?;
 
-    let mut head = latest_header()?;
-    let sleep_time = Duration::from_secs(5);
-    while head != sync_target {
+        let latest_header = {
+            let mut binding = provider.tx_ref().new_cursor::<CanonicalHeaders>()?;
+            let walker = binding.walk(None);
+            let res = walker.into_iter().last().unwrap();
+            let (number, _hash) = res.last().unwrap()?;
+            number
+        };
+
+        let sleep_time = Duration::from_secs(10);
         debug!(
-            gateway_head = head,
+            gateway_head = latest_header,
             target = sync_target,
             "Gateway is syncing, re-checking in {sleep_time:?}..."
         );
+        head = Some(latest_header);
 
         tokio::time::sleep(sleep_time).await;
-
-        head = latest_header()?;
     }
 
     Ok(())
