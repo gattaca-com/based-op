@@ -9,7 +9,7 @@ use std::{
 
 use alloy::{
     eips::Encodable2718,
-    providers::{Provider as _, ProviderBuilder, RootProvider, ext::EngineApi},
+    providers::{Provider as _, ProviderBuilder, RootProvider},
     rpc::types::{
         Block,
         engine::{ForkchoiceState, JwtSecret, PayloadId},
@@ -30,6 +30,8 @@ use libp2p::{
     identity::secp256k1::{self, SecretKey},
 };
 use op_alloy_network::Optimism;
+use op_alloy_provider::ext::engine::OpEngineApi as _;
+use op_alloy_rpc_types_engine::{OpExecutionPayload, OpExecutionPayloadEnvelope};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
@@ -358,20 +360,26 @@ async fn run_verification_body(
         let sealed_block = clients.gateway_auth.get_payload_v4(PayloadId::default()).await?;
 
         // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
-        let op_envelope = execution_payload_envelope_from_block(block.clone());
+        network_inbound
+            .gossip_payload_tx
+            .send(OpExecutionPayloadEnvelope {
+                execution_payload: OpExecutionPayload::V4(sealed_block.execution_payload.clone()),
+                parent_beacon_block_root: Some(sealed_block.parent_beacon_block_root),
+            })
+            .await?;
         // NOTE: we don't check error here because of the no response policy from the gateway.
         let _ = clients
             .gateway_auth
             .new_payload(
-                op_envelope.execution_payload.clone(),
-                op_envelope.parent_beacon_block_root,
+                OpExecutionPayload::V4(sealed_block.execution_payload.clone()),
+                Some(sealed_block.parent_beacon_block_root),
             )
             .await;
-        network_inbound.gossip_payload_tx.send(op_envelope).await?;
 
         // Check if there is a match!
 
-        let sealed_block_inner = &sealed_block.execution_payload.payload_inner.payload_inner;
+        let sealed_block_inner =
+            &sealed_block.execution_payload.payload_inner.payload_inner.payload_inner;
         if sealed_block_inner.block_hash != block_hash {
             error!(
                 "Found block hash mismatch for block {block_num}: sealed = {:?}, target = {:?}",
