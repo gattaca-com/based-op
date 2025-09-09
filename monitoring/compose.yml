@@ -4,7 +4,7 @@ services:
     container_name: based-metrics-exporter
     restart: unless-stopped
     environment:
-      - RUST_LOG=bop_metrics_exporter=trace
+      - RUST_LOG=bop_metrics_exporter=trace,bop_metrics=trace
     volumes:
       - /tmp:/tmp
       - /dev/shm:/dev/shm
@@ -50,9 +50,41 @@ services:
     depends_on:
       - prometheus
 
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    restart: unless-stopped
+    ports:
+      - 9085:9085
+    environment:
+      - HOSTNAME
+    volumes:
+      - ./promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro # discovery
+      - /var/log/containers:/var/log/containers:ro # structured file tailing
+    command:
+      - --config.file=/etc/promtail/promtail.yml
+    networks:
+      - monitoring
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - 3100:3100
+    volumes:
+      - loki-data:/loki
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+    command:
+      - --config.file=/etc/loki/loki.yml
+    networks:
+      - monitoring
+
 volumes:
   prometheus-data:
   grafana-data:
+  loki-data:
 
 networks:
   monitoring:

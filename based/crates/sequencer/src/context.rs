@@ -9,7 +9,7 @@ use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders},
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     debug_panic,
-    metrics::{Gauge, Histogram, Metric, MetricsUpdate, metrics_queue},
+    metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
     p2p::{FragV0, SealV0},
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
@@ -83,10 +83,13 @@ pub struct SequencerContext<Db> {
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
     pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
-        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
+        let metrics = metrics_queue().into();
+
+        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone(), metrics);
         let system_caller = SystemCaller::new(config.evm_config.chain_spec().clone());
         Self {
             db,
+            metrics,
             shared_state,
             block_executor,
             config,
@@ -101,7 +104,6 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             base_fee: Default::default(),
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
-            metrics: metrics_queue().into(),
         }
     }
 }
@@ -254,7 +256,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
 
     /// Finalize the block after the last frag has been sealed
     pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4Patch) {
-        frag_seq.sorting_telemetry.report();
+        frag_seq.sorting_telemetry.report(&self.metrics);
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
         let (transactions, transactions_root, receipts_root, logs_bloom) =
@@ -330,20 +332,24 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             state_root,
             block_hash: v1.block_hash,
         };
-        let mgas = (gas_used / 10_000) as f64 / 100.0;
-        info!(
-            "sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)",
-            seal.block_number,
-            frag_seq.txs.len(),
-            mgas / frag_seq.start_t.elapsed().as_secs()
-        );
 
-        let block_duration = frag_seq.start_t.elapsed().as_millis();
+        let block_duration = frag_seq.start_t.elapsed().as_secs();
+        let mgas = (gas_used / 10_000) as f64 / 100.0;
+        let txs = frag_seq.txs.len() as f64;
+        let tps = txs / block_duration;
+        let mgas_s = mgas / block_duration;
+        info!("sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)", seal.block_number, txs, mgas_s);
+
+        let uuid = Uuid::new_v4();
         MetricsUpdate::send(
-            Uuid::new_v4(),
-            Metric::RecordHistogram(Histogram::GatewayBlockBuildDurationMs, block_duration),
+            uuid,
+            Metric::SetGauge(Gauge::GatewayBlockBuildDurationMs, block_duration),
             &mut self.metrics,
         );
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockTxCount, txs), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockGasUsed, gas_used as f64), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayTps, tps), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayMGasS, mgas_s), &mut self.metrics);
 
         let payload_inner = ExecutionPayloadV3 {
             payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },

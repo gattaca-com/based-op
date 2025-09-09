@@ -42,6 +42,9 @@ services:
       - ./data/geth:/data/geth
       - ./config:/config
     restart: unless-stopped
+    labels:
+      - logs=enabled
+      - service=op-geth
 
   op-node:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.2
@@ -75,7 +78,6 @@ services:
       - --p2p.sequencer.key=${OP_NODE_SEQUENCER_KEY}
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --sequencer.enabled
-
     volumes:
       - ./data/node:/data/op-node
       - ./config:/config
@@ -83,7 +85,10 @@ services:
       - op-geth
       - based-portal
     restart: unless-stopped
-    
+    labels:
+      - logs=enabled
+      - service=op-node
+
   op-batcher:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.13.2
     container_name: op-batcher
@@ -106,9 +111,15 @@ services:
       - --private-key=${OP_BATCHER_PRIVATE_KEY}
       - --max-blocks-per-span-batch=10
       - --data-availability-type=blobs
+      - --metrics.enabled=true
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=8008
     depends_on:
       - op-node
     restart: unless-stopped
+    labels:
+      - logs=enabled
+      - service=op-batcher
 
   op-proposer:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.10.0
@@ -124,13 +135,18 @@ services:
       - --private-key=${OP_PROPOSER_PRIVATE_KEY}
       - --l1-eth-rpc=${L1_RPC_URL}
       - --proposal-interval=2s
-
+      - --metrics.enabled=true
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=8009
     depends_on:
       - op-node
     restart: unless-stopped
+    labels:
+      - logs=enabled
+      - service=op-proposer
 
   based-portal:
-    image: ghcr.io/gattaca-com/based-op/based-portal:latest 
+    image: ghcr.io/gattaca-com/based-op/based-portal:latest
     pull_policy: always
     container_name: based-portal
     network_mode: "host"
@@ -141,8 +157,12 @@ services:
       - --op_node.url=http://0.0.0.0:${OP_NODE_RPC_PORT}
       - --registry.url=http://0.0.0.0:${REGISTRY_PORT}
       - --gateway.timeout_ms=200
+      - --log.dir=/var/log/app
     volumes:
       - ./config:/config
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
+      - /var/log/containers/based-op/based-portal:/var/log/app
     restart: unless-stopped
 
   based-registry:
@@ -155,14 +175,23 @@ services:
       - --registry.path=/config/registry.json
       - --eth_rpc_url=http://0.0.0.0:${OP_GETH_RPC_PORT}
       - --port=${REGISTRY_PORT}
-    volumes: 
+      - --log.dir=/var/log/app
+    volumes:
       - ./config:/config
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
+      - /var/log/containers/based-op/based-registry:/var/log/app
     restart: unless-stopped
-    
+
   restarter:
     image: docker:cli
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
-    command: ["/bin/sh", "-c", "while true; do sleep 3600; docker restart op-batcher; done"]
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "while true; do sleep 3600; docker restart op-batcher; done",
+      ]
     restart: unless-stopped
     network_mode: "host"
 
@@ -174,10 +203,13 @@ services:
     command:
       - --tx_receivers.path=/config/tx_receivers.json
       - --port=${TXPROXY_PORT}
-    volumes: 
+      - --log.dir=/var/log/app
+    volumes:
       - ./config:/config
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
+      - /var/log/containers/based-op/based-txproxy:/var/log/app
     restart: unless-stopped
-
 # ################################################################################
 # # Postgres for Blockscout
 # ################################################################################
@@ -205,7 +237,7 @@ services:
 #       - /bin/sh
 #       - -c
 #       - bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()" && bin/blockscout start
-    
+
 #     network_mode: "host"
 #     depends_on:
 #       - op-node                  # need the L2 node up to serve RPC
