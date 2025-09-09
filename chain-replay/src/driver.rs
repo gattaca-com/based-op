@@ -39,6 +39,7 @@ use url::Url;
 
 use crate::{
     config::Args,
+    docker::start_based_op_node_service,
     engine::EngineExt,
     types::{execution_payload_envelope_from_block, op_attributes_from_block},
 };
@@ -120,10 +121,16 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
             .await
             .expect("to start network");
     });
+    info!("Gossip driver started, receiving blocks.");
+
+    // NOTE: we start bop-node here so that dialing the kona sequencer as static peers works
+    // immediately and we don't have to wait one minute for the next attempt.
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    info!("Starting based-op-node");
+    start_based_op_node_service(args.chain_name).wrap_err("to start based-op-node")?;
 
     tasks.push(handle);
 
-    info!("Gossip driver started, receiving blocks.");
     tasks.push(tokio::spawn(async move {
         loop {
             match unsafe_blocks_rx.recv().await {

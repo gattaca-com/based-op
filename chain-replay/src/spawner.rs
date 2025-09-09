@@ -22,7 +22,7 @@ use crate::{
     config::Args,
     docker::{
         ensure_all_containers_down, start_based_gatway, start_based_op_geth_service,
-        start_based_op_node_service, start_based_registry,
+        start_based_registry,
     },
     engine::EngineExt as _,
     rpc::{debug_set_head, wait_for_sync},
@@ -129,9 +129,6 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
 
     info!("Starting based-registry");
     start_based_registry(args.chain_name).wrap_err("to start based-registry")?;
-
-    info!("Starting based-op-node");
-    start_based_op_node_service(args.chain_name).wrap_err("to start based-op-node")?;
 
     info!("Starting based-gateway");
     start_based_gatway(args.clone()).wrap_err("to start gateway")?;
