@@ -5,6 +5,7 @@ use bop_common::{
     communication::{Producer, messages::BlockSyncError},
     db::{DatabaseRead, DatabaseWrite},
     eth::MicroEth,
+    metrics::{Counter, Histogram, Metric, MetricsUpdate},
     telemetry::{
         self, TelemetryUpdate,
         order::{IncludedInFrag, Ingested},
@@ -39,13 +40,14 @@ pub struct BlockSync {
     /// Sorted list in reverse order by block number.
     pending_blocks: Vec<RecoveredBlock<OpBlock>>,
     timers: BlockSyncTimers,
+    metrics: Producer<MetricsUpdate>,
 }
 
 impl BlockSync {
     /// Creates a new BlockSync instance with the given chain specification and RPC endpoint
-    pub fn new(chain_spec: Arc<OpChainSpec>) -> Self {
+    pub fn new(chain_spec: Arc<OpChainSpec>, metrics: Producer<MetricsUpdate>) -> Self {
         let execution_factory = OpExecutorProvider::optimism(chain_spec.clone());
-        Self { chain_spec, execution_factory, pending_blocks: vec![], timers: Default::default() }
+        Self { chain_spec, execution_factory, pending_blocks: vec![], timers: Default::default(), metrics }
     }
 
     /// Returns block numbers to fetch, start to end. This will be used in the case of a reorg.
@@ -102,6 +104,12 @@ impl BlockSync {
                 db_head_hash
             );
 
+            MetricsUpdate::send_ref(
+                Uuid::new_v4(),
+                Metric::IncrementCounter(Counter::GatewayReorgDetected, 1),
+                &self.metrics,
+            );
+
             // Roll back head and request missing blocks.
             db.roll_back_head()?;
             self.insert_pending_block(block);
@@ -143,6 +151,12 @@ impl BlockSync {
             n_txs = block.body().transactions.len(),
             total_t = %self.timers.total.elapsed(),
         );
+        MetricsUpdate::send_ref(
+            Uuid::new_v4(),
+            Metric::RecordHistogram(Histogram::GatewayCommitBlockDurationMs, self.timers.total.elapsed().as_millis()),
+            &self.metrics,
+        );
+
         tracing::debug!(
             "commit block took: {} (caches: {}, state_changes: {}, trie_updates: {}, header_write: {}, db_commit: {})",
             self.timers.total.elapsed(),
@@ -296,7 +310,7 @@ mod tests {
     use std::collections::HashMap;
 
     use alloy_primitives::B256;
-    use bop_common::utils::initialize_test_tracing;
+    use bop_common::{metrics::metrics_queue, utils::initialize_test_tracing};
     use bop_db::{AlloyDB, init_database};
     use reqwest::Url;
     use reth_optimism_chainspec::{BASE_SEPOLIA, OpChainSpecBuilder};
@@ -320,7 +334,7 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = Arc::new(OpChainSpecBuilder::base_sepolia().build());
-        let mut block_sync = BlockSync::new(chain_spec);
+        let mut block_sync = BlockSync::new(chain_spec, metrics_queue().into());
 
         // Fetch the block from the RPC.
         let provider = AlloyProvider::new_http(rpc_url);
@@ -352,7 +366,7 @@ mod tests {
 
         // Create the block executor.
         let chain_spec = BASE_SEPOLIA.clone();
-        let mut block_sync = BlockSync::new(chain_spec);
+        let mut block_sync = BlockSync::new(chain_spec, metrics_queue().into());
 
         let provider = AlloyProvider::new_http(rpc_url);
         let block = rt.block_on(async { fetch_block(db_head_block_number + 1, &provider).await });
@@ -374,7 +388,7 @@ mod tests {
         let rpc_url = Url::parse(TEST_BASE_SEPOLIA_RPC_URL).unwrap();
         let provider = AlloyProvider::new_http(rpc_url);
 
-        let mut block_sync = BlockSync::new(BASE_SEPOLIA.clone());
+        let mut block_sync = BlockSync::new(BASE_SEPOLIA.clone(), metrics_queue().into());
 
         // Get initial block number from db
         let start_block = db.head_block_number().unwrap();
