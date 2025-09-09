@@ -56,7 +56,7 @@ pub struct PortalArgs {
     #[arg(long = "registry.timeout_ms", default_value_t = 100)]
     pub registry_timeout_ms: u64,
     /// Enable file logging
-    #[arg(long = "log.enable_file_logging", default_value_t = true)]
+    #[arg(long = "log.disable_file_logging", action = clap::ArgAction::SetFalse, default_value_t = true)]
     pub file_logging: bool,
     /// Prefix of log files
     #[arg(long = "log.prefix", default_value = "bop-portal.log")]
