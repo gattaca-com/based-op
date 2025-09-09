@@ -27,14 +27,13 @@ use kona_node_service::{
 use kona_sources::BlockSigner;
 use libp2p::{
     Multiaddr,
-    futures::future::join_all,
     identity::secp256k1::{self, SecretKey},
 };
 use op_alloy_network::Optimism;
 use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelope;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 use crate::{
@@ -51,30 +50,30 @@ pub struct Clients {
     gateway_auth: EngineClient,
 }
 
-pub fn create_clients(
-    based_op_geth_url: Url,
-    l2_el_verifier_url: Url,
-    gateway_url: Url,
-    gateway_auth_url: Url,
-    gateway_auth_jwt: JwtSecret,
-    rollup_config: RollupConfig,
-) -> eyre::Result<Clients> {
-    let based_op_geth =
-        ProviderBuilder::<_, _, Optimism>::default().connect_http(based_op_geth_url);
-    let l2_el_verifier =
-        ProviderBuilder::<_, _, Optimism>::default().connect_http(l2_el_verifier_url);
-    let gateway = ProviderBuilder::<_, _, Optimism>::default().connect_http(gateway_url);
+impl Clients {
+    fn new(
+        based_op_geth_url: Url,
+        l2_el_verifier_url: Url,
+        gateway_url: Url,
+        gateway_auth_url: Url,
+        gateway_auth_jwt: JwtSecret,
+        rollup_config: RollupConfig,
+    ) -> Self {
+        let based_op_geth =
+            ProviderBuilder::<_, _, Optimism>::default().connect_http(based_op_geth_url);
+        let l2_el_verifier =
+            ProviderBuilder::<_, _, Optimism>::default().connect_http(l2_el_verifier_url);
+        let gateway = ProviderBuilder::<_, _, Optimism>::default().connect_http(gateway_url);
 
-    let gateway_auth = EngineClient::new_http(
-        gateway_auth_url,
-        Url::from_str("http://0.0.0.0:1234")?, // NOTE: we don't use the L1
-        Arc::new(rollup_config),
-        gateway_auth_jwt,
-    );
+        let gateway_auth = EngineClient::new_http(
+            gateway_auth_url,
+            Url::from_str("http://0.0.0.0:1234").expect("valid URL"), // NOTE: we don't use the L1
+            Arc::new(rollup_config),
+            gateway_auth_jwt,
+        );
 
-    let clients = Clients { based_op_geth, l2_el_verifier, gateway, gateway_auth };
-
-    Ok(clients)
+        Self { based_op_geth, l2_el_verifier, gateway, gateway_auth }
+    }
 }
 
 pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
@@ -90,15 +89,14 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
     let based_op_geth_url = Url::from_str(&format!("http://0.0.0.0:{based_op_geth_port}"))
         .wrap_err("valid based-op-geth url")?;
 
-    let clients = create_clients(
+    let clients = Clients::new(
         based_op_geth_url,
         args.l2_el_verifier_url,
         args.gateway_url,
         args.gateway_auth_url,
         args.gateway_auth_jwt,
         rollup_config.clone(),
-    )
-    .wrap_err("failed to create clients")?;
+    );
 
     let (network_inbound_data, network) = init_network_actor(
         args.p2p_sequencer_key.clone(),
@@ -110,9 +108,7 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
 
     let (unsafe_blocks_tx, mut unsafe_blocks_rx) = tokio::sync::mpsc::channel(1024);
 
-    let mut tasks = Vec::new();
-
-    let handle = tokio::spawn(async {
+    tokio::spawn(async {
         network
             .start(NetworkContext {
                 blocks: unsafe_blocks_tx,
@@ -129,9 +125,7 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
     info!("Starting based-op-node");
     start_based_op_node_service(args.chain_name).wrap_err("to start based-op-node")?;
 
-    tasks.push(handle);
-
-    tasks.push(tokio::spawn(async move {
+    tokio::spawn(async move {
         loop {
             match unsafe_blocks_rx.recv().await {
                 Some(block) => {
@@ -142,7 +136,7 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
                 }
             }
         }
-    }));
+    });
 
     info!(target = args.expected_peers_count, "Waiting until we have enough peers");
     wait_for_peers(&network_inbound_data, args.expected_peers_count).await;
@@ -161,8 +155,6 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
     info!("Gossiping payload with block number {}", payload.execution_payload.block_number());
     network_inbound_data.gossip_payload_tx.send(payload.clone()).await?;
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
     info!("Sending the same payload also to the gateway");
 
     // NOTE: we're ignoring possible error responses, because the gateway code return an internal
@@ -170,6 +162,8 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
     // Reference: <https://github.com/gattaca-com/based-op/blob/9585a9044d9abeadce8e4af7eb624e43f8c1e0b8/based/crates/rpc/src/engine.rs#L55-L67>
     //
     // For some reason, after this call the gateway silently dies and restarts.
+    //
+    // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
     let _ = clients
         .gateway_auth
         .new_payload(payload.execution_payload, payload.parent_beacon_block_root)
@@ -177,15 +171,14 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
 
     let p2p_rpc = network_inbound_data.p2p_rpc.clone();
 
-    tasks.push(tokio::spawn(async {
+    tokio::spawn(async {
         print_peers(p2p_rpc).await;
-    }));
+    });
 
     run_verification_body(clients, args.blocks_range)
         .await
         .wrap_err("failed to run verification")?;
 
-    join_all(tasks).await;
     Ok(())
 }
 
@@ -253,7 +246,7 @@ fn init_network_actor(
 
 /// Block the current thread until we have the expected number of peers.
 async fn wait_for_peers(network_inbound: &NetworkInboundData, expected_peers_count: usize) {
-    let retry_time = Duration::from_secs(10);
+    let retry_time = Duration::from_secs(5);
     loop {
         let (tx, rx) = oneshot::channel();
         let peer_count_request = P2pRpcRequest::PeerCount(tx);
@@ -304,7 +297,7 @@ async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
             continue;
         };
 
-        debug!("Peer dump: {peer_dump:?}");
+        trace!("Peer dump: {peer_dump:?}");
 
         tokio::time::sleep(retry_time).await;
     }
