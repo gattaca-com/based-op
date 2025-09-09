@@ -14,7 +14,7 @@ use clap::Parser;
 use tracing::{info, warn};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt as _};
 
-use crate::{config::Args, driver::start_kona_node, spawner::spin_up_follower_nodes};
+use crate::{config::Args, driver::start_kona_sequencer_node, spawner::spin_up_follower_nodes};
 
 #[tokio::main]
 async fn main() {
@@ -32,7 +32,7 @@ pub async fn run(args: Args) -> eyre::Result<()> {
     info!("Starting chain replication for blocks {:?}", args.blocks_range);
 
     spin_up_follower_nodes(args.clone()).await?;
-    start_kona_node(args).await?;
+    start_kona_sequencer_node(args).await?;
 
     Ok(())
 }

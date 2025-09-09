@@ -83,30 +83,30 @@ services:
       GOLOG_LOG_LEVEL: "debug"
     command:
       - op-node
-      - --l2=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}
-      - --l2.jwt-secret=/config/jwt
-      - --verifier.l1-confs=1
-      - --rollup.config=/config/rollup.json
-      - --rpc.addr=0.0.0.0
-      - --rpc.port=${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
-      - --rpc.enable-admin
-      - --l1=${BOP_REPLAY_L1_RPC_URL}
-      - --l1.rpckind=standard
       - --l1.beacon=${BOP_REPLAY_L1_BEACON_RPC_URL}
+      - --l1.rpckind=standard
+      - --l1=${BOP_REPLAY_L1_RPC_URL}
+      - --l2.jwt-secret=/config/jwt
+      - --l2=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}
+      - --log.level=debug
       - --p2p.advertise.ip=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_IP}
       - --p2p.advertise.tcp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
       - --p2p.advertise.udp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
       - --p2p.listen.ip=0.0.0.0
       - --p2p.listen.tcp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
       - --p2p.listen.udp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
-      - --safedb.path=/data/op-node/op-node-beacon-data
-      - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
       - --p2p.no-discovery=true
-      - --rpc.enable-based
+      - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
       - --registry=http://bop-replay-based-registry:${BOP_REPLAY_REGISTRY_PORT}
+      - --rollup.config=/config/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --rpc.enable-admin
+      - --rpc.enable-based
+      - --rpc.port=${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
+      - --safedb.path=/data/op-node/op-node-beacon-data
       - --syncmode=execution-layer
-      - --log.level=debug
       - --unsafe-allow-old-payloads=true
+      - --verifier.l1-confs=1
     volumes:
       - ./data/node:/data/op-node
       - ./config:/config

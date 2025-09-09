@@ -11,6 +11,7 @@ use alloy::{
     eips::Encodable2718,
     providers::{Provider as _, ProviderBuilder, RootProvider, ext::EngineApi},
     rpc::types::engine::{ForkchoiceState, JwtSecret, PayloadId},
+    signers::local::PrivateKeySigner,
 };
 use eyre::Context as _;
 use kona_disc::LocalNode;
@@ -40,7 +41,7 @@ use crate::{
 };
 
 pub struct Clients {
-    based_op_geth: RootProvider<Optimism>,
+    _based_op_geth: RootProvider<Optimism>,
     l2_el_verifier: RootProvider<Optimism>,
     gateway: RootProvider<Optimism>,
     gateway_auth: EngineClient,
@@ -67,12 +68,12 @@ pub fn create_clients(
         gateway_auth_jwt,
     );
 
-    let clients = Clients { based_op_geth, l2_el_verifier, gateway, gateway_auth };
+    let clients = Clients { _based_op_geth: based_op_geth, l2_el_verifier, gateway, gateway_auth };
 
     Ok(clients)
 }
 
-pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
+pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
     info!("🎈✣ Starting Kona Sequencer node\n\n");
 
     let rollup_config_string = fs::read_to_string(args.chain_name.rollup_file_path())?;
@@ -95,58 +96,13 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
     )
     .wrap_err("failed to create clients")?;
 
-    let gossip = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), args.gossip_port);
-    info!(target: "gossip", "Starting gossip driver on {:?}", gossip);
-
-    let mut gossip_addr = Multiaddr::from(gossip.ip());
-    gossip_addr.push(libp2p::multiaddr::Protocol::Tcp(gossip.port()));
-
-    let disc_ip = Ipv4Addr::UNSPECIFIED;
-    let disc_addr = LocalNode::new(
-        args.p2p_sequencer_key.credential().clone(),
-        IpAddr::V4(disc_ip),
+    let (network_inbound_data, network) = init_network_actor(
+        args.p2p_sequencer_key.clone(),
+        args.gossip_port,
         args.disc_port,
-        args.disc_port,
-    );
-
-    let sk = SecretKey::try_from_bytes(args.p2p_sequencer_key.to_bytes().as_mut_slice())
-        .expect("valid private key");
-    let keypair = secp256k1::Keypair::from(sk).into();
-
-    let gossip_signer = BlockSigner::Local(args.p2p_sequencer_key.clone());
-
-    let network_config = NetworkConfig {
-        discovery_address: disc_addr,
-        gossip_address: gossip_addr,
-        unsafe_block_signer: args.p2p_sequencer_key.address(),
-        discovery_config: discv5::ConfigBuilder::new(discv5::ListenConfig::Ipv4 {
-            ip: disc_ip,
-            port: args.disc_port,
-        })
-        .build(),
-        discovery_interval: Duration::from_secs(1),
-        discovery_randomize: None,
-        keypair,
-        // Messages are sent to libp2p anonymously and checked in OP consensus. If we sign a
-        // message, they will get rejected with a `unexpected signature` message.
-        // References:
-        // * <https://github.com/gattaca-com/based-optimism/blob/1e803a46f9c8ddfcee795cd59c0d638d28cb904e/op-node/p2p/gossip.go#L185>
-        // * <https://github.com/libp2p/go-libp2p-pubsub/blob/ab876fc71c34e89a7f0c8f4e361720ca9fa8588a/pubsub.go#L1393-L1423>
-        gossip_config: libp2p::gossipsub::ConfigBuilder::default()
-            .validation_mode(libp2p::gossipsub::ValidationMode::Anonymous)
-            .build()
-            .expect("valid config"),
-        scoring: Default::default(),
-        topic_scoring: Default::default(),
-        monitor_peers: Default::default(),
-        bootstore: None,
-        gater_config: Default::default(),
-        bootnodes: Vec::new(),
-        rollup_config: rollup_config.clone(),
-        gossip_signer: Some(gossip_signer),
-        enr_update: true,
-    };
-    let (network_inbound_data, network) = NetworkActor::new(network_config.into());
+        rollup_config,
+    )
+    .wrap_err("failed to initaliaze network")?;
 
     let (unsafe_blocks_tx, mut unsafe_blocks_rx) = tokio::sync::mpsc::channel(1024);
 
@@ -164,15 +120,6 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
 
     tasks.push(handle);
 
-    let address = args.p2p_sequencer_key.address();
-    let signer = network_inbound_data.signer.clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            let _ = signer.send(address).await;
-        }
-    });
-
     info!("Gossip driver started, receiving blocks.");
     tasks.push(tokio::spawn(async move {
         loop {
@@ -187,7 +134,8 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
         }
     }));
 
-    let expected_peers_count = 1;
+    info!(target = args.expected_peers_count, "Waiting until we have enough peers");
+    wait_for_peers(&network_inbound_data, args.expected_peers_count).await;
 
     // NOTE: it is N-1 because N will be inserted via frags.
     let first_block_to_gossip = clients
@@ -199,9 +147,6 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
         .await?
         .expect("to find block");
     let payload = execution_payload_envelope_from_block(first_block_to_gossip);
-
-    info!(target = expected_peers_count, "Waiting until we have enough peers");
-    wait_for_peers(&network_inbound_data, expected_peers_count).await;
 
     info!("Gossiping payload with block number {}", payload.execution_payload.block_number());
     network_inbound_data.gossip_payload_tx.send(payload.clone()).await?;
@@ -234,8 +179,70 @@ pub async fn start_kona_node(args: Args) -> eyre::Result<()> {
     Ok(())
 }
 
+/// Init the network stack from provided configurable, and returns an handle to send and receive
+/// commands, and a task handle.
+fn init_network_actor(
+    p2p_sequencer_key: PrivateKeySigner,
+    gossip_port: u16,
+    disc_port: u16,
+    rollup_config: RollupConfig,
+) -> eyre::Result<(NetworkInboundData, NetworkActor)> {
+    let gossip = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), gossip_port);
+    info!(target: "gossip", "Starting gossip driver on {:?}", gossip);
+
+    let mut gossip_addr = Multiaddr::from(gossip.ip());
+    gossip_addr.push(libp2p::multiaddr::Protocol::Tcp(gossip.port()));
+
+    let disc_ip = Ipv4Addr::UNSPECIFIED;
+    let disc_addr = LocalNode::new(
+        p2p_sequencer_key.credential().clone(),
+        IpAddr::V4(disc_ip),
+        disc_port,
+        disc_port,
+    );
+
+    let sk = SecretKey::try_from_bytes(p2p_sequencer_key.to_bytes().as_mut_slice())
+        .expect("valid private key");
+    let keypair = secp256k1::Keypair::from(sk).into();
+
+    let gossip_signer = BlockSigner::Local(p2p_sequencer_key.clone());
+
+    let network_config = NetworkConfig {
+        discovery_address: disc_addr,
+        gossip_address: gossip_addr,
+        unsafe_block_signer: p2p_sequencer_key.address(),
+        discovery_config: discv5::ConfigBuilder::new(discv5::ListenConfig::Ipv4 {
+            ip: disc_ip,
+            port: disc_port,
+        })
+        .build(),
+        discovery_interval: Duration::from_secs(1),
+        discovery_randomize: None,
+        keypair,
+        // Messages are sent to libp2p anonymously and checked in OP consensus. If we sign a
+        // message, they will get rejected with a `unexpected signature` message.
+        // References:
+        // * <https://github.com/gattaca-com/based-optimism/blob/1e803a46f9c8ddfcee795cd59c0d638d28cb904e/op-node/p2p/gossip.go#L185>
+        // * <https://github.com/libp2p/go-libp2p-pubsub/blob/ab876fc71c34e89a7f0c8f4e361720ca9fa8588a/pubsub.go#L1393-L1423>
+        gossip_config: libp2p::gossipsub::ConfigBuilder::default()
+            .validation_mode(libp2p::gossipsub::ValidationMode::Anonymous)
+            .build()
+            .expect("valid config"),
+        scoring: Default::default(),
+        topic_scoring: Default::default(),
+        monitor_peers: Default::default(),
+        bootstore: None,
+        gater_config: Default::default(),
+        bootnodes: Vec::new(),
+        rollup_config: rollup_config.clone(),
+        gossip_signer: Some(gossip_signer),
+        enr_update: true,
+    };
+    Ok(NetworkActor::new(network_config.into()))
+}
+
 /// Block the current thread until we have the expected number of peers.
-pub async fn wait_for_peers(network_inbound: &NetworkInboundData, expected_peers_count: usize) {
+async fn wait_for_peers(network_inbound: &NetworkInboundData, expected_peers_count: usize) {
     let retry_time = Duration::from_secs(10);
     loop {
         let (tx, rx) = oneshot::channel();
@@ -271,7 +278,7 @@ pub async fn wait_for_peers(network_inbound: &NetworkInboundData, expected_peers
     }
 }
 
-pub async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
+async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
     let retry_time = Duration::from_secs(10);
     loop {
         let (tx, rx) = oneshot::channel();
@@ -293,7 +300,7 @@ pub async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
     }
 }
 
-pub async fn run_verification_body(
+async fn run_verification_body(
     clients: Clients,
     blocks_range: RangeInclusive<u64>,
 ) -> eyre::Result<()> {

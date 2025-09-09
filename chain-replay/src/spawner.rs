@@ -137,7 +137,6 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
     start_based_gatway(args.clone()).wrap_err("to start gateway")?;
 
     info!("Waiting for gateway to sync");
-    // For some weird rollback commitments reason, we provide +1 here.
     wait_for_gateway_sync(args.chain_name, sync_target_block_number)
         .await
         .wrap_err("failed to check gateway sync status")?;

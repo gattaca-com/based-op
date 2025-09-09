@@ -44,6 +44,15 @@ pub struct Args {
         id = "BOP_REPLAY_KONA_SEQUENCER_DISCOVERY_PORT"
     )]
     pub disc_port: u16,
+    /// The expected number of peers the kona sequencer should have before starting chain
+    /// replication.
+    #[arg(
+        long,
+        default_value_t = 1,
+        env = "BOP_REPLAY_KONA_SEQUENCER_EXPECTED_PEERS_COUNT",
+        id = "BOP_REPLAY_KONA_SEQUENCER_EXPECTED_PEERS_COUNT"
+    )]
+    pub expected_peers_count: usize,
     /// The inclusive range of blocks to replay, in the format 'start..=end'.
     #[clap(
         long,
