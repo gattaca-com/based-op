@@ -95,10 +95,8 @@ pub fn ensure_chain_folder(chain_name: ChainName) -> io::Result<()> {
     }
 
     let env_path = chain_name.env_file_path();
-    if !fs::exists(env_path.clone())? {
-        info!("Creating .env file for chain '{chain_name}' at: {:?}", env_path.clone());
-        fs::copy(".env.example", env_path)?;
-    }
+    info!("Copying .env file for chain '{chain_name}' at: {:?}", env_path.clone());
+    fs::copy(".env", env_path)?;
 
     let compose_path = chain_name.compose_file_path();
     if !fs::exists(compose_path.clone())? {
