@@ -321,6 +321,12 @@ async fn run_verification_body(
             return Err(eyre::eyre!("Block {} not found", block_num));
         };
 
+        let system_tx = block
+            .transactions
+            .first_transaction()
+            .cloned()
+            .expect("all OP blocks should have at least the system tx");
+
         let raw_txs = block
             .transactions
             .clone()
@@ -339,7 +345,7 @@ async fn run_verification_body(
         debug!("Sending {} transactions to gateway for block {block_num}", raw_txs.len());
 
         let fcs = ForkchoiceState { head_block_hash: prev_block.header.hash, ..Default::default() };
-        let op_attributes = op_attributes_from_block(&block);
+        let op_attributes = op_attributes_from_block(&block, system_tx);
 
         // WaitingForForkchoiceWithAttributes -> Sorting
         // NOTE: we don't check error here because of the no response policy from the gateway.
@@ -384,7 +390,8 @@ async fn run_verification_body(
         // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
         let OpExecutionPayloadEnvelope { execution_payload, parent_beacon_block_root } =
             execution_payload_envelope_from_block(block);
-        clients.gateway_auth.new_payload(execution_payload, parent_beacon_block_root).await?;
+        // NOTE: we don't check error here because of the no response policy from the gateway.
+        let _ = clients.gateway_auth.new_payload(execution_payload, parent_beacon_block_root).await;
     }
 
     Ok(())
