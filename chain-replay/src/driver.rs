@@ -312,6 +312,7 @@ async fn run_verification_body(
         let Some(block) = block? else {
             return Err(eyre::eyre!("Block {} not found", block_num));
         };
+        let block_hash = block.hash();
 
         let system_tx = block
             .transactions
@@ -351,10 +352,26 @@ async fn run_verification_body(
         // Sorting -> WaitingForNewPayload
         let sealed_block = clients.gateway_auth.get_payload_v4(PayloadId::default()).await?;
 
-        let hash = block.hash();
-        let sealed_block_inner = &sealed_block.execution_payload.payload_inner.payload_inner;
+        // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
+        let op_envelope = execution_payload_envelope_from_block(block.clone());
+        // NOTE: we don't check error here because of the no response policy from the gateway.
+        let _ = clients
+            .gateway_auth
+            .new_payload(
+                op_envelope.execution_payload.clone(),
+                op_envelope.parent_beacon_block_root,
+            )
+            .await;
+        network_inbound.gossip_payload_tx.send(op_envelope).await?;
 
-        if sealed_block_inner.block_hash != hash {
+        // Check if there is a match!
+
+        let sealed_block_inner = &sealed_block.execution_payload.payload_inner.payload_inner;
+        if sealed_block_inner.block_hash != block_hash {
+            error!(
+                "Found block hash mismatch for block {block_num}: sealed = {:?}, target = {:?}",
+                sealed_block_inner.block_hash, block_hash
+            );
             // Our follower node should have this block in a reasonable time-frame
             let mut attempts = 0;
             let based_op_geth_block = loop {
@@ -378,18 +395,6 @@ async fn run_verification_body(
                 block.hash()
             );
         }
-
-        // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
-        let op_envelope = execution_payload_envelope_from_block(block);
-        // NOTE: we don't check error here because of the no response policy from the gateway.
-        let _ = clients
-            .gateway_auth
-            .new_payload(
-                op_envelope.execution_payload.clone(),
-                op_envelope.parent_beacon_block_root,
-            )
-            .await;
-        network_inbound.gossip_payload_tx.send(op_envelope).await?;
     }
 
     Ok(())
