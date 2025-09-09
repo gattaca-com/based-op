@@ -30,7 +30,6 @@ use libp2p::{
     identity::secp256k1::{self, SecretKey},
 };
 use op_alloy_network::Optimism;
-use op_alloy_rpc_types_engine::OpExecutionPayloadEnvelope;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
@@ -175,7 +174,7 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
         print_peers(p2p_rpc).await;
     });
 
-    run_verification_body(clients, args.blocks_range)
+    run_verification_body(&clients, &network_inbound_data, args.blocks_range)
         .await
         .wrap_err("failed to run verification")?;
 
@@ -304,7 +303,8 @@ async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
 }
 
 async fn run_verification_body(
-    clients: Clients,
+    clients: &Clients,
+    network_inbound: &NetworkInboundData,
     blocks_range: RangeInclusive<u64>,
 ) -> eyre::Result<()> {
     for block_num in blocks_range {
@@ -388,10 +388,16 @@ async fn run_verification_body(
         }
 
         // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
-        let OpExecutionPayloadEnvelope { execution_payload, parent_beacon_block_root } =
-            execution_payload_envelope_from_block(block);
+        let op_envelope = execution_payload_envelope_from_block(block);
         // NOTE: we don't check error here because of the no response policy from the gateway.
-        let _ = clients.gateway_auth.new_payload(execution_payload, parent_beacon_block_root).await;
+        let _ = clients
+            .gateway_auth
+            .new_payload(
+                op_envelope.execution_payload.clone(),
+                op_envelope.parent_beacon_block_root,
+            )
+            .await;
+        network_inbound.gossip_payload_tx.send(op_envelope).await?;
     }
 
     Ok(())
