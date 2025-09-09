@@ -1947,7 +1947,6 @@ version = "0.1.0"
 dependencies = [
  "bop-common",
  "metrics",
- "metrics-exporter-prometheus",
  "tokio",
  "tracing",
 ]
@@ -1959,6 +1958,7 @@ dependencies = [
  "bop-common",
  "bop-metrics",
  "clap",
+ "metrics-exporter-prometheus",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
@@ -1977,6 +1977,7 @@ dependencies = [
  "revm-primitives",
  "rustc-hash 2.1.1",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

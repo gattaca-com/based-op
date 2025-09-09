@@ -1,6 +1,7 @@
 use bop_common::utils::wait_for_signal;
-use bop_metrics::{consumer::MetricsConsumer, install_prometheus_exporter};
+use bop_metrics::MetricsConsumer;
 use clap::Parser;
+use metrics_exporter_prometheus::PrometheusBuilder;
 use tracing::{info, level_filters::LevelFilter};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -25,11 +26,20 @@ async fn main() {
     install_prometheus_exporter(args.port);
     info!("Prometheus server started on port {}", args.port);
 
-    let mut consumer = MetricsConsumer::default();
+    let consumer = MetricsConsumer::default();
 
     // Start the metrics consumer loop
     tokio::select! {
         _ = consumer.run() => {},
         _ = wait_for_signal() => info!("Shutdown signal received")
     }
+}
+
+/// Installs the prometheus exporter on the given port.
+fn install_prometheus_exporter(port: u16) {
+    PrometheusBuilder::new()
+        .with_http_listener(([0, 0, 0, 0], port))
+        .add_global_label("instance", "based-optimism")
+        .install()
+        .expect("Failed to install prometheus exporter");
 }
