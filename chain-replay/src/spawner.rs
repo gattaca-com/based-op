@@ -174,9 +174,7 @@ pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> e
     let db_path = data_path.join("db");
     let static_files_dir = data_path.join("static_files");
 
-    let mut head: Option<u64> = None;
-
-    while head.map(|h| h != sync_target).unwrap_or(true) {
+    loop {
         let factory = OpNode::provider_factory_builder()
             .db(Arc::new(
                 open_db_read_only(db_path.clone(), Default::default()).expect("to open reth db"),
@@ -198,14 +196,16 @@ pub async fn wait_for_gateway_sync(chain_name: ChainName, sync_target: u64) -> e
             number
         };
 
+        if latest_header == sync_target {
+            break;
+        }
+
         let sleep_time = Duration::from_secs(10);
         debug!(
             gateway_head = latest_header,
             target = sync_target,
             "Gateway is syncing, re-checking in {sleep_time:?}..."
         );
-        head = Some(latest_header);
-
         tokio::time::sleep(sleep_time).await;
     }
 

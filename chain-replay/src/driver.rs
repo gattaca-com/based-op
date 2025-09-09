@@ -363,7 +363,7 @@ async fn run_verification_body(
                 let Some(block) =
                     clients.based_op_geth.get_block_by_number(block_num.into()).full().await?
                 else {
-                    if attempts == 10 {
+                    if attempts == 20 {
                         panic!("failed to fetch sealed block {block_num} from bop-geth");
                     } else {
                         attempts += 1;
@@ -374,7 +374,11 @@ async fn run_verification_body(
                 break block;
             };
             show_block_mismatches(&based_op_geth_block, &block);
-            panic!("Block mismatch:\n\nour    = {:?}\n\ntarget = {:?}", based_op_geth_block, block);
+            panic!(
+                "Block mismatch:\n\nour    = {:?}\n\ntarget = {:?}",
+                based_op_geth_block.hash(),
+                block.hash()
+            );
         }
 
         // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
@@ -485,22 +489,28 @@ fn show_block_mismatches(
         );
     }
 
+    let max_len = produced_block.transactions.len().max(target.transactions.len());
+
+    let produced_block_txs_slice = produced_block.transactions.as_transactions().unwrap();
+    let target_block_txs_slice = target.transactions.as_transactions().unwrap();
+
+    let produced_and_target_pairs = (0..max_len)
+        .map(|i| (produced_block_txs_slice.get(i).cloned(), target_block_txs_slice.get(i).cloned()))
+        .collect::<Vec<_>>();
+
     // Individual transaction comparisons
-    for (i, (produced_tx, target_tx)) in produced_block
-        .transactions
-        .clone()
-        .into_transactions()
-        .zip(target.transactions.clone().into_transactions())
-        .enumerate()
-    {
-        let produced_tx = produced_tx.inner.inner;
-        let target_tx = target_tx.inner.inner;
-        if produced_tx.hash() != target_tx.hash() {
+    for (i, (produced_tx, target_tx)) in produced_and_target_pairs.iter().enumerate() {
+        let produced_tx_hash = produced_tx.as_ref().map(|t| t.inner.inner.hash());
+        let target_tx_hash = target_tx.as_ref().map(|t| t.inner.inner.hash());
+        if produced_tx_hash != target_tx_hash {
             error!(
                 "Transaction hash mismatch at index {}: produced={:?}, target={:?}",
-                i,
-                produced_tx.hash(),
-                target_tx.hash()
+                i, produced_tx_hash, target_tx_hash
+            );
+        } else {
+            debug!(
+                "Transaction hash match at index {}: produced={:?}, target={:?}",
+                i, produced_tx_hash, target_tx_hash
             );
         }
     }
