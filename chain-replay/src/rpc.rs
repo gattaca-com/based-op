@@ -2,28 +2,30 @@ use std::{borrow::Cow, time::Duration};
 
 use alloy::{
     providers::{Provider as _, RootProvider},
-    rpc::types::SyncStatus,
     transports::TransportResult,
 };
 use alloy_network::Network;
 use tokio::time::sleep;
 use tracing::debug;
 
-/// Waits for the EL client to be synced.
-pub async fn wait_for_sync<N: Network>(
+/// Waits for the EL client to be on a certain head.
+pub async fn wait_for_el_on_head<N: Network>(
     provider: &RootProvider<N>,
-    poll_time: Duration,
+    target: u64,
 ) -> TransportResult<()> {
     loop {
-        sleep(poll_time).await;
-        let sync_info = provider.syncing().await?;
-        match sync_info {
-            SyncStatus::None => return Ok(()),
-            SyncStatus::Info(info) => {
-                debug!("EL syncing: {info:?}");
-            }
+        sleep(Duration::from_secs(5)).await;
+        let block_number = provider.get_block_number().await?;
+        if block_number == target {
+            break;
+        } else {
+            debug!(
+                head = block_number,
+                target, "Waiting for based-op-geth to be on the correct head"
+            );
         }
     }
+    Ok(())
 }
 
 /// Reference: <https://geth.ethereum.org/docs/interacting-with-geth/rpc/ns-debug#debugsethead>
