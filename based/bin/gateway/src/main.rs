@@ -13,7 +13,7 @@ use bop_db::{DatabaseRead, DatabaseWrite as _, init_database};
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
     Sequencer, SequencerConfig, Simulator,
-    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher, replay_fetcher::ReplayFetcher},
+    block_sync::{block_fetcher::BlockFetcher, mock_fetcher::MockFetcher},
 };
 use clap::Parser;
 use revm_primitives::B256;
@@ -65,7 +65,7 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     let evm_config = sequencer_config.evm_config.clone();
     let (frag_broadcast_tx, _) = tokio::sync::broadcast::channel(10_000);
 
-    if let Some(ref range) = args.replay_args.replay_blocks_range {
+    if let Some(ref range) = args.replay_blocks_range {
         warn!(?range, "Replay range found. Performing DB rollback if necessary");
         // Example: if start is 1000, then we should rollback to 998
         while db_bop.head_block_number()? > range.start().saturating_sub(2) {

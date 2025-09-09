@@ -279,16 +279,16 @@ where
 
                 // NewPayload skipped some blocks. Signal to fetch them all and set state to syncing.
                 let payload_hash = payload.payload_inner.payload_inner.payload_inner.block_hash;
+                // Check if we have already committed this payload.
+                if payload_hash == ctx.db.head_block_hash().expect("couldn't get db head block hash") {
+                    return WaitingForForkChoiceWithAttributes;
+                }
+
                 let block = payload_to_block(payload, sidecar).expect("couldn't get block from payload");
 
                 // Update sorting context
                 ctx.parent_header = block.header().clone();
                 ctx.parent_hash = payload_hash;
-
-                // Check if we have already committed this payload.
-                if payload_hash == ctx.db.head_block_hash().expect("couldn't get db head block hash") {
-                    return WaitingForForkChoiceWithAttributes;
-                }
 
                 // Commit the block
                 if let Some((start, stop)) = ctx.commit_block(&block) {
@@ -325,10 +325,6 @@ where
             WaitingForForkChoiceWithAttributes => {
                 match payload_attributes {
                     Some(attributes) => {
-                        trace!(
-                            "Received attributes {attributes:?}. ctx.parent_header: {:?}",
-                            ctx.parent_header.parent_hash
-                        );
                         // Don't start sequencing until we have a parent hash.
                         if ctx.parent_header.parent_hash == B256::ZERO {
                             return self;

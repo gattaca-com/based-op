@@ -28,7 +28,6 @@ use uuid::Uuid;
 pub mod block_fetcher;
 pub mod fetch_blocks;
 pub mod mock_fetcher;
-pub mod replay_fetcher;
 
 pub type AlloyProvider = alloy_provider::RootProvider<op_alloy_network::Optimism>;
 

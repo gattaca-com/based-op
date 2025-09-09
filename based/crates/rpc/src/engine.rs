@@ -27,6 +27,8 @@ impl EngineApiServer for RpcServer {
         fork_choice_state: ForkchoiceState,
         payload_attributes: Option<OpPayloadAttributes>,
     ) -> RpcResult<ForkchoiceUpdated> {
+        trace!(?fork_choice_state, ?payload_attributes, "new request");
+
         self.send(messages::EngineApi::ForkChoiceUpdatedV3 {
             fork_choice_state,
             payload_attributes: payload_attributes.map(Box::new),
@@ -41,6 +43,8 @@ impl EngineApiServer for RpcServer {
         versioned_hashes: Vec<B256>,
         parent_beacon_block_root: B256,
     ) -> RpcResult<PayloadStatus> {
+        trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
+
         self.send(messages::EngineApi::NewPayloadV4 {
             payload: OpExecutionPayloadV4 { payload_inner: payload, withdrawals_root: B256::ZERO },
             versioned_hashes,
@@ -57,6 +61,8 @@ impl EngineApiServer for RpcServer {
         parent_beacon_block_root: B256,
         _requests: RequestsOrHash,
     ) -> RpcResult<PayloadStatus> {
+        trace!(?payload, ?versioned_hashes, %parent_beacon_block_root, "new request");
+
         self.send(messages::EngineApi::NewPayloadV4 { payload, versioned_hashes, parent_beacon_block_root });
         Err(RpcError::NoReturn)
     }

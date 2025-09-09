@@ -133,7 +133,6 @@ services:
       - --gossip.signer_private_key=${BOP_REPLAY_GATEWAY_SEQUENCING_KEY}
       - --gossip.root_peer_url=http://bop-replay-based-op-node:${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
       - --chain-replay.blocks-range=${BOP_REPLAY_BLOCKS_RANGE}
-      - --chain-replay.l2-el-verifier-url=${BOP_REPLAY_L2_EL_VERIFIER_URL}
 
     volumes:
       - ./config:/config

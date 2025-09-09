@@ -68,8 +68,11 @@ pub struct GatewayArgs {
     /// Mock mode
     #[arg(long = "mock")]
     pub mock: Option<MockMode>,
-    #[clap(flatten)]
-    pub replay_args: ReplayArgs,
+    /// For chain replication testing, it expresses the range of blocks we want to replay. In
+    /// particular, assuming the local eth client is at height N <= replay_target, the
+    /// chain-replication will happen for range N..=replay_target.
+    #[clap(long = "chain-replay.blocks-range", value_parser = range_inclusive_from_str)]
+    pub replay_blocks_range: Option<RangeInclusive<u64>>,
     /// Enable DEBUG logging
     #[arg(long = "debug")]
     pub debug: bool,
@@ -172,19 +175,6 @@ impl From<&GatewayArgs> for LoggingConfig {
             filters: args.log_filters.clone(),
         }
     }
-}
-
-/// Arguments required for running the gateway in chain-replication mode. See [`crates::sequencer::block_sync::ReplayFetcher`] for
-/// more details.
-#[derive(Debug, Clone, Parser)]
-pub struct ReplayArgs {
-    #[clap(long = "chain-replay.l2-el-verifier-url")]
-    pub l2_el_verifier_url: Option<Url>,
-    /// The block number which expresses the range of blocks we want to replay. In particular,
-    /// assuming the local eth client is at height N <= replay_target, the chain-replication will
-    /// happen for range N..=replay_target.
-    #[clap(long = "chain-replay.blocks-range", value_parser = range_inclusive_from_str)]
-    pub replay_blocks_range: Option<RangeInclusive<u64>>,
 }
 
 fn range_inclusive_from_str(s: &str) -> Result<RangeInclusive<u64>, &'static str> {
