@@ -337,8 +337,7 @@ async fn run_verification_body(
             })
             .collect::<Vec<_>>();
 
-        debug!("Sending {} transactions to gateway for block {block_num}", raw_txs.len());
-
+        let raw_txs_len = raw_txs.len();
         let fcs = ForkchoiceState { head_block_hash: prev_block.header.hash, ..Default::default() };
         let op_attributes = op_attributes_from_block(&block, system_tx);
 
@@ -346,15 +345,18 @@ async fn run_verification_body(
         // NOTE: we don't check error here because of the no response policy from the gateway.
         let _ = clients.gateway_auth.fork_choice_update(fcs, Some(op_attributes), true).await;
 
+        let mut i = 0;
         let _ = tokio::time::timeout(Duration::from_secs(2), async {
             for t in raw_txs {
                 let _ =
                     clients.gateway.send_raw_transaction(&t).await.expect("to send tx to gateway");
+                i += 1;
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
             tokio::time::sleep(Duration::from_secs(2)).await; // Let the timeout hit.
         })
         .await;
+        debug!("Sent {i} transactions out of {raw_txs_len} to gateway for block {block_num}");
 
         // Sorting -> WaitingForNewPayload
         let sealed_block = clients.gateway_auth.get_payload_v4(PayloadId::default()).await?;
