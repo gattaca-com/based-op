@@ -105,6 +105,7 @@ services:
       - --rpc.port=${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --syncmode=execution-layer
+      - --l2.skip-sync-start-check=true # As recommended in https://github.com/gattaca-com/based-optimism/blob/8d2ac48c88bf659da9a3dbe4ef04c0fbbfc7b240/op-node/rollup/sync/config.go#L67-L72
       - --unsafe-allow-old-payloads=true
       - --verifier.l1-confs=1
     volumes:
