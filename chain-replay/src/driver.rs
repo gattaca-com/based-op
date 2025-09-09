@@ -10,7 +10,10 @@ use std::{
 use alloy::{
     eips::Encodable2718,
     providers::{Provider as _, ProviderBuilder, RootProvider, ext::EngineApi},
-    rpc::types::engine::{ForkchoiceState, JwtSecret, PayloadId},
+    rpc::types::{
+        Block,
+        engine::{ForkchoiceState, JwtSecret, PayloadId},
+    },
     signers::local::PrivateKeySigner,
 };
 use eyre::Context as _;
@@ -41,7 +44,7 @@ use crate::{
 };
 
 pub struct Clients {
-    _based_op_geth: RootProvider<Optimism>,
+    based_op_geth: RootProvider<Optimism>,
     l2_el_verifier: RootProvider<Optimism>,
     gateway: RootProvider<Optimism>,
     gateway_auth: EngineClient,
@@ -68,7 +71,7 @@ pub fn create_clients(
         gateway_auth_jwt,
     );
 
-    let clients = Clients { _based_op_geth: based_op_geth, l2_el_verifier, gateway, gateway_auth };
+    let clients = Clients { based_op_geth, l2_el_verifier, gateway, gateway_auth };
 
     Ok(clients)
 }
@@ -322,8 +325,18 @@ async fn run_verification_body(
             .transactions
             .clone()
             .into_transactions()
-            .map(|t| t.inner.inner.into_inner().encoded_2718())
+            // Skip L2 deposit info system transaction.
+            .skip(1)
+            .filter_map(|t| {
+                if t.inner.inner.is_system_transaction() {
+                    None
+                } else {
+                    Some(t.inner.inner.into_inner().encoded_2718())
+                }
+            })
             .collect::<Vec<_>>();
+
+        debug!("Sending {} transactions to gateway for block {block_num}", raw_txs.len());
 
         let fcs = ForkchoiceState { head_block_hash: prev_block.header.hash, ..Default::default() };
         let op_attributes = op_attributes_from_block(&block);
@@ -343,10 +356,19 @@ async fn run_verification_body(
         let hash = block.hash();
         let sealed_block_inner = &sealed_block.execution_payload.payload_inner.payload_inner;
 
-        info!("block fetched {block:?}");
-
         if sealed_block_inner.block_hash != hash {
-            panic!("Block mismatch: our = {:#?}, target = {:#?}", sealed_block, block);
+            // Our follower node should have this block in its canonical chain by now.
+            let based_op_geth_block = clients
+                .based_op_geth
+                .get_block_by_number(block_num.into())
+                .full()
+                .await?
+                .expect("to find sealed block in bop-geth");
+            show_block_mismatches(based_op_geth_block, block);
+            panic!(
+                "Block mismatch: our = {:#?} vs target = {:#?}",
+                sealed_block_inner.block_hash, hash
+            );
         }
 
         // WaitingForNewPayload -> WaitingForForkchoiceWithAttributes
@@ -356,4 +378,151 @@ async fn run_verification_body(
     }
 
     Ok(())
+}
+
+/// Compares two blocks and prints mismatches found.
+fn show_block_mismatches(
+    produced_block: Block<op_alloy_rpc_types::Transaction>,
+    target: Block<op_alloy_rpc_types::Transaction>,
+) {
+    if produced_block.header.parent_hash != target.header.parent_hash {
+        error!(
+            "Parent hash mismatch: produced={:?}, target={:?}",
+            produced_block.header.parent_hash, target.header.parent_hash
+        );
+    }
+
+    if produced_block.header.number != target.header.number {
+        error!(
+            "Block number mismatch: produced={}, target={}",
+            produced_block.header.number, target.header.number
+        );
+    }
+
+    if produced_block.header.timestamp != target.header.timestamp {
+        error!(
+            "Timestamp mismatch: produced={}, target={}",
+            produced_block.header.timestamp, target.header.timestamp
+        );
+    }
+
+    if produced_block.header.gas_limit != target.header.gas_limit {
+        error!(
+            "Gas limit mismatch: produced={}, target={}",
+            produced_block.header.gas_limit, target.header.gas_limit
+        );
+    }
+
+    if produced_block.header.gas_used != target.header.gas_used {
+        error!(
+            "Gas used mismatch: produced={}, target={}",
+            produced_block.header.gas_used, target.header.gas_used
+        );
+    }
+
+    if produced_block.header.base_fee_per_gas != target.header.base_fee_per_gas {
+        error!(
+            "Base fee per gas mismatch: produced={:?}, target={:?}",
+            produced_block.header.base_fee_per_gas, target.header.base_fee_per_gas
+        );
+    }
+
+    if produced_block.header.state_root != target.header.state_root {
+        error!(
+            "State root mismatch: produced={:?}, target={:?}",
+            produced_block.header.state_root, target.header.state_root
+        );
+    }
+
+    if produced_block.header.receipts_root != target.header.receipts_root {
+        error!(
+            "Receipts root mismatch: produced={:?}, target={:?}",
+            produced_block.header.receipts_root, target.header.receipts_root
+        );
+    }
+
+    if produced_block.header.logs_bloom != target.header.logs_bloom {
+        error!(
+            "Logs bloom mismatch: produced={:?}, target={:?}",
+            produced_block.header.logs_bloom, target.header.logs_bloom
+        );
+    }
+
+    if produced_block.header.extra_data != target.header.extra_data {
+        error!(
+            "Extra data mismatch: produced={:?}, target={:?}",
+            produced_block.header.extra_data, target.header.extra_data
+        );
+    }
+
+    // Optimism-specific header fields
+    if produced_block.header.withdrawals_root != target.header.withdrawals_root {
+        error!(
+            "Withdrawals root mismatch: produced={:?}, target={:?}",
+            produced_block.header.withdrawals_root, target.header.withdrawals_root
+        );
+    }
+
+    if produced_block.header.parent_beacon_block_root != target.header.parent_beacon_block_root {
+        error!(
+            "Parent beacon block root mismatch: produced={:?}, target={:?}",
+            produced_block.header.parent_beacon_block_root, target.header.parent_beacon_block_root
+        );
+    }
+
+    // Transaction count comparison
+    if produced_block.transactions.len() != target.transactions.len() {
+        error!(
+            "Transaction count mismatch: produced={}, target={}",
+            produced_block.transactions.len(),
+            target.transactions.len()
+        );
+    }
+
+    // Individual transaction comparisons
+    for (i, (produced_tx, target_tx)) in produced_block
+        .transactions
+        .clone()
+        .into_transactions()
+        .zip(target.transactions.into_transactions())
+        .enumerate()
+    {
+        let produced_tx = produced_tx.inner.inner;
+        let target_tx = target_tx.inner.inner;
+        if produced_tx.hash() != target_tx.hash() {
+            error!(
+                "Transaction hash mismatch at index {}: produced={:?}, target={:?}",
+                i,
+                produced_tx.hash(),
+                target_tx.hash()
+            );
+        }
+    }
+
+    // Withdrawals comparison (if present)
+    match (&produced_block.withdrawals, &target.withdrawals) {
+        (Some(produced_withdrawals), Some(target_withdrawals)) => {
+            if produced_withdrawals.len() != target_withdrawals.len() {
+                error!(
+                    "Withdrawals count mismatch: produced={}, target={}",
+                    produced_withdrawals.len(),
+                    target_withdrawals.len()
+                );
+            }
+
+            for (i, (produced_w, target_w)) in
+                produced_withdrawals.iter().zip(target_withdrawals.iter()).enumerate()
+            {
+                if produced_w != target_w {
+                    error!(
+                        "Withdrawal mismatch at index {}: produced={:?}, target={:?}",
+                        i, produced_w, target_w
+                    );
+                }
+            }
+        }
+        (Some(_), None) => error!("Produced block has withdrawals, target block does not"),
+        (None, Some(_)) => error!("Target block has withdrawals, produced block does not"),
+        (None, None) => {} // Both blocks have no withdrawals, which is fine
+    }
 }
