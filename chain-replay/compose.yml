@@ -77,7 +77,7 @@ services:
       - "${BOP_REPLAY_REGISTRY_PORT}:${BOP_REPLAY_REGISTRY_PORT}"
 
   bop-replay-based-op-node:
-    image: ghcr.io/chainbound/op-node:2281ceaf2d2f985b8f6a9d97bb4e7439a6e27a91-10-09-2025
+    image: ghcr.io/chainbound/op-node:4962e9bd6133355d80d614857aece57ab21ceba8-10-09-2025
     container_name: bop-replay-based-op-node
     environment:
       GOLOG_LOG_LEVEL: "debug"
