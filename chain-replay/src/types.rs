@@ -55,7 +55,8 @@ pub fn op_attributes_from_block(
     OpPayloadAttributes {
         payload_attributes,
         transactions: Some(vec![Bytes::from(system_tx.inner.inner.inner().encoded_2718())]),
-        no_tx_pool: Some(true),
+        no_tx_pool: Some(false), // NOTE: we want to use it in the gateway otherwise some txs might
+        // be lost due to tof snapshot override when sealing frags!
         gas_limit: Some(block.header.gas_limit),
         eip_1559_params: Some(FixedBytes::from_slice(&block.header.extra_data[1..9])),
     }
