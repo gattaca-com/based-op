@@ -83,12 +83,12 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
     let rollup_config_string = fs::read_to_string(args.chain_name.rollup_file_path())?;
     let rollup_config: RollupConfig = serde_json::from_str(&rollup_config_string)?;
 
-    let based_op_geth_port_string =
-        std::env::var("BOP_REPLAY_BASED_OP_GETH_RPC_PORT").wrap_err("based-op-geth port set")?;
+    let based_op_geth_port_string = std::env::var("BOP_REPLAY_BASED_OP_GETH_0_RPC_PORT")
+        .wrap_err("based-op-geth-0 port set")?;
     let based_op_geth_port =
-        u64::from_str(based_op_geth_port_string.trim()).wrap_err("valid based-op-geth port")?;
+        u64::from_str(based_op_geth_port_string.trim()).wrap_err("valid based-op-geth-0 port")?;
     let based_op_geth_url = Url::from_str(&format!("http://0.0.0.0:{based_op_geth_port}"))
-        .wrap_err("valid based-op-geth url")?;
+        .wrap_err("valid based-op-geth-0 url")?;
 
     let clients = Clients::new(
         based_op_geth_url,
@@ -123,8 +123,11 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
     // NOTE: we start bop-node here so that dialing the kona sequencer as static peers works
     // immediately and we don't have to wait one minute for the next attempt.
     tokio::time::sleep(Duration::from_secs(1)).await;
-    info!("Starting based-op-node");
-    start_based_op_node_service(args.chain_name).wrap_err("to start based-op-node")?;
+    for instance_num in 0..args.follower_nodes_count {
+        info!("Starting based-op-node-{instance_num}");
+        start_based_op_node_service(args.chain_name, instance_num)
+            .wrap_err("to start based-op-node")?;
+    }
 
     tokio::spawn(async move {
         loop {
@@ -139,8 +142,8 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
         }
     });
 
-    info!(target = args.expected_peers_count, "Waiting until we have enough peers");
-    wait_for_peers(&network_inbound_data, args.expected_peers_count).await;
+    info!(target = args.follower_nodes_count, "Waiting until we have enough peers");
+    wait_for_peers(&network_inbound_data, args.follower_nodes_count as usize).await;
 
     // NOTE: it is N-1 because N will be inserted via frags.
     let first_block_to_gossip = clients

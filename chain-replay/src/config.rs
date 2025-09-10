@@ -9,6 +9,14 @@ use crate::chain::ChainName;
 
 #[derive(clap::Parser, Debug, Clone)]
 pub struct Args {
+    /// The number of pairs of based-op-geth/based-op-node follower nodes. Defaults to 1.
+    #[arg(
+        long,
+        env = "BOP_REPLAY_FOLLOWER_NODES_COUNT",
+        id = "BOP_REPLAY_FOLLOWER_NODES_COUNT",
+        default_value_t = 1
+    )]
+    pub follower_nodes_count: u8,
     /// The url of the gateway to send transactions to, non-authenticated.
     #[arg(long, env = "BOP_REPLAY_GATEWAY_URL", id = "BOP_REPLAY_GATEWAY_URL")]
     pub gateway_url: Url,
@@ -20,9 +28,6 @@ pub struct Args {
     /// The name of chain of which we want to replay blocks.
     #[clap(long, env = "BOP_REPLAY_CHAIN_NAME", id = "BOP_REPLAY_CHAIN_NAME")]
     pub chain_name: ChainName,
-    /// The L2 engine RPC URL, needed to send CL messages.
-    #[clap(long, env = "BOP_REPLAY_L2_ENGINE_RPC_URL", id = "BOP_REPLAY_L2_ENGINE_RPC_URL")]
-    pub l2_engine_rpc_url: Url,
     /// The L2 execution layer RPC URL, needed to download the blocks to replay.
     #[clap(long, env = "BOP_REPLAY_L2_EL_VERIFIER_URL", id = "BOP_REPLAY_L2_EL_VERIFIER_URL")]
     pub l2_el_verifier_url: Url,
@@ -44,15 +49,6 @@ pub struct Args {
         id = "BOP_REPLAY_KONA_SEQUENCER_DISCOVERY_PORT"
     )]
     pub disc_port: u16,
-    /// The expected number of peers the kona sequencer should have before starting chain
-    /// replication.
-    #[arg(
-        long,
-        default_value_t = 1,
-        env = "BOP_REPLAY_KONA_SEQUENCER_EXPECTED_PEERS_COUNT",
-        id = "BOP_REPLAY_KONA_SEQUENCER_EXPECTED_PEERS_COUNT"
-    )]
-    pub expected_peers_count: usize,
     /// The inclusive range of blocks to replay, in the format 'start..=end'.
     #[clap(
         long,

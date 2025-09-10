@@ -1,8 +1,8 @@
 services:
-  bop-replay-based-op-geth:
+  bop-replay-based-op-geth-0:
     image: ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest
     pull_policy: always
-    container_name: bop-replay-based-op-geth
+    container_name: bop-replay-based-op-geth-0
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -25,43 +25,107 @@ services:
           --allow-insecure-unlock \
           --http \
           --http.addr=0.0.0.0 \
-          --http.port="${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}" \
+          --http.port="${BOP_REPLAY_BASED_OP_GETH_0_RPC_PORT}" \
           --http.vhosts="*" \
           --http.corsdomain="*" \
           --http.api="admin,engine,net,eth,web3,debug,miner,txpool" \
           --ws \
           --ws.addr=0.0.0.0 \
-          --ws.port="${BOP_REPLAY_BASED_OP_GETH_WS_PORT}" \
+          --ws.port="${BOP_REPLAY_BASED_OP_GETH_0_WS_PORT}" \
           --ws.api="admin,engine,net,eth,web3,debug,miner,txpool" \
           --ws.origins="*" \
           --authrpc.addr=0.0.0.0 \
-          --authrpc.port="${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}" \
+          --authrpc.port="${BOP_REPLAY_BASED_OP_GETH_0_ENGINE_RPC_PORT}" \
           --authrpc.vhosts="*" \
           --authrpc.jwtsecret=/config/jwt \
-          --discovery.port="${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}" \
-          --port="${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}" \
-          --nat="extip:${BOP_REPLAY_BASED_OP_GETH_EXTIP}" \
+          --discovery.port="${BOP_REPLAY_BASED_OP_GETH_0_GOSSIP_PORT}" \
+          --port="${BOP_REPLAY_BASED_OP_GETH_0_GOSSIP_PORT}" \
+          --nat="extip:${BOP_REPLAY_BASED_OP_GETH_0_EXTIP}" \
 
-        if [ -n "${BOP_REPLAY_BASED_OP_GETH_BOOTNODES:-}" ]; then
-          set -- "$@" --bootnodes="${BOP_REPLAY_BASED_OP_GETH_BOOTNODES}"
+        if [ -n "${BOP_REPLAY_BASED_OP_GETH_0_BOOTNODES:-}" ]; then
+          set -- "$@" --bootnodes="${BOP_REPLAY_BASED_OP_GETH_0_BOOTNODES}"
         fi
 
-        if [ -n "${BOP_REPLAY_BASED_OP_GETH_NETWORK:-}" ]; then
-          set -- "$@" --op-network="${BOP_REPLAY_BASED_OP_GETH_NETWORK}"
+        if [ -n "${BOP_REPLAY_BASED_OP_GETH_0_NETWORK:-}" ]; then
+          set -- "$@" --op-network="${BOP_REPLAY_BASED_OP_GETH_0_NETWORK}"
         fi
 
         exec geth "$@"
 
     volumes:
-      - ./data/geth:/data/geth
+      - ./data_0/geth:/data/geth
       - ./config:/config
     restart: unless-stopped
     ports:
-      - "${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}"
-      - "${BOP_REPLAY_BASED_OP_GETH_WS_PORT}:${BOP_REPLAY_BASED_OP_GETH_WS_PORT}"
-      - "${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}:${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}"
-      - "${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}/tcp"
-      - "${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_GETH_GOSSIP_PORT}/udp"
+      - "${BOP_REPLAY_BASED_OP_GETH_0_RPC_PORT}:${BOP_REPLAY_BASED_OP_GETH_0_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_0_WS_PORT}:${BOP_REPLAY_BASED_OP_GETH_0_WS_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_0_ENGINE_RPC_PORT}:${BOP_REPLAY_BASED_OP_GETH_0_ENGINE_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_0_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_GETH_0_GOSSIP_PORT}/tcp"
+      - "${BOP_REPLAY_BASED_OP_GETH_0_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_GETH_0_GOSSIP_PORT}/udp"
+
+  bop-replay-based-op-geth-1:
+    image: ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest
+    pull_policy: always
+    container_name: bop-replay-based-op-geth-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # 1) initialize datadir if needed
+        if [ ! -d /data/geth/geth/chaindata ]; then
+          echo ">>> initializing geth datadir…"
+          geth init \
+            --state.scheme=hash \
+            --datadir=/data/geth \
+            /config/genesis.json
+        fi
+
+        # 2) build argv with conditionals (POSIX sh)
+        set -- \
+          --datadir=/data/geth \
+          --gcmode=archive \
+          --state.scheme=hash \
+          --syncmode=full \
+          --rpc.allow-unprotected-txs \
+          --allow-insecure-unlock \
+          --http \
+          --http.addr=0.0.0.0 \
+          --http.port="${BOP_REPLAY_BASED_OP_GETH_1_RPC_PORT}" \
+          --http.vhosts="*" \
+          --http.corsdomain="*" \
+          --http.api="admin,engine,net,eth,web3,debug,miner,txpool" \
+          --ws \
+          --ws.addr=0.0.0.0 \
+          --ws.port="${BOP_REPLAY_BASED_OP_GETH_1_WS_PORT}" \
+          --ws.api="admin,engine,net,eth,web3,debug,miner,txpool" \
+          --ws.origins="*" \
+          --authrpc.addr=0.0.0.0 \
+          --authrpc.port="${BOP_REPLAY_BASED_OP_GETH_1_ENGINE_RPC_PORT}" \
+          --authrpc.vhosts="*" \
+          --authrpc.jwtsecret=/config/jwt \
+          --discovery.port="${BOP_REPLAY_BASED_OP_GETH_1_GOSSIP_PORT}" \
+          --port="${BOP_REPLAY_BASED_OP_GETH_1_GOSSIP_PORT}" \
+          --nat="extip:${BOP_REPLAY_BASED_OP_GETH_1_EXTIP}" \
+
+        if [ -n "${BOP_REPLAY_BASED_OP_GETH_1_BOOTNODES:-}" ]; then
+          set -- "$@" --bootnodes="${BOP_REPLAY_BASED_OP_GETH_1_BOOTNODES}"
+        fi
+
+        if [ -n "${BOP_REPLAY_BASED_OP_GETH_1_NETWORK:-}" ]; then
+          set -- "$@" --op-network="${BOP_REPLAY_BASED_OP_GETH_1_NETWORK}"
+        fi
+
+        exec geth "$@"
+
+    volumes:
+      - ./data_1/geth:/data/geth
+      - ./config:/config
+    restart: unless-stopped
+    ports:
+      - "${BOP_REPLAY_BASED_OP_GETH_1_RPC_PORT}:${BOP_REPLAY_BASED_OP_GETH_1_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_1_WS_PORT}:${BOP_REPLAY_BASED_OP_GETH_1_WS_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_1_ENGINE_RPC_PORT}:${BOP_REPLAY_BASED_OP_GETH_1_ENGINE_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_GETH_1_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_GETH_1_GOSSIP_PORT}/tcp"
+      - "${BOP_REPLAY_BASED_OP_GETH_1_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_GETH_1_GOSSIP_PORT}/udp"
 
   bop-replay-based-registry:
     image: local_based_registry
@@ -70,7 +134,7 @@ services:
       - RUST_LOG=${BOP_REPLAY_RUST_LOG:-}
     command:
       - --registry.path=/config/registry.json
-      - --eth_rpc_url=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
+      - --eth_rpc_url=http://bop-replay-based-op-geth-0:${BOP_REPLAY_BASED_OP_GETH_0_RPC_PORT}
       - --port=${BOP_REPLAY_REGISTRY_PORT}
     volumes:
       - ./config:/config
@@ -78,9 +142,9 @@ services:
     ports:
       - "${BOP_REPLAY_REGISTRY_PORT}:${BOP_REPLAY_REGISTRY_PORT}"
 
-  bop-replay-based-op-node:
+  bop-replay-based-op-node-0:
     image: ghcr.io/chainbound/op-node:1e545641929fb26476e885dd9c70be2d627e4fd4-11-09-2025
-    container_name: bop-replay-based-op-node
+    container_name: bop-replay-based-op-node-0
     environment:
       GOLOG_LOG_LEVEL: "debug"
       BOP_REPLAY: "true"
@@ -90,14 +154,14 @@ services:
       - --l1.rpckind=standard
       - --l1=${BOP_REPLAY_L1_RPC_URL}
       - --l2.jwt-secret=/config/jwt
-      - --l2=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_ENGINE_RPC_PORT}
+      - --l2=http://bop-replay-based-op-geth-0:${BOP_REPLAY_BASED_OP_GETH_0_ENGINE_RPC_PORT}
       - --log.level=debug
-      - --p2p.advertise.ip=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_IP}
-      - --p2p.advertise.tcp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
-      - --p2p.advertise.udp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
+      - --p2p.advertise.ip=${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_IP}
+      - --p2p.advertise.tcp=${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}
+      - --p2p.advertise.udp=${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}
       - --p2p.listen.ip=0.0.0.0
-      - --p2p.listen.tcp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
-      - --p2p.listen.udp=${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}
+      - --p2p.listen.tcp=${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}
+      - --p2p.listen.udp=${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}
       - --p2p.no-discovery=true
       - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
       - --p2p.scoring=none
@@ -106,19 +170,61 @@ services:
       - --rpc.addr=0.0.0.0
       - --rpc.enable-admin
       - --rpc.enable-based
-      - --rpc.port=${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
+      - --rpc.port=${BOP_REPLAY_BASED_OP_NODE_0_RPC_PORT}
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --syncmode=execution-layer
       - --l2.skip-sync-start-check=true # As recommended in https://github.com/gattaca-com/based-optimism/blob/8d2ac48c88bf659da9a3dbe4ef04c0fbbfc7b240/op-node/rollup/sync/config.go#L67-L72
       - --verifier.l1-confs=1
     volumes:
-      - ./data/node:/data/op-node
+      - ./data_0/node:/data/op-node
       - ./config:/config
     restart: unless-stopped
     ports:
-      - "${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}:${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}"
-      - "${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}/tcp"
-      - "${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_GOSSIP_PORT}/udp"
+      - "${BOP_REPLAY_BASED_OP_NODE_0_RPC_PORT}:${BOP_REPLAY_BASED_OP_NODE_0_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}/tcp"
+      - "${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}/udp"
+
+  bop-replay-based-op-node-1:
+    image: ghcr.io/chainbound/op-node:1e545641929fb26476e885dd9c70be2d627e4fd4-11-09-2025
+    container_name: bop-replay-based-op-node-1
+    environment:
+      GOLOG_LOG_LEVEL: "debug"
+      BOP_REPLAY: "true"
+    command:
+      - op-node
+      - --l1.beacon=${BOP_REPLAY_L1_BEACON_RPC_URL}
+      - --l1.rpckind=standard
+      - --l1=${BOP_REPLAY_L1_RPC_URL}
+      - --l2.jwt-secret=/config/jwt
+      - --l2=http://bop-replay-based-op-geth-1:${BOP_REPLAY_BASED_OP_GETH_1_ENGINE_RPC_PORT}
+      - --log.level=debug
+      - --p2p.advertise.ip=${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_IP}
+      - --p2p.advertise.tcp=${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}
+      - --p2p.advertise.udp=${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}
+      - --p2p.listen.ip=0.0.0.0
+      - --p2p.listen.tcp=${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}
+      - --p2p.listen.udp=${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}
+      - --p2p.no-discovery=true
+      - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
+      - --p2p.scoring=none
+      - --registry=http://bop-replay-based-registry:${BOP_REPLAY_REGISTRY_PORT}
+      - --rollup.config=/config/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --rpc.enable-admin
+      - --rpc.enable-based
+      - --rpc.port=${BOP_REPLAY_BASED_OP_NODE_1_RPC_PORT}
+      - --safedb.path=/data/op-node/op-node-beacon-data
+      - --syncmode=execution-layer
+      - --l2.skip-sync-start-check=true # As recommended in https://github.com/gattaca-com/based-optimism/blob/8d2ac48c88bf659da9a3dbe4ef04c0fbbfc7b240/op-node/rollup/sync/config.go#L67-L72
+      - --verifier.l1-confs=1
+    volumes:
+      - ./data_1/node:/data/op-node
+      - ./config:/config
+    restart: unless-stopped
+    ports:
+      - "${BOP_REPLAY_BASED_OP_NODE_1_RPC_PORT}:${BOP_REPLAY_BASED_OP_NODE_1_RPC_PORT}"
+      - "${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}/tcp"
+      - "${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}:${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}/udp"
 
   bop-replay-based-gateway:
     image: local_based_gateway
@@ -132,10 +238,10 @@ services:
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway
-      - --eth_client.url=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
+      - --eth_client.url=http://bop-replay-based-op-geth-0:${BOP_REPLAY_BASED_OP_GETH_0_RPC_PORT}
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=${BOP_REPLAY_GATEWAY_SEQUENCING_KEY}
-      - --gossip.root_peer_url=http://bop-replay-based-op-node:${BOP_REPLAY_BASED_OP_NODE_RPC_PORT}
+      - --gossip.root_peer_url=http://bop-replay-based-op-node-0:${BOP_REPLAY_BASED_OP_NODE_0_RPC_PORT}
       - --chain-replay.blocks-range=${BOP_REPLAY_BLOCKS_RANGE}
 
     volumes:

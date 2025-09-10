@@ -22,25 +22,29 @@ pub fn ensure_all_containers_down(chain_name: ChainName) -> io::Result<()> {
 }
 
 /// Starts the based-op-geth service for the given chain, setting the sync target hash
-pub fn start_based_op_geth_service(chain_name: ChainName) -> io::Result<()> {
+pub fn start_based_op_geth_service(chain_name: ChainName, instance_num: u8) -> io::Result<()> {
     let compose_file_path = chain_name.compose_file_path();
     let env_file_path = chain_name.env_file_path();
 
     let command_str = format!(
-        "docker compose --file {} --env-file {} up -d bop-replay-based-op-geth",
+        "docker compose --file {} --env-file {} up -d bop-replay-based-op-geth-{}",
         compose_file_path.to_string_lossy(),
-        env_file_path.to_string_lossy()
+        env_file_path.to_string_lossy(),
+        instance_num,
     );
     let mut args = command_str.trim_matches('"').split(' ');
 
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
     let ip = get_ip().to_string();
-    command.env("BOP_REPLAY_BASED_OP_GETH_EXTIP", ip);
+    command.env(format!("BOP_REPLAY_BASED_OP_GETH_{instance_num}_EXTIP"), ip);
     if chain_name.is_superchain() {
-        command.env("BOP_REPLAY_BASED_OP_GETH_NETWORK", chain_name.to_string());
+        command.env(
+            format!("BOP_REPLAY_BASED_OP_GETH_{instance_num}_NETWORK"),
+            chain_name.to_string(),
+        );
     } else if chain_name.is_based_op() {
-        command.env("BOP_REPLAY_BASED_OP_GETH_BOOTNODES", "enode://6439c0a0cad6b87b032d4e5bb401c5e34b91472eb33b6dbf6c09ed326dc9489d874ab0cacbd3e0f9f89dc7bcb32d66f09a040fb71505f68112037d48d782a509@18.185.199.51:30303");
+        command.env(format!("BOP_REPLAY_BASED_OP_GETH_{instance_num}_BOOTNODES"), "enode://6439c0a0cad6b87b032d4e5bb401c5e34b91472eb33b6dbf6c09ed326dc9489d874ab0cacbd3e0f9f89dc7bcb32d66f09a040fb71505f68112037d48d782a509@18.185.199.51:30303");
     }
     let output = command.output()?;
 
@@ -66,14 +70,15 @@ pub fn start_based_registry(chain_name: ChainName) -> io::Result<()> {
 }
 
 /// Starts the based-op-geth service for the given chain, setting the sync target hash
-pub fn start_based_op_node_service(chain_name: ChainName) -> io::Result<()> {
+pub fn start_based_op_node_service(chain_name: ChainName, instance_num: u8) -> io::Result<()> {
     let compose_file_path = chain_name.compose_file_path();
     let env_file_path = chain_name.env_file_path();
 
     let command_str = format!(
-        "docker compose --file {} --env-file {} up -d bop-replay-based-op-node",
+        "docker compose --file {} --env-file {} up -d bop-replay-based-op-node-{}",
         compose_file_path.to_string_lossy(),
-        env_file_path.to_string_lossy()
+        env_file_path.to_string_lossy(),
+        instance_num,
     );
     let mut args = command_str.trim_matches('"').split(' ');
 

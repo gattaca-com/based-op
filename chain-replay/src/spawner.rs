@@ -27,7 +27,7 @@ use crate::{
     engine::EngineExt as _,
     rpc::{debug_set_head, wait_for_el_on_head},
     types::execution_payload_envelope_from_block,
-    utils::read_jwt_file,
+    utils::{get_ip, read_jwt_file},
 };
 
 /// Responsible for spinning up all follower nodes via docker:
@@ -45,7 +45,7 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
     ensure_all_containers_down(args.chain_name).wrap_err("ensure all containers are down")?;
 
     let rollup_config_string = fs::read_to_string(args.chain_name.rollup_file_path())?;
-    let rollup_config: RollupConfig = serde_json::from_str(&rollup_config_string)?;
+    let rollup_config: Arc<RollupConfig> = Arc::new(serde_json::from_str(&rollup_config_string)?);
 
     let jwt_secret = read_jwt_file(args.chain_name).wrap_err("to read jwt file")?;
 
@@ -56,17 +56,24 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
     // node, and N will be the first block produced via frags.
     let sync_target_block_number = args.blocks_range.start().saturating_sub(2);
 
-    start_based_op_geth_service(args.chain_name).wrap_err("to start based op service")?;
-    let auth_el_client = EngineClient::new_http(
-        args.l2_engine_rpc_url.clone(),
-        Url::parse("http://0.0.0.0:1234").unwrap(), // NOTE: we don't use the L1
-        Arc::new(rollup_config),
-        jwt_secret,
-    );
+    for instance_num in 0..args.follower_nodes_count {
+        info!("Starting based-op-geth-{instance_num}");
+        start_based_op_geth_service(args.chain_name, instance_num)
+            .wrap_err("to start based op service")?;
+        let env = format!("BOP_REPLAY_BASED_OP_GETH_{instance_num}_ENGINE_RPC_PORT");
+        let port = std::env::var(env.clone()).wrap_err(env)?;
+        let engine_url = format!("http://{}:{}", get_ip(), port).parse::<Url>()?;
+        let auth_el_client = EngineClient::new_http(
+            engine_url,
+            Url::parse("http://0.0.0.0:1234").unwrap(), // NOTE: we don't use the L1
+            rollup_config.clone(),
+            jwt_secret,
+        );
 
-    wait_for_based_op_geth_sync(auth_el_client, rpc_client, sync_target_block_number)
-        .await
-        .wrap_err("failed to wait for based-op-geth sync")?;
+        wait_for_based_op_geth_sync(auth_el_client, rpc_client.clone(), sync_target_block_number)
+            .await
+            .wrap_err("failed to wait for based-op-geth sync")?;
+    }
 
     info!("Starting based-registry");
     start_based_registry(args.chain_name).wrap_err("to start based-registry")?;
