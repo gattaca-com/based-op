@@ -156,7 +156,7 @@ impl<Db> SequencerContext<Db> {
     }
 }
 
-impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
+impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
     pub fn seal_frag(
         &mut self,
         mut sorting_data: SortingData<Db>,
@@ -171,6 +171,7 @@ impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
+        self.tx_pool.handle_new_frag(self.base_fee, self.shared_state.as_ref(), false, None);
         (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
     }
 }
@@ -227,6 +228,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         // Apply must include
         sorting.apply_block_start_to_state(self, simulator_evm_block_params).expect("shouldn't fail");
         self.tx_pool.remove_mined_txs(sorting.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
+        self.tx_pool.handle_new_frag(self.base_fee, self.shared_state.as_ref(), false, None);
 
         (seq, sorting)
     }
@@ -400,7 +402,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
 
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
-            self.tx_pool.handle_new_block(base_fee, self.shared_state.as_ref(), false, None);
+            self.tx_pool.handle_new_frag(base_fee, self.shared_state.as_ref(), false, None);
         }
 
         blocks_to_fetch

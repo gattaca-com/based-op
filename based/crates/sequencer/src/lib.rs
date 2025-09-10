@@ -540,7 +540,7 @@ where
         self
     }
 }
-impl<Db: Clone + DatabaseRef> SequencerState<Db> {
+impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
     /// Performs periodic state machine updates:
     ///
     /// - Seals transaction fragments when timing threshold reached
