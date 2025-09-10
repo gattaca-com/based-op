@@ -1,19 +1,83 @@
-The chain replay driver is responsible for making the chain progress during
-the chain replication testing, and checking its correctness.
+## About
 
-After a chain replication testground has been spawned with the
-spawner component, the driver will be responsible to send sequencer messages
-in the p2p network and engine API calls to driver the chain forward. It is
-essentially a bare-bone replacement for `op-node` which allows more control over
-what's happening.
+Chain replication provides a testground where it possible to replay a range of
+past L2 blocks. The goal is to assess whether the based-op stack is able to
+handle consistently some load, and end up with the same state as the target
+chain it is replaying.
 
-The driver during is lifecycle is responsible of the following:
+### Chain support
 
-1. Send the initial unsafe payload with block before chain replication, to kick
-   off the follower (based)-op-nodes.
-2. Send engine API messages to the gateway to control its state transition, and
-   moving it into its sorting state
-3. Send transactions to the Gateway, so that block production is triggered with
-   the contents of the blocks we want to replay
-4. Make followed based nodes create blocks and compare them with the provided
-   verifier L2 EL.
+The chain supported is based-op-sepolia. While some of the components are
+chain-agnostic, currently full-support for other op-stack chains would require
+either some specific credentials (like the sequencer key), or making some of the
+gateway and chain replication internals compatible with past version of Engine
+API messages.
+
+## Running it
+
+### OS and Docker compatibility
+
+In brief:
+
+1. Run this testground on a Linux system
+2. [Rootless Docker](https://docs.docker.com/engine/security/rootless/) is
+   required for it to work.
+
+**Rationale**
+
+While developing this testground on a MacOS laptop, I've been fairly surprised
+in seeing my Gateway service silently killed by the Linux kernel with a `SIGBUS`
+error. After many attempts at troubleshooting, I narrowed it down to some
+incompatibilities in volume mounting between MacOS and Linux of the Reth (and
+underlying MDBX) database uses by the Gateway.
+
+Rootless Docker is required because the binary interacts with some of the
+volumes mounted in Docker compose. The binary needs to have read-access to the
+Gateway database to check its synchronization or rollback status and wait
+accordingly. If the Docker daemon is run as root, volumes like the database can
+only be read by root.
+
+### Starting it up
+
+To get started, make a copy of the `.env.example` file:
+
+```sh
+cp .env.example .env
+```
+
+Edit your `.env` file if needed. What you'll want to edit mainly is the
+`BOP_REPLAY_BLOCKS_RANGE` variable, which targets which blocks we want to replay
+in the test.
+
+Then, start the binary with `cargo run`.
+
+## How it works
+
+Internally, the replication is achieve with two main components: a _spawner_,
+and a _driver_, that run in the same binary.
+
+**Spawner**
+
+The spawner, as the name suggests, is responsible of spinning up all (or most)
+of the follower node services and their configuration requirements, including:
+`based-op-geth`, `based-op-node`, `based-registry`, `based-gateway`.
+
+Moreover, the spawner duty is to make sure all the components are at the right
+head of the L2 chain we want to replay. As such, it sends either synchronization
+or rollback signals to the required components.
+
+To spawn these components, the binary will runs small child processes with
+commands to spin up dedicated docker compose services.
+
+**Driver**
+
+The driver is the long lived service that runs in the binary and drives the
+chain replication testing until completeness. To achieve so, such component
+behaves as an arbiter, or coordinator, between the different components of the
+testground.
+
+In particular, the driver is responsible to move the Gateway to the different
+stages of block production. As such, the driver sends proper Engine API messages
+and runs along with a [Kona](https://github.com/op-rs/kona) sequencer node to
+send unsafe L2 payloads. This setup is crucial to achieve the functionality of a
+main node while being very flexible for our use-case.
