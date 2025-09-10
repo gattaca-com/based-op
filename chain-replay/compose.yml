@@ -77,10 +77,11 @@ services:
       - "${BOP_REPLAY_REGISTRY_PORT}:${BOP_REPLAY_REGISTRY_PORT}"
 
   bop-replay-based-op-node:
-    image: ghcr.io/chainbound/op-node:586ab88da3cc0b0123e987c58bf5ed92a946b029
+    image: ghcr.io/chainbound/op-node:2281ceaf2d2f985b8f6a9d97bb4e7439a6e27a91-10-09-2025
     container_name: bop-replay-based-op-node
     environment:
       GOLOG_LOG_LEVEL: "debug"
+      BOP_REPLAY: "true"
     command:
       - op-node
       - --l1.beacon=${BOP_REPLAY_L1_BEACON_RPC_URL}
@@ -106,7 +107,6 @@ services:
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --syncmode=execution-layer
       - --l2.skip-sync-start-check=true # As recommended in https://github.com/gattaca-com/based-optimism/blob/8d2ac48c88bf659da9a3dbe4ef04c0fbbfc7b240/op-node/rollup/sync/config.go#L67-L72
-      - --unsafe-allow-old-payloads=true
       - --verifier.l1-confs=1
     volumes:
       - ./data/node:/data/op-node
