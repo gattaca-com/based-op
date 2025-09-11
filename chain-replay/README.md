@@ -50,6 +50,14 @@ the main binary and all the containers that are spawn. What you'll want to edit
 mainly is the `BOP_REPLAY_BLOCKS_RANGE` variable, which targets which blocks we
 want to replay in the test.
 
+Most metrics and telemetry services are configured to interact with
+`/var/log/containers`. Since we're using rootless docker, for metrics we have to
+adjust a directory permission:
+
+```sh
+sudo chmod -R 777 /var/log/containers
+```
+
 Then, start the binary with `cargo run`.
 
 ## How it works
