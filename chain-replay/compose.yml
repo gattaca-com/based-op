@@ -66,6 +66,8 @@ services:
   bop-replay-based-registry:
     image: local_based_registry
     container_name: bop-replay-based-registry
+    environment:
+      - RUST_LOG=${BOP_REPLAY_RUST_LOG:-}
     command:
       - --registry.path=/config/registry.json
       - --eth_rpc_url=http://bop-replay-based-op-geth:${BOP_REPLAY_BASED_OP_GETH_RPC_PORT}
@@ -122,7 +124,7 @@ services:
     # pull_policy: always
     container_name: bop-replay-based-gateway
     environment:
-      - RUST_LOG=${BOP_RELAY_RUST_LOG_GATEWAY:-}
+      - RUST_LOG=${BOP_REPLAY_RUST_LOG:-}
     command:
       - --rpc.port_no_auth=${BOP_REPLAY_GATEWAY_PORT_NO_AUTH}
       - --rpc.port=${BOP_REPLAY_GATEWAY_PORT}
