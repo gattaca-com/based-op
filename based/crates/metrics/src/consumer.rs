@@ -14,13 +14,15 @@ pub struct MetricsConsumer {
 }
 
 impl MetricsConsumer {
-    pub fn run(mut self) {
-        vsync(Some(Duration::from_millis(1)), || self.run2())
-    }
-
     /// Runs the metrics consumer, consuming telemetry updates from shared queues,
     /// and converting them into metrics.
-    fn run2(&mut self) {
+    pub fn run(mut self) {
+        loop {
+            vsync(Some(Duration::from_millis(1)), || self._run())
+        }
+    }
+
+    fn _run(&mut self) {
         let max_drain = Duration::from_millis(1);
 
         let mut tick = Repeater::every(Duration::from_millis(1000));
