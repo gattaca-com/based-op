@@ -2,7 +2,7 @@ use bop_common::{
     communication::Consumer,
     metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
     telemetry::{Frag, Telemetry, TelemetryUpdate, Tx, system::SystemNotification, telemetry_queue},
-    time::{Duration, Instant, Repeater, vsync},
+    time::{Duration, Instant, Repeater},
 };
 use metrics::{counter, gauge, histogram};
 use tracing::{info, trace};
@@ -17,26 +17,21 @@ impl MetricsConsumer {
     /// Runs the metrics consumer, consuming telemetry updates from shared queues,
     /// and converting them into metrics.
     pub fn run(mut self) {
-        loop {
-            vsync(Some(Duration::from_millis(1)), || self._run())
-        }
-    }
-
-    fn _run(&mut self) {
-        let max_drain = Duration::from_millis(1);
+        let tick_dur = Duration::from_millis(1);
 
         let mut tick = Repeater::every(Duration::from_millis(1000));
         let mut event_count_last_checkpoint = Instant::now();
         let mut event_count_since_checkpoint = 0;
 
         loop {
-            consume_for(&mut self.telemetry, max_drain, |update| {
+            let start = Instant::now();
+            consume_for(&mut self.telemetry, tick_dur, |update| {
                 trace!(?update, "Received telemetry update");
                 Self::process_telemetry_queue_update(update);
                 event_count_since_checkpoint += 1;
             });
 
-            consume_for(&mut self.metrics, max_drain, |update| {
+            consume_for(&mut self.metrics, tick_dur, |update| {
                 trace!(?update, "Received metrics update");
                 Self::process_metrics_queue_update(update);
                 event_count_since_checkpoint += 1;
@@ -51,6 +46,11 @@ impl MetricsConsumer {
                 event_count_last_checkpoint = Instant::now();
                 event_count_since_checkpoint = 0;
             };
+
+            let rem = tick_dur.saturating_sub(start.elapsed());
+            if rem > Duration::from_nanos(0) {
+                std::thread::sleep(rem.into());
+            }
         }
     }
 
