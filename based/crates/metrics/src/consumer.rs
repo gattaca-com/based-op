@@ -1,3 +1,8 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
 use bop_common::{
     communication::Consumer,
     metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
@@ -18,6 +23,10 @@ impl MetricsConsumer {
     /// and converting them into metrics.
     pub fn run(mut self) {
         let tick_dur = Duration::from_millis(1);
+
+        let term = Arc::new(AtomicBool::new(false));
+        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
+            .expect("couldn't register signal hook for some reason");
 
         let mut tick = Repeater::every(Duration::from_millis(1000));
         let mut event_count_last_checkpoint = Instant::now();
@@ -50,6 +59,10 @@ impl MetricsConsumer {
             let rem = tick_dur.saturating_sub(start.elapsed());
             if rem > Duration::ZERO {
                 std::thread::sleep(rem.into());
+            }
+
+            if term.load(Ordering::Relaxed) {
+                return;
             }
         }
     }
