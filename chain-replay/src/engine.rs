@@ -12,6 +12,7 @@ use kona_engine::EngineClient;
 use op_alloy_provider::ext::engine::OpEngineApi;
 use op_alloy_rpc_types_engine::{OpExecutionPayload, OpPayloadAttributes};
 
+/// An extension trait for the Engine API for sending version-agnostic messages.
 pub trait EngineExt {
     async fn new_payload(
         &self,

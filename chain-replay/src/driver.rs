@@ -277,6 +277,7 @@ async fn wait_for_peers(network_inbound: &NetworkInboundData, expected_peers_cou
     }
 }
 
+/// Routine to periodically dump the number of peers we have.
 async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
     let retry_time = Duration::from_secs(10);
     loop {
@@ -299,6 +300,13 @@ async fn print_peers(p2p_rpc: mpsc::Sender<P2pRpcRequest>) -> ! {
     }
 }
 
+/// The actual chain replication logic. It iters through the block numbers specified in the
+/// configured range, and sends all transactions within a certain block to the gateway, along with
+/// Engine API messages to drive it through its various states.
+///
+/// After the gateway seals a block, retrieved via a `GetPayload` call, it is compared with the
+/// block from the chain we're targeting. In case of block hash mismatch, an helper function is
+/// called to show differences between the two.
 async fn run_verification_body(
     clients: &Clients,
     network_inbound: &NetworkInboundData,

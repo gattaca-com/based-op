@@ -80,6 +80,11 @@ impl ChainName {
     }
 }
 
+/// Ensure the folder containing chain configuration data is configured correctly, with all files
+/// in place.
+///
+/// On every call of this function, the `.env` and `compose.yml` file from this project override
+/// what was used previously.
 pub fn ensure_chain_folder(chain_name: ChainName) -> io::Result<()> {
     let config_dir_path = chain_name.config_directory_path();
 

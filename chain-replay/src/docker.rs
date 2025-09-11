@@ -51,6 +51,7 @@ pub fn start_based_op_geth_service(chain_name: ChainName, instance_num: u8) -> i
     output_to_result(&command_str, output)
 }
 
+/// Start the based-registry service for the given chain.
 pub fn start_based_registry(chain_name: ChainName) -> io::Result<()> {
     let compose_file_path = chain_name.compose_file_path();
     let env_file_path = chain_name.env_file_path();

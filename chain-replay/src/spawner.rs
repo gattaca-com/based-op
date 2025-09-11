@@ -39,6 +39,10 @@ use crate::{
 ///
 /// Moreover, it ensure all of them are synced and eventually rolled back to the required state to
 /// being chain replication.
+///
+/// NOTE: in practice, based-op-node isn't spawn here, and the reason is for faster startup times,
+/// so that when it starts the dial to the static peer is immediately successful and it is not
+/// retried after a minute.
 pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
     ensure_chain_folder(args.chain_name).wrap_err("ensure chain folder is configured")?;
 

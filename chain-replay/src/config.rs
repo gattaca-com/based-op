@@ -10,6 +10,7 @@ use crate::chain::ChainName;
 #[derive(clap::Parser, Debug, Clone)]
 pub struct Args {
     /// The number of pairs of based-op-geth/based-op-node follower nodes. Defaults to 1.
+    /// The maximum supported is currently 2.
     #[arg(
         long,
         env = "BOP_REPLAY_FOLLOWER_NODES_COUNT",

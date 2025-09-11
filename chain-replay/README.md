@@ -45,9 +45,10 @@ To get started, make a copy of the `.env.example` file:
 cp .env.example .env
 ```
 
-Edit your `.env` file if needed. What you'll want to edit mainly is the
-`BOP_REPLAY_BLOCKS_RANGE` variable, which targets which blocks we want to replay
-in the test.
+Edit your `.env` file if needed. This environment variable file configures both
+the main binary and all the containers that are spawn. What you'll want to edit
+mainly is the `BOP_REPLAY_BLOCKS_RANGE` variable, which targets which blocks we
+want to replay in the test.
 
 Then, start the binary with `cargo run`.
 
@@ -65,6 +66,9 @@ of the follower node services and their configuration requirements, including:
 Moreover, the spawner duty is to make sure all the components are at the right
 head of the L2 chain we want to replay. As such, it sends either synchronization
 or rollback signals to the required components.
+
+At the time of writing, the spawner and its docker compose file is able to spawn
+two pairs of follower nodes, so that also frag propagation is tested.
 
 To spawn these components, the binary will runs small child processes with
 commands to spin up dedicated docker compose services.
