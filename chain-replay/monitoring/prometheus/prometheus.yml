@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: "bop-metrics-exporter"
+    static_configs:
+      - targets: ["based-metrics-exporter:9000"]
+  - job_name: "bop-replay-based-op-geth-0"
+    scheme: http
+    metrics_path: "/debug/metrics/prometheus"
+    static_configs:
+      - targets:
+          ["${BOP_REPLAY_HOST_IP}:${BOP_RELAY_BASED_OP_GETH_0_METRICS_PORT}"]
+  - job_name: "bop-replay-based-op-geth-1"
+    scheme: http
+    metrics_path: "/debug/metrics/prometheus"
+    static_configs:
+      - targets:
+          ["${BOP_REPLAY_HOST_IP}:${BOP_RELAY_BASED_OP_GETH_1_METRICS_PORT}"]
+  - job_name: "bop-replay-based-op-node-0"
+    static_configs:
+      - targets:
+          ["${BOP_REPLAY_HOST_IP}:${BOP_RELAY_BASED_OP_NODE_0_METRICS_PORT}"]
+  - job_name: "bop-replay-based-op-node-1"
+    static_configs:
+      - targets:
+          ["${BOP_REPLAY_HOST_IP}:${BOP_RELAY_BASED_OP_NODE_1_METRICS_PORT}"]

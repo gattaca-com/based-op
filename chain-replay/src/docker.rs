@@ -120,14 +120,18 @@ pub fn start_based_gatway(args: Args) -> io::Result<()> {
     output_to_result(&command_str, output)
 }
 
-pub fn start_monitoring_compose() -> io::Result<()> {
-    let command_str = "docker compose --file ../monitoring/compose.yml up -d";
+pub fn start_monitoring_compose(chain_name: ChainName) -> io::Result<()> {
+    let env_file_path = chain_name.env_file_path();
 
+    let command_str = format!(
+        "docker compose --file ./monitoring/compose.yml --env-file {} up -d",
+        env_file_path.to_string_lossy()
+    );
     let mut args = command_str.trim_matches('"').split(' ');
 
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
     let output = command.output()?;
 
-    output_to_result(command_str, output)
+    output_to_result(&command_str, output)
 }

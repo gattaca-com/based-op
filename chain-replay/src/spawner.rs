@@ -111,7 +111,7 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
     info!("Gateway synced!");
 
     info!("Starting monitoring services");
-    start_monitoring_compose().wrap_err("failed to start monitoring services")?;
+    start_monitoring_compose(args.chain_name).wrap_err("failed to start monitoring services")?;
 
     Ok(())
 }
