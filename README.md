@@ -11,7 +11,8 @@ The following steps have been tested on Sepolia, with a previously deployed L2 c
 5. Normally you should see some logs starting
 6. `blockscout` should be up and running at `http://0.0.0.0:4000` 
 7a. `make stop-main-node` to stop all the sequencing services
-7b. `make logs-main-node` to output logs of all the main services
+7b. `make stop-monitoring` to stop all monitoring services (Grafana, Prometheus, etc)
+7c. `make logs-main-node` to output logs of all the main services
 
 ### Deploy a new l2 chain on Sepolia
 1. To deploy a new chain on l2, make sure to have an address on Sepolia with some funds. This will be used as the `MAIN`/`vault` address.
@@ -21,7 +22,8 @@ The following steps have been tested on Sepolia, with a previously deployed L2 c
 5. Normally you should see some logs starting
 6. `blockscout` should be up and running at `http://0.0.0.0:4000` 
 7a. `make stop-main-node` to stop all the sequencing services
-7b. `make logs-main-node` to output logs of all the main services
+7b. `make stop-monitoring` to stop all monitoring services (Grafana, Prometheus, etc)
+7c. `make logs-main-node` to output logs of all the main services
 
 ### Run a Based Gateway
 

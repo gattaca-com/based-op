@@ -1,0 +1,69 @@
+server:
+  http_listen_port: 9085
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # docker containers with label logs=enabled
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["logs=enabled"] # only discover containers with label logs=enabled
+    pipeline_stages:
+      - cri: {} # handles container log framing
+      - json: # parse JSON logs if your app prints JSON
+          expressions:
+            level: level
+            msg: msg
+            timestamp: timestamp
+      - labels: # promote low-cardinality fields to labels
+          level:
+          service:
+          env:
+    relabel_configs:
+      # keep only containers with label logs=enabled
+      - source_labels: [__meta_docker_container_label_logs]
+        regex: "enabled"
+        action: keep
+      # set job label from docker label "service"
+      - source_labels: [__meta_docker_container_label_service]
+        target_label: job
+      # handy default labels from docker metadata
+      - source_labels: [__meta_docker_container_name]
+        target_label: container
+      - source_labels: [__meta_docker_container_image]
+        target_label: image
+      - source_labels: [__meta_docker_container_label_env]
+        target_label: env
+
+  # structured files from containers on /var/log/containers
+  - job_name: container_files
+    static_configs:
+      - targets: [localhost]
+        labels:
+          # path format: /var/log/containers/<project>/<service>/app-*.log.2025-08-27
+          __path__: /var/log/containers/*/*/*.log* # rotate-friendly glob
+    pipeline_stages:
+      # derive labels from the real file path (the 'filename' label)
+      - regex:
+          source: filename
+          expression: '.*/(?P<project>[^/]+)/(?P<service>[^/]+)/[^/]+\.log\.[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      - labels:
+          project:
+          service:
+      - json:
+          expressions:
+            level: level
+            service: service
+            msg: msg
+    relabel_configs:
+      - replacement: "${HOSTNAME}"
+        target_label: host

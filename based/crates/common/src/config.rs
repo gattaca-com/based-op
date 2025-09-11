@@ -80,7 +80,7 @@ pub struct GatewayArgs {
     #[arg(long = "trace")]
     pub trace: bool,
     /// Enable file logging
-    #[arg(long = "log.enable_file_logging", default_value_t = true)]
+    #[arg(long = "log.disable_file_logging", action = clap::ArgAction::SetFalse, default_value_t = true)]
     pub file_logging: bool,
     /// Prefix of log files
     #[arg(long = "log.prefix", default_value = "bop-gateway.log")]
