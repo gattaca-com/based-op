@@ -11,6 +11,7 @@ use tracing::debug;
 /// Waits for the EL client to be on a certain head.
 pub async fn wait_for_el_on_head<N: Network>(
     provider: &RootProvider<N>,
+    instance_num: u8,
     target: u64,
 ) -> TransportResult<()> {
     loop {
@@ -21,7 +22,7 @@ pub async fn wait_for_el_on_head<N: Network>(
         } else {
             debug!(
                 head = block_number,
-                target, "Waiting for based-op-geth to be on the correct head"
+                target, "Waiting for based-op-geth-{instance_num} to be on the correct head"
             );
         }
     }

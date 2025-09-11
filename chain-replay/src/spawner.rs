@@ -9,6 +9,7 @@ use alloy_genesis::Genesis;
 use eyre::Context as _;
 use kona_engine::EngineClient;
 use kona_genesis::RollupConfig;
+use libp2p::futures::future::join_all;
 use op_alloy_network::Optimism;
 use reth_db::{CanonicalHeaders, cursor::DbCursorRO, open_db_read_only};
 use reth_optimism_chainspec::OpChainSpec;
@@ -56,24 +57,42 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
     // node, and N will be the first block produced via frags.
     let sync_target_block_number = args.blocks_range.start().saturating_sub(2);
 
+    let mut tasks = Vec::new();
     for instance_num in 0..args.follower_nodes_count {
-        info!("Starting based-op-geth-{instance_num}");
-        start_based_op_geth_service(args.chain_name, instance_num)
-            .wrap_err("to start based op service")?;
-        let env = format!("BOP_REPLAY_BASED_OP_GETH_{instance_num}_ENGINE_RPC_PORT");
-        let port = std::env::var(env.clone()).wrap_err(env)?;
-        let engine_url = format!("http://{}:{}", get_ip(), port).parse::<Url>()?;
-        let auth_el_client = EngineClient::new_http(
-            engine_url,
-            Url::parse("http://0.0.0.0:1234").unwrap(), // NOTE: we don't use the L1
-            rollup_config.clone(),
-            jwt_secret,
-        );
+        let rollup_config = rollup_config.clone();
+        let rpc_client = rpc_client.clone();
+        let task = tokio::spawn(async move {
+            info!("Starting based-op-geth-{instance_num}");
+            start_based_op_geth_service(args.chain_name, instance_num)
+                .expect("to start based op service");
+            let env = format!("BOP_REPLAY_BASED_OP_GETH_{instance_num}_ENGINE_RPC_PORT");
+            let port = std::env::var(env.clone()).expect(&env);
+            let engine_url =
+                format!("http://{}:{}", get_ip(), port).parse::<Url>().expect("valid url");
+            let auth_el_client = EngineClient::new_http(
+                engine_url,
+                Url::parse("http://0.0.0.0:1234").unwrap(), // NOTE: we don't use the L1
+                rollup_config.clone(),
+                jwt_secret,
+            );
 
-        wait_for_based_op_geth_sync(auth_el_client, rpc_client.clone(), sync_target_block_number)
+            wait_for_based_op_geth_sync(
+                auth_el_client,
+                instance_num,
+                rpc_client.clone(),
+                sync_target_block_number,
+            )
             .await
-            .wrap_err("failed to wait for based-op-geth sync")?;
+            .unwrap_or_else(|_| panic!("failed to wait for based-op-geth-{instance_num} sync"));
+        });
+        tasks.push(task);
     }
+
+    join_all(tasks).await.iter().for_each(|t| {
+        if let Err(e) = t {
+            panic!("based-op-geth task failed: {e}")
+        }
+    });
 
     info!("Starting based-registry");
     start_based_registry(args.chain_name).wrap_err("to start based-registry")?;
@@ -94,6 +113,7 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
 /// necessary.
 pub async fn wait_for_based_op_geth_sync(
     based_op_geth: EngineClient,
+    instance_num: u8,
     rpc_client: RootProvider<Optimism>,
     sync_target: u64,
 ) -> eyre::Result<()> {
@@ -113,28 +133,28 @@ pub async fn wait_for_based_op_geth_sync(
     let block_to_sync_hash = block_to_sync.hash();
     let parent_beacon_block_root = block_to_sync.header.parent_beacon_block_root;
 
-    info!("Waiting for engine to be up...");
+    info!("Waiting for based-op-geth engine {instance_num} to be up...");
     let highest_known_block = wait_for_based_op_geth_up(&based_op_geth).await?;
 
     let execution_payload_envelope = execution_payload_envelope_from_block(block_to_sync);
     let execution_payload = execution_payload_envelope.execution_payload;
     let is_at_least_v3 = execution_payload.as_v3().is_some();
 
-    info!("Current block number of local geth: {highest_known_block}");
+    info!("Current block number of local based-op-geth-{instance_num}: {highest_known_block}");
 
     let should_sync = highest_known_block < sync_target;
     let should_rollback = highest_known_block > sync_target;
 
     if should_sync {
-        info!("Sending new payload to based-op-geth, so we trigger sync next");
+        info!("Sending new payload to based-op-geth-{instance_num}, so we trigger sync next");
         let status = based_op_geth
             .new_payload(execution_payload, parent_beacon_block_root)
             .await
             .wrap_err("call new payload")?;
-        info!("New payload status: {status:?}");
+        info!("New payload status from based-op-geth-{instance_num}: {status:?}");
     } else if should_rollback {
         info!(
-            "based-op-geth is too far ahead on the chain, rolling back the chain via debug_setHead + FCU. This can take some time..."
+            "based-op-geth-{instance_num} is too far ahead on the chain, rolling back the chain via debug_setHead + FCU. This can take some time..."
         );
         // NOTE: this call might take a very long time because rolling back takes time, as such we
         // don't check for errors here.
@@ -142,7 +162,7 @@ pub async fn wait_for_based_op_geth_sync(
     }
 
     info!(
-        "Sending fork choice update with starting block to replay. If rolling back, it waits the previous call is completed."
+        "Sending fork choice update to based-op-geth-{instance_num} with starting block to replay. If rolling back, it waits the previous call is completed."
     );
     let fcs = ForkchoiceState {
         head_block_hash: block_to_sync_hash,
@@ -157,8 +177,8 @@ pub async fn wait_for_based_op_geth_sync(
     info!("Fork choice update result: {update:?}");
 
     if should_sync || should_rollback {
-        info!("Checking whether based-op-geth is at the right head target");
-        wait_for_el_on_head(based_op_geth.l2_engine(), sync_target)
+        info!("Checking whether based-op-geth-{instance_num} is at the right head target");
+        wait_for_el_on_head(based_op_geth.l2_engine(), instance_num, sync_target)
             .await
             .wrap_err("make sync status calls")?;
 
