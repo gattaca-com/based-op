@@ -21,11 +21,11 @@ async fn main() -> eyre::Result<()> {
     let server = PortalServer::new(args.clone()).await?;
 
     if args.enable_metrics {
-        let consumer = MetricsConsumer::default();
-        tokio::spawn(async move {
-            install_prometheus_exporter(args.metrics_port);
+        install_prometheus_exporter(args.metrics_port);
+        std::thread::spawn(move || {
+            let consumer = MetricsConsumer::default();
             info!("Prometheus server started on port {}", args.metrics_port);
-            consumer.run().await
+            consumer.run();
         });
     }
 

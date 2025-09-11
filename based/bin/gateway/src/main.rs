@@ -79,11 +79,11 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             .into();
 
         if args.enable_metrics {
-            let consumer = MetricsConsumer::default();
-            rt.spawn(async move {
+            s.spawn(move || {
+                let consumer = MetricsConsumer::default();
                 install_prometheus_exporter(args.metrics_port);
                 info!("Prometheus server started on port {}", args.metrics_port);
-                consumer.run().await
+                consumer.run();
             });
         }
 

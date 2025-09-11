@@ -1,4 +1,4 @@
-use bop_common::{metrics::install_prometheus_exporter, utils::wait_for_signal};
+use bop_common::metrics::install_prometheus_exporter;
 use bop_metrics::MetricsConsumer;
 use clap::Parser;
 use tracing::{info, level_filters::LevelFilter};
@@ -12,8 +12,7 @@ struct Args {
     port: u16,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     // Parse CLI arguments
     let args = Args::parse();
 
@@ -27,9 +26,5 @@ async fn main() {
 
     let consumer = MetricsConsumer::default();
 
-    // Start the metrics consumer loop
-    tokio::select! {
-        _ = consumer.run() => {},
-        _ = wait_for_signal() => info!("Shutdown signal received")
-    }
+    consumer.run();
 }
