@@ -99,13 +99,11 @@ pub fn ensure_chain_folder(chain_name: ChainName) -> io::Result<()> {
     fs::copy(".env", env_path)?;
 
     let compose_path = chain_name.compose_file_path();
-    if !fs::exists(compose_path.clone())? {
-        info!(
-            "Creating docker-compose file for chain '{chain_name}' at: {:?}",
-            compose_path.clone()
-        );
-        fs::copy("compose.yml", compose_path)?;
-    }
+    info!(
+        "Copying compose.yml docker-compose file for chain '{chain_name}' at: {:?}",
+        compose_path.clone()
+    );
+    fs::copy("compose.yml", compose_path)?;
 
     let genesis_path = chain_name.genesis_file_path();
     if !fs::exists(genesis_path.clone())? {
