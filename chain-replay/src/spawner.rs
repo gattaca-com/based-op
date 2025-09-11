@@ -23,7 +23,7 @@ use crate::{
     config::Args,
     docker::{
         ensure_all_containers_down, start_based_gatway, start_based_op_geth_service,
-        start_based_registry,
+        start_based_registry, start_monitoring_compose,
     },
     engine::EngineExt as _,
     rpc::{debug_set_head, wait_for_el_on_head},
@@ -109,6 +109,9 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
         .await
         .wrap_err("failed to check gateway sync status")?;
     info!("Gateway synced!");
+
+    info!("Starting monitoring services");
+    start_monitoring_compose().wrap_err("failed to start monitoring services")?;
 
     Ok(())
 }
