@@ -48,7 +48,7 @@ impl MetricsConsumer {
             };
 
             let rem = tick_dur.saturating_sub(start.elapsed());
-            if rem > Duration::from_nanos(0) {
+            if rem > Duration::ZERO {
                 std::thread::sleep(rem.into());
             }
         }
