@@ -142,7 +142,7 @@ services:
       - "${BOP_REPLAY_BASED_OP_GETH_1_METRICS}:${BOP_REPLAY_BASED_OP_GETH_1_METRICS}"
 
   bop-replay-based-registry:
-    image: local_based_registry
+    image: ghcr.io/chainbound/based-op/registry:latest-amd64
     container_name: bop-replay-based-registry
     environment:
       - RUST_LOG=${BOP_REPLAY_RUST_LOG:-}
