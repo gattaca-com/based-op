@@ -1,3 +1,4 @@
+use metrics_exporter_prometheus::PrometheusBuilder;
 use revm_primitives::Address;
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
@@ -12,6 +13,15 @@ use crate::{
 pub fn metrics_queue() -> Queue<MetricsUpdate> {
     Queue::create_or_open_shared(queues_dir().join("metrics"), 2usize.pow(18), QueueType::MPMC)
         .expect("Can't create or open metrics queue")
+}
+
+/// Installs the prometheus exporter on the given port.
+pub fn install_prometheus_exporter(port: u16) {
+    PrometheusBuilder::new()
+        .with_http_listener(([0, 0, 0, 0], port))
+        .add_global_label("instance", "based-optimism")
+        .install()
+        .expect("Failed to install prometheus exporter");
 }
 
 /// A metrics update is a message sent to the metrics consumer.

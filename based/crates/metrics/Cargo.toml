@@ -6,6 +6,6 @@ version.workspace = true
 
 [dependencies]
 bop-common.workspace = true
-tokio.workspace = true
-tracing.workspace = true
 metrics.workspace = true
+signal-hook.workspace = true
+tracing.workspace = true

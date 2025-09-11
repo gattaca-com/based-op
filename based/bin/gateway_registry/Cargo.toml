@@ -9,6 +9,7 @@ version.workspace = true
 alloy-primitives.workspace = true
 alloy-provider.workspace = true
 bop-common.workspace = true
+bop-metrics.workspace = true
 clap.workspace = true
 eyre.workspace = true
 jsonrpsee.workspace = true

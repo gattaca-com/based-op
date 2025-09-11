@@ -5,16 +5,18 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-rpc-types.workspace = true
 bop-common.workspace = true
+bop-metrics.workspace = true
 clap.workspace = true
 eyre.workspace = true
 futures.workspace = true
+indexmap = "2.10.0"
 jsonrpsee.workspace = true
 op-alloy-rpc-types.workspace = true
 op-alloy-rpc-types-engine.workspace = true
-alloy-eips.workspace = true
 parking_lot.workspace = true
 reqwest.workspace = true
 reth-rpc-layer.workspace = true
@@ -24,4 +26,3 @@ tokio.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
-indexmap = "2.10.0"
