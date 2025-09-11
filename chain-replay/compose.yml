@@ -148,6 +148,8 @@ services:
     environment:
       GOLOG_LOG_LEVEL: "debug"
       BOP_REPLAY: "true"
+      BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_IP: "${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_IP:-}"
+      BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_IP: "${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_IP:-}"
     command:
       - op-node
       - --l1.beacon=${BOP_REPLAY_L1_BEACON_RPC_URL}
@@ -163,7 +165,7 @@ services:
       - --p2p.listen.tcp=${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}
       - --p2p.listen.udp=${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}
       - --p2p.no-discovery=true
-      - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
+      - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU,/ip4/${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_IP}/tcp/${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}/p2p/16Uiu2HAkyh1AzdmFQR1RvgpHTtogShdKnhZDPaPLGJM4jHePnuyt
       - --p2p.priv.raw=6ef638ab9a0c56cab2ce058ec2280d2d5f655ec29dafac0cf46b8b66b82051da
       - --p2p.scoring=none
       - --registry=http://bop-replay-based-registry:${BOP_REPLAY_REGISTRY_PORT}
@@ -191,6 +193,8 @@ services:
     environment:
       GOLOG_LOG_LEVEL: "debug"
       BOP_REPLAY: "true"
+      BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_IP: "${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_IP:-}"
+      BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_IP: "${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_IP:-}"
     command:
       - op-node
       - --l1.beacon=${BOP_REPLAY_L1_BEACON_RPC_URL}
@@ -206,7 +210,7 @@ services:
       - --p2p.listen.tcp=${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}
       - --p2p.listen.udp=${BOP_REPLAY_BASED_OP_NODE_1_GOSSIP_PORT}
       - --p2p.no-discovery=true
-      - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU
+      - --p2p.static=/ip4/${BOP_REPLAY_KONA_SEQUENCER_IP}/tcp/${BOP_REPLAY_KONA_SEQUENCER_GOSSIP_PORT}/p2p/16Uiu2HAm3d6XznXaJu4YdfA1Gn8GBabgtj8qydx8jSowMsXjcqnU,/ip4/${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_IP}/tcp/${BOP_REPLAY_BASED_OP_NODE_0_GOSSIP_PORT}/p2p/16Uiu2HAkzgQVX4Pt4TLUqC13xkBux1ZNunVDVDAknjdtmq8eDGjJ
       - --p2p.priv.raw=8666bda406d6139c5bed90843506d6eec379f917f041bf933447218fa53b2042
       - --p2p.scoring=none
       - --registry=http://bop-replay-based-registry:${BOP_REPLAY_REGISTRY_PORT}

@@ -125,7 +125,7 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
     for instance_num in 0..args.follower_nodes_count {
         info!("Starting based-op-node-{instance_num}");
-        start_based_op_node_service(args.chain_name, instance_num)
+        start_based_op_node_service(args.chain_name, instance_num, args.follower_nodes_count)
             .wrap_err("to start based-op-node")?;
     }
 

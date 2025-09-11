@@ -70,7 +70,11 @@ pub fn start_based_registry(chain_name: ChainName) -> io::Result<()> {
 }
 
 /// Starts the based-op-geth service for the given chain, setting the sync target hash
-pub fn start_based_op_node_service(chain_name: ChainName, instance_num: u8) -> io::Result<()> {
+pub fn start_based_op_node_service(
+    chain_name: ChainName,
+    instance_num: u8,
+    total_follower_peers: u8,
+) -> io::Result<()> {
     let compose_file_path = chain_name.compose_file_path();
     let env_file_path = chain_name.env_file_path();
 
@@ -84,6 +88,9 @@ pub fn start_based_op_node_service(chain_name: ChainName, instance_num: u8) -> i
 
     let mut command = Command::new(args.next().expect("docker"));
     command.args(args);
+    for i in 0..total_follower_peers {
+        command.env(format!("BOP_REPLAY_BASED_OP_NODE_{i}_GOSSIP_IP"), get_ip().to_string());
+    }
     command.env("BOP_REPLAY_KONA_SEQUENCER_IP", get_ip().to_string());
     let output = command.output()?;
 
