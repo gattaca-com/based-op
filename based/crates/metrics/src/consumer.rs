@@ -49,7 +49,6 @@ impl MetricsConsumer {
             if tick.fired() {
                 let elapsed = event_count_last_checkpoint.elapsed();
                 let eps = event_count_since_checkpoint as f64 / elapsed.as_secs();
-                gauge!("bop_metric_events_per_second").set(eps);
                 info!("Metric events/s: {:.2}", eps);
 
                 event_count_last_checkpoint = Instant::now();
