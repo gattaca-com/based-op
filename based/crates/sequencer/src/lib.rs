@@ -107,8 +107,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0 &&
-                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0
+                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -551,7 +551,10 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
         use SequencerState::*;
         let base_fee = data.as_ref().basefee;
         match self {
-            Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
+            Sorting(mut seq, mut sorting_data) if sorting_data.should_seal_frag() => {
+                // There might still be left over tx to apply from a previous completed simulation.
+                sorting_data.maybe_apply(base_fee);
+
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
                 // Reset the tx pool.
