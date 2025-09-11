@@ -4,12 +4,14 @@ use bop_common::{
     actor::{Actor, ActorConfig},
     communication::Spine,
     config::GatewayArgs,
+    metrics::install_prometheus_exporter,
     shared::SharedState,
     signing::ECDSASigner,
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
 use bop_db::{DatabaseRead, init_database};
+use bop_metrics::MetricsConsumer;
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
     Sequencer, SequencerConfig, Simulator,
@@ -75,6 +77,15 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             .build()
             .expect("failed to create runtime")
             .into();
+
+        if args.enable_metrics {
+            s.spawn(move || {
+                let consumer = MetricsConsumer::default();
+                install_prometheus_exporter(args.metrics_port);
+                info!("Prometheus server started on port {}", args.metrics_port);
+                consumer.run();
+            });
+        }
 
         s.spawn({
             let rt = rt.clone();

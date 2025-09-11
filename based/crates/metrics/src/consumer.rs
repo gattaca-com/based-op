@@ -1,13 +1,16 @@
-use std::time::Duration;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use bop_common::{
     communication::Consumer,
     metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
     telemetry::{Frag, Telemetry, TelemetryUpdate, Tx, system::SystemNotification, telemetry_queue},
+    time::{Duration, Instant, Repeater},
 };
 use metrics::{counter, gauge, histogram};
-use tokio::{sync::mpsc, time::Instant};
-use tracing::{error, info, trace};
+use tracing::{info, trace};
 
 /// Consumes telemetry updates from shared memory queues, and converts them into metrics.
 pub struct MetricsConsumer {
@@ -18,62 +21,53 @@ pub struct MetricsConsumer {
 impl MetricsConsumer {
     /// Runs the metrics consumer, consuming telemetry updates from shared queues,
     /// and converting them into metrics.
-    pub async fn run(mut self) {
-        // Drain the queues concurrently.
-        let (telemetry_tx, mut telemetry_rx) = mpsc::channel(2048);
-        tokio::spawn(async move {
-            loop {
-                while let Some(update) = self.telemetry.try_consume() {
-                    trace!(?update, "Received telemetry update");
-                    if telemetry_tx.send(update).await.is_err() {
-                        error!("Telemetry channel is full, dropping update");
-                    }
-                }
-            }
-        });
-        let (metrics_tx, mut metrics_rx) = mpsc::channel(2048);
-        tokio::spawn(async move {
-            loop {
-                while let Some(update) = self.metrics.try_consume() {
-                    trace!(?update, "Received metrics update");
-                    if metrics_tx.send(update).await.is_err() {
-                        error!("Metrics channel is full, dropping update");
-                    }
-                }
-            }
-        });
+    pub fn run(mut self) {
+        let tick_dur = Duration::from_millis(1);
 
-        let mut event_count_checkpoint = tokio::time::interval(Duration::from_millis(1000));
+        let term = Arc::new(AtomicBool::new(false));
+        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
+            .expect("couldn't register signal hook for some reason");
+
+        let mut tick = Repeater::every(Duration::from_millis(1000));
         let mut event_count_last_checkpoint = Instant::now();
         let mut event_count_since_checkpoint = 0;
 
         loop {
-            tokio::select! {
-                Some(update) = telemetry_rx.recv() => {
-                    trace!(?update, "Received telemetry update");
-                    self.process_telemetry_queue_update(update);
-                    event_count_since_checkpoint += 1;
-                }
-                Some(update) = metrics_rx.recv() => {
-                    trace!(?update, "Received metrics update");
-                    self.process_metrics_queue_update(update);
-                    event_count_since_checkpoint += 1;
-                },
-                tick = event_count_checkpoint.tick() => {
-                    let elapsed = tick.duration_since(event_count_last_checkpoint);
-                    let eps = event_count_since_checkpoint as f64 / elapsed.as_secs_f64();
-                    gauge!("bop_metric_events_per_second").set(eps);
-                    info!("Metric events/s: {:.2}", eps);
+            let start = Instant::now();
+            consume_for(&mut self.telemetry, tick_dur, |update| {
+                trace!(?update, "Received telemetry update");
+                Self::process_telemetry_queue_update(update);
+                event_count_since_checkpoint += 1;
+            });
 
-                    event_count_last_checkpoint = tick;
-                    event_count_since_checkpoint = 0;
-                }
+            consume_for(&mut self.metrics, tick_dur, |update| {
+                trace!(?update, "Received metrics update");
+                Self::process_metrics_queue_update(update);
+                event_count_since_checkpoint += 1;
+            });
+
+            if tick.fired() {
+                let elapsed = event_count_last_checkpoint.elapsed();
+                let eps = event_count_since_checkpoint as f64 / elapsed.as_secs();
+                info!("Metric events/s: {:.2}", eps);
+
+                event_count_last_checkpoint = Instant::now();
+                event_count_since_checkpoint = 0;
+            };
+
+            let rem = tick_dur.saturating_sub(start.elapsed());
+            if rem > Duration::ZERO {
+                std::thread::sleep(rem.into());
+            }
+
+            if term.load(Ordering::Relaxed) {
+                return;
             }
         }
     }
 
     /// Processes a telemetry update, converting it into metrics.
-    fn process_telemetry_queue_update(&mut self, update: TelemetryUpdate) {
+    fn process_telemetry_queue_update(update: TelemetryUpdate) {
         match update.update {
             Telemetry::Tx(tx) => match tx {
                 Tx::AddedToPool => counter!("bop_gateway_tx_added_to_pool_total").increment(1),
@@ -115,7 +109,7 @@ impl MetricsConsumer {
     }
 
     /// Processes a metrics update, updating the corresponding metrics.
-    fn process_metrics_queue_update(&mut self, update: MetricsUpdate) {
+    fn process_metrics_queue_update(update: MetricsUpdate) {
         // Note: we use strum's `AsRefStr` to get the metric name as a snake_case string.
         // For instance, `Counter::GatewayIngressTxsTotal.as_ref()` => "gateway_ingress_txs_total".
         match update.metric {
@@ -140,5 +134,21 @@ impl MetricsConsumer {
 impl Default for MetricsConsumer {
     fn default() -> Self {
         Self { telemetry: telemetry_queue().into(), metrics: metrics_queue().into() }
+    }
+}
+
+/// Consumes items from a consumer for a specified duration, calling the provided function on each item.
+/// The function is called immediately for each consumed item.
+fn consume_for<T: Clone, F>(consumer: &mut Consumer<T>, duration: Duration, mut f: F)
+where
+    F: FnMut(T),
+{
+    let start = Instant::now();
+    while let Some(item) = consumer.try_consume() {
+        f(item);
+
+        if start.elapsed() > duration {
+            break;
+        }
     }
 }

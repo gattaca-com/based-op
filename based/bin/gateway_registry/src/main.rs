@@ -11,8 +11,10 @@ use bop_common::{
     api::RegistryApiServer,
     communication::messages::{RpcError, RpcResult},
     config::{LoggingConfig, LoggingFlags},
+    metrics::install_prometheus_exporter,
     utils::{init_tracing, wait_for_signal},
 };
+use bop_metrics::MetricsConsumer;
 use clap::Parser;
 use jsonrpsee::{
     core::{ClientError, async_trait},
@@ -70,6 +72,14 @@ pub struct RegistryArgs {
     /// mock blocknumber
     #[arg(long = "use_mock_blocknumber", default_value_t = false)]
     pub use_mock_blocknumber: bool,
+
+    /// Enable metrics collection
+    #[arg(long = "metrics.enable", default_value_t = false)]
+    pub enable_metrics: bool,
+
+    /// Port for prometheus server
+    #[arg(long = "metrics.port", default_value_t = 9465)]
+    pub metrics_port: u16,
 }
 
 impl From<&RegistryArgs> for LoggingConfig {
@@ -195,8 +205,8 @@ impl RegistryApiServer for RegistryServer {
         if n_gateways == 0 {
             return Err(RpcError::Jsonrpsee(ClientError::Custom("No registered gateways".to_string())));
         }
-        let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)? +
-            n_blocks_into_the_future;
+        let target_block = u64::try_from(curblock + U256::from_limbs([1, 0, 0, 0])).map_err(|_| RpcError::Internal)?
+            + n_blocks_into_the_future;
 
         let id = (target_block / self.gateway_update_blocks) as usize;
         let (url, address, jwt_in_b256) = gateways[id % n_gateways].clone();
@@ -228,6 +238,15 @@ async fn main() -> eyre::Result<()> {
 
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.registry_port);
     let server = RegistryServer::new(args.clone())?;
+
+    if args.enable_metrics {
+        install_prometheus_exporter(args.metrics_port);
+        std::thread::spawn(move || {
+            let consumer = MetricsConsumer::default();
+            info!("Prometheus server started on port {}", args.metrics_port);
+            consumer.run();
+        });
+    }
 
     info!(%addr,  eth_client_url = %args.eth_url, "starting Based Registry");
     server.run(addr).await

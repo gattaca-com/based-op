@@ -71,6 +71,14 @@ pub struct PortalArgs {
     /// gateway inactivity timeout in milliseconds
     #[arg(long = "gateway.inactivity_timeout_ms", default_value_t = 3000)]
     pub gateway_timeout_inactivity_ms: u64,
+
+    /// Enable metrics collection
+    #[arg(long = "metrics.enable", default_value_t = false)]
+    pub enable_metrics: bool,
+
+    /// Port for prometheus server
+    #[arg(long = "metrics.port", default_value_t = 9466)]
+    pub metrics_port: u16,
 }
 
 impl PortalArgs {
