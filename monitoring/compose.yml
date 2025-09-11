@@ -1,6 +1,6 @@
 services:
   based-metrics-exporter:
-    image: local_based_metrics_exporter # TODO: use a ghcr.io image
+    image: ghcr.io/chainbound/based-op/metrics-exporter:latest-amd64 # arm64 also available. TODO: make cross-platform
     container_name: based-metrics-exporter
     restart: unless-stopped
     environment:
