@@ -28,7 +28,7 @@ impl MetricsConsumer {
         signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
             .expect("couldn't register signal hook for some reason");
 
-        let mut tick = Repeater::every(Duration::from_millis(1000));
+        let mut tick = Repeater::every(Duration::from_secs(30));
         let mut event_count_last_checkpoint = Instant::now();
         let mut event_count_since_checkpoint = 0;
 
