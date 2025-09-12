@@ -50,6 +50,14 @@ the main binary and all the containers that are spawn. What you'll want to edit
 mainly is the `BOP_REPLAY_BLOCKS_RANGE` variable, which targets which blocks we
 want to replay in the test.
 
+Then, we have to generate a custom `prometheus.yml` with the contents of the
+`.env` file. _In a separate terminal_, run:
+
+```bash
+export BOP_REPLAY_HOST_IP=$(curl -4 ifconfig.me)
+set -a && source ./.env && set +a && envsubst < ./monitoring/prometheus/prometheus.yml.tmpl > ./monitoring/prometheus/prometheus.yml
+```
+
 Most metrics and telemetry services are configured to interact with
 `/var/log/containers`. Since we're using rootless docker, for metrics we have to
 adjust a directory permission:
