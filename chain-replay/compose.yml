@@ -278,7 +278,9 @@ services:
       - --gossip.signer_private_key=${BOP_REPLAY_GATEWAY_SEQUENCING_KEY}
       - --gossip.root_peer_url=http://bop-replay-based-op-node-0:${BOP_REPLAY_BASED_OP_NODE_0_RPC_PORT}
       - --chain-replay.blocks-range=${BOP_REPLAY_BLOCKS_RANGE}
-
+    labels:
+      - logs=enabled
+      - service=bop-replay-based-gateway
     volumes:
       - ./config:/config
       - ./data/gateway:/data/gateway
