@@ -56,11 +56,11 @@ impl Timer {
         let _ = std::fs::create_dir_all(&dirstr);
 
         let timing_queue =
-            Queue::create_or_open_shared(dirstr.join(format!("timing-{name}")), QUEUE_SIZE, QueueType::MPMC)
+            Queue::create_open_or_delete_shared(dirstr.join(format!("timing-{name}")), QUEUE_SIZE, QueueType::MPMC)
                 .expect("couldn't open timing queue");
 
         let latency_queue =
-            Queue::create_or_open_shared(dirstr.join(format!("latency-{name}")), QUEUE_SIZE, QueueType::MPMC)
+            Queue::create_open_or_delete_shared(dirstr.join(format!("latency-{name}")), QUEUE_SIZE, QueueType::MPMC)
                 .expect("couldn't open latency queue");
         Timer {
             curmsg: Default::default(),
