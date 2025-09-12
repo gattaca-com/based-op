@@ -113,6 +113,14 @@ pub struct GatewayArgs {
 
     #[arg(skip = OpDAConfig::default())]
     pub da_config: OpDAConfig,
+
+    /// Enable metrics collection
+    #[arg(long = "metrics.enable", default_value_t = false)]
+    pub enable_metrics: bool,
+
+    /// Port for prometheus server
+    #[arg(long = "metrics.port", default_value_t = 9464)]
+    pub metrics_port: u16,
 }
 
 impl GatewayArgs {

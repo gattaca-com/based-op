@@ -31,6 +31,14 @@ pub struct TxProxyArgs {
     /// Maximum number of log files
     #[arg(long = "log.max_files", default_value_t = 100)]
     pub log_max_files: usize,
+
+    /// Enable metrics collection
+    #[arg(long = "metrics.enable", default_value_t = false)]
+    pub enable_metrics: bool,
+
+    /// Port for prometheus server
+    #[arg(long = "metrics.port", default_value_t = 9467)]
+    pub metrics_port: u16,
 }
 
 impl From<&TxProxyArgs> for LoggingConfig {
