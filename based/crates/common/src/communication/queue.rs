@@ -260,12 +260,21 @@ impl<T> Queue<T> {
         InnerQueue::new(len, queue_type).map(|inner| Self { inner })
     }
 
-    pub fn create_or_open_shared<P: AsRef<Path>>(
+    fn create_or_open_shared<P: AsRef<Path>>(shmem_file: P, len: usize, queue_type: QueueType) -> Result<Self, Error> {
+        InnerQueue::create_or_open_shared(shmem_file, len, queue_type).map(|inner| Self { inner })
+    }
+
+    pub fn create_open_or_delete_shared<P: AsRef<Path>>(
         shmem_file: P,
         len: usize,
         queue_type: QueueType,
     ) -> Result<Self, Error> {
-        InnerQueue::create_or_open_shared(shmem_file, len, queue_type).map(|inner| Self { inner })
+        if let Err(err) = Self::create_or_open_shared(&shmem_file, len, queue_type) {
+            error!(?err, "failed opening queue. Deleting...");
+            std::fs::remove_file(&shmem_file).expect("failed removing shared queue");
+        }
+
+        Self::create_or_open_shared(shmem_file, len, queue_type)
     }
 
     pub fn open_shared<P: AsRef<Path>>(shmem_file: P) -> Result<Self, Error> {
