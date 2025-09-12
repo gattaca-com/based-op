@@ -552,12 +552,8 @@ impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
         let base_fee = data.as_ref().basefee;
         match self {
             Sorting(mut seq, mut sorting_data) if sorting_data.should_seal_frag() && sorting_data.should_send_next_sims() => {
-                sorting_data.maybe_apply(base_fee);
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
-                // Reset the tx pool.
-                data.tx_pool
-                    .remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut data.telemetry);
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
 

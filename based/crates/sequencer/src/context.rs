@@ -162,6 +162,7 @@ impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
+        sorting_data.maybe_apply(self.base_fee);
         sorting_data.send_finished_telemetry();
         info!(
             frag_id = frag_seq.next_seq,
@@ -171,7 +172,6 @@ impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
-        self.tx_pool.handle_new_frag(self.base_fee, self.shared_state.as_ref(), false, None);
         (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
     }
 }
@@ -228,7 +228,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         // Apply must include
         sorting.apply_block_start_to_state(self, simulator_evm_block_params).expect("shouldn't fail");
         self.tx_pool.remove_mined_txs(sorting.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
-        self.tx_pool.handle_new_frag(self.base_fee, self.shared_state.as_ref(), false, None);
 
         (seq, sorting)
     }

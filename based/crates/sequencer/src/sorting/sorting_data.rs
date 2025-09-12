@@ -17,6 +17,7 @@ use bop_common::{
     typedefs::{Database, DatabaseRef},
 };
 use bop_db::DatabaseRead;
+use bop_pool::transaction::active;
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{
     ConfigureEvm, Evm,
@@ -122,15 +123,19 @@ pub struct SortingData<Db> {
     pub metrics_producer: Producer<MetricsUpdate>,
 }
 
-impl<Db> SortingData<Db> {
-    pub fn new(seq: &FragSequence, data: &SequencerContext<Db>) -> Self
+impl<Db: DatabaseRead> SortingData<Db> {
+    pub fn new(seq: &FragSequence, data: &mut SequencerContext<Db>) -> Self
     where
         Db: Clone + DatabaseRef,
     {
+        data.tx_pool.handle_new_frag(data.base_fee, data.shared_state.as_ref(), false, None);
+
         let tof_snapshot = if data.payload_attributes.no_tx_pool.unwrap_or_default() {
             ActiveOrders::empty()
         } else {
-            ActiveOrders::new(data.tx_pool.clone_active())
+            let active = data.tx_pool.clone_active();
+            debug!("cloning active tx pool with {} orders", active.len());
+            ActiveOrders::new(active)
         };
         let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
@@ -166,7 +171,9 @@ impl<Db> SortingData<Db> {
             metrics_producer: data.metrics,
         }
     }
+}
 
+impl<Db> SortingData<Db> {
     pub fn is_empty(&self) -> bool {
         self.txs.is_empty()
     }
@@ -197,7 +204,7 @@ impl<Db> SortingData<Db> {
         trace!("handling sender {sender}");
         // handle errored sim
         let Ok(simulated_tx) = simulated_tx.inspect_err(|e| {
-            tracing::trace!("error {e} for tx: {}", sender);
+            tracing::warn!("error {e} for tx: {}", sender);
             // Send metric for simulation error
             MetricsUpdate::send(
                 self.uuid,
