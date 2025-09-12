@@ -362,7 +362,7 @@ async fn run_verification_body(
                 let _ =
                     clients.gateway.send_raw_transaction(&t).await.expect("to send tx to gateway");
                 i += 1;
-                tokio::time::sleep(Duration::from_millis(2)).await;
+                tokio::time::sleep(Duration::from_millis(1)).await;
             }
             tokio::time::sleep(Duration::from_secs(2)).await; // Let the timeout hit.
         })
@@ -425,7 +425,7 @@ async fn run_verification_body(
 
     info!("CHAIN REPLICATION COMPLETED SUCCESFULLY!");
 
-    Ok(())
+    std::process::exit(0);
 }
 
 /// Compares two blocks and prints mismatches found.
