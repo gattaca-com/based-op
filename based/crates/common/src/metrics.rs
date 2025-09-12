@@ -11,7 +11,7 @@ use crate::{
 
 /// Creates or opens the metrics queue.
 pub fn metrics_queue() -> Queue<MetricsUpdate> {
-    Queue::create_or_open_shared(queues_dir().join("metrics"), 2usize.pow(18), QueueType::MPMC)
+    Queue::create_open_or_delete_shared(queues_dir().join("metrics"), 2usize.pow(18), QueueType::MPMC)
         .expect("Can't create or open metrics queue")
 }
 
