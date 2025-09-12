@@ -57,11 +57,11 @@ impl QueueHeader {
         self.elsize
     }
 
-    pub fn open_shared<S: AsRef<Path>>(path: S) -> &'static mut Self {
-        let shmem = ShmemConf::new().flink(path.as_ref()).open().unwrap();
+    pub fn open_shared<S: AsRef<Path>>(path: S) -> Result<&'static mut Self, Error> {
+        let shmem = ShmemConf::new().flink(path.as_ref()).open()?;
         let ptr = shmem.as_ptr();
         std::mem::forget(shmem);
-        Self::from_ptr(ptr)
+        Ok(Self::from_ptr(ptr))
     }
 }
 
@@ -131,10 +131,10 @@ impl<T> InnerQueue<T> {
             return Err(Error::NonExistingFile);
         }
         let mut tries = 0;
-        let mut header = QueueHeader::open_shared(shmem_file.as_ref());
+        let mut header = QueueHeader::open_shared(shmem_file.as_ref())?;
         while !header.is_initialized() {
             std::thread::sleep(std::time::Duration::from_millis(1));
-            header = QueueHeader::open_shared(shmem_file.as_ref());
+            header = QueueHeader::open_shared(shmem_file.as_ref())?;
             if tries == 10 {
                 return Err(Error::UnInitialized);
             }
