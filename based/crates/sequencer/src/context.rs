@@ -156,12 +156,13 @@ impl<Db> SequencerContext<Db> {
     }
 }
 
-impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
+impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
     pub fn seal_frag(
         &mut self,
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
     ) -> (FragV0, SortingData<Db>) {
+        sorting_data.maybe_apply(self.base_fee);
         sorting_data.send_finished_telemetry();
         info!(
             frag_id = frag_seq.next_seq,
@@ -400,7 +401,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
 
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
-            self.tx_pool.handle_new_block(base_fee, self.shared_state.as_ref(), false, None);
+            self.tx_pool.handle_new_frag(base_fee, self.shared_state.as_ref(), false, None);
         }
 
         blocks_to_fetch
