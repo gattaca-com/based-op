@@ -356,7 +356,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let uuid = Uuid::new_v4();
         MetricsUpdate::send(
             uuid,
-            Metric::SetGauge(Gauge::GatewayBlockBuildDurationMs, block_duration),
+            Metric::SetGauge(Gauge::GatewayBlockBuildDurationSecs, block_duration),
             &mut self.metrics,
         );
         MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockTxCount, txs), &mut self.metrics);

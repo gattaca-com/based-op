@@ -84,13 +84,13 @@ impl FlowCounter {
     }
 
     pub fn print_summary_send_metrics_and_reset(&self, metrics: &Producer<MetricsUpdate>) {
-        let total = self.total.load(Ordering::Relaxed);
-        let success = self.success.load(Ordering::Relaxed);
-        let failed = self.failed.load(Ordering::Relaxed);
-        let failed_invalid_params = self.failed_invalid_params.load(Ordering::Relaxed);
-        let failed_method_not_found = self.failed_method_not_found.load(Ordering::Relaxed);
-        let failed_no_clients = self.failed_no_clients.load(Ordering::Relaxed);
-        let failed_all_clients = self.failed_all_clients.load(Ordering::Relaxed);
+        let total = self.total.swap(0, Ordering::Relaxed);
+        let success = self.success.swap(0, Ordering::Relaxed);
+        let failed = self.failed.swap(0, Ordering::Relaxed);
+        let failed_invalid_params = self.failed_invalid_params.swap(0, Ordering::Relaxed);
+        let failed_method_not_found = self.failed_method_not_found.swap(0, Ordering::Relaxed);
+        let failed_no_clients = self.failed_no_clients.swap(0, Ordering::Relaxed);
+        let failed_all_clients = self.failed_all_clients.swap(0, Ordering::Relaxed);
 
         info!(
             total,
@@ -128,15 +128,6 @@ impl FlowCounter {
             Metric::IncrementCounter(Counter::TxProxyFailedRequestsAllClients, failed_all_clients as u64),
             metrics,
         );
-
-        // Reset counters
-        self.total.store(0, Ordering::Relaxed);
-        self.success.store(0, Ordering::Relaxed);
-        self.failed.store(0, Ordering::Relaxed);
-        self.failed_invalid_params.store(0, Ordering::Relaxed);
-        self.failed_method_not_found.store(0, Ordering::Relaxed);
-        self.failed_no_clients.store(0, Ordering::Relaxed);
-        self.failed_all_clients.store(0, Ordering::Relaxed);
     }
 }
 
