@@ -41,8 +41,13 @@ services:
           --discovery.port=$OP_GETH_GOSSIP_PORT \
           --port=$OP_GETH_GOSSIP_PORT \
           --bootnodes=$MAIN_OP_GETH_ENODE \
-          --rollup.sequencerhttp=$PORTAL
-
+          --rollup.sequencerhttp=$TXPROXY \
+          --metrics=true \
+          --metrics.addr=0.0.0.0 \
+          --metrics.port=8010
+    labels:
+      - logs=enabled
+      - service=based-op-geth
     volumes:
       - ./data/geth:/data/geth
       - ./config:/config
@@ -74,16 +79,22 @@ services:
       - --p2p.listen.udp=$OP_NODE_GOSSIP_PORT
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --p2p.static=$MAIN_OP_NODE_GOSSIP_STATIC
-      - --rpc.enable-based 
+      - --rpc.enable-based
       - --registry=$PORTAL
       - --p2p.bootnodes=$MAIN_OP_NODE_ENR
       - --syncmode=execution-layer
+      - --metrics.enabled=true
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=8011
     volumes:
       - ./data/node:/data/op-node
       - ./config:/config
     depends_on:
       - based-op-geth
     restart: unless-stopped
+    labels:
+      - logs=enabled
+      - service=based-op-node
 
   based-gateway:
     image: ghcr.io/gattaca-com/based-op/based-gateway:latest
@@ -98,10 +109,12 @@ services:
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
       - --gossip.root_peer_url=http://0.0.0.0:8547
-    volumes: 
+      - --log.dir=/var/log/app
+    volumes:
       - ./config:/config
       - ./data/gateway:/data/gateway
       - /tmp:/tmp
       - /dev/shm:/dev/shm
+      - /var/log/containers/based-op/based-gateway:/var/log/app
     network_mode: "host"
     restart: unless-stopped

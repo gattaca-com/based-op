@@ -45,6 +45,7 @@ pub fn build_env_filter(default_level: LevelFilter, env_filters: Option<String>)
 /// Initialises tracing logger that creates daily log files.
 pub fn init_tracing(config: LoggingConfig) -> Option<WorkerGuard> {
     let format = tracing_subscriber::fmt::format().with_level(true).with_thread_ids(false).with_target(false);
+
     if config.flags == LoggingFlags::File | LoggingFlags::StdOut {
         let _ = std::fs::create_dir_all(&config.path);
         let mut builder =
@@ -58,14 +59,15 @@ pub fn init_tracing(config: LoggingConfig) -> Option<WorkerGuard> {
         let (writer, guard) = tracing_appender::non_blocking(appender);
 
         let stdout_layer = tracing_subscriber::fmt::layer()
-            .event_format(format.clone())
+            .event_format(format)
             .with_filter(build_env_filter(config.level, config.filters.clone()));
 
         let file_layer = tracing_subscriber::fmt::layer()
-            .event_format(format)
+            .event_format(tracing_subscriber::fmt::format().json())
+            .with_timer(tracing_subscriber::fmt::time::UtcTime::rfc_3339())
             .with_ansi(false)
             .with_writer(writer)
-            .with_filter(build_env_filter(config.level, config.filters.clone()));
+            .with_filter(build_env_filter(config.level, config.filters));
 
         tracing_subscriber::registry().with(stdout_layer.and_then(file_layer)).init();
 
@@ -76,7 +78,7 @@ pub fn init_tracing(config: LoggingConfig) -> Option<WorkerGuard> {
         let stdout_layer = tracing_subscriber::fmt::layer()
             .event_format(format)
             .with_writer(writer)
-            .with_filter(build_env_filter(config.level, config.filters.clone()));
+            .with_filter(build_env_filter(config.level, config.filters));
 
         tracing_subscriber::registry().with(stdout_layer).init();
         Some(guard)
@@ -93,10 +95,11 @@ pub fn init_tracing(config: LoggingConfig) -> Option<WorkerGuard> {
         let (writer, guard) = tracing_appender::non_blocking(appender);
 
         let file_layer = tracing_subscriber::fmt::layer()
-            .event_format(format)
+            .event_format(tracing_subscriber::fmt::format().json())
+            .with_timer(tracing_subscriber::fmt::time::UtcTime::rfc_3339())
             .with_ansi(false)
             .with_writer(writer)
-            .with_filter(build_env_filter(config.level, config.filters.clone()));
+            .with_filter(build_env_filter(config.level, config.filters));
 
         tracing_subscriber::registry().with(file_layer).init();
 

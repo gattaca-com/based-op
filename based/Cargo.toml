@@ -42,7 +42,10 @@ alloy-transport-http = "0.14.0"
 auto_impl = "1.3.0"
 axum = { version = "0.8.1", features = ["macros", "ws"] }
 bitflags = "2.6.0"
+metrics = "0.24.1"
+metrics-exporter-prometheus = "0.16.2"
 bop-common = { path = "crates/common" }
+bop-metrics = { path = "crates/metrics" }
 bop-db = { path = "crates/db" }
 bop-pool = { path = "crates/pool" }
 bop-rpc = { path = "crates/rpc" }
@@ -71,6 +74,7 @@ moka = "0.12.10"
 op-alloy-consensus = { version = "=0.14.1", default-features = false, features = ["k256"] }
 op-alloy-network = "0.14.1"
 op-alloy-rpc-types = "0.14.1"
+op-alloy-flz = { version = "0.13.0", default-features = false }
 op-alloy-rpc-types-engine = { version = "0.14.1", default-features = false, features = ["serde"] }
 op-revm = "3.0.2"
 parking_lot = "0.12.3"
@@ -96,6 +100,7 @@ reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
 reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
 reth-optimism-node = { path = "../reth/crates/optimism/node" }
 reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
+reth-optimism-payload-builder = { path = "../reth/crates/optimism/payload" }
 reth-primitives = { path = "../reth/crates/primitives" }
 reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
 reth-provider = { path = "../reth/crates/storage/provider", features = ["test-utils"] }
@@ -129,7 +134,7 @@ tower = "0.4"
 tower-http = { version = "0.6.4", features = ["cors"] }
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt", "time"] }
 tree_hash = "0.10"
 tree_hash_derive = "0.10"
 uuid = { version = "1.12.1", features = ["serde", "v4"] }

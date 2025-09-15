@@ -7,13 +7,19 @@ use std::{
 };
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::B256;
+use alloy_primitives::{B256, U64};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use bop_common::{
     api::{
-        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpNodeApiClient, OpNodeP2PApiClient, PortalApiServer,
+        EngineApiClient, EngineApiServer, OpGethAdminApiClient, OpMinerExtApiServer, OpNodeApiClient,
+        OpNodeP2PApiClient, PortalApiServer,
     },
-    communication::messages::{RpcError, RpcResult},
+    communication::{
+        Producer,
+        messages::{RpcError, RpcResult},
+    },
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
+    metrics::{Counter, Metric, MetricsUpdate, metrics_queue},
     time::Duration,
     utils::{uuid, wait_for_signal},
 };
@@ -21,7 +27,7 @@ use jsonrpsee::{
     core::{ClientError, async_trait},
     server::{RpcServiceBuilder, ServerBuilder},
 };
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
@@ -44,6 +50,7 @@ pub struct PortalServer {
     new_payload_block_hash: Arc<RwLock<B256>>,
     new_payload_block_number: Arc<AtomicU64>,
     current_block_number: Arc<AtomicU64>,
+    metrics: Producer<MetricsUpdate>,
     args: Arc<PortalArgs>,
 }
 
@@ -53,15 +60,17 @@ impl PortalServer {
         let fallback_eth_client = create_client(args.fallback_eth_url.clone(), timeout)?;
         let op_node_client = create_client(args.op_node_url.clone(), timeout)?;
         let fallback_client = create_auth_client(args.fallback_url.clone(), args.fallback_jwt(), timeout)?;
+        let metrics = metrics_queue().into();
 
         let temp = Self {
             geth_client: fallback_eth_client,
             geth_engine_client: fallback_client,
             op_node_client,
-            gateway_manager: Arc::new(GatewayManager::new_from_args(&args)),
+            gateway_manager: Arc::new(GatewayManager::new_from_args(&args, metrics)),
             new_payload_block_number: Arc::new(AtomicU64::new(0)),
             new_payload_block_hash: Arc::new(RwLock::new(B256::ZERO)),
             current_block_number: Arc::new(AtomicU64::new(0)),
+            metrics,
             args: Arc::new(args),
         };
 
@@ -73,11 +82,15 @@ impl PortalServer {
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
         let geth_engine_client = self.geth_engine_client.clone();
         let registry_client = self.gateway_manager.registry_client.clone();
+        let op_node_client = self.op_node_client.clone();
+        let metrics = self.metrics;
 
         let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |s| EngineApiProxy {
             inner: s,
             geth_client: geth_engine_client.clone(),
             registry_client: registry_client.clone(),
+            op_node_client: op_node_client.clone(),
+            metrics,
         });
 
         // temp: remove when factoring out the portal
@@ -94,6 +107,7 @@ impl PortalServer {
 
         let mut module = EngineApiServer::into_rpc(self.clone());
         module.merge(PortalApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        module.merge(OpMinerExtApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         let server_handle = server.start(module);
 
         let gateway_manager = Arc::clone(&self.gateway_manager);
@@ -235,7 +249,7 @@ impl EngineApiServer for PortalServer {
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG), fields(req_id = %uuid()))]
-    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4> {
+    async fn get_payload_v4(&self, payload_id: PayloadId) -> RpcResult<OpExecutionPayloadEnvelopeV4Patch> {
         debug!(%payload_id, "new request");
 
         let fallback_fut = tokio::spawn({
@@ -246,7 +260,7 @@ impl EngineApiServer for PortalServer {
 
         let Some(gateway) = self.gateway_manager.current_gateway().await else { return Ok(fallback_fut.await??) };
 
-        let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV4, _>> = tokio::spawn(
+        let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV4Patch, _>> = tokio::spawn(
             {
                 // only get payload from previously picked gateway
                 let fallback_client = self.geth_engine_client.clone();
@@ -293,13 +307,24 @@ impl EngineApiServer for PortalServer {
                 "block {}: successfully served from based-gateway {:?}",
                 gateway.execution_payload.payload_inner.payload_inner.payload_inner.block_number, gateway
             );
+            MetricsUpdate::send_ref(
+                uuid(),
+                Metric::IncrementCounter(Counter::PayloadsServedFromGateway, 1),
+                &self.metrics,
+            );
         } else if let Ok(fallback) = fallback.as_ref() {
             info!(
                 "block {}: successfully served from fallback",
                 fallback.execution_payload.payload_inner.payload_inner.payload_inner.block_number
             );
+            MetricsUpdate::send_ref(
+                uuid(),
+                Metric::IncrementCounter(Counter::PayloadsServedFromFallback, 1),
+                &self.metrics,
+            );
         } else {
             error!("couldn't serve a block from fallback or gateway");
+            MetricsUpdate::send_ref(uuid(), Metric::IncrementCounter(Counter::PayloadServeFailed, 1), &self.metrics);
         }
 
         let payload = gateway.or(fallback)?;
@@ -346,5 +371,14 @@ impl PortalApiServer for PortalServer {
     /// The enode that can be used to sync with the op-geth
     async fn op_geth_bootnode_enode(&self) -> RpcResult<String> {
         Ok(self.geth_client.node_info().await.map(|p| p.enode)?)
+    }
+}
+
+#[async_trait]
+impl OpMinerExtApiServer for PortalServer {
+    async fn set_max_da_size(&self, max_tx_size: U64, max_block_size: U64) -> RpcResult<bool> {
+        debug!(?max_tx_size, ?max_block_size, "set max DA size");
+        self.gateway_manager.broadcast_set_max_da_size(max_tx_size, max_block_size).await;
+        Ok(true)
     }
 }

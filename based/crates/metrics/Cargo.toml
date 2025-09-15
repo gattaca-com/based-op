@@ -1,0 +1,11 @@
+[package]
+edition.workspace = true
+name = "bop-metrics"
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+bop-common.workspace = true
+metrics.workspace = true
+signal-hook.workspace = true
+tracing.workspace = true

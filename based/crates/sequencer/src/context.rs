@@ -7,7 +7,9 @@ use alloy_rpc_types::engine::{
 };
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders},
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     debug_panic,
+    metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
     p2p::{FragV0, SealV0, StateUpdate},
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
@@ -17,7 +19,7 @@ use bop_common::{
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
 use bop_pool::transaction::pool::TxPool;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use op_revm::OpSpecId;
 use reth_chainspec::EthereumHardforks;
 use reth_evm::{ConfigureEvm, block::SystemCaller, env::EvmEnv, execute::ProviderError};
@@ -27,7 +29,8 @@ use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use reth_provider::StorageRootProvider;
 use revm_primitives::{B256, Bytes, U256, b256};
-use tracing::info;
+use tracing::{debug, info};
+use uuid::Uuid;
 
 use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
 
@@ -75,14 +78,18 @@ pub struct SequencerContext<Db> {
     pub system_caller: SystemCaller<Arc<OpChainSpec>>,
     pub timers: SequencerTimers,
     pub telemetry: Producer<TelemetryUpdate>,
+    pub metrics: Producer<MetricsUpdate>,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
     pub fn new(db: Db, shared_state: SharedState<Db>, config: SequencerConfig) -> Self {
-        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone());
+        let metrics = metrics_queue().into();
+
+        let block_executor = BlockSync::new(config.evm_config.chain_spec().clone(), metrics);
         let system_caller = SystemCaller::new(config.evm_config.chain_spec().clone());
         Self {
             db,
+            metrics,
             shared_state,
             block_executor,
             config,
@@ -149,18 +156,19 @@ impl<Db> SequencerContext<Db> {
     }
 }
 
-impl<Db: DatabaseRef + Clone> SequencerContext<Db> {
+impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
     pub fn seal_frag(
         &mut self,
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
     ) -> (FragV0, Option<StateUpdate>, SortingData<Db>) {
+        sorting_data.maybe_apply(self.base_fee);
         sorting_data.send_finished_telemetry();
         info!(
             frag_id = frag_seq.next_seq,
             txs = sorting_data.txs.len(),
             frag_time =% sorting_data.start_t.elapsed(),
-            "sealing frag"
+            "sealing frag",
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
@@ -181,6 +189,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.as_ref().basefee,
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
+            &mut self.metrics,
         ) {
             TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
         }
@@ -204,14 +213,25 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         senders.send(simulator_evm_block_params.clone()).expect("should never fail");
         let n_force_include_txs =
             self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
+        let max_block_da = self.config.da_config.max_da_block_size();
         let seq = FragSequence::new(
             self.gas_limit(),
+            max_block_da,
             self.block_number(),
             self.timestamp(),
             self.base_fee(),
             n_force_include_txs,
         );
+
+        debug!("new frag sequence");
         let mut sorting = SortingData::new(&seq, self);
+
+        // Update block height metric
+        MetricsUpdate::send(
+            Uuid::new_v4(),
+            Metric::SetGauge(Gauge::GatewayBlockHeight, self.block_number() as f64),
+            &mut self.metrics,
+        );
 
         // Apply must include
         sorting.apply_block_start_to_state(self, simulator_evm_block_params).expect("shouldn't fail");
@@ -248,8 +268,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
     }
 
     /// Finalize the block after the last frag has been sealed
-    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4) {
-        frag_seq.sorting_telemetry.report();
+    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4Patch) {
+        frag_seq.sorting_telemetry.report(&self.metrics);
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
         let (transactions, transactions_root, receipts_root, logs_bloom) =
@@ -325,29 +345,44 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             state_root,
             block_hash: v1.block_hash,
         };
+
+        let block_duration = frag_seq.start_t.elapsed().as_secs();
         let mgas = (gas_used / 10_000) as f64 / 100.0;
-        info!(
-            "sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)",
-            seal.block_number,
-            frag_seq.txs.len(),
-            mgas / frag_seq.start_t.elapsed().as_secs()
+        let txs = frag_seq.txs.len() as f64;
+        let tps = txs / block_duration;
+        let mgas_s = mgas / block_duration;
+        info!("sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)", seal.block_number, txs, mgas_s);
+
+        let uuid = Uuid::new_v4();
+        MetricsUpdate::send(
+            uuid,
+            Metric::SetGauge(Gauge::GatewayBlockBuildDurationMs, block_duration),
+            &mut self.metrics,
         );
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockTxCount, txs), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockGasUsed, gas_used as f64), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayTps, tps), &mut self.metrics);
+        MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayMGasS, mgas_s), &mut self.metrics);
+
         let payload_inner = ExecutionPayloadV3 {
             payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
             blob_gas_used: 0,
             excess_blob_gas: 0,
         };
-        (seal, OpExecutionPayloadEnvelopeV4 {
-            execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
-                payload_inner,
-                withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+        (
+            seal,
+            OpExecutionPayloadEnvelopeV4Patch {
+                execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
+                    payload_inner,
+                    withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+                },
+                block_value: frag_seq.payment.to(),
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+                execution_requests: vec![],
             },
-            block_value: frag_seq.payment.to(),
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-            execution_requests: vec![],
-        })
+        )
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
@@ -368,13 +403,20 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         self.parent_header = block.header().clone();
         self.parent_hash = block.hash_slow();
 
+        // Update block height metric when syncing
+        MetricsUpdate::send(
+            Uuid::new_v4(),
+            Metric::SetGauge(Gauge::GatewayBlockHeight, block.number() as f64),
+            &mut self.metrics,
+        );
+
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
         self.tx_pool.active_txs.clear();
         self.tx_pool.remove_mined_txs(block.transactions_with_sender(), &mut self.telemetry);
 
         if let Some(base_fee) = block.base_fee_per_gas {
             self.base_fee = base_fee;
-            self.tx_pool.handle_new_block(base_fee, self.shared_state.as_ref(), false, None);
+            self.tx_pool.handle_new_frag(base_fee, self.shared_state.as_ref(), false, None);
         }
 
         blocks_to_fetch

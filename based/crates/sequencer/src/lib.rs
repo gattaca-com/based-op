@@ -12,6 +12,7 @@ use bop_common::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
         messages::{self, BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
+    custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::DatabaseWrite,
     p2p::{EnvV0, VersionedMessage, VersionedMessageWithState},
     shared::SharedState,
@@ -21,7 +22,7 @@ use bop_common::{
     typedefs::{BlockSyncMessage, DatabaseRef},
 };
 use bop_db::DatabaseRead;
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV4, OpExecutionPayloadV4, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::{SignedTransaction, block::TestBlock};
@@ -106,8 +107,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0 &&
-                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0
+                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -391,7 +392,7 @@ where
     /// 4. Returns payload to consensus layer
     fn handle_get_payload_engine_api(
         self,
-        res: oneshot::Sender<OpExecutionPayloadEnvelopeV4>,
+        res: oneshot::Sender<OpExecutionPayloadEnvelopeV4Patch>,
         ctx: &mut SequencerContext<Db>,
         senders: &SendersSpine<Db>,
     ) -> SequencerState<Db> {
@@ -544,7 +545,7 @@ where
         self
     }
 }
-impl<Db: Clone + DatabaseRef> SequencerState<Db> {
+impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
     /// Performs periodic state machine updates:
     ///
     /// - Seals transaction fragments when timing threshold reached
@@ -555,12 +556,12 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
         use SequencerState::*;
         let base_fee = data.as_ref().basefee;
         match self {
-            Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
+            Sorting(mut seq, sorting_data)
+                if sorting_data.should_seal_frag() && sorting_data.should_send_next_sims() =>
+            {
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
-                // Reset the tx pool.
-                data.tx_pool
-                    .remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut data.telemetry);
+
                 let (msg, maybe_update, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 let versioned_message = VersionedMessage::from(msg);
                 connections.send(VersionedMessageWithState { msg: versioned_message, state_update: maybe_update });

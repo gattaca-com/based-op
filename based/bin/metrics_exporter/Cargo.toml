@@ -1,0 +1,17 @@
+[package]
+edition.workspace = true
+name = "bop-metrics-exporter"
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+bop-common.workspace = true
+bop-metrics.workspace = true
+
+tokio.workspace = true
+clap.workspace = true
+
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+metrics-exporter-prometheus.workspace = true

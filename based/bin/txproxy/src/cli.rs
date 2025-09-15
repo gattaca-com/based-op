@@ -20,11 +20,25 @@ pub struct TxProxyArgs {
     #[arg(long = "tx_receivers.path")]
     pub tx_receivers_path: PathBuf,
     /// Enable file logging
-    #[arg(long = "log.enable_file_logging", default_value_t = true)]
+    #[arg(long = "log.disable_file_logging", action = clap::ArgAction::SetFalse, default_value_t = true)]
     pub file_logging: bool,
     /// Prefix of log files
     #[arg(long = "log.prefix", default_value = "bop-txproxy.log")]
     pub log_prefix: String,
+    /// Path for log files
+    #[arg(long = "log.dir", default_value = "/tmp")]
+    pub log_dir: PathBuf,
+    /// Maximum number of log files
+    #[arg(long = "log.max_files", default_value_t = 100)]
+    pub log_max_files: usize,
+
+    /// Enable metrics collection
+    #[arg(long = "metrics.enable", default_value_t = false)]
+    pub enable_metrics: bool,
+
+    /// Port for prometheus server
+    #[arg(long = "metrics.port", default_value_t = 9467)]
+    pub metrics_port: u16,
 }
 
 impl From<&TxProxyArgs> for LoggingConfig {
@@ -37,8 +51,8 @@ impl From<&TxProxyArgs> for LoggingConfig {
                 .unwrap_or(LevelFilter::INFO),
             flags: if args.file_logging { LoggingFlags::all() } else { LoggingFlags::StdOut },
             prefix: args.file_logging.then(|| args.log_prefix.clone()),
-            max_files: 100,
-            path: PathBuf::from("/tmp"),
+            max_files: args.log_max_files,
+            path: args.log_dir.clone(),
             filters: None,
         }
     }

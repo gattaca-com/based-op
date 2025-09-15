@@ -11,8 +11,10 @@ use bop_common::{
     api::RegistryApiServer,
     communication::messages::{RpcError, RpcResult},
     config::{LoggingConfig, LoggingFlags},
+    metrics::install_prometheus_exporter,
     utils::{init_tracing, wait_for_signal},
 };
+use bop_metrics::MetricsConsumer;
 use clap::Parser;
 use jsonrpsee::{
     core::{ClientError, async_trait},
@@ -52,16 +54,32 @@ pub struct RegistryArgs {
     pub gateway_update_blocks: u64,
 
     /// Enable file logging
-    #[arg(long = "log.enable_file_logging", default_value_t = true)]
+    #[arg(long = "log.disable_file_logging", action = clap::ArgAction::SetFalse, default_value_t = true)]
     pub file_logging: bool,
 
     /// Prefix of log files
-    #[arg(long = "log.prefix", default_value = "bop-portal.log")]
+    #[arg(long = "log.prefix", default_value = "bop-registry.log")]
     pub log_prefix: String,
+
+    /// Path for log files
+    #[arg(long = "log.dir", default_value = "/tmp")]
+    pub log_dir: PathBuf,
+
+    /// Maximum number of log files
+    #[arg(long = "log.max_files", default_value_t = 100)]
+    pub log_max_files: usize,
 
     /// mock blocknumber
     #[arg(long = "use_mock_blocknumber", default_value_t = false)]
     pub use_mock_blocknumber: bool,
+
+    /// Enable metrics collection
+    #[arg(long = "metrics.enable", default_value_t = false)]
+    pub enable_metrics: bool,
+
+    /// Port for prometheus server
+    #[arg(long = "metrics.port", default_value_t = 9465)]
+    pub metrics_port: u16,
 }
 
 impl From<&RegistryArgs> for LoggingConfig {
@@ -74,8 +92,8 @@ impl From<&RegistryArgs> for LoggingConfig {
                 .unwrap_or(LevelFilter::INFO),
             flags: if args.file_logging { LoggingFlags::all() } else { LoggingFlags::StdOut },
             prefix: args.file_logging.then(|| args.log_prefix.clone()),
-            max_files: 100,
-            path: PathBuf::from("/tmp"),
+            max_files: args.log_max_files,
+            path: args.log_dir.clone(),
             filters: None,
         }
     }
@@ -220,6 +238,15 @@ async fn main() -> eyre::Result<()> {
 
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), args.registry_port);
     let server = RegistryServer::new(args.clone())?;
+
+    if args.enable_metrics {
+        install_prometheus_exporter(args.metrics_port);
+        std::thread::spawn(move || {
+            let consumer = MetricsConsumer::default();
+            info!("Prometheus server started on port {}", args.metrics_port);
+            consumer.run();
+        });
+    }
 
     info!(%addr,  eth_client_url = %args.eth_url, "starting Based Registry");
     server.run(addr).await

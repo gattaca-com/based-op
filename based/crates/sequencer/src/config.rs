@@ -2,6 +2,7 @@ use bop_common::{config::GatewayArgs, time::Duration};
 use kona_interop::SafetyLevel;
 use reqwest::Url;
 use reth_optimism_evm::OpEvmConfig;
+use reth_optimism_payload_builder::config::OpDAConfig;
 
 #[derive(Clone, Debug)]
 pub struct SuperVisorConfig {
@@ -32,6 +33,7 @@ pub struct SequencerConfig {
     /// If true will commit locally sequenced blocks to the db before getting payload from the engine api.
     pub commit_sealed_frags_to_db: bool,
     pub supervisor: Option<SuperVisorConfig>,
+    pub da_config: OpDAConfig,
 }
 
 impl From<&GatewayArgs> for SequencerConfig {
@@ -44,6 +46,7 @@ impl From<&GatewayArgs> for SequencerConfig {
             evm_config: OpEvmConfig::new(args.chain.clone(), Default::default()),
             commit_sealed_frags_to_db: args.commit_sealed_frags_to_db,
             supervisor: args.supervisor_url.as_ref().map(|_| SuperVisorConfig::from(args)),
+            da_config: args.da_config.clone(),
         }
     }
 }

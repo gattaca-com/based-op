@@ -5,6 +5,7 @@ pub mod config;
 pub mod db;
 pub mod eth;
 pub mod fabric;
+pub mod metrics;
 pub mod p2p;
 pub mod shared;
 pub mod signing;
@@ -13,3 +14,5 @@ pub mod time;
 pub mod transaction;
 pub mod typedefs;
 pub mod utils;
+
+pub mod custom_v4;
