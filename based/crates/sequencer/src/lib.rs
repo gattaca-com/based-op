@@ -561,7 +561,7 @@ impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
             {
                 MetricsUpdate::send(
                     Uuid::new_v4(),
-                    Metric::SetGauge(Gauge::TransactionPoolMemoryBytes, data.tx_pool.mem_size() as f64),
+                    Metric::SetGauge(Gauge::TransactionPoolMemoryBytes, data.tx_pool.mem_size as f64),
                     &mut data.metrics,
                 );
 

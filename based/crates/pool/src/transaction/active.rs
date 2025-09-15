@@ -1,6 +1,8 @@
-use alloy_consensus::Transaction;
+use std::sync::Arc;
+
+use alloy_consensus::Transaction as TxTrait;
 use alloy_primitives::Address;
-use bop_common::{communication::Producer, telemetry::TelemetryUpdate, transaction::SimulatedTxList};
+use bop_common::transaction::{SimulatedTxList, Transaction};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]
@@ -19,8 +21,11 @@ impl Active {
         }
     }
 
+    /// Adds a simulated tx list to the active list.
+    /// Returns true if the tx list was added, false if it was already in the list.
     #[inline]
-    pub fn put(&mut self, tx: SimulatedTxList) {
+    pub fn put(&mut self, tx: SimulatedTxList) -> bool {
+        let mut added = false;
         let sender = tx.sender();
 
         if let Some(&index) = self.senders.get(&sender) {
@@ -28,7 +33,10 @@ impl Active {
         } else {
             self.txs.push(tx);
             self.senders.insert(sender, self.txs.len() - 1);
+            added = true;
         }
+
+        added
     }
 
     #[inline]
@@ -69,19 +77,13 @@ impl Active {
     }
 
     #[inline]
-    pub fn forward(&mut self, address: &Address, nonce: u64, telemetry_producer: &mut Producer<TelemetryUpdate>) {
+    pub fn forward(&mut self, address: &Address, nonce: u64, f: &mut impl FnMut(Arc<Transaction>)) {
         let Some(&index) = self.senders.get(address) else {
             return;
         };
 
         let tx_list = &mut self.txs[index];
-        if tx_list.pending.forward(nonce, |t| {
-            TelemetryUpdate::send(
-                t.uuid,
-                bop_common::telemetry::Telemetry::Tx(bop_common::telemetry::Tx::RemovedFromPool),
-                telemetry_producer,
-            )
-        }) {
+        if tx_list.pending.forward(nonce, f) {
             self.remove(index, address);
             return;
         }
