@@ -122,11 +122,13 @@ pub struct SortingData<Db> {
     pub metrics_producer: Producer<MetricsUpdate>,
 }
 
-impl<Db> SortingData<Db> {
-    pub fn new(seq: &FragSequence, data: &SequencerContext<Db>) -> Self
+impl<Db: DatabaseRead> SortingData<Db> {
+    pub fn new(seq: &FragSequence, data: &mut SequencerContext<Db>) -> Self
     where
         Db: Clone + DatabaseRef,
     {
+        data.tx_pool.handle_new_frag(data.base_fee, data.shared_state.as_ref(), false, None);
+
         let tof_snapshot = if data.payload_attributes.no_tx_pool.unwrap_or_default() {
             ActiveOrders::empty()
         } else {
@@ -166,7 +168,9 @@ impl<Db> SortingData<Db> {
             metrics_producer: data.metrics,
         }
     }
+}
 
+impl<Db> SortingData<Db> {
     pub fn is_empty(&self) -> bool {
         self.txs.is_empty()
     }

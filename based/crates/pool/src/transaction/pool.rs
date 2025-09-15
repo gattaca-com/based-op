@@ -163,7 +163,7 @@ impl TxPool {
     /// This gets called in two places:
     /// 1) When we sync a new block.
     /// 2) When we commit a new Frag.
-    pub fn handle_new_block<Db: DatabaseRead>(
+    pub fn handle_new_frag<Db: DatabaseRead>(
         &mut self,
         base_fee: u64,
         db: &DBFrag<Db>,
@@ -173,6 +173,7 @@ impl TxPool {
         // If enabled, fill the active list with non-simulated txs and send off the first tx for each sender to
         // simulator.
         if !syncing {
+            self.active_txs.clear();
             for (sender, tx_list) in self.pool_data.iter() {
                 let db_nonce = db.get_nonce(*sender).unwrap();
                 if let Some(ready) = tx_list.ready(db_nonce, base_fee) {

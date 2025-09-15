@@ -540,7 +540,7 @@ where
         self
     }
 }
-impl<Db: Clone + DatabaseRef> SequencerState<Db> {
+impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
     /// Performs periodic state machine updates:
     ///
     /// - Seals transaction fragments when timing threshold reached
@@ -551,12 +551,11 @@ impl<Db: Clone + DatabaseRef> SequencerState<Db> {
         use SequencerState::*;
         let base_fee = data.as_ref().basefee;
         match self {
-            Sorting(mut seq, sorting_data) if sorting_data.should_seal_frag() => {
+            Sorting(mut seq, sorting_data)
+                if sorting_data.should_seal_frag() && sorting_data.should_send_next_sims() =>
+            {
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
-                // Reset the tx pool.
-                data.tx_pool
-                    .remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut data.telemetry);
                 let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 connections.send(VersionedMessage::from(msg));
 
