@@ -14,7 +14,7 @@ pub struct TxSpammerArgs {
     #[arg(long="num_accounts", default_value_t = 100)]
     pub num_accounts: usize,
     /// Throughput (tx/s)
-    #[arg(long="throughput", default_value_t = 10)]
+    #[arg(long="throughput", default_value_t = 300)]
     pub throughput: usize,
     /// Funding amount per account (in ether)
     #[arg(long="funding_amount", default_value_t = 0.01)]
