@@ -362,10 +362,12 @@ async fn run_verification_body(
         // time.
         for t in raw_txs {
             let _ = clients.gateway.send_raw_transaction(&t).await.expect("to send tx to gateway");
-            // Add a small sleep to reduce the chances of different ordering.
-            tokio::time::sleep(Duration::from_millis(3)).await;
         }
         debug!("Sent {raw_txs_len} transactions to gateway for block {block_num}");
+
+        // Adds a small delay to make sure last every transaction is processed, and not end up
+        // with testing failure because of a couple of missing transactions.
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Sorting -> WaitingForNewPayload
         let sealed_block = clients.gateway_auth.get_payload_v4(PayloadId::default()).await?;
