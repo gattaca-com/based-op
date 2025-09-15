@@ -85,3 +85,26 @@ stages of block production. As such, the driver sends proper Engine API messages
 and runs along with a [Kona](https://github.com/op-rs/kona) sequencer node to
 send unsafe L2 payloads. This setup is crucial to achieve the functionality of a
 main node while being very flexible for our use-case.
+
+## Limitations
+
+Chain replication has some natural limitations due to Ethereum L1 and L2 clients
+not made with this purpose in mind. In no particular order we have:
+
+- Geth by defaults supports rolling back the chain down to the
+  [`FullImmutabilityThreshold`](https://github.com/gattaca-com/based-op-geth/blob/3d1a8f60a54660607157dda514984844b41dbd88/params/network_params.go#L31-L35)
+  of `90_000` blocks. This means jumping between different segments of the chain
+  for chain replication purposes can be limited. However, this value can be
+  extended in a fork of such codebase.
+
+- Geth rolling back speed is quite low, so we can expect some waiting times when
+  rolling back a large segment of the chain
+
+- Rolling back the chain on Geth is an unsafe procedure that must not be
+  interrupted while in process, otherwise there is a high chance of corrupting the
+  database, leading to a wipe-out and re-sync in order to be able to perform such
+  tests.
+
+- To support chain replication on `op-node` it has been necessary to disable the
+  derivation pipeline and other L1-driven events so that to avoid interfering of
+  batches with past L2 blocks.
