@@ -137,8 +137,6 @@ impl Default for MetricsConsumer {
     }
 }
 
-/// Consumes items from a consumer for a specified duration, calling the provided function on each item.
-/// The function is called immediately for each consumed item.
 fn consume_for<T: Clone, F>(consumer: &mut Consumer<T>, duration: Duration, mut f: F)
 where
     F: FnMut(T),

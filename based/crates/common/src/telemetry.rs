@@ -15,7 +15,7 @@ pub use order::Tx;
 pub mod system;
 
 pub fn telemetry_queue() -> Queue<TelemetryUpdate> {
-    Queue::create_or_open_shared(queues_dir().join("telemetry"), 2usize.pow(18), QueueType::MPMC)
+    Queue::create_open_or_delete_shared(queues_dir().join("telemetry"), 2usize.pow(18), QueueType::MPMC)
         .expect("Can't create or open telemetry queue")
 }
 
