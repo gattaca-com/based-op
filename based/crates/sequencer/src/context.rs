@@ -189,7 +189,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.as_ref().basefee,
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
-            &mut self.metrics,
         ) {
             TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
         }
