@@ -52,13 +52,13 @@ impl Account {
     pub async fn refresh(&mut self, provider: RootProvider) -> eyre::Result<u64> {
         self.nonce = provider.get_transaction_count(self.signer.address()).await?;
         self.balance = provider.get_balance(self.signer.address()).await?;
-        println!("Refreshed {:?} has nonce {}, balance {}", self.signer.address(), self.nonce, self.balance);
+        // print!("Refreshed {:?} has nonce {}, balance {}  \r", self.signer.address(), self.nonce, self.balance);
         Ok(self.nonce)
     }
 
     pub async fn refresh_balance(&mut self, provider: RootProvider) -> eyre::Result<u64> {
         self.balance = provider.get_balance(self.signer.address()).await?;
-        println!("Refreshed {:?} has balance {}", self.signer.address(), self.balance);
+        // print!("Refreshed {:?} has balance {}  \r", self.signer.address(), self.balance);
         Ok(self.nonce)
     }
 
@@ -80,7 +80,7 @@ impl Account {
         let encoded = tx.encoded_2718();
         let provider_to_use = sequencer.as_ref().unwrap_or(&provider);
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
-        println!("Sending {:?} -> {:?}, nonce: {} (balance: {})", self.signer.address(), to.signer.address(), self.nonce, self.balance);
+        // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), to.signer.address(), self.nonce, self.balance);
         self.nonce += 1;
         self.balance -= spec.value + U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
         to.balance += spec.value;
@@ -106,7 +106,7 @@ impl Account {
         let encoded = tx.encoded_2718();
         let provider_to_use = sequencer.as_ref().unwrap_or(&provider);
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
-        println!("Sending {:?} -> {:?}, nonce: {} (balance: {})", self.signer.address(), self.signer.address(), self.nonce, self.balance);
+        // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), self.signer.address(), self.nonce, self.balance);
         self.nonce += 1;
         self.balance -= U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
 
