@@ -123,7 +123,7 @@ impl TxPool {
 
     /// Removes a transaction with sender and nonce from the pool.
     pub fn remove(&mut self, sender: &Address, nonce: u64, telemetry_producer: &mut Producer<TelemetryUpdate>) {
-        let mut closure = |t: Arc<Transaction>| {
+        let mut f = |t: Arc<Transaction>| {
             self.mem_size = self.mem_size.saturating_sub(t.size());
             TelemetryUpdate::send(
                 t.uuid,
@@ -133,12 +133,12 @@ impl TxPool {
         };
 
         if let Some(tx_list) = self.pool_data.get_mut(sender) {
-            if tx_list.forward(nonce, &mut closure) {
+            if tx_list.forward(nonce, &mut f) {
                 self.pool_data.remove(sender);
             }
         }
 
-        self.active_txs.forward(sender, nonce, &mut closure);
+        self.active_txs.forward(sender, nonce, &mut f);
     }
 
     pub fn remove_mined_txs<'a, T: OpTransaction + TransactionTrait + 'a>(
@@ -146,7 +146,7 @@ impl TxPool {
         mined_txs: impl Iterator<Item = (&'a Address, &'a T)>,
         telemetry_producer: &mut Producer<TelemetryUpdate>,
     ) {
-        let mut closure = |t: Arc<Transaction>| {
+        let mut f = |t: Arc<Transaction>| {
             self.mem_size = self.mem_size.saturating_sub(t.size());
             TelemetryUpdate::send(
                 t.uuid,
@@ -159,11 +159,11 @@ impl TxPool {
         for (sender, tx) in mined_txs {
             let nonce = tx.nonce();
             if let Some(sender_tx_list) = self.pool_data.get_mut(sender) {
-                if sender_tx_list.forward(nonce, &mut closure) {
+                if sender_tx_list.forward(nonce, &mut f) {
                     self.pool_data.remove(sender);
                 }
             }
-            self.active_txs.forward(sender, nonce, &mut closure);
+            self.active_txs.forward(sender, nonce, &mut f);
         }
     }
 
