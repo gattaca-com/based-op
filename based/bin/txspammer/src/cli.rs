@@ -31,10 +31,10 @@ pub struct TxSpammerArgs {
     #[arg(long = "gas_limit", default_value_t = 21_000)]
     pub gas_limit: u64,
     /// Max fee per gas (in wei)
-    #[arg(long = "max_fee_per_gas", default_value_t = 100_000_000)]
+    #[arg(long = "max_fee_per_gas", default_value_t = 1_000_000_000)]
     pub max_fee_per_gas: u128,
     /// Max priority fee per gas (in wei)
-    #[arg(long = "max_priority_fee_per_gas", default_value_t = 10)]
+    #[arg(long = "max_priority_fee_per_gas", default_value_t = 100)]
     pub max_priority_fee_per_gas: u128,
 
     /// Eth rpc url (http/ws)
@@ -43,7 +43,7 @@ pub struct TxSpammerArgs {
     /// Sequencer URL (if specified, eth_sendRawTransaction will be sent to this URL)
     #[arg(long="sequencer.url")]
     pub sequencer_url: Option<String>,
-    /// Frag stream URL (if specified, we can measure the e2e latency)
+    /// Frag stream URL (if specified, we can measure the e2e latency via the frag stream). Poll receipt using eth rpc if not specified.
     #[arg(long="fragstream.url")]
     pub fragstream_url: Option<String>,
 
