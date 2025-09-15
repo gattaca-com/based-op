@@ -60,6 +60,18 @@ set -a && source ./.env && set +a && envsubst < ./monitoring/prometheus/promethe
 
 Then, start the binary with `cargo run`.
 
+When the test completes, in case of either failure or success, containers are
+not stopped nor removed. You have to do it manually. The reason is, in both
+cases you might want to keep your services up to inspect them and see their
+logs, or keep taking a look at the provided Grafana dashboard.
+
+To shut everything down, run:
+
+```sh
+docker compose --file ./monitoring/compose.yml --env-file ./.env down
+docker compose --file ../.local_gateway_and_follower_based-op-sepolia/compose --env-file ../.local_gateway_and_follower_based-op-sepolia/.env down
+```
+
 ## How it works
 
 Internally, the replication is achieve with two main components: a _spawner_,
