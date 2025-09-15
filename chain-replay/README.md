@@ -58,14 +58,6 @@ export BOP_REPLAY_HOST_IP=$(curl -4 ifconfig.me)
 set -a && source ./.env && set +a && envsubst < ./monitoring/prometheus/prometheus.yml.tmpl > ./monitoring/prometheus/prometheus.yml
 ```
 
-Most metrics and telemetry services are configured to interact with
-`/var/log/containers`. Since we're using rootless docker, for metrics we have to
-adjust a directory permission:
-
-```sh
-sudo chmod -R 777 /var/log/containers
-```
-
 Then, start the binary with `cargo run`.
 
 ## How it works
