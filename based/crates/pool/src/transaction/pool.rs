@@ -224,4 +224,10 @@ impl TxPool {
         self.active_txs.clear();
         self.pool_data.clear();
     }
+
+    #[inline]
+    pub fn mem_size(&self) -> usize {
+        self.pool_data.values().map(|tx_list| tx_list.mem_size()).sum::<usize>() +
+            self.active_txs.txs.iter().map(|tx_list| tx_list.mem_size()).sum::<usize>()
+    }
 }
