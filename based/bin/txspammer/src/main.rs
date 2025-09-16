@@ -174,7 +174,7 @@ impl TxSpammer {
         }
     }
 
-    pub async fn spawn_receipt_listener_frag_stream(&mut self) {
+    pub fn spawn_receipt_listener_frag_stream(&mut self) {
         let mut request_rx = self.request_rx.take().expect("request receiver already taken");
         let latencie_tx = self.latencie_tx.clone();
         let frag_url = self.args.fragstream_url.clone().expect("frag stream url not specified");
@@ -201,7 +201,7 @@ impl TxSpammer {
         });
     }
 
-    pub async fn spawn_receipt_listener_rpc_polling(&mut self) {
+    pub fn spawn_receipt_listener_rpc_polling(&mut self) {
         let mut request_rx = self.request_rx.take().expect("request receiver already taken");
         let latencie_tx = self.latencie_tx.clone();
         let provider = self.full_provider.clone();
@@ -223,7 +223,7 @@ impl TxSpammer {
         });
     }
 
-    pub async fn spawn_stats_logger(&mut self) {
+    pub fn spawn_stats_logger(&mut self) {
         // Start stats logger
         let mut latencie_rx = self.latencie_rx.take().expect("latency receiver already taken");
         tokio::spawn(async move {
@@ -256,7 +256,7 @@ impl TxSpammer {
         });
     }
 
-    pub async fn spawn_spammer(&self) {
+    pub fn spawn_spammer(&self) {
         for (counter, mut account) in self.target_accounts.clone().into_iter().enumerate() {
             let request_tx = self.request_tx.clone();
             let args = self.args.clone();
@@ -312,18 +312,18 @@ async fn main() -> eyre::Result<()> {
     spammer.fund_target_accounts().await;
 
     if spammer.args.fragstream_url.is_some() {
-        spammer.spawn_receipt_listener_frag_stream().await;
+        spammer.spawn_receipt_listener_frag_stream();
     } else {
         warn!("");
         warn!("Frag stream URL not specified, falling back to RPC polling. Latency measurement may be inaccurate.");
         warn!("Consider using a frag stream for better latency measurement. Use --fragstream.url to specify the URL.");
         warn!("eg: --fragstream.url ws://0.0.0.0:9999/state_stream");
         warn!("");
-        spammer.spawn_receipt_listener_rpc_polling().await;
+        spammer.spawn_receipt_listener_rpc_polling();
     }
 
-    spammer.spawn_stats_logger().await;
-    spammer.spawn_spammer().await;
+    spammer.spawn_stats_logger();
+    spammer.spawn_spammer();
 
     tokio::signal::ctrl_c().await.expect("failed to listen for ctrl-c");
     info!("Received Ctrl-C, shutting down...");
