@@ -129,8 +129,8 @@ pub enum Gauge {
     TransactionPoolMemoryBytes,
     /// Count of transactions in a frag
     GatewayFragTxCount,
-    /// Gateway block build duration in milliseconds
-    GatewayBlockBuildDurationMs,
+    /// Gateway block build duration in seconds
+    GatewayBlockBuildDurationSecs,
     /// Gateway transactions per second (txs / ms)
     GatewayTps,
     /// Gateway MGas per second (MGas / s)

@@ -14,6 +14,7 @@ use bop_common::{
     },
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::DatabaseWrite,
+    metrics::{Gauge, Metric, MetricsUpdate},
     p2p::{EnvV0, VersionedMessage, VersionedMessageWithState},
     shared::SharedState,
     telemetry::{self, Telemetry, TelemetryUpdate, system::SystemNotification},
@@ -560,6 +561,12 @@ impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
             Sorting(mut seq, sorting_data)
                 if sorting_data.should_seal_frag() && sorting_data.should_send_next_sims() =>
             {
+                MetricsUpdate::send(
+                    Uuid::new_v4(),
+                    Metric::SetGauge(Gauge::TransactionPoolMemoryBytes, data.tx_pool.mem_size as f64),
+                    &mut data.metrics,
+                );
+
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
 

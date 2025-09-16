@@ -5,12 +5,12 @@ use alloy_primitives::Address;
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders, messages::SequencerToSimulator},
     db::{DBFrag, DatabaseRead},
-    metrics::{Gauge, Metric, MetricsUpdate},
     telemetry::TelemetryUpdate,
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
 };
 use reth_optimism_primitives::transaction::OpTransaction;
+use reth_primitives_traits::InMemorySize;
 
 use crate::transaction::active::Active;
 
@@ -20,11 +20,13 @@ pub struct TxPool {
     pool_data: HashMap<Address, TxList>,
     /// Current list of all simulated mineable txs in the pool
     pub active_txs: Active,
+    /// Current memory size of the pool in bytes
+    pub mem_size: usize,
 }
 
 impl TxPool {
     pub fn new(capacity: usize) -> Self {
-        Self { pool_data: HashMap::with_capacity(capacity), active_txs: Active::with_capacity(capacity) }
+        Self { pool_data: HashMap::with_capacity(capacity), active_txs: Active::with_capacity(capacity), mem_size: 0 }
     }
 
     /// Handles an incoming transaction.
@@ -40,7 +42,6 @@ impl TxPool {
         base_fee: u64,
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
-        metrics: &mut Producer<MetricsUpdate>,
     ) -> bool {
         let state_nonce = db.get_nonce(new_tx.sender()).expect("handle failed db");
         let nonce = new_tx.nonce();
@@ -62,6 +63,7 @@ impl TxPool {
                     return false;
                 }
                 tx_list.put(new_tx.clone());
+                self.mem_size = self.mem_size.saturating_add(new_tx.size());
 
                 if !syncing {
                     let valid_for_block = new_tx.valid_for_block(base_fee);
@@ -69,6 +71,7 @@ impl TxPool {
                         // If this is the first tx for a sender, and it can be processed, simulate it and add to active.
                         TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
                         self.active_txs.put(SimulatedTxList::new(None, tx_list));
+                        self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                     } else if valid_for_block {
                         // If we already have the first tx for this sender and it's in active we might be able to
                         // add this tx to its pending list.
@@ -88,20 +91,14 @@ impl TxPool {
                     if is_next_nonce && new_tx.valid_for_block(base_fee) {
                         TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
                         self.active_txs.put(SimulatedTxList::new(None, &tx_list));
+                        self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                     }
                 }
 
+                self.mem_size = self.mem_size.saturating_add(new_tx.size());
                 self.pool_data.insert(tx_list.sender(), tx_list);
             }
         }
-
-        let estimated_memory = self.pool_data.values().map(|tx_list| tx_list.mem_size()).sum::<usize>() +
-            self.active_txs.txs.iter().map(|tx_list| tx_list.mem_size()).sum::<usize>();
-        MetricsUpdate::send(
-            new_tx.uuid,
-            Metric::SetGauge(Gauge::TransactionPoolMemoryBytes, estimated_memory as f64),
-            metrics,
-        );
 
         true
     }
@@ -116,24 +113,29 @@ impl TxPool {
         // Refresh active txs with the latest tx_list and simulated tx.
         // TODO: probably unecassary to copy the tx_list here.
         let simulated_tx_list = SimulatedTxList::new(Some(simulated_tx), tx_list);
+        let mem_size = simulated_tx_list.mem_size();
         self.active_txs.put(simulated_tx_list);
+        self.mem_size = self.mem_size.saturating_add(mem_size);
     }
 
     /// Removes a transaction with sender and nonce from the pool.
     pub fn remove(&mut self, sender: &Address, nonce: u64, telemetry_producer: &mut Producer<TelemetryUpdate>) {
+        let mut f = |t: Arc<Transaction>| {
+            self.mem_size = self.mem_size.saturating_sub(t.size());
+            TelemetryUpdate::send(
+                t.uuid,
+                bop_common::telemetry::Telemetry::Tx(bop_common::telemetry::Tx::RemovedFromPool),
+                telemetry_producer,
+            )
+        };
+
         if let Some(tx_list) = self.pool_data.get_mut(sender) {
-            if tx_list.forward(nonce, |t| {
-                TelemetryUpdate::send(
-                    t.uuid,
-                    bop_common::telemetry::Telemetry::Tx(bop_common::telemetry::Tx::RemovedFromPool),
-                    telemetry_producer,
-                )
-            }) {
+            if tx_list.forward(nonce, &mut f) {
                 self.pool_data.remove(sender);
             }
         }
 
-        self.active_txs.forward(sender, nonce, telemetry_producer);
+        self.active_txs.forward(sender, nonce, &mut f);
     }
 
     pub fn remove_mined_txs<'a, T: OpTransaction + TransactionTrait + 'a>(
@@ -141,21 +143,24 @@ impl TxPool {
         mined_txs: impl Iterator<Item = (&'a Address, &'a T)>,
         telemetry_producer: &mut Producer<TelemetryUpdate>,
     ) {
+        let mut f = |t: Arc<Transaction>| {
+            self.mem_size = self.mem_size.saturating_sub(t.size());
+            TelemetryUpdate::send(
+                t.uuid,
+                bop_common::telemetry::Telemetry::Tx(bop_common::telemetry::Tx::RemovedFromPool),
+                telemetry_producer,
+            )
+        };
+
         // Clear all mined nonces from the pool
         for (sender, tx) in mined_txs {
             let nonce = tx.nonce();
             if let Some(sender_tx_list) = self.pool_data.get_mut(sender) {
-                if sender_tx_list.forward(nonce, |t| {
-                    TelemetryUpdate::send(
-                        t.uuid,
-                        bop_common::telemetry::Telemetry::Tx(bop_common::telemetry::Tx::RemovedFromPool),
-                        telemetry_producer,
-                    )
-                }) {
+                if sender_tx_list.forward(nonce, &mut f) {
                     self.pool_data.remove(sender);
                 }
             }
-            self.active_txs.forward(sender, nonce, telemetry_producer);
+            self.active_txs.forward(sender, nonce, &mut f);
         }
     }
 
@@ -179,6 +184,7 @@ impl TxPool {
                 if let Some(ready) = tx_list.ready(db_nonce, base_fee) {
                     TxPool::send_sim_requests_for_tx(ready.peek().unwrap(), db, sim_sender);
                     self.active_txs.put(SimulatedTxList::new(None, tx_list));
+                    self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                 }
             }
         }
@@ -223,5 +229,6 @@ impl TxPool {
     pub fn clear(&mut self) {
         self.active_txs.clear();
         self.pool_data.clear();
+        self.mem_size = 0;
     }
 }
