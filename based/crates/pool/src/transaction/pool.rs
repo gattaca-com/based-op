@@ -70,9 +70,8 @@ impl TxPool {
                     if is_next_nonce && valid_for_block {
                         // If this is the first tx for a sender, and it can be processed, simulate it and add to active.
                         TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
-                        if self.active_txs.put(SimulatedTxList::new(None, tx_list)) {
-                            self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
-                        }
+                        self.active_txs.put(SimulatedTxList::new(None, tx_list));
+                        self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                     } else if valid_for_block {
                         // If we already have the first tx for this sender and it's in active we might be able to
                         // add this tx to its pending list.
@@ -91,9 +90,8 @@ impl TxPool {
                     // If this is the first tx for a sender, and it can be processed, simulate it and add to active.
                     if is_next_nonce && new_tx.valid_for_block(base_fee) {
                         TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
-                        if self.active_txs.put(SimulatedTxList::new(None, &tx_list)) {
-                            self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
-                        }
+                        self.active_txs.put(SimulatedTxList::new(None, &tx_list));
+                        self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                     }
                 }
 
@@ -116,9 +114,8 @@ impl TxPool {
         // TODO: probably unecassary to copy the tx_list here.
         let simulated_tx_list = SimulatedTxList::new(Some(simulated_tx), tx_list);
         let mem_size = simulated_tx_list.mem_size();
-        if self.active_txs.put(simulated_tx_list) {
-            self.mem_size = self.mem_size.saturating_add(mem_size);
-        }
+        self.active_txs.put(simulated_tx_list);
+        self.mem_size = self.mem_size.saturating_add(mem_size);
     }
 
     /// Removes a transaction with sender and nonce from the pool.
@@ -186,9 +183,8 @@ impl TxPool {
                 let db_nonce = db.get_nonce(*sender).unwrap();
                 if let Some(ready) = tx_list.ready(db_nonce, base_fee) {
                     TxPool::send_sim_requests_for_tx(ready.peek().unwrap(), db, sim_sender);
-                    if self.active_txs.put(SimulatedTxList::new(None, tx_list)) {
-                        self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
-                    }
+                    self.active_txs.put(SimulatedTxList::new(None, tx_list));
+                    self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                 }
             }
         }

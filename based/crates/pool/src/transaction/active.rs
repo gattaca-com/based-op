@@ -24,8 +24,7 @@ impl Active {
     /// Adds a simulated tx list to the active list.
     /// Returns true if the tx list was added, false if it was already in the list.
     #[inline]
-    pub fn put(&mut self, tx: SimulatedTxList) -> bool {
-        let mut added = false;
+    pub fn put(&mut self, tx: SimulatedTxList) {
         let sender = tx.sender();
 
         if let Some(&index) = self.senders.get(&sender) {
@@ -33,10 +32,7 @@ impl Active {
         } else {
             self.txs.push(tx);
             self.senders.insert(sender, self.txs.len() - 1);
-            added = true;
         }
-
-        added
     }
 
     #[inline]
