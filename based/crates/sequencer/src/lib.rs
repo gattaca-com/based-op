@@ -14,6 +14,7 @@ use bop_common::{
     },
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::DatabaseWrite,
+    metrics::{Gauge, Metric, MetricsUpdate},
     p2p::{EnvV0, VersionedMessage, VersionedMessageWithState},
     shared::SharedState,
     telemetry::{self, Telemetry, TelemetryUpdate, system::SystemNotification},
