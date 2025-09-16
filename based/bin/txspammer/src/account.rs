@@ -1,16 +1,10 @@
-use alloy_consensus::TxEip1559;
-use alloy_consensus::{SignableTransaction, TxEnvelope};
+use alloy_consensus::{SignableTransaction, TxEip1559, TxEnvelope};
 use alloy_eips::eip2718::Encodable2718;
-use alloy_primitives::{B256, U256};
-use alloy_primitives::{Bytes, b256, utils::parse_ether};
-use alloy_provider::Provider;
-use alloy_provider::ProviderBuilder;
-use alloy_provider::RootProvider;
+use alloy_primitives::{B256, Bytes, U256};
+use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types::AccessList;
 use alloy_signer::SignerSync;
 use alloy_signer_local::PrivateKeySigner;
-use reqwest::Url;
-use tokio::time::sleep;
 
 pub struct AccountGenerator {
     current: U256,
@@ -24,7 +18,7 @@ impl AccountGenerator {
     pub fn next(&mut self) -> PrivateKeySigner {
         let temp = self.current;
         self.current += U256::from(1);
-        PrivateKeySigner::from_slice(&temp.as_le_slice()).expect("something wrong with U256 to bytes conversion")
+        PrivateKeySigner::from_slice(temp.as_le_slice()).expect("something wrong with U256 to bytes conversion")
     }
 }
 
@@ -62,7 +56,13 @@ impl Account {
         Ok(self.nonce)
     }
 
-    pub async fn transfer(&mut self, to: &mut Account, spec: TxSpec, provider: RootProvider, sequencer: Option<RootProvider>) -> eyre::Result<B256> {
+    pub async fn transfer(
+        &mut self,
+        to: &mut Account,
+        spec: TxSpec,
+        provider: RootProvider,
+        sequencer: Option<RootProvider>,
+    ) -> eyre::Result<B256> {
         let tx = TxEip1559 {
             chain_id: spec.chain_id,
             nonce: self.nonce,
@@ -80,15 +80,21 @@ impl Account {
         let encoded = tx.encoded_2718();
         let provider_to_use = sequencer.as_ref().unwrap_or(&provider);
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
-        // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), to.signer.address(), self.nonce, self.balance);
+        // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), to.signer.address(),
+        // self.nonce, self.balance);
         self.nonce += 1;
         self.balance -= spec.value + U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
         to.balance += spec.value;
 
-        Ok(tx.tx_hash().clone())
+        Ok(*tx.tx_hash())
     }
 
-    pub async fn self_transfer(&mut self, spec: TxSpec, provider: RootProvider, sequencer: Option<RootProvider>) -> eyre::Result<B256> {
+    pub async fn _self_transfer(
+        &mut self,
+        spec: TxSpec,
+        provider: RootProvider,
+        sequencer: Option<RootProvider>,
+    ) -> eyre::Result<B256> {
         let tx = TxEip1559 {
             chain_id: spec.chain_id,
             nonce: self.nonce,
@@ -106,10 +112,11 @@ impl Account {
         let encoded = tx.encoded_2718();
         let provider_to_use = sequencer.as_ref().unwrap_or(&provider);
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
-        // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), self.signer.address(), self.nonce, self.balance);
+        // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), self.signer.address(),
+        // self.nonce, self.balance);
         self.nonce += 1;
         self.balance -= U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
 
-        Ok(tx.tx_hash().clone())
+        Ok(*tx.tx_hash())
     }
 }

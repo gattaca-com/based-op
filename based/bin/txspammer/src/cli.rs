@@ -8,24 +8,26 @@ use tracing::level_filters::LevelFilter;
 #[command(version, about, name = "based-txproxy")]
 pub struct TxSpammerArgs {
     /// Root wallet private key
-    #[arg(long="root.private_key", default_value = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")]
+    #[arg(
+        long = "root.private_key",
+        default_value = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    )]
     pub root_private_key: String,
     /// Number of accounts to generate
-    #[arg(long="num_accounts", default_value_t = 100)]
+    #[arg(long = "num_accounts", default_value_t = 100)]
     pub num_accounts: usize,
     /// Throughput (tx/s)
-    #[arg(long="throughput", default_value_t = 300)]
+    #[arg(long = "throughput", default_value_t = 300)]
     pub throughput: usize,
     /// Funding amount per account (in ether)
-    #[arg(long="funding_amount", default_value_t = 0.01)]
+    #[arg(long = "funding_amount", default_value_t = 0.01)]
     pub funding_amount: f64,
 
     // /// Refund
     // #[arg(long="refund", default_value_t = false)]
     // pub refund: bool,
-
     /// Value to transfer per transaction (in ether)
-    #[arg(long="tx_value", default_value_t = 0.0000000000000001)]
+    #[arg(long = "tx_value", default_value_t = 0.0000000000000001)]
     pub tx_value: f64,
     /// Gas limit per transaction
     #[arg(long = "gas_limit", default_value_t = 21_000)]
@@ -34,17 +36,18 @@ pub struct TxSpammerArgs {
     #[arg(long = "max_fee_per_gas", default_value_t = 1_000_000_000)]
     pub max_fee_per_gas: u128,
     /// Max priority fee per gas (in wei)
-    #[arg(long = "max_priority_fee_per_gas", default_value_t = 100)]
+    #[arg(long = "max_priority_fee_per_gas", default_value_t = 20)]
     pub max_priority_fee_per_gas: u128,
 
     /// Eth rpc url (http/ws)
-    #[arg(long="eth_rpc.url", default_value = "http://127.0.0.1:8545")]
+    #[arg(long = "eth_rpc.url", default_value = "http://127.0.0.1:8545")]
     pub eth_rpc_url: String,
     /// Sequencer URL (if specified, eth_sendRawTransaction will be sent to this URL)
-    #[arg(long="sequencer.url")]
+    #[arg(long = "sequencer.url")]
     pub sequencer_url: Option<String>,
-    /// Frag stream URL (if specified, we can measure the e2e latency via the frag stream). Poll receipt using eth rpc if not specified.
-    #[arg(long="fragstream.url")]
+    /// Frag stream URL (if specified, we can measure the e2e latency via the frag stream). Poll receipt using eth rpc
+    /// if not specified.
+    #[arg(long = "fragstream.url")]
     pub fragstream_url: Option<String>,
 
     /// Enable debug logging

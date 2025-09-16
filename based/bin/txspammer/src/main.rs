@@ -1,30 +1,30 @@
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::time::Duration;
-use std::time::Instant;
+use std::{
+    collections::HashMap,
+    io::{Write, stdout},
+    str::FromStr,
+    time::{Duration, Instant},
+};
 
-use alloy_primitives::U256;
-use alloy_provider::Provider;
-use alloy_provider::WsConnect;
+use alloy_primitives::{U256, utils::format_ether};
+use alloy_provider::{Provider, WsConnect};
 use alloy_signer_local::PrivateKeySigner;
-use bop_common::p2p::SignedVersionedMessage;
-use bop_common::utils::init_tracing;
+use bop_common::{p2p::SignedVersionedMessage, utils::init_tracing};
 use clap::Parser;
 use cli::TxSpammerArgs;
 use futures_util::stream::StreamExt;
 use http::Uri;
-use rand::Rng;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use reqwest::Url;
-use tokio::sync::mpsc;
-use tokio::time::interval;
-use tokio::time::sleep;
-use tokio_websockets::{ClientBuilder};
+use tokio::{
+    sync::mpsc,
+    time::{interval, sleep},
+};
+use tokio_websockets::ClientBuilder;
+use tracing::{info, warn};
 
 use crate::account::{Account, AccountGenerator, TxSpec};
 mod account;
 mod cli;
-
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -50,25 +50,22 @@ async fn main() -> eyre::Result<()> {
     });
 
     let chain_id = full_provider.get_chain_id().await?;
-    println!("Connected to chain id {}", chain_id);
+    info!("Eth RPC has chain id {}", chain_id);
 
     let root_signer = PrivateKeySigner::from_str(&args.root_private_key).expect("invalid root private key");
     let mut root_account = Account::new(root_signer);
     root_account.refresh(full_provider.clone()).await.expect("failed to fetch root account nonce and balance");
-    println!(
-        "Root account {:?} has balance {} wei",
-        root_account.signer.address(),
-        root_account.balance
-    );
+    info!("Root account {:?} has balance {} eth", root_account.signer.address(), format_ether(root_account.balance),);
 
     // Generate target accounts
     let mut account_generator = AccountGenerator::new(U256::from(123456789u64));
     let mut target_accounts =
         (0..args.num_accounts).map(|_| Account::new(account_generator.next())).collect::<Vec<Account>>();
-    println!("Generated {} accounts", target_accounts.len());
 
     for account in target_accounts.iter_mut() {
         account.refresh(full_provider.clone()).await.expect("failed to fetch account nonce and balance");
+        print!("Fetching {:?} balance: {} eth     \r", account.signer.address(), format_ether(account.balance));
+        stdout().flush().unwrap();
     }
 
     // Fund target accounts
@@ -93,15 +90,24 @@ async fn main() -> eyre::Result<()> {
             )
             .await
             .expect("failed to fund account");
-        println!("Funded account {:?} with {} wei", account.signer.address(), amount_to_fund);
-        sleep(std::time::Duration::from_millis(50)).await;
+        print!("Funding {:?} with {} eth     \r", account.signer.address(), format_ether(amount_to_fund));
+        stdout().flush().unwrap();
+        sleep(std::time::Duration::from_millis(10)).await;
     }
     sleep(std::time::Duration::from_secs(1)).await;
 
     // Refresh account states
     for account in target_accounts.iter_mut() {
         account.refresh(full_provider.clone()).await.expect("failed to fetch account nonce and balance");
-        println!("Account {:?} has balance {} wei", account.signer.address(), account.balance);
+        if account.balance < funding_amount {
+            panic!(
+                "Account {:?} has insufficient balance {} (Failed to transfer. Maybe max gas fee too low?)",
+                account.signer.address(),
+                account.balance
+            );
+        }
+        print!("Verifying {:?} balance: {} eth     \r", account.signer.address(), format_ether(account.balance));
+        stdout().flush().unwrap();
     }
 
     let tx_spec = TxSpec {
@@ -112,14 +118,13 @@ async fn main() -> eyre::Result<()> {
         value: U256::from((args.tx_value * 1e18) as u64),
     };
 
-    println!("Funding {} accounts with {} ether each", args.num_accounts, args.funding_amount);
-    println!("Spamming transactions at {} tx/s", args.throughput);
-    println!("Tx: {:?}", tx_spec);
+    info!("Tx: {:?}", tx_spec);
+    info!("Funded {} accounts with {} ether each", args.num_accounts, args.funding_amount);
+    info!("Start spamming transactions at {} tx/s", args.throughput);
 
     // Set up receipt listener for latency measurement
     let accounts_clone = target_accounts.clone();
     let n = accounts_clone.len();
-    let mut rng = rand::rngs::StdRng::seed_from_u64(1234567890);
     let mut counter = 0;
 
     let (request_tx, mut request_rx) = mpsc::channel::<(alloy_primitives::TxHash, Instant)>(1 << 16);
@@ -154,13 +159,21 @@ async fn main() -> eyre::Result<()> {
                             }
                         }
                         None => {
-                            println!("Received non-text message: {:?}", msg);
+                            warn!("Received non-text message: {:?}", msg);
                             continue;
                         }
                     }
                 }
             }
             None => {
+                warn!("");
+                warn!(
+                    "Frag stream URL not specified, falling back to RPC polling. Latency measurement may be inaccurate."
+                );
+                warn!(
+                    "Consider using a frag stream for better latency measurement. Use --fragstream.url to specify the URL."
+                );
+                warn!("");
                 while let Some((tx_hash, tx_out_time)) = request_rx.recv().await {
                     let _ = loop {
                         match full_provider_clone.get_transaction_receipt(tx_hash).await {
@@ -177,6 +190,35 @@ async fn main() -> eyre::Result<()> {
         }
     });
 
+    // Start stats logger
+    tokio::spawn(async move {
+        let interval_secs = 5;
+        let mut info_interval = interval(Duration::from_secs(interval_secs));
+        loop {
+            info_interval.tick().await;
+
+            let mut latencies = Percentile::new();
+            while let Ok((_, latency)) = latency_rx.try_recv() {
+                latencies.add(latency);
+            }
+
+            let tps = latencies.len() as f64 / interval_secs as f64;
+            let p50 = latencies.percentile(50.0).unwrap_or(0.0);
+            let p90 = latencies.percentile(90.0).unwrap_or(0.0);
+            let p99 = latencies.percentile(99.0).unwrap_or(0.0);
+
+            info!(
+                "Last {}s: {} tx confirmed, TPS: {:.2}, Latency P50: {:.2}s, P90: {:.2}s, P99: {:.2}s",
+                interval_secs,
+                latencies.len(),
+                tps,
+                p50,
+                p90,
+                p99
+            );
+        }
+    });
+
     // Start spamming
     for mut account in target_accounts.into_iter() {
         let args = args.clone();
@@ -187,13 +229,12 @@ async fn main() -> eyre::Result<()> {
         let mut rag2 = rand::rngs::StdRng::seed_from_u64(counter);
         let tx = request_tx.clone();
         counter += 1;
-        sleep(Duration::from_millis(rng.random_range(0..100))).await;
         tokio::spawn(async move {
             let interval_nanos = 1_000_000_000f64 / args.throughput as f64 * args.num_accounts as f64;
+            sleep(Duration::from_nanos(rag2.random_range(0..(interval_nanos as u64)))).await;
             let interval_duration = Duration::from_nanos(interval_nanos as u64);
             let mut interval_send = interval(interval_duration);
             let mut refresh_timer = Instant::now();
-            // println!("Account {:?} starts spamming every {:?}", account.signer.address(), interval_duration);
             loop {
                 interval_send.tick().await;
                 let to = &mut accounts_clone[rag2.random_range(0..n)];
@@ -212,32 +253,8 @@ async fn main() -> eyre::Result<()> {
         });
     }
 
-    // Start stats printer
-    tokio::spawn(async move {
-        let interval_secs = 5;
-        let mut info_interval = interval(Duration::from_secs(interval_secs));
-        loop {
-            info_interval.tick().await;
-
-            let mut latencies = Percentile::new();
-            while let Ok((_, latency)) = latency_rx.try_recv() {
-                latencies.add(latency);
-            }
-
-            let tps = latencies.len() as f64 / interval_secs as f64;
-            let p50 = latencies.percentile(50.0).unwrap_or(0.0);
-            let p90 = latencies.percentile(90.0).unwrap_or(0.0);
-            let p99 = latencies.percentile(99.0).unwrap_or(0.0);
-
-            println!(
-                "In the last {}s: {} tx confirmed, TPS: {:.2}, Latency P50: {:.2}s, P90: {:.2}s, P99: {:.2}s",
-                interval_secs, latencies.len(), tps, p50, p90, p99
-            );
-        }
-    });
-
     tokio::signal::ctrl_c().await?;
-    println!("Received Ctrl-C, shutting down");
+    info!("Received Ctrl-C, shutting down");
 
     Ok(())
 }
