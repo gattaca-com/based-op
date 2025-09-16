@@ -11,7 +11,7 @@ use reth_evm::EvmEnv;
 use shared_memory::ShmemError;
 use thiserror::Error;
 
-use crate::typedefs::*;
+use crate::{p2p::VersionedMessageWithState, typedefs::*};
 
 pub mod queue;
 pub mod seqlock;
@@ -24,7 +24,6 @@ use tracing::{error, warn};
 pub use walkie_talkie::WalkieTalkie;
 
 use crate::{
-    p2p::VersionedMessage,
     time::{Duration, IngestionTime, Instant, Timer},
     transaction::Transaction,
     utils::{full_last_part_of_typename, last_part_of_typename},
@@ -270,8 +269,8 @@ pub struct Spine<Db: 'static> {
     sender_sequencer_to_blockfetch: Sender<BlockFetch>,
     receiver_sequencer_to_blockfetch: CrossBeamReceiver<BlockFetch>,
 
-    sender_sequencer_frag_broadcast: Sender<VersionedMessage>,
-    receiver_sequencer_frag_broadcast: CrossBeamReceiver<VersionedMessage>,
+    sender_sequencer_frag_broadcast: Sender<VersionedMessageWithState>,
+    receiver_sequencer_frag_broadcast: CrossBeamReceiver<VersionedMessageWithState>,
 
     evm_block_params: Queue<InternalMessage<EvmEnv<OpSpecId>>>,
 }
@@ -367,7 +366,7 @@ macro_rules! from_spine {
     };
 }
 
-from_spine!(VersionedMessage, sequencer_frag_broadcast, Sender);
+from_spine!(VersionedMessageWithState, sequencer_frag_broadcast, Sender);
 from_spine!(SimulatorToSequencer, simulator_to_sequencer, Sender);
 from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator, Sender);
 from_spine!(SequencerToExternal, sequencer_to_rpc, Sender);
@@ -403,7 +402,7 @@ pub struct SendersSpine<Db> {
     engine_rpc_to_sequencer: Sender<EngineApi>,
     eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
-    sequencer_frag_broadcast: Sender<VersionedMessage>,
+    sequencer_frag_broadcast: Sender<VersionedMessageWithState>,
     evm_block_params: Producer<InternalMessage<EvmEnv<OpSpecId>>>,
     sequencer_to_blockfetch: Sender<BlockFetch>,
     timestamp: IngestionTime,
@@ -449,7 +448,7 @@ pub struct ReceiversSpine<Db> {
     engine_rpc_to_sequencer: Receiver<EngineApi>,
     eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
-    sequencer_frag_broadcast: Receiver<VersionedMessage>,
+    sequencer_frag_broadcast: Receiver<VersionedMessageWithState>,
     evm_block_params: Receiver<EvmEnv<OpSpecId>, Consumer<InternalMessage<EvmEnv<OpSpecId>>>>,
     sequencer_to_blockfetch: Receiver<BlockFetch>,
 }
