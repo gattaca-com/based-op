@@ -238,9 +238,9 @@ impl<Db> SortingData<Db> {
             &mut self.metrics_producer,
         );
 
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining
-            && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
-            && !self.fifo_ordering
+        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment) &&
+            !self.fifo_ordering
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
