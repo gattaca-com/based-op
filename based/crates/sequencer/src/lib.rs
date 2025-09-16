@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip7685::RequestsOrHash;
@@ -409,6 +409,7 @@ where
                 ctx.timers.seal_block.start();
 
                 // Gossip last frag before sealing
+                ctx.last_seal_time = Instant::now();
                 let (last_frag, maybe_state) = ctx.seal_last_frag(&mut seq, sorting_data);
                 let msg =
                     VersionedMessageWithState { msg: VersionedMessage::from(last_frag), state_update: maybe_state };
@@ -562,6 +563,7 @@ impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
 
+                data.last_seal_time = Instant::now();
                 let (msg, maybe_update, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
                 let versioned_message = VersionedMessage::from(msg);
                 connections.send(VersionedMessageWithState { msg: versioned_message, state_update: maybe_update });

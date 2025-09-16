@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Display, sync::Arc};
+use std::{collections::VecDeque, fmt::Display, sync::{Arc}, time::Instant};
 
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header};
 use alloy_eips::merge::BEACON_NONCE;
@@ -79,6 +79,7 @@ pub struct SequencerContext<Db> {
     pub timers: SequencerTimers,
     pub telemetry: Producer<TelemetryUpdate>,
     pub metrics: Producer<MetricsUpdate>,
+    pub last_seal_time: Instant,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -104,6 +105,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             base_fee: Default::default(),
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
+            last_seal_time: Instant::now(),
         }
     }
 }
