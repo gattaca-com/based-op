@@ -161,6 +161,7 @@ mod tests {
 
         let config = SequencerConfig {
             frag_duration: Duration::from_millis(200),
+            fifo_ordering: false,
             n_per_loop: 5,
             rpc_url: rpc_url.clone(),
             evm_config: evm_config.clone(),
