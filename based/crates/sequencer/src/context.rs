@@ -191,7 +191,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.as_ref().basefee,
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
-            &mut self.metrics,
         ) {
             TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
         }
@@ -358,7 +357,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let uuid = Uuid::new_v4();
         MetricsUpdate::send(
             uuid,
-            Metric::SetGauge(Gauge::GatewayBlockBuildDurationMs, block_duration),
+            Metric::SetGauge(Gauge::GatewayBlockBuildDurationSecs, block_duration),
             &mut self.metrics,
         );
         MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockTxCount, txs), &mut self.metrics);
