@@ -78,9 +78,6 @@ build-txproxy: ## 🏗️ Build based txproxy
 build-metrics-exporter: ## 🏗️ Build metrics exporter
 	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based --load
 
-build-metrics-exporter: ## 🏗️ Build metrics exporter
-	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based --load
-
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t local_based_op_geth ../based-op-geth
 
@@ -419,6 +416,9 @@ stop-main-node:
 		exit 1; \
 	fi
 	docker compose -f .local_main_node/compose.yml down
+
+start-monitoring:
+	docker compose $(START_MONITORING_COMPOSE_FILES) up -d
 
 stop-monitoring:
 	docker compose $(START_MONITORING_COMPOSE_FILES) down
