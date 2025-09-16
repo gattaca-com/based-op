@@ -31,7 +31,7 @@ impl Duration {
 
     #[inline]
     pub fn from_secs_f64(s: f64) -> Self {
-        Self::from_secs((s * 1_000_000_000.0).round() as u64)
+        Self::from_nanos((s * 1_000_000_000.0).round() as u64)
     }
 
     #[inline]
