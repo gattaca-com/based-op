@@ -7,6 +7,7 @@ datasources:
     isDefault: true
     access: proxy
     editable: false
+    uid: PBFA97CFB590B2093
 
   - name: Loki
     type: loki
@@ -14,6 +15,7 @@ datasources:
     isDefault: false
     access: proxy
     editable: false
+    uid: P8E80F9AEF21F6940
     jsonData:
       timeout: 60
       maxLines: 1000
