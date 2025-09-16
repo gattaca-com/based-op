@@ -57,6 +57,8 @@ pub trait Actor<Db>: Sized {
         let term = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
             .expect("couldn't register signal hook for some reason");
+        signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))
+            .expect("couldn't register signal hook for some reason");
         let time_loop = actor_config.min_loop_duration.is_some();
         loop {
             loop_timer.start();
