@@ -40,8 +40,7 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
-      - ./grafana/dashboards/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
-      - ./grafana/dashboards:/etc/grafana/dashboards
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
     environment:
       - GF_SECURITY_ADMIN_USER=based-op
       - GF_SECURITY_ADMIN_PASSWORD=grafana
