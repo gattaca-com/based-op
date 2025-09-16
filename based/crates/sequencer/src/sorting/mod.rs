@@ -58,17 +58,20 @@ impl ActiveOrders {
         unreachable!("this should never happen");
     }
 
-    pub fn put(&mut self, tx: SimulatedTx) {
-        let payment = tx.payment;
+    pub fn put(&mut self, tx: SimulatedTx, fifo_ordering: bool) {
         let mut id = self.orders.len();
-        let sender = tx.sender();
-        for (i, order) in self.orders.iter_mut().enumerate().rev() {
-            if order.sender() == sender {
-                order.put(tx);
-                return;
-            }
-            if payment < order.payment() {
-                id = i;
+
+        if !fifo_ordering {
+            let payment = tx.payment;
+            let sender = tx.sender();
+            for (i, order) in self.orders.iter_mut().enumerate().rev() {
+                if order.sender() == sender {
+                    order.put(tx);
+                    return;
+                }
+                if payment < order.payment() {
+                    id = i;
+                }
             }
         }
         // not found so we insert it at the id corresponding to the payment

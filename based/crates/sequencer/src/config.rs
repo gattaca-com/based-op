@@ -26,6 +26,7 @@ impl From<&GatewayArgs> for SuperVisorConfig {
 pub struct SequencerConfig {
     pub frag_duration: Duration,
     pub n_per_loop: usize,
+    pub fifo_ordering: bool,
     pub rpc_url: Url,
     pub evm_config: OpEvmConfig,
     /// If true, we will simulate txs at the top of each frag in the pools.
@@ -40,7 +41,8 @@ impl From<&GatewayArgs> for SequencerConfig {
     fn from(args: &GatewayArgs) -> Self {
         Self {
             frag_duration: Duration::from_millis(args.frag_duration_ms),
-            n_per_loop: args.sim_threads,
+            n_per_loop: if args.fifo_ordering { 1 } else { args.sim_threads },
+            fifo_ordering: args.fifo_ordering,
             rpc_url: args.eth_client_url.clone(),
             simulate_tof_in_pools: false,
             evm_config: OpEvmConfig::new(args.chain.clone(), Default::default()),

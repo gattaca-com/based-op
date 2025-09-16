@@ -56,6 +56,10 @@ pub struct GatewayArgs {
     /// Number of sims per loop
     #[arg(long = "sequencer.sim_threads", default_value_t = 5)]
     pub sim_threads: usize,
+    /// Run the sequencer in fifo ordering mode. Note that this will result in using only one
+    /// simulation thread. This must be used for chain replication testing.
+    #[arg(long = "sequencer.fifo_ordering", default_value_t = false)]
+    pub fifo_ordering: bool,
     /// vsync window in micros
     #[arg(long = "sequencer.vsync_window_us", default_value_t = 10)]
     pub vsync_window_us: usize,
