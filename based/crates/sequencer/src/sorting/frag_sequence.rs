@@ -1,11 +1,17 @@
 use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use bop_common::p2p::{StateUpdate, Transaction, Transactions};
-use bop_common::{p2p::FragV0, telemetry::TelemetryUpdate, time::Instant, transaction::SimulatedTx};
+use bop_common::{
+    p2p::{FragV0, StateUpdate, Transaction, Transactions},
+    telemetry::TelemetryUpdate,
+    time::Instant,
+    transaction::SimulatedTx,
+};
 use revm::database::DatabaseRef;
-use revm_primitives::map::foldhash::{HashMap, HashMapExt};
-use revm_primitives::{B256, Bytes};
+use revm_primitives::{
+    B256, Bytes,
+    map::foldhash::{HashMap, HashMapExt},
+};
 use tracing::debug;
 
 use super::{SortingData, sorting_data::SortingTelemetry};
