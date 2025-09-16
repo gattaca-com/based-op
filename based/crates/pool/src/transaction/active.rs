@@ -21,8 +21,6 @@ impl Active {
         }
     }
 
-    /// Adds a simulated tx list to the active list.
-    /// Returns true if the tx list was added, false if it was already in the list.
     #[inline]
     pub fn put(&mut self, tx: SimulatedTxList) {
         let sender = tx.sender();
