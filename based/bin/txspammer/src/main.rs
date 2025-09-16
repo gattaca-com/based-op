@@ -5,7 +5,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use alloy_primitives::{U256, utils::format_ether};
+use alloy_primitives::{
+    U256,
+    utils::{format_ether, parse_ether},
+};
 use alloy_provider::{Provider, WsConnect};
 use alloy_signer_local::PrivateKeySigner;
 use bop_common::{p2p::SignedVersionedMessage, utils::init_tracing};
@@ -43,6 +46,16 @@ async fn main() -> eyre::Result<()> {
             .on_http(args.eth_rpc_url.parse().expect("invalid eth rpc url")),
     };
 
+    if args.sequencer_url.is_none() {
+        warn!("");
+        warn!(
+            "Sequencer URL not specified, Submitting transactions via Eth RPC. This may lead to higher latency and lower throughput."
+        );
+        warn!("Consider using a sequencer for better performance. Use --sequencer.url to specify the URL.");
+        warn!("eg: --sequencer.url http://127.0.0.1:9994");
+        warn!("");
+    }
+
     let sequencer = args.sequencer_url.clone().map(|url| {
         alloy_provider::ProviderBuilder::new()
             .disable_recommended_fillers()
@@ -72,21 +85,21 @@ async fn main() -> eyre::Result<()> {
     let funding_amount = U256::from((args.funding_amount * 1e18) as u64);
     for account in target_accounts.iter_mut() {
         let amount_to_fund = funding_amount.saturating_sub(account.balance);
-        if amount_to_fund.is_zero() {
+        if amount_to_fund.is_zero() || amount_to_fund < parse_ether("0.001").unwrap() {
             continue;
         }
         root_account
             .transfer(
                 account,
-                TxSpec {
+                &TxSpec {
                     chain_id,
                     gas_limit: args.gas_limit,
                     max_fee_per_gas: args.max_fee_per_gas,
                     max_priority_fee_per_gas: args.max_priority_fee_per_gas,
                     value: amount_to_fund,
                 },
-                full_provider.clone(),
-                sequencer.clone(),
+                &full_provider,
+                &sequencer,
             )
             .await
             .expect("failed to fund account");
@@ -96,10 +109,10 @@ async fn main() -> eyre::Result<()> {
     }
     sleep(std::time::Duration::from_secs(1)).await;
 
-    // Refresh account states
+    // Verifying account states
     for account in target_accounts.iter_mut() {
         account.refresh(full_provider.clone()).await.expect("failed to fetch account nonce and balance");
-        if account.balance < funding_amount {
+        if funding_amount.saturating_sub(account.balance) > parse_ether("0.001").unwrap() {
             panic!(
                 "Account {:?} has insufficient balance {} (Failed to transfer. Maybe max gas fee too low?)",
                 account.signer.address(),
@@ -173,6 +186,7 @@ async fn main() -> eyre::Result<()> {
                 warn!(
                     "Consider using a frag stream for better latency measurement. Use --fragstream.url to specify the URL."
                 );
+                warn!("eg: --fragstream.url ws://0.0.0.0:9999/state_stream");
                 warn!("");
                 while let Some((tx_hash, tx_out_time)) = request_rx.recv().await {
                     let _ = loop {
@@ -203,17 +217,18 @@ async fn main() -> eyre::Result<()> {
             }
 
             let tps = latencies.len() as f64 / interval_secs as f64;
+
             let p50 = latencies.percentile(50.0).unwrap_or(0.0);
-            let p90 = latencies.percentile(90.0).unwrap_or(0.0);
+            let p95 = latencies.percentile(95.0).unwrap_or(0.0);
             let p99 = latencies.percentile(99.0).unwrap_or(0.0);
 
             info!(
-                "Last {}s: {} tx confirmed, TPS: {:.2}, Latency P50: {:.2}s, P90: {:.2}s, P99: {:.2}s",
+                "Last {}s: {} tx confirmed, TPS: {:.2}, Latency P50: {:.2}s, P95: {:.2}s, P99: {:.2}s",
                 interval_secs,
                 latencies.len(),
                 tps,
                 p50,
-                p90,
+                p95,
                 p99
             );
         }
@@ -238,12 +253,11 @@ async fn main() -> eyre::Result<()> {
             loop {
                 interval_send.tick().await;
                 let to = &mut accounts_clone[rag2.random_range(0..n)];
-                let tx_out_time = Instant::now();
-                let tx_hash = account
-                    .transfer(to, tx_spec_cloned.clone(), full_provider.clone(), sequencer.clone())
-                    .await
-                    .expect("failed to send tx");
-                tx.send((tx_hash, tx_out_time)).await.expect("failed to send tx hash to logger");
+                let start_sending_at = Instant::now();
+                let (tx_hash, _) =
+                    account.transfer(to, &tx_spec_cloned, &full_provider, &sequencer).await.expect("failed to send tx");
+                // let tx_out_time = Instant::now();
+                tx.send((tx_hash, start_sending_at)).await.expect("failed to send tx hash to logger");
 
                 if refresh_timer.elapsed() > Duration::from_secs(5) {
                     account.refresh_balance(full_provider.clone()).await.expect("failed to refresh account");

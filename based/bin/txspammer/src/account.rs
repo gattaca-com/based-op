@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use alloy_consensus::{SignableTransaction, TxEip1559, TxEnvelope};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{B256, Bytes, U256};
@@ -59,10 +61,10 @@ impl Account {
     pub async fn transfer(
         &mut self,
         to: &mut Account,
-        spec: TxSpec,
-        provider: RootProvider,
-        sequencer: Option<RootProvider>,
-    ) -> eyre::Result<B256> {
+        spec: &TxSpec,
+        provider: &RootProvider,
+        sequencer: &Option<RootProvider>,
+    ) -> eyre::Result<(B256, Instant)> {
         let tx = TxEip1559 {
             chain_id: spec.chain_id,
             nonce: self.nonce,
@@ -78,7 +80,9 @@ impl Account {
         let sig = self.signer.sign_hash_sync(&tx.signature_hash()).unwrap();
         let tx: TxEnvelope = tx.into_signed(sig).into();
         let encoded = tx.encoded_2718();
-        let provider_to_use = sequencer.as_ref().unwrap_or(&provider);
+        let provider_to_use = sequencer.as_ref().unwrap_or(provider);
+
+        let start_sending = Instant::now();
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
         // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), to.signer.address(),
         // self.nonce, self.balance);
@@ -86,15 +90,15 @@ impl Account {
         self.balance -= spec.value + U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
         to.balance += spec.value;
 
-        Ok(*tx.tx_hash())
+        Ok((*tx.tx_hash(), start_sending))
     }
 
     pub async fn _self_transfer(
         &mut self,
-        spec: TxSpec,
-        provider: RootProvider,
-        sequencer: Option<RootProvider>,
-    ) -> eyre::Result<B256> {
+        spec: &TxSpec,
+        provider: &RootProvider,
+        sequencer: &Option<RootProvider>,
+    ) -> eyre::Result<(B256, Instant)> {
         let tx = TxEip1559 {
             chain_id: spec.chain_id,
             nonce: self.nonce,
@@ -110,13 +114,14 @@ impl Account {
         let sig = self.signer.sign_hash_sync(&tx.signature_hash()).unwrap();
         let tx: TxEnvelope = tx.into_signed(sig).into();
         let encoded = tx.encoded_2718();
-        let provider_to_use = sequencer.as_ref().unwrap_or(&provider);
+        let provider_to_use = sequencer.as_ref().unwrap_or(provider);
+        let start_time = Instant::now();
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
         // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), self.signer.address(),
         // self.nonce, self.balance);
         self.nonce += 1;
         self.balance -= U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
 
-        Ok(*tx.tx_hash())
+        Ok((*tx.tx_hash(), start_time))
     }
 }
