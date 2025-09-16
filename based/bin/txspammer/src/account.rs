@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use alloy_consensus::{SignableTransaction, TxEip1559, TxEnvelope};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{B256, Bytes, U256};
@@ -45,16 +43,19 @@ impl Account {
         Self { signer, nonce: 0, balance: U256::ZERO }
     }
 
-    pub async fn refresh(&mut self, provider: RootProvider) -> eyre::Result<u64> {
-        self.nonce = provider.get_transaction_count(self.signer.address()).await?;
+    pub async fn refresh_balance(&mut self, provider: &RootProvider) -> eyre::Result<U256> {
         self.balance = provider.get_balance(self.signer.address()).await?;
-        // print!("Refreshed {:?} has nonce {}, balance {}  \r", self.signer.address(), self.nonce, self.balance);
+        Ok(self.balance)
+    }
+
+    pub async fn refresh_nonce(&mut self, provider: &RootProvider) -> eyre::Result<u64> {
+        self.nonce = provider.get_transaction_count(self.signer.address()).await?;
         Ok(self.nonce)
     }
 
-    pub async fn refresh_balance(&mut self, provider: RootProvider) -> eyre::Result<u64> {
-        self.balance = provider.get_balance(self.signer.address()).await?;
-        // print!("Refreshed {:?} has balance {}  \r", self.signer.address(), self.balance);
+    pub async fn refresh(&mut self, provider: &RootProvider) -> eyre::Result<u64> {
+        self.refresh_balance(provider).await?;
+        self.refresh_nonce(provider).await?;
         Ok(self.nonce)
     }
 
@@ -64,7 +65,7 @@ impl Account {
         spec: &TxSpec,
         provider: &RootProvider,
         sequencer: &Option<RootProvider>,
-    ) -> eyre::Result<(B256, Instant)> {
+    ) -> eyre::Result<B256> {
         let tx = TxEip1559 {
             chain_id: spec.chain_id,
             nonce: self.nonce,
@@ -81,16 +82,12 @@ impl Account {
         let tx: TxEnvelope = tx.into_signed(sig).into();
         let encoded = tx.encoded_2718();
         let provider_to_use = sequencer.as_ref().unwrap_or(provider);
-
-        let start_sending = Instant::now();
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
-        // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), to.signer.address(),
-        // self.nonce, self.balance);
         self.nonce += 1;
         self.balance -= spec.value + U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
         to.balance += spec.value;
 
-        Ok((*tx.tx_hash(), start_sending))
+        Ok(*tx.tx_hash())
     }
 
     pub async fn _self_transfer(
@@ -98,7 +95,7 @@ impl Account {
         spec: &TxSpec,
         provider: &RootProvider,
         sequencer: &Option<RootProvider>,
-    ) -> eyre::Result<(B256, Instant)> {
+    ) -> eyre::Result<B256> {
         let tx = TxEip1559 {
             chain_id: spec.chain_id,
             nonce: self.nonce,
@@ -115,13 +112,10 @@ impl Account {
         let tx: TxEnvelope = tx.into_signed(sig).into();
         let encoded = tx.encoded_2718();
         let provider_to_use = sequencer.as_ref().unwrap_or(provider);
-        let start_time = Instant::now();
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
-        // print!("Sending {:?} -> {:?}, nonce: {} (balance: {})  \r", self.signer.address(), self.signer.address(),
-        // self.nonce, self.balance);
         self.nonce += 1;
         self.balance -= U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
 
-        Ok((*tx.tx_hash(), start_time))
+        Ok(*tx.tx_hash())
     }
 }
