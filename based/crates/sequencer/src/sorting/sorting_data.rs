@@ -153,7 +153,8 @@ impl<Db: DatabaseRead> SortingData<Db> {
         debug!(da_remaining = seq.da_remaining, gas_remaining = seq.gas_remaining, "new sorting data created");
 
         let since_last_seal = data.last_seal_time.elapsed().into();
-        let adjusted_frag_time = data.config.frag_duration.saturating_sub(since_last_seal).max(Duration::from_millis(50));
+        let adjusted_frag_time =
+            data.config.frag_duration.saturating_sub(since_last_seal).max(Duration::from_millis(50));
 
         Self {
             db,
@@ -241,9 +242,9 @@ impl<Db> SortingData<Db> {
             &mut self.metrics_producer,
         );
 
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining
-            && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
-            && !self.fifo_ordering
+        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment) &&
+            !self.fifo_ordering
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {

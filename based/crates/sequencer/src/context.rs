@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Display, sync::{Arc}, time::Instant};
+use std::{collections::VecDeque, fmt::Display, sync::Arc, time::Instant};
 
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header};
 use alloy_eips::merge::BEACON_NONCE;
