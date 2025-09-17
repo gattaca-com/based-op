@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, path::PathBuf, sync::Arc};
+use std::{net::Ipv4Addr, path::PathBuf, sync::Arc, str::FromStr};
 
 use alloy_rpc_types::engine::JwtSecret;
 use clap::Parser;
@@ -51,7 +51,7 @@ pub struct GatewayArgs {
     pub gossip_root_peer_url: Url,
     /// Gossip to sign frag messages
     #[arg(long = "gossip.signer_private_key")]
-    pub gossip_signer_private_key: Option<B256>,
+    pub gossip_signer_private_key: Option<String>,
     /// Duration of a frag in ms
     #[arg(long = "sequencer.frag_duration_ms", default_value_t = 200)]
     pub frag_duration_ms: u64,
@@ -132,6 +132,20 @@ impl GatewayArgs {
         JwtSecret::from_hex(&self.rpc_jwt)
             .or_else(|_| JwtSecret::from_file(std::path::Path::new(&self.rpc_jwt)))
             .expect("Couldn't parse sequencer_jwt")
+    }
+
+    pub fn gossip_signer_private_key(&self) -> Option<B256> {
+        self.gossip_signer_private_key.as_ref().and_then(|key_str| {
+            // Try to parse as hex first
+            B256::from_str(key_str)
+                .or_else(|_| {
+                    // If hex parsing fails, try to read as file
+                    std::fs::read_to_string(key_str)
+                        .map_err(|_| ())
+                        .and_then(|contents| B256::from_str(contents.trim()).map_err(|_| ()))
+                })
+                .ok()
+        })
     }
 }
 
