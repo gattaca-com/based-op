@@ -43,8 +43,8 @@ struct TxSpammer {
     args: TxSpammerArgs,
     request_rx: Option<Receiver<(TxHash, Instant)>>,
     request_tx: Sender<(TxHash, Instant)>,
-    latencie_rx: Option<Receiver<(TxHash, f64)>>,
-    latencie_tx: Sender<(TxHash, f64)>,
+    latency_rx: Option<Receiver<(TxHash, f64)>>,
+    latency_tx: Sender<(TxHash, f64)>,
 }
 
 impl TxSpammer {
@@ -94,8 +94,8 @@ impl TxSpammer {
             args,
             request_rx: Some(request_rx),
             request_tx,
-            latencie_rx: Some(latency_rx),
-            latencie_tx: latency_tx,
+            latency_rx: Some(latency_rx),
+            latency_tx,
         }
     }
 
@@ -176,7 +176,7 @@ impl TxSpammer {
 
     pub fn spawn_receipt_listener_frag_stream(&mut self) {
         let mut request_rx = self.request_rx.take().expect("request receiver already taken");
-        let latencie_tx = self.latencie_tx.clone();
+        let latency_tx = self.latency_tx.clone();
         let frag_url = self.args.fragstream_url.clone().expect("frag stream url not specified");
         tokio::spawn(async move {
             let uri = Uri::from_str(&frag_url).expect("invalid frag stream url");
@@ -193,7 +193,7 @@ impl TxSpammer {
                     for (tx_hash, _) in txs.iter() {
                         if let Some(tx_out_time) = requests.remove(tx_hash) {
                             let latency = tx_out_time.elapsed();
-                            latencie_tx.send((*tx_hash, latency.as_secs_f64())).await.expect("failed to send latency");
+                            latency_tx.send((*tx_hash, latency.as_secs_f64())).await.expect("failed to send latency");
                         }
                     }
                 }
@@ -203,7 +203,7 @@ impl TxSpammer {
 
     pub fn spawn_receipt_listener_rpc_polling(&mut self) {
         let mut request_rx = self.request_rx.take().expect("request receiver already taken");
-        let latencie_tx = self.latencie_tx.clone();
+        let latency_tx = self.latency_tx.clone();
         let provider = self.full_provider.clone();
         tokio::spawn(async move {
             let mut requests = HashMap::new();
@@ -218,14 +218,14 @@ impl TxSpammer {
                     }
                 };
                 let latency = requests.remove(&tx_hash).unwrap().elapsed();
-                latencie_tx.send((tx_hash, latency.as_secs_f64())).await.expect("failed to send latency");
+                latency_tx.send((tx_hash, latency.as_secs_f64())).await.expect("failed to send latency");
             }
         });
     }
 
     pub fn spawn_stats_logger(&mut self) {
         // Start stats logger
-        let mut latencie_rx = self.latencie_rx.take().expect("latency receiver already taken");
+        let mut latency_rx = self.latency_rx.take().expect("latency receiver already taken");
         tokio::spawn(async move {
             let interval_secs = 5;
             let mut info_interval = interval(Duration::from_secs(interval_secs));
@@ -233,7 +233,7 @@ impl TxSpammer {
                 info_interval.tick().await;
 
                 let mut latencies = Percentile::new();
-                while let Ok((_, latency)) = latencie_rx.try_recv() {
+                while let Ok((_, latency)) = latency_rx.try_recv() {
                     latencies.add(latency);
                 }
 

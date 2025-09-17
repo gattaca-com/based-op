@@ -23,9 +23,6 @@ pub struct TxSpammerArgs {
     #[arg(long = "funding_amount", default_value_t = 0.01)]
     pub funding_amount: f64,
 
-    // /// Refund
-    // #[arg(long="refund", default_value_t = false)]
-    // pub refund: bool,
     /// Value to transfer per transaction (in ether)
     #[arg(long = "tx_value", default_value_t = 0.0000000000000001)]
     pub tx_value: f64,
