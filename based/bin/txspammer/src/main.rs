@@ -244,11 +244,8 @@ impl TxSpammer {
                 let p99 = latencies.percentile(99.0).unwrap_or(0.0);
 
                 let fast_txs = latencies.data.iter().filter(|&&latency| latency < 1.0).count();
-                let fast_txs_percent = if latencies.len() > 0 {
-                    fast_txs as f64 / latencies.len() as f64 * 100.0
-                } else {
-                    0.0
-                };
+                let fast_txs_percent =
+                    if latencies.len() > 0 { fast_txs as f64 / latencies.len() as f64 * 100.0 } else { 0.0 };
 
                 info!(
                     "Last {}s: {} tx confirmed, TPS: {:.2}, Latency P50: {:.2}s, P95: {:.2}s, P99: {:.2}s, txs<1s: {:.2}%",
