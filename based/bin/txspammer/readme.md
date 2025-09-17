@@ -78,7 +78,7 @@ This is a critical section for configuring how `txspammer` interacts with the ne
 
 ### **Example Output**
 
-```
+```bash
 > cargo run --release --bin txspammer -- --eth_rpc.url ws://127.0.0.1:8646 --sequencer.url http://127.0.0.1:9994 --throughput 1000 --fragstream.url ws://0.0.0.0:9999/state_stream --num_accounts 1000 --max_fee_per_gas 10000000000
 
     Finished `release` profile [optimized] target(s) in 0.32s
