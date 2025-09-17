@@ -1,5 +1,7 @@
 use alloy_primitives::{Address, B256, Bytes, U256};
+use op_alloy_rpc_types::OpTransactionReceipt;
 use revm::context::BlockEnv;
+use revm_primitives::map::foldhash::HashMap;
 use serde::{Deserialize, Serialize};
 use ssz_types::{VariableList, typenum};
 use strum_macros::AsRefStr;
@@ -56,9 +58,9 @@ pub type Transactions = VariableList<Transaction, MaxTransactionsPerPayload>;
 #[serde(rename_all = "camelCase")]
 pub struct FragV0 {
     /// Block in which this frag will be included
-    block_number: u64,
+    pub block_number: u64,
     /// Index of this frag. Frags need to be applied sequentially by index, up to [`SealV0::total_frags`]
-    seq: u64,
+    pub seq: u64,
     /// Whether this is the last frag in the sequence
     pub is_last: bool,
     /// Ordered list of EIP-2718 encoded transactions
@@ -106,12 +108,18 @@ pub enum VersionedMessage {
     EnvV0(EnvV0),
 }
 
-impl VersionedMessage {
+#[derive(Debug)]
+pub struct VersionedMessageWithState {
+    pub msg: VersionedMessage,
+    pub state_update: Option<StateUpdate>,
+}
+
+impl VersionedMessageWithState {
     pub fn to_signed(self, signer: &ECDSASigner) -> SignedVersionedMessage {
-        let hash = self.tree_hash_root();
+        let hash = self.msg.tree_hash_root();
         let signature = signer.sign_message(hash).expect("couldn't sign message");
         let signature = Bytes::from(signature.as_bytes());
-        SignedVersionedMessage { message: self, signature }
+        SignedVersionedMessage { message: self.msg, signature, state_update: self.state_update }
     }
 }
 
@@ -137,6 +145,16 @@ impl From<EnvV0> for VersionedMessage {
 pub struct SignedVersionedMessage {
     pub message: VersionedMessage,
     pub signature: Bytes,
+    /// For FragV0 we may also send the new state
+    pub state_update: Option<StateUpdate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StateUpdate {
+    /// Receipts for all transactions in txs in FragV0
+    pub receipts: HashMap<B256, OpTransactionReceipt>,
+    /// Updated balances for all accounts in txs in FragV0
+    pub balances: HashMap<Address, U256>,
 }
 
 impl SignedVersionedMessage {

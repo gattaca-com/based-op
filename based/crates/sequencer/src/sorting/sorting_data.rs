@@ -103,6 +103,8 @@ pub struct SortingData<Db> {
     /// We wait until these are back before we apply the next
     /// and send the next round of simulations
     pub in_flight_sims: usize,
+    /// Whether we should use fifo ordering instead of sorting by payments value.
+    pub fifo_ordering: bool,
     /// Remaining orders to be sorted, ideally with top of frag (TOF)
     /// sim data. The TOF sim data can be used as a heuristic initial sort of
     /// the orders. The assumption is that applying some orders will not
@@ -150,9 +152,13 @@ impl<Db: DatabaseRead> SortingData<Db> {
 
         debug!(da_remaining = seq.da_remaining, gas_remaining = seq.gas_remaining, "new sorting data created");
 
+        let since_last_seal = data.last_seal_time.elapsed().into();
+        let adjusted_frag_time =
+            data.config.frag_duration.saturating_sub(since_last_seal).max(Duration::from_millis(50));
+
         Self {
             db,
-            until: Instant::now() + data.config.frag_duration,
+            until: Instant::now() + adjusted_frag_time,
             in_flight_sims: 0,
             payment: U256::ZERO,
             next_to_be_applied: None,
@@ -160,6 +166,7 @@ impl<Db: DatabaseRead> SortingData<Db> {
             gas_remaining: seq.gas_remaining,
             da_config: data.config.da_config.clone(),
             da_remaining: seq.da_remaining,
+            fifo_ordering: data.config.fifo_ordering,
             txs: vec![],
             start_t: Instant::now(),
             telemetry: Default::default(),
@@ -236,14 +243,15 @@ impl<Db> SortingData<Db> {
         );
 
         let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
-            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment) &&
+            !self.fifo_ordering
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
             Some(simulated_tx)
         };
         if let Some(tx) = tx_to_put_back {
-            self.tof_snapshot.put(tx)
+            self.tof_snapshot.put(tx, self.fifo_ordering)
         }
     }
 

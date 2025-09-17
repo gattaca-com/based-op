@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Display, sync::Arc};
+use std::{collections::VecDeque, fmt::Display, sync::Arc, time::Instant};
 
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, Header};
 use alloy_eips::merge::BEACON_NONCE;
@@ -10,7 +10,7 @@ use bop_common::{
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     debug_panic,
     metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
-    p2p::{FragV0, SealV0},
+    p2p::{FragV0, SealV0, StateUpdate},
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
     time::Timer,
@@ -79,6 +79,7 @@ pub struct SequencerContext<Db> {
     pub timers: SequencerTimers,
     pub telemetry: Producer<TelemetryUpdate>,
     pub metrics: Producer<MetricsUpdate>,
+    pub last_seal_time: Instant,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -104,6 +105,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             base_fee: Default::default(),
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
+            last_seal_time: Instant::now(),
         }
     }
 }
@@ -161,7 +163,7 @@ impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
         &mut self,
         mut sorting_data: SortingData<Db>,
         frag_seq: &mut FragSequence,
-    ) -> (FragV0, SortingData<Db>) {
+    ) -> (FragV0, Option<StateUpdate>, SortingData<Db>) {
         sorting_data.maybe_apply(self.base_fee);
         sorting_data.send_finished_telemetry();
         info!(
@@ -172,7 +174,8 @@ impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
         );
         self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
         self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
-        (frag_seq.apply_sorted_frag(sorting_data, self), SortingData::new(frag_seq, self))
+        let (frag, maybe_state) = frag_seq.apply_sorted_frag(sorting_data, self);
+        (frag, maybe_state, SortingData::new(frag_seq, self))
     }
 }
 
@@ -188,7 +191,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.as_ref().basefee,
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
-            &mut self.metrics,
         ) {
             TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
         }
@@ -213,7 +215,14 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let n_force_include_txs =
             self.payload_attributes.transactions.as_ref().map(|txs| txs.len()).unwrap_or_default();
         let max_block_da = self.config.da_config.max_da_block_size();
-        let seq = FragSequence::new(self.gas_limit(), max_block_da, self.block_number(), n_force_include_txs);
+        let seq = FragSequence::new(
+            self.gas_limit(),
+            max_block_da,
+            self.block_number(),
+            self.timestamp(),
+            self.base_fee(),
+            n_force_include_txs,
+        );
 
         debug!("new frag sequence");
         let mut sorting = SortingData::new(&seq, self);
@@ -249,10 +258,14 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             .expect("couldn't construct the next evm env")
     }
 
-    pub fn seal_last_frag(&mut self, frag_seq: &mut FragSequence, last_frag: SortingData<Db>) -> FragV0 {
-        let (mut frag_msg, _) = self.seal_frag(last_frag, frag_seq);
+    pub fn seal_last_frag(
+        &mut self,
+        frag_seq: &mut FragSequence,
+        last_frag: SortingData<Db>,
+    ) -> (FragV0, Option<StateUpdate>) {
+        let (mut frag_msg, maybe_update, _) = self.seal_frag(last_frag, frag_seq);
         frag_msg.is_last = true;
-        frag_msg
+        (frag_msg, maybe_update)
     }
 
     /// Finalize the block after the last frag has been sealed
@@ -344,7 +357,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let uuid = Uuid::new_v4();
         MetricsUpdate::send(
             uuid,
-            Metric::SetGauge(Gauge::GatewayBlockBuildDurationMs, block_duration),
+            Metric::SetGauge(Gauge::GatewayBlockBuildDurationSecs, block_duration),
             &mut self.metrics,
         );
         MetricsUpdate::send(uuid, Metric::SetGauge(Gauge::GatewayBlockTxCount, txs), &mut self.metrics);

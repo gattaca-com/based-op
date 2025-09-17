@@ -45,7 +45,7 @@ impl TxList {
     /// Removes all transactions with nonce lower or equal than the provided threshold.
     /// Returns true if list becomes empty after removal.
     #[inline]
-    pub fn forward(&mut self, nonce: u64, mut f: impl FnMut(Arc<Transaction>)) -> bool {
+    pub fn forward(&mut self, nonce: u64, f: &mut impl FnMut(Arc<Transaction>)) -> bool {
         if self.txs.front().is_some_and(|t| t.nonce() > nonce) {
             return false;
         }

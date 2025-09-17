@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, ops::RangeInclusive, path::PathBuf, sync::Arc};
+use std::{net::Ipv4Addr, ops::RangeInclusive, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy_rpc_types::engine::JwtSecret;
 use clap::Parser;
@@ -36,6 +36,8 @@ pub struct GatewayArgs {
     pub rpc_port: u16,
     #[arg(long = "rpc.port_no_auth", default_value_t = 9998)]
     pub rpc_port_no_auth: u16,
+    #[arg(long = "rpc.port_ws", default_value_t = 9999)]
+    pub rpc_port_ws: u16,
     #[arg(long = "rpc.jwt")]
     pub rpc_jwt: String,
     /// Url to an L2 eth api rpc
@@ -46,13 +48,17 @@ pub struct GatewayArgs {
     pub gossip_root_peer_url: Url,
     /// Gossip to sign frag messages
     #[arg(long = "gossip.signer_private_key")]
-    pub gossip_signer_private_key: Option<B256>,
+    pub gossip_signer_private_key: Option<String>,
     /// Duration of a frag in ms
     #[arg(long = "sequencer.frag_duration_ms", default_value_t = 200)]
     pub frag_duration_ms: u64,
     /// Number of sims per loop
     #[arg(long = "sequencer.sim_threads", default_value_t = 5)]
     pub sim_threads: usize,
+    /// Run the sequencer in fifo ordering mode. Note that this will result in using only one
+    /// simulation thread. This must be used for chain replication testing.
+    #[arg(long = "sequencer.fifo_ordering", default_value_t = false)]
+    pub fifo_ordering: bool,
     /// vsync window in micros
     #[arg(long = "sequencer.vsync_window_us", default_value_t = 10)]
     pub vsync_window_us: usize,
@@ -128,6 +134,20 @@ impl GatewayArgs {
         JwtSecret::from_hex(&self.rpc_jwt)
             .or_else(|_| JwtSecret::from_file(std::path::Path::new(&self.rpc_jwt)))
             .expect("Couldn't parse sequencer_jwt")
+    }
+
+    pub fn gossip_signer_private_key(&self) -> Option<B256> {
+        self.gossip_signer_private_key.as_ref().and_then(|key_str| {
+            // Try to parse as hex first
+            B256::from_str(key_str)
+                .or_else(|_| {
+                    // If hex parsing fails, try to read as file
+                    std::fs::read_to_string(key_str)
+                        .map_err(|_| ())
+                        .and_then(|contents| B256::from_str(contents.trim()).map_err(|_| ()))
+                })
+                .ok()
+        })
     }
 }
 

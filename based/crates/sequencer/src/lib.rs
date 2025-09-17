@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip7685::RequestsOrHash;
@@ -14,7 +14,8 @@ use bop_common::{
     },
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::DatabaseWrite,
-    p2p::{EnvV0, VersionedMessage},
+    metrics::{Gauge, Metric, MetricsUpdate},
+    p2p::{EnvV0, VersionedMessage, VersionedMessageWithState},
     shared::SharedState,
     telemetry::{self, Telemetry, TelemetryUpdate, system::SystemNotification},
     time::{Duration, Repeater},
@@ -353,7 +354,9 @@ where
                             &ctx.extra_data(),
                             ctx.parent_beacon_block_root().unwrap(),
                         );
-                        let _ = senders.send(VersionedMessage::from(env_msg));
+                        let msg =
+                            VersionedMessageWithState { msg: VersionedMessage::from(env_msg), state_update: None };
+                        let _ = senders.send(msg);
 
                         info!("start sorting with {} orders", first_frag.tof_snapshot.len());
                         SequencerState::Sorting(seq, first_frag)
@@ -407,15 +410,19 @@ where
                 ctx.timers.seal_block.start();
 
                 // Gossip last frag before sealing
-                let last_frag = ctx.seal_last_frag(&mut seq, sorting_data);
+                ctx.last_seal_time = Instant::now();
+                let (last_frag, maybe_state) = ctx.seal_last_frag(&mut seq, sorting_data);
+                let msg =
+                    VersionedMessageWithState { msg: VersionedMessage::from(last_frag), state_update: maybe_state };
 
-                let s = senders.send_timeout(VersionedMessage::from(last_frag), Duration::from_millis(10));
+                let s = senders.send_timeout(msg, Duration::from_millis(10));
                 debug_assert!(s.is_ok(), "couldn't send last frag for 10 millis");
 
                 let (seal, block) = ctx.seal_block(seq);
 
                 // Gossip seal to p2p and return payload to rpc
-                let s = senders.send_timeout(VersionedMessage::from(seal), Duration::from_millis(10));
+                let msg = VersionedMessageWithState { msg: VersionedMessage::from(seal), state_update: None };
+                let s = senders.send_timeout(msg, Duration::from_millis(10));
                 debug_assert!(s.is_ok(), "couldn't send seal for 10 millis");
                 let s = res.send(block.clone());
                 if cfg!(debug_assertions) && s.is_err() {
@@ -554,10 +561,19 @@ impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
             Sorting(mut seq, sorting_data)
                 if sorting_data.should_seal_frag() && sorting_data.should_send_next_sims() =>
             {
+                MetricsUpdate::send(
+                    Uuid::new_v4(),
+                    Metric::SetGauge(Gauge::TransactionPoolMemoryBytes, data.tx_pool.mem_size as f64),
+                    &mut data.metrics,
+                );
+
                 data.timers.waiting_for_sims.stop();
                 data.timers.seal_frag.start();
-                let (msg, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
-                connections.send(VersionedMessage::from(msg));
+
+                data.last_seal_time = Instant::now();
+                let (msg, maybe_update, new_sort_dat) = data.seal_frag(sorting_data, &mut seq);
+                let versioned_message = VersionedMessage::from(msg);
+                connections.send(VersionedMessageWithState { msg: versioned_message, state_update: maybe_update });
 
                 data.timers.seal_frag.stop();
                 info!("start sorting with {} orders", new_sort_dat.tof_snapshot.len());

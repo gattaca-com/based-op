@@ -1,8 +1,17 @@
 use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
-use bop_common::{p2p::FragV0, telemetry::TelemetryUpdate, time::Instant, transaction::SimulatedTx};
-use revm_primitives::{B256, Bytes};
+use bop_common::{
+    p2p::{FragV0, StateUpdate, Transaction, Transactions},
+    telemetry::TelemetryUpdate,
+    time::Instant,
+    transaction::SimulatedTx,
+};
+use revm::database::DatabaseRef;
+use revm_primitives::{
+    B256, Bytes,
+    map::foldhash::{HashMap, HashMapExt},
+};
 use tracing::debug;
 
 use super::{SortingData, sorting_data::SortingTelemetry};
@@ -20,14 +29,25 @@ pub struct FragSequence {
     pub txs: Vec<SimulatedTx>,
     /// Next frag index
     pub next_seq: u64,
-    /// Block number and timestamp shared by all frags of this sequence
+    /// Block number shared by all frags of this sequence
     block_number: u64,
+    /// Block timestamp shared by all frags of this sequence
+    block_timestamp: u64,
+    /// Base fee of the block
+    base_fee: u64,
     pub n_force_include_txs: usize,
 
     pub sorting_telemetry: SortingTelemetry,
 }
 impl FragSequence {
-    pub fn new(gas_remaining: u64, da_remaining: Option<u64>, block_number: u64, n_force_include_txs: usize) -> Self {
+    pub fn new(
+        gas_remaining: u64,
+        da_remaining: Option<u64>,
+        block_number: u64,
+        block_timestamp: u64,
+        base_fee: u64,
+        n_force_include_txs: usize,
+    ) -> Self {
         Self {
             start_t: Instant::now(),
             gas_remaining,
@@ -37,6 +57,8 @@ impl FragSequence {
             payment: U256::ZERO,
             txs: vec![],
             block_number,
+            block_timestamp,
+            base_fee,
             next_seq: 0,
             n_force_include_txs,
             sorting_telemetry: Default::default(),
@@ -47,19 +69,42 @@ impl FragSequence {
         self.gas_remaining = gas_limit;
     }
 
-    pub fn apply_sorted_frag<Db>(&mut self, in_sort: SortingData<Db>, ctx: &mut SequencerContext<Db>) -> FragV0 {
+    pub fn apply_sorted_frag<Db: DatabaseRef>(
+        &mut self,
+        in_sort: SortingData<Db>,
+        ctx: &mut SequencerContext<Db>,
+    ) -> (FragV0, Option<StateUpdate>) {
         let gas_used = in_sort.gas_used();
         self.gas_remaining -= gas_used;
         self.payment += in_sort.payment();
         let uuid = in_sort.uuid;
 
-        let in_sort_txs = in_sort.txs.len();
+        let mut txs = Vec::with_capacity(in_sort.txs.len());
+        let mut receipts = HashMap::with_capacity(in_sort.txs.len());
+        let mut balances = HashMap::with_capacity(in_sort.txs.len());
         let mut in_sort_da_used = 0;
+        let in_sort_txs = in_sort.txs.len();
 
-        let msg = FragV0::new(self.block_number, self.next_seq, in_sort.txs.iter().map(|tx| tx.tx.as_ref()), false);
         for tx in in_sort.txs {
             self.gas_used += tx.gas_used();
             in_sort_da_used += tx.tx.estimated_tx_compressed_size();
+
+            txs.push(Transaction::from(tx.tx.encode().to_vec()));
+            receipts.insert(
+                *tx.hash(),
+                tx.op_tx_receipt(
+                    self.gas_used,
+                    self.block_number,
+                    self.block_timestamp,
+                    self.base_fee,
+                    self.txs.len() as u64,
+                ),
+            );
+            let address = tx.sender();
+            let balance =
+                in_sort.db.basic_ref(address).map(|a| a.map(|a| a.balance).unwrap_or_default()).unwrap_or(U256::ZERO);
+            balances.insert(address, balance);
+
             self.txs.push(tx);
         }
 
@@ -68,6 +113,14 @@ impl FragSequence {
 
         debug!(?self.gas_remaining, ?self.da_remaining, ?self.gas_used, ?self.da_used, ?in_sort_txs, "frag sequence updated");
 
+        let msg = FragV0 {
+            block_number: self.block_number,
+            seq: self.next_seq,
+            is_last: false,
+            txs: Transactions::from(txs),
+        };
+        let state_update = StateUpdate { receipts, balances };
+
         TelemetryUpdate::send(
             uuid,
             bop_common::telemetry::Telemetry::Frag(bop_common::telemetry::Frag::Commit),
@@ -75,7 +128,7 @@ impl FragSequence {
         );
         self.next_seq += 1;
         self.sorting_telemetry += in_sort.telemetry;
-        msg
+        (msg, Some(state_update))
     }
 
     /// Returns encoded_2718 txs, transactions root, receipts root, and receipts bloom
@@ -161,6 +214,7 @@ mod tests {
 
         let config = SequencerConfig {
             frag_duration: Duration::from_millis(200),
+            fifo_ordering: false,
             n_per_loop: 5,
             rpc_url: rpc_url.clone(),
             evm_config: evm_config.clone(),
@@ -236,7 +290,7 @@ mod tests {
         }
 
         // Apply the frag of non-must include txs
-        let (_frag, _sorting_db) = ctx.seal_frag(sorting_db, &mut seq);
+        let (_frag, _, _sorting_db) = ctx.seal_frag(sorting_db, &mut seq);
 
         // Seal the block
         let (_seal, payload) = ctx.seal_block(seq);

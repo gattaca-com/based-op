@@ -4,14 +4,14 @@ You can try out a Based OP testnet following the steps below.
 
 ### Network Details
 
-| Parameter | Value |
-|-----------|-------|
-| Chain ID | 29866 |
-| Network Name | Based-OP |
-| Currency Symbol | opETH |
-| RPC URL | https://based-rpc.gattaca.com |
-| Block Explorer | https://based-explorer.gattaca.com/ |
-| Break My Frags | https://based-bmf.gattaca.com/ |
+| Parameter       | Value                               |
+| --------------- | ----------------------------------- |
+| Chain ID        | 29866                               |
+| Network Name    | Based-OP                            |
+| Currency Symbol | opETH                               |
+| RPC URL         | https://based-rpc.gattaca.com       |
+| Block Explorer  | https://based-explorer.gattaca.com/ |
+| Break My Frags  | https://based-bmf.gattaca.com/      |
 
 ## Break My Frags
 
@@ -22,12 +22,13 @@ generated with a small amount of Eth deposited to it. Transactions can then be g
 
 Our current testnet setup is mainly focused on robustness and thorough testing of different scenarios.
 As such it is structrured as follows:
+
 - A vanilla `op-node` and `op-geth`, with a `Portal` in between, are driving the chain forward on a box in Europe.
 - Multiple sequencing `Gateways` are setup to take turns sequencing a number of future blocks
-    - On the same box
-    - In the same region
-    - In the US east region
-    - A varying number in the UK on WiFi
+  - On the same box
+  - In the same region
+  - In the US east region
+  - A varying number in the UK on WiFi
 - `Gateways` gossip `Frags`, i.e. ~`200ms` partial blocks that have been committed to
 - The `Gateway` on the same box as the main `op-node` and `op-geth` serves as the main RPC
 - Txs are gossiped around, `Frags` arrive back, and the `Gateway` serves `Receipts` based on those
@@ -37,17 +38,20 @@ This setup means that the total latency to receive `Receipts` will vary dependin
 - 80-150 ms on the same box
 - 200-350 ms for same region
 - 500-700 ms when in different regions
-- 200-700 ms for the last category of `Gateways`, depending on the WiFi   
+- 200-700 ms for the last category of `Gateways`, depending on the WiFi
 
 ## Run a local Gateway
 
 ### Prerequisites
+
 You will need a box with globally open ports:
-- 9997  (tcp)
-- 9103  (tcp/udp)
+
+- 9997 (tcp)
+- 9103 (tcp/udp)
 - 31303 (tcp/udp)
 
 ### Gateway Setup
+
 In the following, all defaults are set up to target the [`Based OP` testnet](https://based-explorer.gattaca.com), deployed on top of mainnet Sepolia.
 With that default config, a new `private-key` and `wallet` combo will be generated which your `Gateway` will use to sign `Frags`.
 The `wallet` is communicated back to the `Portal` to be gossiped around to the rest of the network for signature verification.
@@ -65,6 +69,7 @@ The configuration that was generated can be found in `based-op/.local_gateway_an
 When you [spam some transactions with `based-bmf`](https://based-bmf.gattaca.com), you should see them appear in the `Transaction Pool` of your `Gateway`.
 
 A couple of commands tend to come in handy (from the top `based-op` directory):
+
 - `make stop-gateway`
 - `make start-gateway`
 - `make start-overseer`
@@ -84,7 +89,7 @@ Wallets commonly use a high polling interval for the transaction receipt. To be 
 You can test it by compiling it:
 
 ```sh
-make build-rabby
+make build-rabby-chrom
 ```
 
 And importing it to your browser locally (see [Firefox](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/) or [Chrome](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) references). The compiled extension directory is `rabby/dist` for Google Chrome, and `rabby/dist-mv2` for Mozilla Firefox.
@@ -108,11 +113,11 @@ To manually add the network, follow these steps:
 ![3](../../static/img/wallet_tutorial/step_3.png)
 
 4. Fill in the form with the following values:
-    - Chain ID: `29866`
-    - Network Name: `Based-OP`
-    - RPC URL: `https://based-rpc.gattaca.com`
-    - Currency Symbol: `opETH`
-    - Block Explorer URL: `https://based-explorer.gattaca.com/`
+   - Chain ID: `29866`
+   - Network Name: `Based-OP`
+   - RPC URL: `https://based-rpc.gattaca.com`
+   - Currency Symbol: `opETH`
+   - Block Explorer URL: `https://based-explorer.gattaca.com/`
 
 ![4](../../static/img/wallet_tutorial/step_4.png)
 
@@ -125,4 +130,3 @@ To manually add the network, follow these steps:
 ![6](../../static/img/wallet_tutorial/step_6.png)
 
 You can now use the wallet to interact with the Based-OP devnet.
-
