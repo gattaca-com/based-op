@@ -5,45 +5,47 @@ use clap::{Parser, command};
 use tracing::level_filters::LevelFilter;
 
 #[derive(Parser, Debug, Clone)]
-#[command(version, about, name = "based-txproxy")]
+#[command(version, about, name = "based-txproxy", arg_required_else_help = true)]
 pub struct TxSpammerArgs {
-    /// Root wallet private key
+    // --- Account & Funding ---
+    /// Private key of the root wallet used for funding worker accounts.
     #[arg(
         long = "root.private_key",
         default_value = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
     )]
     pub root_private_key: String,
-    /// Number of accounts to generate
+    /// Number of worker accounts to generate and fund.
     #[arg(long = "num_accounts", default_value_t = 100)]
     pub num_accounts: usize,
-    /// Throughput (tx/s)
-    #[arg(long = "throughput", default_value_t = 300)]
-    pub throughput: usize,
-    /// Funding amount per account (in ether)
-    #[arg(long = "funding_amount", default_value_t = 0.01)]
+    /// Amount of ETH to fund each worker account with.
+    #[arg(long = "funding_amount", default_value_t = 0.5)]
     pub funding_amount: f64,
 
-    /// Value to transfer per transaction (in ether)
+    // --- Transaction Parameters ---
+    /// Target transaction throughput in transactions per second (TPS).
+    #[arg(long = "throughput", default_value_t = 300)]
+    pub throughput: usize,
+    /// Amount of ETH to transfer in each transaction.
     #[arg(long = "tx_value", default_value_t = 0.0000000000000001)]
     pub tx_value: f64,
-    /// Gas limit per transaction
+    /// Gas limit for each transaction.
     #[arg(long = "gas_limit", default_value_t = 21_000)]
     pub gas_limit: u64,
-    /// Max fee per gas (in wei)
+    /// Max fee per gas for EIP-1559 transactions (in Wei).
     #[arg(long = "max_fee_per_gas", default_value_t = 1_000_000_000)]
     pub max_fee_per_gas: u128,
-    /// Max priority fee per gas (in wei)
+    /// Max priority fee per gas (miner tip) for EIP-1559 transactions (in Wei).
     #[arg(long = "max_priority_fee_per_gas", default_value_t = 20)]
     pub max_priority_fee_per_gas: u128,
 
-    /// Eth rpc url (http/ws)
+    // --- Network Configuration ---
+    /// The JSON-RPC URL of the Ethereum node (HTTP or WebSocket).
     #[arg(long = "eth_rpc.url", default_value = "http://127.0.0.1:8545")]
     pub eth_rpc_url: String,
-    /// Sequencer URL (if specified, eth_sendRawTransaction will be sent to this URL)
+    /// Optional URL for a sequencer; if set, transactions are sent here instead of the main RPC URL.
     #[arg(long = "sequencer.url")]
     pub sequencer_url: Option<String>,
-    /// Frag stream URL (if specified, we can measure the e2e latency via the frag stream). Poll receipt using eth rpc
-    /// if not specified.
+    /// Optional URL for a fragment stream to measure E2E latency.
     #[arg(long = "fragstream.url")]
     pub fragstream_url: Option<String>,
 
