@@ -22,6 +22,7 @@ use reth_optimism_forks::OpHardfork;
 use revm::context::{Block, DBErrorMarker};
 use revm_inspector::NoOpInspector;
 use revm_primitives::{Address, U256};
+use tracing::trace;
 
 pub trait SimulationDatabase: DatabaseRef<
         Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
@@ -163,15 +164,19 @@ where
             let (sender, nonce, state_id) = msg.sim_info();
             let curt = Instant::now();
             let msg = match msg {
-                SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(Self::simulate_transaction(
-                    tx,
-                    db,
-                    &mut self.evm_sorting,
-                    self.regolith_active,
-                    true,
-                    self.allow_reverts,
-                )),
+                SequencerToSimulator::SimulateTx(tx, db) => {
+                    trace!(hash = ?tx.hash(), "received tx to simulate NOT TOF");
+                    SimulatorToSequencerMsg::Tx(Self::simulate_transaction(
+                        tx,
+                        db,
+                        &mut self.evm_sorting,
+                        self.regolith_active,
+                        true,
+                        self.allow_reverts,
+                    ))
+                }
                 SequencerToSimulator::SimulateTxTof(tx, db) => {
+                    trace!(hash = ?tx.hash(), "received tx to simulate TOF");
                     SimulatorToSequencerMsg::TxPoolTopOfFrag(Self::simulate_transaction(
                         tx,
                         db,

@@ -10,7 +10,7 @@ use crate::transaction::Transaction;
 #[derive(Clone, Debug)]
 pub struct TxList {
     sender: Address,
-    txs: VecDeque<Arc<Transaction>>,
+    pub txs: VecDeque<Arc<Transaction>>,
 }
 
 impl TxList {

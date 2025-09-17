@@ -370,17 +370,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             blob_gas_used: 0,
             excess_blob_gas: 0,
         };
-        (seal, OpExecutionPayloadEnvelopeV4Patch {
-            execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
-                payload_inner,
-                withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+        (
+            seal,
+            OpExecutionPayloadEnvelopeV4Patch {
+                execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
+                    payload_inner,
+                    withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+                },
+                block_value: frag_seq.payment.to(),
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+                execution_requests: vec![],
             },
-            block_value: frag_seq.payment.to(),
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-            execution_requests: vec![],
-        })
+        )
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {

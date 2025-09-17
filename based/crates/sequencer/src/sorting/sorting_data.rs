@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use alloy_consensus::Transaction as _;
 use bop_common::{
     communication::{
         Producer, SpineConnections,
@@ -205,7 +206,6 @@ impl<Db> SortingData<Db> {
         self.in_flight_sims -= 1;
         self.telemetry.tot_sim_time += simtime;
 
-        trace!("handling sender {sender}");
         // handle errored sim
         let Ok(simulated_tx) = simulated_tx.inspect_err(|e| {
             tracing::trace!("error {e} for tx: {}", sender);
@@ -221,7 +221,6 @@ impl<Db> SortingData<Db> {
             return;
         };
 
-        trace!("succesful for nonce {}", simulated_tx.nonce_ref());
         if self.gas_remaining < simulated_tx.gas_used() {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
@@ -242,9 +241,19 @@ impl<Db> SortingData<Db> {
             &mut self.metrics_producer,
         );
 
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
-            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment) &&
-            !self.fifo_ordering
+        trace!(?sender, nonce = ?simulated_tx.nonce(), hash = ?simulated_tx.hash(), gas_used =
+            simulated_tx.gas_used(), gas_remaining = self.gas_remaining, next_to_applied_hash =
+                ?self.next_to_be_applied.as_ref().map(|t| t.tx.hash()), next_to_be_applied_payment =
+                ?self.next_to_be_applied.as_ref().map(|t| t.payment), simulated_tx_payment =
+                ?simulated_tx.payment, fifo_ordering = self.fifo_ordering, "Received successful simulation");
+
+        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining
+            && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment && !self.fifo_ordering)
+        // if simulated_tx.gas_used() < self.gas_remaining
+        //     && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
+        //     && !self.fifo_ordering
+        //     // WARN: possible cold-start problem here when fifo-ordering is set? Because first tx
+        //     // will never be added here.
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {

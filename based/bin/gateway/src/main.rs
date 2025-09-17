@@ -44,8 +44,13 @@ fn main() {
     }
 }
 
-fn run(args: GatewayArgs) -> eyre::Result<()> {
+fn run(mut args: GatewayArgs) -> eyre::Result<()> {
     let spine = Spine::default();
+
+    // For fifo ordering we use only one simulator.
+    if args.fifo_ordering {
+        args.sim_threads = 1;
+    }
 
     let db_bop =
         init_database(args.db_datadir.clone(), args.max_cached_accounts, args.max_cached_storages, args.chain.clone())?;
