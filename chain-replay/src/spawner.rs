@@ -87,7 +87,9 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
                 sync_target_block_number,
             )
             .await
-            .unwrap_or_else(|_| panic!("failed to wait for based-op-geth-{instance_num} sync"));
+            .unwrap_or_else(|e| {
+                panic!("failed to wait for based-op-geth-{instance_num} sync: {e}")
+            });
         });
         tasks.push(task);
     }
