@@ -68,7 +68,7 @@ impl Clients {
 
         let gateway_auth = EngineClient::new_http(
             gateway_auth_url,
-            Url::from_str("http://0.0.0.0:1234").expect("valid URL"), // NOTE: we don't use the L1
+            Url::from_str("http://127.0.0.1:1234").expect("valid URL"), // NOTE: we don't use the L1
             Arc::new(rollup_config),
             gateway_auth_jwt,
         );

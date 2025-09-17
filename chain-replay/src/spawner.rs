@@ -28,7 +28,7 @@ use crate::{
     engine::EngineExt as _,
     rpc::{debug_set_head, wait_for_el_on_head},
     types::execution_payload_envelope_from_block,
-    utils::{get_ip, read_jwt_file},
+    utils::read_jwt_file,
 };
 
 /// Responsible for spinning up all follower nodes via docker:
@@ -72,10 +72,10 @@ pub async fn spin_up_follower_nodes(args: Args) -> eyre::Result<()> {
             let env = format!("BOP_REPLAY_BASED_OP_GETH_{instance_num}_ENGINE_RPC_PORT");
             let port = std::env::var(env.clone()).expect(&env);
             let engine_url =
-                format!("http://{}:{}", get_ip(), port).parse::<Url>().expect("valid url");
+                format!("http://127.0.0.1:{}", port).parse::<Url>().expect("valid url");
             let auth_el_client = EngineClient::new_http(
                 engine_url,
-                Url::parse("http://0.0.0.0:1234").unwrap(), // NOTE: we don't use the L1
+                Url::parse("http://127.0.0.1:1234").unwrap(), // NOTE: we don't use the L1
                 rollup_config.clone(),
                 jwt_secret,
             );
