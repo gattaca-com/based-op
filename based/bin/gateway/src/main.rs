@@ -70,6 +70,9 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     let sequencer_vsync_window = Duration::from_micros(args.vsync_window_us as u64);
     let simulator_vsync_window = Duration::from_micros(args.vsync_window_us as u64);
 
+    let root_peer_url = args.gossip_root_peer_url.clone();
+    let gossip_signer_private_key = args.gossip_signer_private_key().map(|key| ECDSASigner::new(key).unwrap());
+
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
             .worker_threads(10)
@@ -123,8 +126,6 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
             });
         }
 
-        let root_peer_url = args.gossip_root_peer_url.clone();
-        let gossip_signer_private_key = args.gossip_signer_private_key.map(|key| ECDSASigner::new(key).unwrap());
         s.spawn(|| {
             Gossiper::new(root_peer_url, gossip_signer_private_key, frag_broadcast_tx).run(
                 spine.to_connections("Gossiper"),
