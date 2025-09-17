@@ -172,6 +172,7 @@ impl TxSpammer {
             print!("Verifying {:?} balance: {} eth     \r", account.signer.address(), format_ether(account.balance));
             stdout().flush().unwrap();
         }
+        info!("All {} target accounts are funded and ready.              ", self.target_accounts.len());
     }
 
     pub fn spawn_receipt_listener_frag_stream(&mut self) {
