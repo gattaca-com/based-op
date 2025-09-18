@@ -19,7 +19,13 @@ pub struct ActiveOrders {
 
 impl ActiveOrders {
     pub fn new(mut orders: Vec<SimulatedTxList>, fifo_ordering: bool) -> Self {
-        if !fifo_ordering {
+        if fifo_ordering {
+            // NOTE: This function is used to populate the `tof_snaphost`, where transactions
+            // are pushed front on a `VecDeque`. Instead, active transactions in the tx pool
+            // are pushed back on a `Vec`, so since we need to maintain ordering here we have to
+            // reverse the list.
+            orders.reverse();
+        } else {
             // WARNING: this might lead to apples to oranges comparison if we haven't
             // re-simulated all forwarded txlists top of last applied frag in the pool Activelist.
             // This is currently the situation
