@@ -135,7 +135,7 @@ impl<Db: DatabaseRead> SortingData<Db> {
         let tof_snapshot = if data.payload_attributes.no_tx_pool.unwrap_or_default() {
             ActiveOrders::empty()
         } else {
-            ActiveOrders::new(data.tx_pool.clone_active())
+            ActiveOrders::new(data.tx_pool.clone_active(), data.config.fifo_ordering)
         };
         let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
@@ -342,31 +342,73 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         if self.tof_snapshot.is_empty() {
             return;
         }
-        let mut i = self.tof_snapshot.len() - 1;
+
+        let mut tof_snapshot_txs = String::new();
+        for tx_list in &self.tof_snapshot.orders {
+            let string = format!(
+                "{{ current: {:?}, pending: {:?}}}",
+                tx_list.current.as_ref().map(|t| t.hash()),
+                tx_list.pending.txs.iter().map(|t| format!("{:?}", t.hash())).collect::<Vec<_>>().join(",")
+            );
+            tof_snapshot_txs.push_str(&string);
+        }
+        trace!(?tof_snapshot_txs, "tof snapshot txs inside send_next");
+
         let mut sims_sent = 0;
-        while self.in_flight_sims < n_sims_per_loop {
-            // check if tx DA is smaller than max allowed
-            let too_big = self.tof_snapshot.da_too_big(i, self.da_remaining, self.da_config.max_da_tx_size());
-            // check if we even have enough gas left for next order
-            if too_big || self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
-                self.tof_snapshot.swap_remove_back(i);
+
+        if self.fifo_ordering {
+            let snapshot_last_index = self.tof_snapshot.len() - 1;
+            let mut i = 0;
+            while self.in_flight_sims < n_sims_per_loop {
+                // check if tx DA is smaller than max allowed
+                let too_big = self.tof_snapshot.da_too_big(i, self.da_remaining, self.da_config.max_da_tx_size());
+                // check if we even have enough gas left for next order
+                if too_big || self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
+                    self.tof_snapshot.swap_remove_back(i);
+                    if i == snapshot_last_index {
+                        break;
+                    }
+                    i += 1;
+                    continue;
+                }
+                let order = self.tof_snapshot[i].next_to_sim(); // marcio
+                debug_assert!(order.is_some(), "Unsimmable TxList should have been cleared previously");
+                let tx_to_sim = order.unwrap();
+                senders.send(SequencerToSimulator::SimulateTx(tx_to_sim, self.state()));
+                self.in_flight_sims += 1;
+                self.telemetry.n_sims_sent += 1;
+                sims_sent += 1;
+                if i == snapshot_last_index {
+                    break;
+                }
+                i += 1;
+            }
+        } else {
+            let mut i = self.tof_snapshot.len() - 1;
+            while self.in_flight_sims < n_sims_per_loop {
+                // check if tx DA is smaller than max allowed
+                let too_big = self.tof_snapshot.da_too_big(i, self.da_remaining, self.da_config.max_da_tx_size());
+                // check if we even have enough gas left for next order
+                if too_big || self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
+                    self.tof_snapshot.swap_remove_back(i);
+                    if i == 0 {
+                        break;
+                    }
+                    i -= 1;
+                    continue;
+                }
+                let order = self.tof_snapshot[i].next_to_sim(); // marcio
+                debug_assert!(order.is_some(), "Unsimmable TxList should have been cleared previously");
+                let tx_to_sim = order.unwrap();
+                senders.send(SequencerToSimulator::SimulateTx(tx_to_sim, self.state()));
+                self.in_flight_sims += 1;
+                self.telemetry.n_sims_sent += 1;
+                sims_sent += 1;
                 if i == 0 {
                     break;
                 }
                 i -= 1;
-                continue;
             }
-            let order = self.tof_snapshot[i].next_to_sim();
-            debug_assert!(order.is_some(), "Unsimmable TxList should have been cleared previously");
-            let tx_to_sim = order.unwrap();
-            senders.send(SequencerToSimulator::SimulateTx(tx_to_sim, self.state()));
-            self.in_flight_sims += 1;
-            self.telemetry.n_sims_sent += 1;
-            sims_sent += 1;
-            if i == 0 {
-                break;
-            }
-            i -= 1;
         }
 
         // Send metrics for simulation requests
