@@ -1,6 +1,5 @@
 use std::{net::Ipv4Addr, ops::RangeInclusive, path::PathBuf, str::FromStr, sync::Arc};
 
-
 use alloy_rpc_types::engine::JwtSecret;
 use clap::Parser;
 use reqwest::Url;
