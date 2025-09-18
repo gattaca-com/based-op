@@ -1,0 +1,9 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:${BOP_REPLAY_PROMETHEUS_PORT}
+    isDefault: true
+    access: proxy
+    editable: false

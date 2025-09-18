@@ -35,15 +35,16 @@ impl Gossiper {
         let signed = msg.to_signed(&self.signer);
         let payload = signed.to_json();
 
-        if matches!(signed.message, p2p::VersionedMessage::FragV0(_)) {
-            if let Err(e) = self.frag_broadcast.send(signed) {
-                tracing::debug!(" broadcast of frag failed {e}")
-            }
+        if matches!(signed.message, p2p::VersionedMessage::FragV0(_)) && self.frag_broadcast.send(signed).is_err() {
+            tracing::debug!("broadcast of frag failed")
         }
 
-        let Ok(res) = self.client.post(self.target_rpc.clone()).json(&payload).send() else {
-            tracing::error!("couldn't send {}", payload);
-            return;
+        let res = match self.client.post(self.target_rpc.clone()).json(&payload).send() {
+            Ok(res) => res,
+            Err(e) => {
+                tracing::error!(?e, target = ?self.target_rpc.clone(), "couldn't send payload: {}", payload);
+                return;
+            }
         };
 
         let code = res.status();
