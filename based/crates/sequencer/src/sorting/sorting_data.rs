@@ -129,12 +129,14 @@ impl<Db: DatabaseRead> SortingData<Db> {
     where
         Db: Clone + DatabaseRef,
     {
-        data.tx_pool.handle_new_frag(data.base_fee, data.shared_state.as_ref(), false, None);
+        if !data.config.fifo_ordering {
+            data.tx_pool.handle_new_frag(data.base_fee, data.shared_state.as_ref(), false, None);
+        }
 
         let tof_snapshot = if data.payload_attributes.no_tx_pool.unwrap_or_default() {
             ActiveOrders::empty()
         } else {
-            ActiveOrders::new(data.tx_pool.clone_active())
+            ActiveOrders::new(data.tx_pool.clone_active(), data.config.fifo_ordering)
         };
         let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
@@ -243,8 +245,7 @@ impl<Db> SortingData<Db> {
         );
 
         let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
-            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment) &&
-            !self.fifo_ordering
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment && !self.fifo_ordering)
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {

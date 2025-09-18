@@ -10,7 +10,7 @@ use bop_common::{
     time::Duration,
     utils::{init_tracing, wait_for_signal},
 };
-use bop_db::{DatabaseRead, init_database};
+use bop_db::{DatabaseRead, DatabaseWrite as _, init_database};
 use bop_metrics::MetricsConsumer;
 use bop_rpc::{gossiper::Gossiper, start_rpc};
 use bop_sequencer::{
@@ -20,7 +20,7 @@ use bop_sequencer::{
 use clap::Parser;
 use revm_primitives::B256;
 use tokio::runtime::Runtime;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
@@ -44,8 +44,13 @@ fn main() {
     }
 }
 
-fn run(args: GatewayArgs) -> eyre::Result<()> {
+fn run(mut args: GatewayArgs) -> eyre::Result<()> {
     let spine = Spine::default();
+
+    // For fifo ordering we use only one simulator.
+    if args.fifo_ordering {
+        args.sim_threads = 1;
+    }
 
     let db_bop =
         init_database(args.db_datadir.clone(), args.max_cached_accounts, args.max_cached_storages, args.chain.clone())?;
@@ -66,6 +71,15 @@ fn run(args: GatewayArgs) -> eyre::Result<()> {
     let sequencer_config: SequencerConfig = (&args).into();
     let evm_config = sequencer_config.evm_config.clone();
     let (frag_broadcast_tx, _) = tokio::sync::broadcast::channel(10_000);
+
+    if let Some(ref range) = args.replay_blocks_range {
+        warn!(?range, "Replay range found. Performing DB rollback if necessary");
+        // Example: if start is 1000, then we should rollback to 998
+        while db_bop.head_block_number()? > range.start().saturating_sub(2) {
+            db_bop.roll_back_head()?;
+        }
+        info!(db_block = db_bop.head_block_number()?, db_hash = ?db_bop.head_block_hash()?, "New database head");
+    }
 
     let sequencer_vsync_window = Duration::from_micros(args.vsync_window_us as u64);
     let simulator_vsync_window = Duration::from_micros(args.vsync_window_us as u64);

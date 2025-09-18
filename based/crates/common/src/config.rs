@@ -1,4 +1,5 @@
-use std::{net::Ipv4Addr, path::PathBuf, str::FromStr, sync::Arc};
+use std::{net::Ipv4Addr, ops::RangeInclusive, path::PathBuf, str::FromStr, sync::Arc};
+
 
 use alloy_rpc_types::engine::JwtSecret;
 use clap::Parser;
@@ -40,9 +41,6 @@ pub struct GatewayArgs {
     pub rpc_port_ws: u16,
     #[arg(long = "rpc.jwt")]
     pub rpc_jwt: String,
-    /// PortalApi RPC URL
-    #[arg(long = "portal_rpc.url", default_value = "http://localhost:9998")]
-    pub portal_rpc_url: Url,
     /// Url to an L2 eth api rpc
     #[arg(long = "eth_client.url", default_value = "http://localhost:8545")]
     pub eth_client_url: Url,
@@ -77,6 +75,11 @@ pub struct GatewayArgs {
     /// Mock mode
     #[arg(long = "mock")]
     pub mock: Option<MockMode>,
+    /// For chain replication testing, it expresses the range of blocks we want to replay. In
+    /// particular, assuming the local eth client is at height N <= replay_target, the
+    /// chain-replication will happen for range N..=replay_target.
+    #[clap(long = "chain-replay.blocks-range", value_parser = range_inclusive_from_str)]
+    pub replay_blocks_range: Option<RangeInclusive<u64>>,
     /// Enable DEBUG logging
     #[arg(long = "debug")]
     pub debug: bool,
@@ -201,4 +204,23 @@ impl From<&GatewayArgs> for LoggingConfig {
             filters: args.log_filters.clone(),
         }
     }
+}
+
+fn range_inclusive_from_str(s: &str) -> Result<RangeInclusive<u64>, &'static str> {
+    let parts = s.split("..=").collect::<Vec<_>>();
+    if parts.len() != 2 {
+        return Err("Range must be in the format 'start..=end'");
+    }
+
+    let Ok(start) = parts[0].parse::<u64>() else {
+        return Err("Invalid start of range");
+    };
+    let Ok(end) = parts[1].parse::<u64>() else {
+        return Err("Invalid end of range");
+    };
+    if start > end {
+        return Err("Start of range must be less than or equal to end");
+    }
+
+    Ok(start..=end)
 }
