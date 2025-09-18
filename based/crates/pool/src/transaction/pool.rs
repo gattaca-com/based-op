@@ -11,7 +11,6 @@ use bop_common::{
 };
 use reth_optimism_primitives::transaction::OpTransaction;
 use reth_primitives_traits::InMemorySize;
-use tracing::trace;
 
 use crate::transaction::active::Active;
 
@@ -52,15 +51,6 @@ impl TxPool {
         }
 
         let is_next_nonce = nonce == state_nonce;
-
-        trace!(
-            sender = ?new_tx.sender_ref(), 
-            hash = ?new_tx.hash(),
-            tx_list_is_some = self.pool_data.contains_key(new_tx.sender_ref()),
-            syncing,
-            is_next_nonce,
-            valid_for_block = new_tx.valid_for_block(base_fee),
-            "handling new tx in pool");
 
         // Add to pool and send to simulator if mineable
         match self.pool_data.get_mut(new_tx.sender_ref()) {
@@ -109,15 +99,6 @@ impl TxPool {
                 self.pool_data.insert(tx_list.sender(), tx_list);
             }
         }
-
-        let mut active_txs = String::new();
-        for tx_list in &self.active_txs.txs {
-            let string = format!("{{ current: {:?}, pending: {:?}}}", 
-                tx_list.current.as_ref().map(|t| t.hash()), 
-                tx_list.pending.txs.iter().map(|t| format!("{:?}", t.hash())).collect::<Vec<_>>().join(","));
-            active_txs.push_str(&string);
-        }
-        trace!(?active_txs, "active txs after handling new tx in pool");
 
         true
     }
