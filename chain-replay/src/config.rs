@@ -58,6 +58,10 @@ pub struct Args {
         value_parser = range_inclusive_from_str,
     )]
     pub blocks_range: RangeInclusive<u64>,
+    /// The time to wait in ms to ensure the gateway has processed the NewPayload + FCU call, so
+    /// that transactions are sent only when the gateway is in Sorting state.
+    #[clap(long, env = "BOP_REPLAY_GATEWAY_FCU_WAIT", id = "BOP_REPLAY_GATEWAY_FCU_WAIT")]
+    pub fcu_wait_ms: u64,
 }
 
 impl Args {

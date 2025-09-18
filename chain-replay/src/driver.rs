@@ -179,7 +179,7 @@ pub async fn start_kona_sequencer_node(args: Args) -> eyre::Result<()> {
         print_peers(p2p_rpc).await;
     });
 
-    run_verification_body(&clients, &network_inbound_data, args.blocks_range)
+    run_verification_body(&clients, &network_inbound_data, args.blocks_range, args.fcu_wait_ms)
         .await
         .wrap_err("failed to run verification")?;
 
@@ -311,6 +311,7 @@ async fn run_verification_body(
     clients: &Clients,
     network_inbound: &NetworkInboundData,
     blocks_range: RangeInclusive<u64>,
+    fcu_wait: u64,
 ) -> eyre::Result<()> {
     for block_num in blocks_range {
         info!("Replaying block {block_num}");
@@ -356,6 +357,10 @@ async fn run_verification_body(
         // NOTE: we don't check error here because of the no response policy from the gateway.
         let _ = clients.gateway_auth.fork_choice_update(fcs, Some(op_attributes), true).await;
 
+        // NOTE: Ensure FCU message is processed, so that transactions are received only when the
+        // Gateway is in Sorting state.
+        tokio::time::sleep(Duration::from_millis(fcu_wait)).await;
+
         // NOTE: we send all the transactions and we make a get payload call immediately after,
         // leading to a variable block time. Enforcing a 2s timeout can slow down the test
         // unnecessarily and on large blocks it can result in not sending all the transactions in
@@ -367,7 +372,7 @@ async fn run_verification_body(
 
         // Adds a small delay to make sure last every transaction is processed, and not end up
         // with testing failure because of a couple of missing transactions.
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
 
         // Sorting -> WaitingForNewPayload
         let sealed_block = clients.gateway_auth.get_payload_v4(PayloadId::default()).await?;
