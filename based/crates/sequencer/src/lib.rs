@@ -1,5 +1,4 @@
 use std::{sync::Arc, time::Instant};
-use tracing::trace;
 
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip7685::RequestsOrHash;
@@ -109,8 +108,8 @@ where
 
         // handle new transaction
         connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0
-                && self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+            if self.data.timestamp() != 0 &&
+                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
             {
                 return;
             }
@@ -502,7 +501,6 @@ where
     /// Sends a new transaction to the tx pool.
     /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
     fn handle_new_tx(&mut self, tx: Arc<Transaction>, ctx: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
-        trace!(hash = ?tx.hash(), sequencer_state = self.as_ref(), "handling new transaction");
         if let SequencerState::Sorting(_, sorting_data) = self {
             sorting_data
                 .tof_snapshot

@@ -4,7 +4,6 @@ use std::{
     sync::Arc,
 };
 
-use alloy_consensus::Transaction as _;
 use bop_common::{
     communication::{
         Producer, SpineConnections,
@@ -208,6 +207,7 @@ impl<Db> SortingData<Db> {
         self.in_flight_sims -= 1;
         self.telemetry.tot_sim_time += simtime;
 
+        trace!("handling sender {sender}");
         // handle errored sim
         let Ok(simulated_tx) = simulated_tx.inspect_err(|e| {
             tracing::trace!("error {e} for tx: {}", sender);
@@ -223,6 +223,7 @@ impl<Db> SortingData<Db> {
             return;
         };
 
+        trace!("succesful for nonce {}", simulated_tx.nonce_ref());
         if self.gas_remaining < simulated_tx.gas_used() {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
@@ -243,19 +244,8 @@ impl<Db> SortingData<Db> {
             &mut self.metrics_producer,
         );
 
-        trace!(?sender, nonce = ?simulated_tx.nonce(), hash = ?simulated_tx.hash(), gas_used =
-            simulated_tx.gas_used(), gas_remaining = self.gas_remaining, next_to_applied_hash =
-                ?self.next_to_be_applied.as_ref().map(|t| t.tx.hash()), next_to_be_applied_payment =
-                ?self.next_to_be_applied.as_ref().map(|t| t.payment), simulated_tx_payment =
-                ?simulated_tx.payment, fifo_ordering = self.fifo_ordering, "Received successful simulation");
-
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining
-            && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment && !self.fifo_ordering)
-        // if simulated_tx.gas_used() < self.gas_remaining
-        //     && self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment)
-        //     && !self.fifo_ordering
-        //     // WARN: possible cold-start problem here when fifo-ordering is set? Because first tx
-        //     // will never be added here.
+        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment && !self.fifo_ordering)
         {
             self.next_to_be_applied.replace(simulated_tx)
         } else {
@@ -344,23 +334,8 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         if self.tof_snapshot.is_empty() {
             return;
         }
-
-        let mut tof_snapshot_txs = String::new();
-        for tx_list in &self.tof_snapshot.orders {
-            let string = format!(
-                "{{ current: {:?}, pending: {:?}}}",
-                tx_list.current.as_ref().map(|t| t.hash()),
-                tx_list.pending.txs.iter().map(|t| format!("{:?}", t.hash())).collect::<Vec<_>>().join(",")
-            );
-            tof_snapshot_txs.push_str(&string);
-        }
-        trace!(?tof_snapshot_txs, "tof snapshot txs inside send_next");
-
-        // remember txs in tof_snaphost are from most recent to oldest, so the one we want to pick
-        // is the last.
-
-        let mut sims_sent = 0;
         let mut i = self.tof_snapshot.len() - 1;
+        let mut sims_sent = 0;
         while self.in_flight_sims < n_sims_per_loop {
             // check if tx DA is smaller than max allowed
             let too_big = self.tof_snapshot.da_too_big(i, self.da_remaining, self.da_config.max_da_tx_size());
@@ -373,7 +348,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
                 i -= 1;
                 continue;
             }
-            let order = self.tof_snapshot[i].next_to_sim(); // marcio
+            let order = self.tof_snapshot[i].next_to_sim();
             debug_assert!(order.is_some(), "Unsimmable TxList should have been cleared previously");
             let tx_to_sim = order.unwrap();
             senders.send(SequencerToSimulator::SimulateTx(tx_to_sim, self.state()));
