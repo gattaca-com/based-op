@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, path::PathBuf, sync::Arc, str::FromStr};
+use std::{net::Ipv4Addr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy_rpc_types::engine::JwtSecret;
 use clap::Parser;
