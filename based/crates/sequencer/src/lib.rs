@@ -10,7 +10,7 @@ use bop_common::{
     actor::Actor,
     communication::{
         Connections, ReceiversSpine, SendersSpine, SpineConnections, TrackedSenders,
-        messages::{self, BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
+        messages::{BlockFetch, BlockSyncError, EngineApi, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::DatabaseWrite,
@@ -133,7 +133,7 @@ where
         });
 
         // handle engine API messages from rpc
-        connections.receive_for(Duration::from_millis(10), |msg: messages::EngineApi, senders| {
+        connections.receive_for(Duration::from_millis(10), |msg, senders| {
             let state = std::mem::take(&mut self.state);
             let cur_seq_state = telemetry::system::SequencerState::from(&state);
             self.state = state.handle_engine_api(msg, &mut self.data, senders);

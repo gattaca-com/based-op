@@ -166,6 +166,7 @@ pub enum EngineApi {
     NewPayloadV4 { payload: OpExecutionPayloadV4, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },
     GetPayloadV4 { payload_id: PayloadId, res: oneshot::Sender<OpExecutionPayloadEnvelopeV4Patch> },
 }
+
 impl EngineApi {
     pub fn messages_from_block(
         block: &BlockSyncMessage,
