@@ -130,7 +130,9 @@ impl<Db: DatabaseRead> SortingData<Db> {
     where
         Db: Clone + DatabaseRef,
     {
-        data.tx_pool.handle_new_frag(data.base_fee, data.shared_state.as_ref(), false, None);
+        if !data.config.fifo_ordering {
+            data.tx_pool.handle_new_frag(data.base_fee, data.shared_state.as_ref(), false, None);
+        }
 
         let tof_snapshot = if data.payload_attributes.no_tx_pool.unwrap_or_default() {
             ActiveOrders::empty()
