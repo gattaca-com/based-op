@@ -49,12 +49,12 @@ impl TxList {
         if self.txs.front().is_some_and(|t| t.nonce() > nonce) {
             return false;
         }
-        while let Some(t) = self.txs.pop_front() {
-            if t.nonce() == nonce {
-                f(t);
+        while let Some(tx) = self.txs.pop_front() {
+            if tx.nonce() > nonce {
+                self.txs.push_front(tx);
                 break;
             }
-            f(t);
+            f(tx);
         }
         self.is_empty()
     }
