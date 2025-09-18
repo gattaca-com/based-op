@@ -4,12 +4,14 @@ services:
     container_name: based-metrics-exporter
     restart: unless-stopped
     environment:
-      - RUST_LOG=bop_metrics_exporter=trace,bop_metrics=trace
+      - RUST_LOG=${BOP_REPLAY_RUST_LOG:-}
+    ports:
+      - ${BOP_REPLAY_METRICS_EXPORTER_PORT}:${BOP_REPLAY_METRICS_EXPORTER_PORT}
     volumes:
       - /tmp:/tmp
       - /dev/shm:/dev/shm
     command:
-      - "--port=9000"
+      - "--port=${BOP_REPLAY_METRICS_EXPORTER_PORT}"
     networks:
       - monitoring
 
@@ -18,7 +20,7 @@ services:
     container_name: prometheus
     restart: unless-stopped
     ports:
-      - 9090:9090
+      - ${BOP_REPLAY_PROMETHEUS_PORT}:${BOP_REPLAY_PROMETHEUS_PORT}
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -28,6 +30,7 @@ services:
       - "--web.console.libraries=/etc/prometheus/console_libraries"
       - "--web.console.templates=/etc/prometheus/consoles"
       - "--web.enable-lifecycle"
+      - "--web.listen-address=0.0.0.0:${BOP_REPLAY_PROMETHEUS_PORT}"
     networks:
       - monitoring
 
@@ -36,55 +39,26 @@ services:
     container_name: grafana
     restart: unless-stopped
     ports:
-      - 3000:3000
+      - ${BOP_REPLAY_GRAFANA_PORT}:${BOP_REPLAY_GRAFANA_PORT}
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/dashboards:/etc/grafana/dashboards
     environment:
+      - GF_SERVER_HTTP_PORT=${BOP_REPLAY_GRAFANA_PORT}
       - GF_SECURITY_ADMIN_USER=based-op
       - GF_SECURITY_ADMIN_PASSWORD=grafana
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/dashboards.yml
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/dashboard.json
+      - BOP_REPLAY_PROMETHEUS_PORT=${BOP_REPLAY_PROMETHEUS_PORT}
     networks:
       - monitoring
     depends_on:
       - prometheus
 
-  promtail:
-    image: grafana/promtail:latest
-    container_name: promtail
-    restart: unless-stopped
-    ports:
-      - 9085:9085
-    environment:
-      - HOSTNAME
-    volumes:
-      - ./promtail/promtail.yml:/etc/promtail/promtail.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro # discovery
-      - /var/log/containers:/var/log/containers:ro # structured file tailing
-    command:
-      - --config.file=/etc/promtail/promtail.yml
-    networks:
-      - monitoring
-
-  loki:
-    image: grafana/loki:latest
-    container_name: loki
-    restart: unless-stopped
-    ports:
-      - 3100:3100
-    volumes:
-      - loki-data:/loki
-      - ./loki/loki.yml:/etc/loki/loki.yml:ro
-    command:
-      - --config.file=/etc/loki/loki.yml
-    networks:
-      - monitoring
-
 volumes:
   prometheus-data:
   grafana-data:
-  loki-data:
 
 networks:
   monitoring:
