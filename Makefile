@@ -14,7 +14,7 @@ OS := $(shell uname -s)
 # Variables
 IMAGE_KEY_TO_ADDRESS:=ghcr.io/gattaca-com/based-op/key-to-address:latest
 ## This image is totally vanilla, but automatically sets isthmus at genesis when using v3.0.0 contracts
-IMAGE_OP_DEPLOYER:=ghcr.io/gattaca-com/based-optimism/based-op-deployer:latest
+IMAGE_OP_DEPLOYER:=us-docker.pkg.dev/oplabs-tools-artifacts/images/op-deployer:v0.4.5
 
 
 START_GATEWAY_COMPOSE_FILES := -f .local_gateway_and_follower/compose.yml
@@ -30,8 +30,8 @@ L2_CHAIN_ID?=$(shell \
 L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
 PORTAL?=http://0.0.0.0:8080
 TXPROXY?=http://0.0.0.0:8090
-L1_RPC_URL?=http://34.194.193.217:8545
-L1_BEACON_RPC_URL?=http://34.194.193.217:5052
+L1_RPC_URL?=http://3.84.162.42:8545
+L1_BEACON_RPC_URL?=http://3.84.162.42:5051
 PUBLIC_IP?=$(shell curl ifconfig.me)
 # if GATEWAY_SEQUENCING_KEY is set, use that one, otherwise key_to_address will generate a new one
 GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
