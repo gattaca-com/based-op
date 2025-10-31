@@ -39,7 +39,7 @@ impl<T> SimulationDatabase for T where
 }
 
 /// Simulator thread.
-pub struct Simulator<Db: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error>> {
+pub struct Simulator<Db: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error> + Debug> {
     /// Top of frag evm.
     evm_tof: OpEvm<State<DBFrag<Db>>, NoOpInspector>,
     /// Evm on top of partially built frag
@@ -56,7 +56,7 @@ impl<
     Db: Database
         + DatabaseRef<
             Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
-        > + Clone,
+        > + Clone + Debug,
 > Simulator<Db>
 {
     pub fn new(db: DBFrag<Db>, evm_config: OpEvmConfig, id: usize, allow_reverts: bool) -> Self {
@@ -71,7 +71,7 @@ impl<
     }
 
     /// Simulates a transaction at the state of the `db` parameter.
-    pub fn simulate_transaction<SimulateTxDb: SimulationDatabase>(
+    pub fn simulate_transaction<SimulateTxDb: SimulationDatabase + Debug>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
         evm: &mut OpEvm<State<SimulateTxDb>, NoOpInspector>,
@@ -98,7 +98,7 @@ impl<
 
 /// Simulates a transaction at the passed in EVM's state.
 /// Will not modify the db state after the simulation is complete.
-pub fn simulate_tx_inner<Db: SimulationDatabase>(
+pub fn simulate_tx_inner<Db: SimulationDatabase + Debug>(
     tx: Arc<Transaction>,
     evm: &mut OpEvm<Db, NoOpInspector>,
     regolith_active: bool,
