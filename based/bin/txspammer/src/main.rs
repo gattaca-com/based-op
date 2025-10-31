@@ -56,19 +56,19 @@ impl TxSpammer {
                 let ws_connect = WsConnect::new(url);
                 alloy_provider::ProviderBuilder::new()
                     .disable_recommended_fillers()
-                    .on_ws(ws_connect)
+                    .connect_ws(ws_connect)
                     .await
                     .expect("failed to connect to eth rpc")
             }
             false => alloy_provider::ProviderBuilder::new()
                 .disable_recommended_fillers()
-                .on_http(args.eth_rpc_url.parse().expect("invalid eth rpc url")),
+                .connect_http(args.eth_rpc_url.parse().expect("invalid eth rpc url")),
         };
 
         let sequencer = args.sequencer_url.clone().map(|url| {
             alloy_provider::ProviderBuilder::new()
                 .disable_recommended_fillers()
-                .on_http(url.parse().expect("invalid sequencer url"))
+                .connect_http(url.parse().expect("invalid sequencer url"))
         });
 
         let root_signer = PrivateKeySigner::from_str(&args.root_private_key).expect("invalid root private key");
@@ -115,6 +115,12 @@ impl TxSpammer {
         let mut account_generator = AccountGenerator::new(U256::from(123456789u64));
         let mut target_accounts =
             (0..num_accounts).map(|_| Account::new(account_generator.next())).collect::<Vec<Account>>();
+
+        if self.args.print_accounts {
+            for account in target_accounts.iter() {
+                println!("{}", account.signer.address());
+            }
+        }
 
         // Fetching target accounts nonce and balance
         for account in target_accounts.iter_mut() {

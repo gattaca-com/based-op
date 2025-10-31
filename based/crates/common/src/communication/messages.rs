@@ -195,6 +195,7 @@ impl EngineApi {
             no_tx_pool,
             gas_limit: Some(block.gas_limit),
             eip_1559_params: Some(revm_primitives::FixedBytes::from_slice(&block.extra_data[1..9])),
+            min_base_fee: None,
         }));
         let v1 = ExecutionPayloadV1 {
             parent_hash: block.parent_hash,

@@ -20,6 +20,9 @@ pub struct TxSpammerArgs {
     /// Amount of ETH to fund each worker account with.
     #[arg(long = "funding_amount", default_value_t = 0.5)]
     pub funding_amount: f64,
+    /// Print account addresses.
+    #[arg(long = "print_accounts", action = clap::ArgAction::SetTrue)]
+    pub print_accounts: bool,
 
     // --- Transaction Parameters ---
     /// Target transaction throughput in transactions per second (TPS).
@@ -67,6 +70,7 @@ pub struct TxSpammerArgs {
     /// Maximum number of log files
     #[arg(long = "log.max_files", default_value_t = 100)]
     pub log_max_files: usize,
+
 }
 
 impl From<&TxSpammerArgs> for LoggingConfig {

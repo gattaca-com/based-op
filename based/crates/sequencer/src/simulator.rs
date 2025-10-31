@@ -86,7 +86,7 @@ impl<
     /// Updates internal EVM environments with new configuration
     #[inline]
     pub fn update_evm_environments(&mut self, evm_block_params: EvmEnv<OpSpecId>) {
-        let timestamp = evm_block_params.block_env.timestamp();
+        let timestamp = evm_block_params.block_env.timestamp().try_into().expect("timestamp overflow");
         self.evm_tof.modify_block(|b| *b = evm_block_params.block_env.clone()); // TODO: re-use mem
         self.evm_tof.modify_cfg(|c| *c = evm_block_params.cfg_env.clone());
         self.evm_sorting.modify_block(|b| *b = evm_block_params.block_env.clone()); // TODO: re-use mem

@@ -26,7 +26,7 @@ use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
-use reth_primitives_traits::{SignedTransaction, block::TestBlock};
+use reth_primitives_traits::{block::TestBlock};
 use reth_provider::StorageRootProvider;
 use revm_primitives::b256;
 use sorting::FragSequence;
@@ -46,6 +46,7 @@ pub use simulator::Simulator;
 use sorting::SortingData;
 use tracing::{info, warn};
 use uuid::Uuid;
+use reth_primitives_traits::SignerRecoverable;
 
 pub fn payload_to_block(
     payload: OpExecutionPayloadV4,

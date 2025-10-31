@@ -33,10 +33,10 @@ pub struct EnvV0 {
 impl EnvV0 {
     pub fn new(env: &BlockEnv, parent_hash: B256, extra_data: &Bytes, parent_beacon_block_root: B256) -> Self {
         Self {
-            number: env.number,
+            number: env.number.try_into().expect("block number does not fit in u64"),
             parent_hash,
             beneficiary: env.beneficiary,
-            timestamp: env.timestamp,
+            timestamp: env.timestamp.try_into().expect("timestamp does not fit in u64"),
             gas_limit: env.gas_limit,
             basefee: env.basefee,
             difficulty: env.difficulty,

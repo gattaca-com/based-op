@@ -1,10 +1,10 @@
 use std::{fmt::Debug, ops::Deref, sync::Arc};
 
-use alloy_consensus::{Eip658Value, Receipt, Transaction as TransactionTrait, TxReceipt};
+use alloy_consensus::{Eip658Value, Receipt, Sealed, Transaction as TransactionTrait, TxReceipt};
 use alloy_eips::{Typed2718, eip7702::SignedAuthorization};
 use alloy_primitives::{ChainId, U256};
 use alloy_rpc_types::{AccessList, TransactionReceipt};
-use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType};
+use op_alloy_consensus::{OpDepositReceipt, OpDepositReceiptWithBloom, OpReceiptEnvelope, OpTxType, TxDeposit};
 use op_alloy_rpc_types::{L1BlockInfo, OpTransactionReceipt};
 use op_revm::OpHaltReason;
 use reth_optimism_primitives::OpReceipt;
@@ -253,5 +253,9 @@ impl TransactionTrait for SimulatedTx {
 impl reth_optimism_primitives::transaction::OpTransaction for SimulatedTx {
     fn is_deposit(&self) -> bool {
         false
+    }
+
+    fn as_deposit(&self) -> Option<&Sealed<TxDeposit>> {
+        None
     }
 }

@@ -8,47 +8,28 @@ repository = "https://github.com/gattaca-com/based-op"
 rust-version = "1.85.0"
 version = "0.1.0"
 
-[profile.release-prod]
-codegen-units = 1
-debug = false
-inherits = "release"
-lto = true
-opt-level = 3
-split-debuginfo = "off"
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
-
-
-[profile.release-with-debug]
-inherits = "dev"
-opt-level = 3
-
 [workspace.dependencies]
-alloy-consensus = "0.14.0"
-alloy-eips = "0.14.0"
-alloy-network = "0.14.0"
-alloy-primitives = { version = "1.0.0", default-features = false, features = [
+alloy-consensus = "1.0.41"
+alloy-eips = "1.0.41"
+alloy-network = "1.0.41"
+alloy-primitives = { version = "1.0.41", default-features = false, features = [
   "getrandom",
 ] }
-alloy-provider = "0.14.0"
-alloy-rlp = "0.3.11"
-alloy-rpc-types = { version = "0.14.0", features = ["engine"] }
-alloy-signer = "0.14.0"
-alloy-signer-local = "0.14.0"
-alloy-transport = "0.14.0"
-alloy-transport-http = "0.14.0"
+alloy-provider = "1.0.41"
+alloy-rlp = "0.3.12"
+alloy-rpc-types = { version = "1.0.41", features = ["engine"] }
+alloy-signer = "1.0.41"
+alloy-signer-local = "1.0.41"
+alloy-transport = "1.0.41"
+alloy-transport-http = "1.0.41"
 auto_impl = "1.3.0"
 axum = { version = "0.8.1", features = ["macros", "ws"] }
+
+backtrace = "0.3.73"
 bitflags = "2.6.0"
-metrics = "0.24.1"
-metrics-exporter-prometheus = "0.16.2"
 bop-common = { path = "crates/common" }
-bop-metrics = { path = "crates/metrics" }
 bop-db = { path = "crates/db" }
+bop-metrics = { path = "crates/metrics" }
 bop-pool = { path = "crates/pool" }
 bop-rpc = { path = "crates/rpc" }
 bop-sequencer = { path = "crates/sequencer" }
@@ -63,80 +44,116 @@ futures = "0.3.31"
 hickory-resolver = "=0.25.0-alpha.5" # Use the exact version reth expects
 http = "1.3.1"
 hyper = "1.5.2"
-jsonrpsee = { version = "0.24", features = ["http-client", "macros", "server"] }
-kona-interop = { git = "https://github.com/op-rs/kona", rev = "88c80aa46975d196c711de203cd7610a15879f58" }
-kona-rpc = { git = "https://github.com/op-rs/kona", rev = "88c80aa46975d196c711de203cd7610a15879f58", features = [
+jsonrpsee = { version = "0.24", features = ["http-client", "macros", "server", "jsonrpsee-client-transport"] }
+kona-interop = { git = "https://github.com/op-rs/kona", rev = "aa7e89596afa96f08eb1b2e14db269fabeb673ea" }
+kona-rpc = { git = "https://github.com/op-rs/kona", rev = "aa7e89596afa96f08eb1b2e14db269fabeb673ea", features = [
   "client",
-  "interop",
-  "jsonrpsee",
 ] }
+metrics = "0.24.1"
+metrics-exporter-prometheus = "0.16.2"
 mio = { features = ["net", "os-poll"], version = "1.0.4" }
 mio_httpc = { features = ["native"], version = "0.10.6" }
 moka = "0.12.10"
-op-alloy-consensus = { version = "=0.14.1", default-features = false, features = [
+op-alloy-consensus = { version = "0.20.0", default-features = false, features = [
   "k256",
 ] }
-op-alloy-network = "0.14.1"
-op-alloy-rpc-types = "0.14.1"
-op-alloy-flz = { version = "0.13.0", default-features = false }
-op-alloy-rpc-types-engine = { version = "0.14.1", default-features = false, features = [
+op-alloy-flz = { version = "0.13.1", default-features = false }
+op-alloy-network = "0.20.0"
+op-alloy-rpc-types = "0.20.0"
+op-alloy-rpc-types-engine = { version = "0.20.0", default-features = false, features = [
   "serde",
 ] }
-op-revm = "3.0.2"
+op-revm = "10.1.0"
 parking_lot = "0.12.3"
 paste = "0.1.18"
 quanta = "0.12.3"
 rand = "0.9.0"
 reqwest = { version = "0.12.12", features = ["blocking", "json"] }
-reth-chain-state = { path = "../reth/crates/chain-state" }
-reth-chainspec = { path = "../reth/crates/chainspec" }
-reth-cli = { path = "../reth/crates/cli/cli" }
-reth-consensus = { path = "../reth/crates/consensus/consensus" }
-reth-db = { path = "../reth/crates/storage/db" }
-reth-db-api = { path = "../reth/crates/storage/db-api" }
-reth-db-common = { path = "../reth/crates/storage/db-common" }
-reth-evm = { path = "../reth/crates/evm" }
-reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
-reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
-  "test-utils",
-] }
-reth-node-types = { path = "../reth/crates/node/types" }
-reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
-reth-optimism-cli = { path = "../reth/crates/optimism/cli" }
-reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
-reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
-reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
-reth-optimism-node = { path = "../reth/crates/optimism/node" }
-reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
-reth-optimism-payload-builder = { path = "../reth/crates/optimism/payload" }
-reth-primitives = { path = "../reth/crates/primitives" }
-reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
-reth-provider = { path = "../reth/crates/storage/provider", features = [
-  "test-utils",
-] }
-reth-revm = { path = "../reth/crates/revm" }
-reth-rpc-builder = { path = "../reth/crates/rpc/rpc-builder" }
-reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
-reth-stages-types = { path = "../reth/crates/stages/types" }
-reth-storage-api = { path = "../reth/crates/storage/storage-api" }
-reth-storage-errors = { path = "../reth/crates/storage/errors" }
-reth-trie = { path = "../reth/crates/trie/trie" }
-reth-trie-common = { path = "../reth/crates/trie/common", features = [
-  "test-utils",
-] }
-reth-trie-db = { path = "../reth/crates/trie/db" }
-reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
-revm = { version = "22.0.1", features = [
+# reth-chain-state = { path = "../reth/crates/chain-state" }
+# reth-chainspec = { path = "../reth/crates/chainspec" }
+# reth-cli = { path = "../reth/crates/cli/cli" }
+# reth-consensus = { path = "../reth/crates/consensus/consensus" }
+# reth-db = { path = "../reth/crates/storage/db" }
+# reth-db-api = { path = "../reth/crates/storage/db-api" }
+# reth-db-common = { path = "../reth/crates/storage/db-common" }
+# reth-evm = { path = "../reth/crates/evm" }
+# reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
+# reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
+#   "test-utils",
+# ] }
+# reth-node-types = { path = "../reth/crates/node/types" }
+# reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
+# reth-optimism-cli = { path = "../reth/crates/optimism/cli" }
+# reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
+# reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
+# reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
+# reth-optimism-node = { path = "../reth/crates/optimism/node" }
+# reth-optimism-payload-builder = { path = "../reth/crates/optimism/payload" }
+# reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
+# reth-primitives = { path = "../reth/crates/primitives" }
+# reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
+# reth-provider = { path = "../reth/crates/storage/provider", features = [
+#   "test-utils",
+# ] }
+# reth-revm = { path = "../reth/crates/revm" }
+# reth-rpc-builder = { path = "../reth/crates/rpc/rpc-builder" }
+# reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
+# reth-stages-types = { path = "../reth/crates/stages/types" }
+# reth-storage-api = { path = "../reth/crates/storage/storage-api" }
+# reth-storage-errors = { path = "../reth/crates/storage/errors" }
+# reth-trie = { path = "../reth/crates/trie/trie" }
+# reth-trie-common = { path = "../reth/crates/trie/common", features = [
+#   "test-utils",
+# ] }
+# reth-trie-db = { path = "../reth/crates/trie/db" }
+# reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
+
+reth-chain-state = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-chain-state" }
+reth-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-chainspec" }
+reth-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-cli" }
+reth-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-consensus" }
+reth-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-db" }
+reth-db-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-db-api" }
+reth-db-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-db-common" }
+reth-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-evm" }
+reth-execution-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-execution-errors" }
+reth-node-ethereum = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-node-ethereum", features = ["test-utils"] }
+reth-node-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-node-types" }
+reth-optimism-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-chainspec" }
+reth-optimism-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-cli" }
+reth-optimism-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-consensus" }
+reth-optimism-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-evm" }
+reth-optimism-forks = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-forks" }
+reth-optimism-node = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-node" }
+reth-optimism-payload-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-payload-builder" }
+reth-optimism-txpool = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-txpool" }
+reth-optimism-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-optimism-primitives" }
+reth-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-primitives" }
+reth-primitives-traits = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-primitives-traits" }
+reth-provider = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-provider", features = ["test-utils"] }
+reth-revm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-revm" }
+reth-rpc-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-rpc-builder" }
+reth-rpc-layer = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-rpc-layer" }
+reth-stages-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-stages-types" }
+reth-storage-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-storage-api" }
+reth-storage-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-storage-errors" }
+reth-trie = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-trie" }
+reth-trie-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-trie-common", features = ["test-utils"] }
+reth-trie-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-trie-db" }
+reth-trie-parallel = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-trie-parallel" }
+
+revm = { version = "29.0.1", features = [
   "optional_balance_check",
   "secp256k1",
   "std",
 ], default-features = false }
-revm-handler = "3.0.0"
-revm-inspector = "3.0.0"
-revm-interpreter = "18.0.0"
-revm-primitives = { version = "18.0.0", features = [
+revm-handler = "12.0.0"
+revm-inspector = "10.0.1"
+revm-interpreter = "25.0.3"
+revm-primitives = { version = "20.2.1", features = [
   "std",
 ], default-features = false }
+
 rustc-hash = "2.0.0"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.137"
@@ -145,17 +162,33 @@ signal-hook = "0.3.17"
 ssz_types = "0.11.0"
 strum = "0.24"
 strum_macros = "0.24"
+tabwriter = "1.4.1"
 thiserror = "2.0.11"
 tokio = { version = "1.43.0", features = ["full"] }
 toml = "0.8.19"
-tower = "0.4"
+tower = { version = "0.4", features = ["timeout"] }
 tower-http = { version = "0.6.4", features = ["cors"] }
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt", "time"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "time"] }
 tree_hash = "0.10"
 tree_hash_derive = "0.10"
 uuid = { version = "1.12.1", features = ["serde", "v4"] }
 
-backtrace = "0.3.73"
-tabwriter = "1.4.1"
+[profile.release-prod]
+codegen-units = 1
+debug = false
+inherits = "release"
+lto = true
+opt-level = 3
+split-debuginfo = "off"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[profile.release-with-debug]
+inherits = "dev"
+opt-level = 3

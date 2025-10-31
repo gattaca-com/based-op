@@ -14,8 +14,7 @@ use bop_common::{
 };
 use reth_consensus::ConsensusError;
 use reth_evm::execute::{
-    BasicBlockExecutorProvider, BlockExecutionError, BlockExecutionOutput, BlockExecutorProvider, Executor,
-    InternalBlockExecutionError, ProviderError,
+    BasicBlockExecutor, BlockExecutionError, BlockExecutionOutput, Executor, InternalBlockExecutionError, ProviderError
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{OpEvmConfig, OpExecutorProvider};
@@ -33,9 +32,9 @@ pub mod mock_fetcher;
 pub type AlloyProvider = alloy_provider::RootProvider<op_alloy_network::Optimism>;
 
 #[derive(Debug)]
-pub struct BlockSync {
+pub struct BlockSync<DB = dyn DatabaseRead + DatabaseWrite> {
     chain_spec: Arc<OpChainSpec>,
-    execution_factory: BasicBlockExecutorProvider<OpEvmConfig>,
+    execution_factory: BasicBlockExecutor<OpEvmConfig, DB>,
     /// Blocks that we have received from the provider but require a prior block to be applied before this can be.
     /// Sorted list in reverse order by block number.
     pending_blocks: Vec<RecoveredBlock<OpBlock>>,
@@ -51,7 +50,7 @@ impl BlockSync {
     }
 
     /// Returns block numbers to fetch, start to end. This will be used in the case of a reorg.
-    #[tracing::instrument(skip_all, fields(block = %block.number))]
+    // #[tracing::instrument(skip_all, fields(block = %block.number))]
     pub fn commit_block<DB>(
         &mut self,
         block: &RecoveredBlock<OpBlock>,

@@ -3,10 +3,10 @@ edition.workspace = true
 name = "utils"
 rust-version.workspace = true
 version.workspace = true
+[[bin]]
+name = "key_to_address"
+path = "key_to_address.rs"
 
 [dependencies]
 bop-common.workspace = true
 revm-primitives.workspace = true
-[[bin]]
-name="key_to_address"
-path="key_to_address.rs"

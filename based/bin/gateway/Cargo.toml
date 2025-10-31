@@ -3,6 +3,9 @@ edition.workspace = true
 name = "bop-gateway"
 rust-version.workspace = true
 version.workspace = true
+[features]
+default = []
+shmem = ["bop-common/shmem"]
 
 [dependencies]
 alloy-eips.workspace = true
@@ -35,6 +38,3 @@ reth-primitives.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing-subscriber.workspace = true
-[features]
-default = []
-shmem = ["bop-common/shmem"]
