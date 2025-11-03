@@ -56,7 +56,8 @@ impl<
     Db: Database
         + DatabaseRef<
             Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
-        > + Clone + Debug,
+        > + Clone
+        + Debug,
 > Simulator<Db>
 {
     pub fn new(db: DBFrag<Db>, evm_config: OpEvmConfig, id: usize, allow_reverts: bool) -> Self {

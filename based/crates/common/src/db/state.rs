@@ -228,7 +228,7 @@ impl<DB: DatabaseRef> Database for State<DB> {
     }
 
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        let res = match self.cache.contracts.entry(code_hash) {
+        match self.cache.contracts.entry(code_hash) {
             Entry::Occupied(entry) => Ok(entry.get().clone()),
             Entry::Vacant(entry) => {
                 if self.use_preloaded_bundle {
@@ -242,8 +242,7 @@ impl<DB: DatabaseRef> Database for State<DB> {
                 entry.insert(code.clone());
                 Ok(code)
             }
-        };
-        res
+        }
     }
 
     fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {

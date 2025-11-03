@@ -25,7 +25,8 @@ use bop_common::{
 };
 use jsonrpsee::{
     core::{ClientError, async_trait},
-    server::{ServerBuilder, ServerConfigBuilder}, ws_client::RpcServiceBuilder,
+    server::{ServerBuilder, ServerConfigBuilder},
+    ws_client::RpcServiceBuilder,
 };
 use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use tokio::sync::RwLock;

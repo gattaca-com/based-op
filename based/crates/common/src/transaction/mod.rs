@@ -15,6 +15,7 @@ use alloy_primitives::{Address, Bytes};
 use op_alloy_consensus::OpTxEnvelope;
 use op_revm::OpTransaction;
 use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives_traits::SignerRecoverable;
 use revm::context::TxEnv;
 pub use simulated::{SimulatedTx, SimulatedTxList};
 pub use tx_list::TxList;
@@ -24,7 +25,6 @@ use crate::{
     telemetry::{Telemetry, Tx, order::Ingested},
     typedefs::BlockSyncMessage,
 };
-use reth_primitives_traits::SignerRecoverable;
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
@@ -148,7 +148,8 @@ impl Transaction {
                 inner_tx_env.access_list = tx.tx().access_list.clone();
                 inner_tx_env.blob_hashes.clear();
                 inner_tx_env.max_fee_per_blob_gas = 0;
-                inner_tx_env.authorization_list = tx.tx().authorization_list.iter().cloned().map(alloy_signer::Either::Left).collect();
+                inner_tx_env.authorization_list =
+                    tx.tx().authorization_list.iter().cloned().map(alloy_signer::Either::Left).collect();
                 inner_tx_env.tx_type = tx.ty();
             }
             OpTxEnvelope::Deposit(deposit_tx) => {

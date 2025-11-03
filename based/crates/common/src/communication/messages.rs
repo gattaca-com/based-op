@@ -161,6 +161,7 @@ impl<T> From<InternalMessage<T>> for Nanos {
 
 /// Supported Engine API RPC methods
 #[derive(Debug, AsRefStr)]
+#[allow(clippy::large_enum_variant)]
 pub enum EngineApi {
     ForkChoiceUpdatedV3 { fork_choice_state: ForkchoiceState, payload_attributes: Option<Box<OpPayloadAttributes>> },
     NewPayloadV4 { payload: OpExecutionPayloadV4, versioned_hashes: Vec<B256>, parent_beacon_block_root: B256 },

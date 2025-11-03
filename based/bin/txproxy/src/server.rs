@@ -157,9 +157,8 @@ impl TxProxyServer {
 
         let forward_to = Arc::clone(&self.forward_to);
         let flow_counter = Arc::clone(&self.flow_counter);
-        let rpc_service = RpcServiceBuilder::new().layer_fn(move |inner| {
-            MultiplexingService::new(inner, Arc::clone(&forward_to), Arc::clone(&flow_counter))
-        });
+        let rpc_service = RpcServiceBuilder::new()
+            .layer_fn(move |inner| MultiplexingService::new(inner, Arc::clone(&forward_to), Arc::clone(&flow_counter)));
 
         let http_middleware = ServiceBuilder::new().layer(cors);
 

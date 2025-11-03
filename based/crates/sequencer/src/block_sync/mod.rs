@@ -13,8 +13,9 @@ use bop_common::{
     time::BlockSyncTimers,
 };
 use reth_consensus::ConsensusError;
-use reth_evm::execute::{
-    BasicBlockExecutor, BlockExecutionError, BlockExecutionOutput, Executor, InternalBlockExecutionError, ProviderError
+use reth_evm::{
+    ConfigureEvm,
+    execute::{BlockExecutionError, BlockExecutionOutput, Executor, InternalBlockExecutionError, ProviderError},
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{OpEvmConfig, OpExecutorProvider};
@@ -24,7 +25,6 @@ use reth_trie_common::updates::TrieUpdates;
 use revm_primitives::Address;
 use tracing::{info, warn};
 use uuid::Uuid;
-use reth_evm::ConfigureEvm;
 
 pub mod block_fetcher;
 pub mod fetch_blocks;

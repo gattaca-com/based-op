@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use bop_common::config::{LoggingConfig, LoggingFlags};
-use clap::{Parser, command};
+use clap::Parser;
 use tracing::level_filters::LevelFilter;
 
 #[derive(Parser, Debug, Clone)]
@@ -70,7 +70,6 @@ pub struct TxSpammerArgs {
     /// Maximum number of log files
     #[arg(long = "log.max_files", default_value_t = 100)]
     pub log_max_files: usize,
-
 }
 
 impl From<&TxSpammerArgs> for LoggingConfig {

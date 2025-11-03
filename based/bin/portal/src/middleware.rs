@@ -3,10 +3,15 @@ use bop_common::{
     metrics::{Counter, Metric, MetricsUpdate},
     utils::uuid,
 };
-use futures::{FutureExt, future::BoxFuture};
+use futures::FutureExt;
 use jsonrpsee::{
     MethodResponse,
-    core::{ClientError, client::ClientT, middleware::{Batch, Notification}, traits::ToRpcParams},
+    core::{
+        ClientError,
+        client::ClientT,
+        middleware::{Batch, Notification},
+        traits::ToRpcParams,
+    },
     server::middleware::rpc::RpcServiceT,
     types::{ErrorObject, Params, Request, ResponsePayload, error::INTERNAL_ERROR_CODE},
 };
@@ -28,9 +33,9 @@ impl<S> RpcServiceT for EngineApiProxy<S>
 where
     S: RpcServiceT<MethodResponse = MethodResponse> + Send + Sync + Clone + 'static,
 {
+    type BatchResponse = S::BatchResponse;
     type MethodResponse = S::MethodResponse;
-	type NotificationResponse = S::NotificationResponse;
-	type BatchResponse = S::BatchResponse;
+    type NotificationResponse = S::NotificationResponse;
 
     #[tracing::instrument(skip_all, name = "middleware")]
     fn call<'a>(&self, req: Request<'a>) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
@@ -82,13 +87,13 @@ where
         .boxed()
     }
 
-	fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
-		self.inner.batch(batch)
-	}
+    fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
+        self.inner.batch(batch)
+    }
 
-	fn notification<'a>(&self, n: Notification<'a>) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
-		self.inner.notification(n)
-	}
+    fn notification<'a>(&self, n: Notification<'a>) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
+        self.inner.notification(n)
+    }
 }
 
 struct WrapParams<'a>(Params<'a>);

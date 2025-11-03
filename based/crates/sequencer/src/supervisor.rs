@@ -1,4 +1,4 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use alloy_consensus::Transaction as _;
 use bop_common::transaction::Transaction;
@@ -15,10 +15,7 @@ pub struct SupervisorValidator {
 
 impl SupervisorValidator {
     pub async fn new(config: &SuperVisorConfig) -> Self {
-        let client = SupervisorClient::builder(config.url.clone())
-            .minimum_safety(config.safety_level)
-            .build()
-            .await;
+        let client = SupervisorClient::builder(config.url.clone()).minimum_safety(config.safety_level).build().await;
         Self { client, safety: config.safety_level }
     }
 

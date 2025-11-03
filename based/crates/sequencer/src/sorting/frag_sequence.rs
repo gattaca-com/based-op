@@ -175,9 +175,9 @@ mod tests {
     use reth_optimism_chainspec::BASE_SEPOLIA;
     use reth_optimism_evm::OpEvmConfig;
     use reth_optimism_payload_builder::config::OpDAConfig;
+    use reth_primitives_traits::SignerRecoverable;
     use revm::context::ContextTr;
     use tracing::level_filters::LevelFilter;
-    use reth_primitives_traits::SignerRecoverable;
 
     use crate::{
         SequencerConfig, Simulator,

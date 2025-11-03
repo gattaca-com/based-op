@@ -1,11 +1,19 @@
 use std::sync::Arc;
 
-use futures::{FutureExt, future::BoxFuture};
+use futures::FutureExt;
 use jsonrpsee::{
-    BatchResponse, MethodResponse, core::{client::ClientT, middleware::{Batch, Notification}, traits::ToRpcParams}, http_client::HttpClient, server::middleware::rpc::RpcServiceT, types::{
+    MethodResponse,
+    core::{
+        client::ClientT,
+        middleware::{Batch, Notification},
+        traits::ToRpcParams,
+    },
+    http_client::HttpClient,
+    server::middleware::rpc::RpcServiceT,
+    types::{
         ErrorObject, Request, ResponsePayload,
         error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE, METHOD_NOT_FOUND_CODE},
-    }
+    },
 };
 use parking_lot::RwLock;
 use serde_json::value::RawValue;
@@ -28,11 +36,11 @@ impl<S> MultiplexingService<S> {
 
 impl<S> RpcServiceT for MultiplexingService<S>
 where
-	S: RpcServiceT<MethodResponse=MethodResponse> + Send + Sync + Clone + 'static,
+    S: RpcServiceT<MethodResponse = MethodResponse> + Send + Sync + Clone + 'static,
 {
+    type BatchResponse = S::BatchResponse;
     type MethodResponse = S::MethodResponse;
-	type NotificationResponse = S::NotificationResponse;
-	type BatchResponse = S::BatchResponse;
+    type NotificationResponse = S::NotificationResponse;
 
     #[tracing::instrument(skip_all, name = "middleware")]
     fn call<'a>(&self, req: Request<'a>) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
@@ -125,13 +133,13 @@ where
         .boxed()
     }
 
-	fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
-		self.inner.batch(batch)
-	}
+    fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
+        self.inner.batch(batch)
+    }
 
-	fn notification<'a>(&self, n: Notification<'a>) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
-		self.inner.notification(n)
-	}
+    fn notification<'a>(&self, n: Notification<'a>) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
+        self.inner.notification(n)
+    }
 }
 
 // TODO: remove this
