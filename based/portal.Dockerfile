@@ -7,15 +7,15 @@ RUN apt-get update && apt-get install -y clang
 
 FROM chef AS planner
 COPY . .
-RUN --mount=from=reth,target=/reth cargo chef prepare --recipe-path recipe.json
+RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder 
 COPY --from=planner /app/recipe.json recipe.json
 
-RUN --mount=from=reth,target=/reth cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
-RUN --mount=from=reth,target=/reth cargo build --release --bin based-portal
+RUN cargo build --release --bin based-portal
 
 
 FROM debian:stable-slim AS runtime
