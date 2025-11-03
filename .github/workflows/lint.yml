@@ -35,10 +35,10 @@ jobs:
           just-version: '1.40.0'
 
       # Install the specific nightly toolchain and components
-      - name: Install nightly-2025-02-26 toolchain and components
+      - name: Install nightly toolchain and components
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2025-02-26
+          toolchain: nightly
           profile: minimal
           components: clippy, rustfmt
 
