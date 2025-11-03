@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use alloy_consensus::Transaction as _;
 use bop_common::transaction::Transaction;
-use reth_optimism_txpool::supervisor::{ExecutingDescriptor, InteropTxValidatorError, SupervisorClient, parse_access_list_items_to_inbox_entries};
+use reth_optimism_txpool::supervisor::{
+    ExecutingDescriptor, InteropTxValidatorError, SupervisorClient, parse_access_list_items_to_inbox_entries,
+};
 use revm_primitives::B256;
 use tracing::warn;
 
@@ -24,9 +26,8 @@ impl SupervisorValidator {
             return true;
         };
 
-        let inbox_entries = parse_access_list_items_to_inbox_entries(access_list.iter())
-            .copied()
-            .collect::<Vec<B256>>();
+        let inbox_entries =
+            parse_access_list_items_to_inbox_entries(access_list.iter()).copied().collect::<Vec<B256>>();
 
         let descriptor = ExecutingDescriptor::new(timestamp, None);
         let res = tokio::runtime::Builder::new_current_thread()
@@ -34,6 +35,7 @@ impl SupervisorValidator {
             .build()
             .unwrap()
             .block_on(self.validate_messages(inbox_entries.as_slice(), descriptor));
+        #[allow(clippy::match_single_binding)]
         match res {
             Ok(()) => true,
             Err(err) => {
@@ -67,7 +69,7 @@ impl SupervisorValidator {
         executing_descriptor: ExecutingDescriptor,
     ) -> Result<(), InteropTxValidatorError> {
         self.client.check_access_list(inbox_entries, executing_descriptor).await
-}
+    }
 }
 
 impl From<&SuperVisorConfig> for SupervisorValidator {
