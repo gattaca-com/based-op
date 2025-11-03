@@ -1,5 +1,5 @@
 use bop_common::{config::GatewayArgs, time::Duration};
-use kona_interop::SafetyLevel;
+use op_alloy_consensus::interop::SafetyLevel;
 use reqwest::Url;
 use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_payload_builder::config::OpDAConfig;

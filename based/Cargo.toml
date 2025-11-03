@@ -45,10 +45,6 @@ hickory-resolver = "=0.25.0-alpha.5" # Use the exact version reth expects
 http = "1.3.1"
 hyper = "1.5.2"
 jsonrpsee = { version = "0.26", features = ["http-client", "macros", "server", "jsonrpsee-client-transport"] }
-kona-interop = { git = "https://github.com/op-rs/kona", rev = "aa7e89596afa96f08eb1b2e14db269fabeb673ea" }
-kona-rpc = { git = "https://github.com/op-rs/kona", rev = "aa7e89596afa96f08eb1b2e14db269fabeb673ea", features = [
-  "client",
-] }
 metrics = "0.24.1"
 metrics-exporter-prometheus = "0.16.2"
 mio = { features = ["net", "os-poll"], version = "1.0.4" }
