@@ -24,6 +24,7 @@ use reth_trie_common::updates::TrieUpdates;
 use revm_primitives::Address;
 use tracing::{info, warn};
 use uuid::Uuid;
+use reth_evm::ConfigureEvm;
 
 pub mod block_fetcher;
 pub mod fetch_blocks;
@@ -34,7 +35,7 @@ pub type AlloyProvider = alloy_provider::RootProvider<op_alloy_network::Optimism
 #[derive(Debug)]
 pub struct BlockSync {
     chain_spec: Arc<OpChainSpec>,
-    execution_factory: BasicBlockExecutor<OpEvmConfig>,
+    execution_factory: OpEvmConfig,
     /// Blocks that we have received from the provider but require a prior block to be applied before this can be.
     /// Sorted list in reverse order by block number.
     pending_blocks: Vec<RecoveredBlock<OpBlock>>,

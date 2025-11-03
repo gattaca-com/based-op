@@ -17,7 +17,7 @@ use bop_common::{
     time::Duration,
     transaction::Transaction,
 };
-use jsonrpsee::{core::async_trait, server::ServerBuilder};
+use jsonrpsee::{core::async_trait, server::{ServerBuilder, ServerConfigBuilder}};
 use reth_optimism_payload_builder::config::OpDAConfig;
 use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
 use tokio::{net::TcpListener, runtime::Runtime};
@@ -83,13 +83,13 @@ impl RpcServer {
         let validator = JwtAuthValidator::new(self.jwt);
         let auth_layer = AuthLayer::new(validator);
         let service_builder = tower::ServiceBuilder::new()
-            // Proxy `GET /health` requests to internal `system_health` method.
             .layer(auth_layer)
             .timeout(std::time::Duration::from_secs(2));
 
         let server_auth = ServerBuilder::default()
-            .max_request_body_size(u32::MAX)
-            .max_response_body_size(u32::MAX)
+            .set_config(
+                ServerConfigBuilder::new().max_request_body_size(u32::MAX).max_response_body_size(u32::MAX).build(),
+            )
             .set_http_middleware(service_builder)
             .build(addr_auth)
             .await
@@ -104,8 +104,9 @@ impl RpcServer {
         let service_builder = tower::ServiceBuilder::new().timeout(std::time::Duration::from_secs(2));
 
         let server_no_auth = ServerBuilder::default()
-            .max_request_body_size(u32::MAX)
-            .max_response_body_size(u32::MAX)
+            .set_config(
+                ServerConfigBuilder::new().max_request_body_size(u32::MAX).max_response_body_size(u32::MAX).build(),
+            )
             .set_http_middleware(service_builder)
             .build(addr_no_auth)
             .await

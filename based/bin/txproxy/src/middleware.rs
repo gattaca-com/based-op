@@ -2,14 +2,10 @@ use std::sync::Arc;
 
 use futures::{FutureExt, future::BoxFuture};
 use jsonrpsee::{
-    MethodResponse,
-    core::{client::ClientT, traits::ToRpcParams},
-    http_client::HttpClient,
-    server::middleware::rpc::RpcServiceT,
-    types::{
+    BatchResponse, MethodResponse, core::{client::ClientT, middleware::{Batch, Notification}, traits::ToRpcParams}, http_client::HttpClient, server::middleware::rpc::RpcServiceT, types::{
         ErrorObject, Request, ResponsePayload,
         error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE, METHOD_NOT_FOUND_CODE},
-    },
+    }
 };
 use parking_lot::RwLock;
 use serde_json::value::RawValue;
@@ -18,22 +14,28 @@ use tracing::{debug, error};
 use crate::server::FlowCounter;
 
 #[derive(Clone)]
-pub struct MultiplexingService {
+pub struct MultiplexingService<S> {
+    inner: S,
     forwarding_to: Arc<RwLock<Vec<HttpClient>>>,
     flow_counter: Arc<FlowCounter>,
 }
 
-impl MultiplexingService {
-    pub fn new(forwarding_to: Arc<RwLock<Vec<HttpClient>>>, flow_counter: Arc<FlowCounter>) -> Self {
-        Self { forwarding_to, flow_counter }
+impl<S> MultiplexingService<S> {
+    pub fn new(inner: S, forwarding_to: Arc<RwLock<Vec<HttpClient>>>, flow_counter: Arc<FlowCounter>) -> Self {
+        Self { inner, forwarding_to, flow_counter }
     }
 }
 
-impl<'a> RpcServiceT<'a> for MultiplexingService {
-    type Future = BoxFuture<'a, MethodResponse>;
+impl<S> RpcServiceT for MultiplexingService<S>
+where
+	S: RpcServiceT<MethodResponse=MethodResponse> + Send + Sync + Clone + 'static,
+{
+    type MethodResponse = S::MethodResponse;
+	type NotificationResponse = S::NotificationResponse;
+	type BatchResponse = S::BatchResponse;
 
     #[tracing::instrument(skip_all, name = "middleware")]
-    fn call(&self, req: Request<'a>) -> Self::Future {
+    fn call<'a>(&self, req: Request<'a>) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
         let forwarding_to_arc = Arc::clone(&self.forwarding_to);
         let flow_counter = Arc::clone(&self.flow_counter);
         flow_counter.increment_total();
@@ -122,6 +124,14 @@ impl<'a> RpcServiceT<'a> for MultiplexingService {
         }
         .boxed()
     }
+
+	fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
+		self.inner.batch(batch)
+	}
+
+	fn notification<'a>(&self, n: Notification<'a>) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
+		self.inner.notification(n)
+	}
 }
 
 // TODO: remove this

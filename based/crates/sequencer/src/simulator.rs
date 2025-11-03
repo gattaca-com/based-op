@@ -41,9 +41,9 @@ impl<T> SimulationDatabase for T where
 /// Simulator thread.
 pub struct Simulator<Db: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error> + Debug> {
     /// Top of frag evm.
-    evm_tof: OpEvm<State<DBFrag<Db>>, NoOpInspector>,
+    evm_tof: OpEvm<State<DBFrag<Db>>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
     /// Evm on top of partially built frag
-    pub evm_sorting: OpEvm<State<DBSorting<Db>>, NoOpInspector>,
+    pub evm_sorting: OpEvm<State<DBSorting<Db>>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
     /// How to create an EVM.
@@ -74,7 +74,7 @@ impl<
     pub fn simulate_transaction<SimulateTxDb: SimulationDatabase + Debug>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
-        evm: &mut OpEvm<State<SimulateTxDb>, NoOpInspector>,
+        evm: &mut OpEvm<State<SimulateTxDb>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
         regolith_active: bool,
         allow_zero_payment: bool,
         allow_revert: bool,
@@ -100,7 +100,7 @@ impl<
 /// Will not modify the db state after the simulation is complete.
 pub fn simulate_tx_inner<Db: SimulationDatabase + Debug>(
     tx: Arc<Transaction>,
-    evm: &mut OpEvm<Db, NoOpInspector>,
+    evm: &mut OpEvm<Db, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
     regolith_active: bool,
     allow_zero_payment: bool,
     allow_revert: bool,

@@ -25,7 +25,7 @@ use bop_common::{
 };
 use jsonrpsee::{
     core::{ClientError, async_trait},
-    server::{RpcServiceBuilder, ServerBuilder},
+    server::{ServerBuilder, ServerConfigBuilder}, ws_client::RpcServiceBuilder,
 };
 use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use tokio::sync::RwLock;
@@ -98,8 +98,9 @@ impl PortalServer {
         let cors_middleware = ServiceBuilder::new().layer(cors);
 
         let server = ServerBuilder::default()
-            .max_request_body_size(u32::MAX)
-            .max_response_body_size(u32::MAX)
+            .set_config(
+                ServerConfigBuilder::new().max_request_body_size(u32::MAX).max_response_body_size(u32::MAX).build(),
+            )
             .set_rpc_middleware(rpc_middleware)
             .set_http_middleware(cors_middleware)
             .build(addr)

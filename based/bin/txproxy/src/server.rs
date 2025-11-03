@@ -16,7 +16,8 @@ use bop_common::{
 use jsonrpsee::{
     Methods,
     http_client::{HttpClient, HttpClientBuilder},
-    server::{RpcServiceBuilder, ServerBuilder},
+    server::{ServerBuilder, ServerConfigBuilder},
+    ws_client::RpcServiceBuilder,
 };
 use parking_lot::RwLock;
 use reqwest::Url;
@@ -154,14 +155,18 @@ impl TxProxyServer {
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
         let cors = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
 
-        let multiplex_service = MultiplexingService::new(Arc::clone(&self.forward_to), Arc::clone(&self.flow_counter));
-        let rpc_service = RpcServiceBuilder::new().layer_fn(move |_inner| multiplex_service.clone());
+        let forward_to = Arc::clone(&self.forward_to);
+        let flow_counter = Arc::clone(&self.flow_counter);
+        let rpc_service = RpcServiceBuilder::new().layer_fn(move |inner| {
+            MultiplexingService::new(inner, Arc::clone(&forward_to), Arc::clone(&flow_counter))
+        });
 
         let http_middleware = ServiceBuilder::new().layer(cors);
 
         let server = ServerBuilder::default()
-            .max_request_body_size(u32::MAX)
-            .max_response_body_size(u32::MAX)
+            .set_config(
+                ServerConfigBuilder::new().max_request_body_size(u32::MAX).max_response_body_size(u32::MAX).build(),
+            )
             .set_rpc_middleware(rpc_service)
             .set_http_middleware(http_middleware)
             .build(addr)
