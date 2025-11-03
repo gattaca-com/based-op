@@ -69,44 +69,6 @@ paste = "0.1.18"
 quanta = "0.12.3"
 rand = "0.9.0"
 reqwest = { version = "0.12.12", features = ["blocking", "json"] }
-# reth-chain-state = { path = "../reth/crates/chain-state" }
-# reth-chainspec = { path = "../reth/crates/chainspec" }
-# reth-cli = { path = "../reth/crates/cli/cli" }
-# reth-consensus = { path = "../reth/crates/consensus/consensus" }
-# reth-db = { path = "../reth/crates/storage/db" }
-# reth-db-api = { path = "../reth/crates/storage/db-api" }
-# reth-db-common = { path = "../reth/crates/storage/db-common" }
-# reth-evm = { path = "../reth/crates/evm" }
-# reth-execution-errors = { path = "../reth/crates/evm/execution-errors" }
-# reth-node-ethereum = { path = "../reth/crates/ethereum/node", features = [
-#   "test-utils",
-# ] }
-# reth-node-types = { path = "../reth/crates/node/types" }
-# reth-optimism-chainspec = { path = "../reth/crates/optimism/chainspec" }
-# reth-optimism-cli = { path = "../reth/crates/optimism/cli" }
-# reth-optimism-consensus = { path = "../reth/crates/optimism/consensus" }
-# reth-optimism-evm = { path = "../reth/crates/optimism/evm" }
-# reth-optimism-forks = { path = "../reth/crates/optimism/hardforks" }
-# reth-optimism-node = { path = "../reth/crates/optimism/node" }
-# reth-optimism-payload-builder = { path = "../reth/crates/optimism/payload" }
-# reth-optimism-primitives = { path = "../reth/crates/optimism/primitives" }
-# reth-primitives = { path = "../reth/crates/primitives" }
-# reth-primitives-traits = { path = "../reth/crates/primitives-traits" }
-# reth-provider = { path = "../reth/crates/storage/provider", features = [
-#   "test-utils",
-# ] }
-# reth-revm = { path = "../reth/crates/revm" }
-# reth-rpc-builder = { path = "../reth/crates/rpc/rpc-builder" }
-# reth-rpc-layer = { path = "../reth/crates/rpc/rpc-layer" }
-# reth-stages-types = { path = "../reth/crates/stages/types" }
-# reth-storage-api = { path = "../reth/crates/storage/storage-api" }
-# reth-storage-errors = { path = "../reth/crates/storage/errors" }
-# reth-trie = { path = "../reth/crates/trie/trie" }
-# reth-trie-common = { path = "../reth/crates/trie/common", features = [
-#   "test-utils",
-# ] }
-# reth-trie-db = { path = "../reth/crates/trie/db" }
-# reth-trie-parallel = { path = "../reth/crates/trie/parallel" }
 
 reth-chain-state = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-chain-state" }
 reth-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "89f90f4a50345dd20bb78051b3aef9bf86903211", package = "reth-chainspec" }
