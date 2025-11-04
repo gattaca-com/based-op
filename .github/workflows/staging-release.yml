@@ -20,23 +20,18 @@ jobs:
           - name: based-gateway-staging
             context: based
             file: based/gateway.Dockerfile
-            build-contexts: 'reth=./reth'
           - name: key-to-address-staging
             context: based
             file: based/key_to_address.Dockerfile
-            build-contexts: 'reth=./reth'
           - name: based-registry-staging
             context: based
             file: based/registry.Dockerfile
-            build-contexts: 'reth=./reth'
           - name: based-portal-staging
             context: based
             file: based/portal.Dockerfile
-            build-contexts: 'reth=./reth'
           - name: based-txproxy-staging
             context: based
             file: based/txproxy.Dockerfile
-            build-contexts: 'reth=./reth'
         platform:
           - arch: amd64
             runner: ubuntu-latest
