@@ -51,7 +51,7 @@ impl BlockSync {
     }
 
     /// Returns block numbers to fetch, start to end. This will be used in the case of a reorg.
-    #[tracing::instrument(skip_all, fields(block = %block.number))]
+    #[tracing::instrument(skip_all, fields(block = %block.number, hash = %block.hash(), commit_block))]
     pub fn commit_block<DB>(
         &mut self,
         block: &RecoveredBlock<OpBlock>,
