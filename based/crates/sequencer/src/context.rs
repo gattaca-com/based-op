@@ -153,8 +153,8 @@ impl<Db> SequencerContext<Db> {
         self.block_env.timestamp
     }
 
-    pub fn is_prague_active(&self) -> bool {
-        self.chain_spec().is_prague_active_at_timestamp(self.timestamp())
+    pub fn is_prague_active(&self, timestamp: u64) -> bool {
+        self.chain_spec().is_prague_active_at_timestamp(timestamp)
     }
 }
 
@@ -279,7 +279,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let state_changes = self.shared_state.as_mut().take_state_changes();
         let state_root = self.db.calculate_state_root(&state_changes).unwrap().0;
 
-        let (withdrawals_root, requests_hash) = if self.is_prague_active() {
+        let (withdrawals_root, requests_hash) = if self.is_prague_active(self.timestamp()) {
             (
                 Some(
                     withdrawals_root(&state_changes, &self.db)
