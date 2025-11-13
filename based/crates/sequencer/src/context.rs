@@ -116,10 +116,14 @@ impl<Db> SequencerContext<Db> {
 
     pub fn extra_data(&self) -> Bytes {
         let timestamp = self.payload_attributes.payload_attributes.timestamp;
-        if self.chain_spec().is_holocene_active_at_timestamp(timestamp) {
+        if self.chain_spec().is_jovian_active_at_timestamp(timestamp) {
+            self.payload_attributes
+                .get_jovian_extra_data(self.chain_spec().base_fee_params_at_timestamp(timestamp))
+                .expect("couldn't get extra data for jovian")
+        } else if self.chain_spec().is_holocene_active_at_timestamp(timestamp) {
             self.payload_attributes
                 .get_holocene_extra_data(self.chain_spec().base_fee_params_at_timestamp(timestamp))
-                .expect("couldn't get extra data")
+                .expect("couldn't get extra data for holocene")
         } else {
             Bytes::default()
         }
@@ -370,17 +374,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             blob_gas_used: 0,
             excess_blob_gas: 0,
         };
-        (seal, OpExecutionPayloadEnvelopeV4Patch {
-            execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
-                payload_inner,
-                withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+        (
+            seal,
+            OpExecutionPayloadEnvelopeV4Patch {
+                execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
+                    payload_inner,
+                    withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+                },
+                block_value: frag_seq.payment.to(),
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+                execution_requests: vec![],
             },
-            block_value: frag_seq.payment.to(),
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-            execution_requests: vec![],
-        })
+        )
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
