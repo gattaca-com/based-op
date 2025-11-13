@@ -19,10 +19,10 @@ use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::{RecoveredBlock, StorageEntry};
 use reth_provider::{
     BlockExecutionOutput, DatabaseProviderRO, LatestStateProviderRef, OriginalValuesKnown, ProviderFactory,
-    ProviderResult, StateWriter, StorageRootProvider, TrieWriter, providers::ConsistentDbView,
+    ProviderResult, StateWriter, StorageRootProvider, TrieWriter, providers::OverlayStateProviderFactory,
 };
 use reth_storage_api::{DBProvider, HashedPostStateProvider};
-use reth_trie::{HashedStorage, StateRoot, StorageMultiProof, StorageProof, TrieInput};
+use reth_trie::{HashedStorage, StateRoot, StorageMultiProof, StorageProof};
 use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
 use reth_trie_parallel::root::ParallelStateRoot;
@@ -100,8 +100,9 @@ impl DatabaseRead for SequencerDB {
         let provider = self.provider()?;
         let latest_state = LatestStateProviderRef::new(provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(bundle_state);
-        let consistent_view = ConsistentDbView::new(self.factory.clone(), None);
-        let parallel_state_root = ParallelStateRoot::new(consistent_view, TrieInput::from_state(hashed_state));
+        let prefix_sets = hashed_state.construct_prefix_sets().freeze();
+        let overlay_factory = OverlayStateProviderFactory::new(self.factory.clone());
+        let parallel_state_root = ParallelStateRoot::new(overlay_factory, prefix_sets);
         parallel_state_root.incremental_root_with_updates().map_err(Error::ParallelStateRootError)
     }
 
@@ -147,7 +148,7 @@ impl DatabaseWrite for SequencerDB {
             let latest_state = LatestStateProviderRef::new(&provider);
             let hashed_state = latest_state.hashed_post_state(&block_execution_output.state);
             rw_provider.write_hashed_state(&hashed_state.into_sorted()).map_err(Error::ProviderError)?;
-            rw_provider.write_trie_updates(&trie_updates).map_err(Error::ProviderError)
+            rw_provider.write_trie_updates(trie_updates).map_err(Error::ProviderError)
         })?;
         timers.header_write.time(|| {
             // Write to header table
@@ -170,7 +171,7 @@ impl DatabaseWrite for SequencerDB {
         let storage_range = BlockNumberAddress::range(range.clone());
 
         // Trie
-        rw_provider.unwind_trie_state_range(range.clone())?;
+        rw_provider.unwind_trie_state_from(head_block_number)?;
 
         // Flat state
         let storage_changeset = rw_provider.take::<tables::StorageChangeSets>(storage_range.clone())?;
