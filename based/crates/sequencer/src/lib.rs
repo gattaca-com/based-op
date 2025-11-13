@@ -530,7 +530,7 @@ where
                     return self;
                 }
                 data.timers.handle_sim.start();
-                sort_data.handle_sim(simulated_tx, sender, data.as_ref().basefee, simtime);
+                sort_data.handle_sim(simulated_tx, sender, data.base_fee(), simtime);
                 data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
@@ -558,7 +558,7 @@ impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
     /// Used to maintain block production cadence.
     fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db>) -> Self {
         use SequencerState::*;
-        let base_fee = data.as_ref().basefee;
+        let base_fee = data.base_fee();
         match self {
             Sorting(mut seq, sorting_data)
                 if sorting_data.should_seal_frag() && sorting_data.should_send_next_sims() =>

@@ -146,7 +146,7 @@ impl<Db> SequencerContext<Db> {
     }
 
     pub fn base_fee(&self) -> u64 {
-        self.block_env.basefee
+        self.block_env.basefee.max(self.payload_attributes.min_base_fee.unwrap_or(0))
     }
 
     pub fn timestamp(&self) -> u64 {
@@ -188,7 +188,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         if self.tx_pool.handle_new_tx(
             tx.clone(),
             self.shared_state.as_ref(),
-            self.as_ref().basefee,
+            self.base_fee(),
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
         ) {
@@ -208,7 +208,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         self.payload_attributes = attributes;
         let simulator_evm_block_params = self.new_block_params();
         self.block_env = simulator_evm_block_params.block_env.clone();
-        self.base_fee = self.block_env.basefee;
+        self.base_fee = self.base_fee();
 
         // send new block params to simulators
         senders.send(simulator_evm_block_params.clone()).expect("should never fail");
@@ -307,7 +307,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             timestamp: self.block_env.timestamp.try_into().expect("timestamp overflow"),
             mix_hash: self.block_env.prevrandao.unwrap_or_default(),
             nonce: BEACON_NONCE.into(),
-            base_fee_per_gas: Some(self.block_env.basefee),
+            base_fee_per_gas: Some(self.base_fee()),
             number: self.block_env.number.try_into().expect("block number overflow"),
             gas_limit: self.block_env.gas_limit,
             difficulty: U256::ZERO,
@@ -331,7 +331,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             gas_used,
             timestamp: self.block_env.timestamp.try_into().expect("timestamp overflow"),
             extra_data,
-            base_fee_per_gas: U256::from(self.block_env.basefee),
+            base_fee_per_gas: U256::from(self.base_fee()),
             block_hash: header.hash_slow(),
             transactions,
         };
