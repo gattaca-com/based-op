@@ -108,16 +108,20 @@ where
             }
         });
 
-        // handle new transaction
-        connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0 &&
-                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
-            {
-                return;
-            }
-
-            self.state.handle_new_tx(msg, &mut self.data, senders);
-        });
+        
+        let use_tx_pool = self.data.payload_attributes.no_tx_pool.is_none_or(|no_tx_pool|!no_tx_pool);
+        if use_tx_pool {
+            // handle new transaction
+            connections.receive_for(Duration::from_millis(10), |msg, senders| {
+                if self.data.timestamp() != 0 &&
+                    self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+                {
+                    return;
+                }
+    
+                self.state.handle_new_tx(msg, &mut self.data, senders);
+            });
+        }
 
         // handle sim results
         connections.receive_for(Duration::from_millis(10), |msg, _| {
