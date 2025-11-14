@@ -23,7 +23,7 @@ use reth_optimism_primitives::{OpBlock, OpReceipt};
 use reth_primitives::{GotExpected, RecoveredBlock};
 use reth_trie_common::updates::TrieUpdates;
 use revm_primitives::Address;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 pub mod block_fetcher;
@@ -51,7 +51,7 @@ impl BlockSync {
     }
 
     /// Returns block numbers to fetch, start to end. This will be used in the case of a reorg.
-    #[tracing::instrument(skip_all, fields(block = %block.number))]
+    #[tracing::instrument(skip_all, fields(block = %block.number, hash = %block.hash(), commit_block))]
     pub fn commit_block<DB>(
         &mut self,
         block: &RecoveredBlock<OpBlock>,
@@ -77,7 +77,7 @@ impl BlockSync {
 
         // Check if we committed a different block with the same number and rewind the database if so.
         if block_number != 0 && block_number <= db_head {
-            let new_block_hash = block.hash_slow();
+            let new_block_hash = block.hash();
 
             // Check if the block has already been committed.
             let db_block_hash = db
@@ -119,7 +119,8 @@ impl BlockSync {
             return Ok(Some((head_block_number, block.number)));
         }
 
-        self.execute_and_maybe_commit(block, db, commit_block, telemetry_producer)?;
+        self.execute_and_maybe_commit(block, db, commit_block, telemetry_producer)
+            .inspect_err(|err| error!(?err, "failed to commit block {} {:?}", block.number, block.hash()))?;
 
         // Process any pending blocks that can now be applied
         while let Some(last_pending) = self.pending_blocks.last() {
@@ -144,12 +145,17 @@ impl BlockSync {
                 return Ok(Some((pending_block.number - 1, pending_block.number)));
             }
 
-            self.execute_and_maybe_commit(&pending_block, db, commit_block, telemetry_producer)?;
+            self.execute_and_maybe_commit(&pending_block, db, commit_block, telemetry_producer).inspect_err(|err| {
+                error!(?err, "failed to commit pending block {} {:?}", pending_block.number, pending_block.hash())
+            })?;
         }
         self.timers.total.stop();
         info!(
             n_txs = block.body().transactions.len(),
             total_t = %self.timers.total.elapsed(),
+            number = block.number,
+            hash =? block.hash(),
+            "commit block"
         );
         MetricsUpdate::send_ref(
             Uuid::new_v4(),

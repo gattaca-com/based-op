@@ -268,7 +268,6 @@ where
         match self {
             // Default path once synced. Apply and commit the payload.
             WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
-                // let payload = ExecutionPayload::V3(payload);
                 let sidecar = if ctx.is_prague_active(payload.payload_inner.timestamp()) {
                     ExecutionPayloadSidecar::v4(
                         CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes),
