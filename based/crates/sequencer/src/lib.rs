@@ -28,6 +28,7 @@ use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::block::TestBlock;
 use reth_provider::StorageRootProvider;
+use revm::Database;
 use revm_primitives::b256;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
@@ -268,7 +269,7 @@ where
             // Default path once synced. Apply and commit the payload.
             WaitingForNewPayload | WaitingForForkChoiceWithAttributes => {
                 // let payload = ExecutionPayload::V3(payload);
-                let sidecar = if ctx.is_prague_active() {
+                let sidecar = if ctx.is_prague_active(payload.payload_inner.timestamp()) {
                     ExecutionPayloadSidecar::v4(
                         CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes),
                         PraguePayloadFields::new(RequestsOrHash::empty()),
@@ -549,7 +550,7 @@ where
         self
     }
 }
-impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
+impl<Db: Clone + DatabaseRef + DatabaseRead + Database> SequencerState<Db> {
     /// Performs periodic state machine updates:
     ///
     /// - Seals transaction fragments when timing threshold reached

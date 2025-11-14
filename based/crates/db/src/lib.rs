@@ -22,7 +22,7 @@ use reth_provider::{
     ProviderResult, StateWriter, StorageRootProvider, TrieWriter, providers::OverlayStateProviderFactory,
 };
 use reth_storage_api::{DBProvider, HashedPostStateProvider};
-use reth_trie::{HashedStorage, StateRoot, StorageMultiProof, StorageProof};
+use reth_trie::{HashedStorage, StateRoot, StorageMultiProof, StorageProof, TrieInput};
 use reth_trie_common::updates::TrieUpdates;
 use reth_trie_db::{DatabaseHashedCursorFactory, DatabaseTrieCursorFactory};
 use reth_trie_parallel::root::ParallelStateRoot;
@@ -95,14 +95,22 @@ impl Debug for SequencerDB {
     }
 }
 
+use reth_engine_tree::tree::payload_processor::multiproof::MultiProofConfig;
+
 impl DatabaseRead for SequencerDB {
     fn calculate_state_root(&self, bundle_state: &BundleState) -> Result<(B256, TrieUpdates), Error> {
+        // https://github.com/gattaca-com/based-op-reth/blob/25b9ceb8ae88604e87a54cd6590459e200e0e502/crates/engine/tree/src/tree/payload_validator.rs#L648
         let provider = self.provider()?;
         let latest_state = LatestStateProviderRef::new(provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(bundle_state);
-        let prefix_sets = hashed_state.construct_prefix_sets().freeze();
-        let overlay_factory = OverlayStateProviderFactory::new(self.factory.clone());
-        let parallel_state_root = ParallelStateRoot::new(overlay_factory, prefix_sets);
+        let trie_input = TrieInput::from_state(hashed_state);
+        let (_, multiproof_config) = MultiProofConfig::from_input(trie_input);
+        let prefix_sets =
+            Arc::into_inner(multiproof_config.prefix_sets).expect("MultiProofConfig was never cloned").freeze();
+        let factory = OverlayStateProviderFactory::new(self.factory.clone())
+            .with_trie_overlay(Some(multiproof_config.nodes_sorted))
+            .with_hashed_state_overlay(Some(multiproof_config.state_sorted));
+        let parallel_state_root = ParallelStateRoot::new(factory, prefix_sets);
         parallel_state_root.incremental_root_with_updates().map_err(Error::ParallelStateRootError)
     }
 

@@ -378,6 +378,7 @@ impl<T: Clone> ConsumerBare<T> {
 
     /// Blocking consume
     #[inline]
+    #[allow(unused_unsafe)]
     pub fn blocking_consume(&mut self, el: &mut T) {
         loop {
             match self.try_consume(el) {

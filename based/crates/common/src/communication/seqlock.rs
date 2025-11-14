@@ -63,6 +63,7 @@ impl<T: Clone> Seqlock<T> {
     }
 
     #[inline(never)]
+    #[allow(unused_unsafe)]
     pub fn read(&self, result: &mut T) {
         loop {
             let v1 = self.version.load(Ordering::Acquire);

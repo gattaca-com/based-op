@@ -66,39 +66,40 @@ quanta = "0.12.3"
 rand = "0.9.0"
 reqwest = { version = "0.12.12", features = ["blocking", "json"] }
 
-reth-chain-state = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-chain-state" }
-reth-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-chainspec" }
-reth-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-cli" }
-reth-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-consensus" }
-reth-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-db" }
-reth-db-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-db-api" }
-reth-db-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-db-common" }
-reth-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-evm" }
-reth-execution-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-execution-errors" }
-reth-node-ethereum = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-node-ethereum", features = ["test-utils"] }
-reth-node-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-node-types" }
-reth-optimism-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-chainspec" }
-reth-optimism-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-cli" }
-reth-optimism-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-consensus" }
-reth-optimism-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-evm" }
-reth-optimism-forks = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-forks" }
-reth-optimism-node = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-node" }
-reth-optimism-payload-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-payload-builder" }
-reth-optimism-txpool = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-txpool" }
-reth-optimism-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-optimism-primitives" }
-reth-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-primitives" }
-reth-primitives-traits = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-primitives-traits" }
-reth-provider = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-provider", features = ["test-utils"] }
-reth-revm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-revm" }
-reth-rpc-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-rpc-builder" }
-reth-rpc-layer = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-rpc-layer" }
-reth-stages-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-stages-types" }
-reth-storage-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-storage-api" }
-reth-storage-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-storage-errors" }
-reth-trie = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-trie" }
-reth-trie-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-trie-common", features = ["test-utils"] }
-reth-trie-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-trie-db" }
-reth-trie-parallel = { git = "https://github.com/gattaca-com/based-op-reth", rev = "2f3628e698e471c7898b508e253379d19c18acfc", package = "reth-trie-parallel" }
+reth-chain-state = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-chain-state" }
+reth-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-chainspec" }
+reth-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-cli" }
+reth-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-consensus" }
+reth-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-db" }
+reth-db-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-db-api" }
+reth-db-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-db-common" }
+reth-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-evm" }
+reth-execution-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-execution-errors" }
+reth-engine-tree = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-engine-tree" }
+reth-node-ethereum = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-node-ethereum", features = ["test-utils"] }
+reth-node-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-node-types" }
+reth-optimism-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-chainspec" }
+reth-optimism-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-cli" }
+reth-optimism-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-consensus" }
+reth-optimism-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-evm" }
+reth-optimism-forks = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-forks" }
+reth-optimism-node = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-node" }
+reth-optimism-payload-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-payload-builder" }
+reth-optimism-txpool = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-txpool" }
+reth-optimism-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-optimism-primitives" }
+reth-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-primitives" }
+reth-primitives-traits = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-primitives-traits" }
+reth-provider = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-provider", features = ["test-utils"] }
+reth-revm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-revm" }
+reth-rpc-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-rpc-builder" }
+reth-rpc-layer = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-rpc-layer" }
+reth-stages-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-stages-types" }
+reth-storage-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-storage-api" }
+reth-storage-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-storage-errors" }
+reth-trie = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-trie" }
+reth-trie-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-trie-common", features = ["test-utils"] }
+reth-trie-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-trie-db" }
+reth-trie-parallel = { git = "https://github.com/gattaca-com/based-op-reth", rev = "25b9ceb8ae88604e87a54cd6590459e200e0e502", package = "reth-trie-parallel" }
 
 revm = { version = "31.0.1", features = [
   "optional_balance_check",

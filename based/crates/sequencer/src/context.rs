@@ -14,7 +14,7 @@ use bop_common::{
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
     time::Timer,
-    transaction::Transaction,
+    transaction::{SimulatedTx, Transaction},
     typedefs::*,
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
@@ -29,7 +29,7 @@ use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use reth_provider::StorageRootProvider;
 use revm_primitives::{B256, Bytes, U256, b256};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
@@ -80,6 +80,7 @@ pub struct SequencerContext<Db> {
     pub telemetry: Producer<TelemetryUpdate>,
     pub metrics: Producer<MetricsUpdate>,
     pub last_seal_time: Instant,
+    pub da_footprint_gas_scalar: Option<u64>,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -106,6 +107,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
             last_seal_time: Instant::now(),
+            da_footprint_gas_scalar: None,
         }
     }
 }
@@ -115,8 +117,9 @@ impl<Db> SequencerContext<Db> {
     }
 
     pub fn extra_data(&self) -> Bytes {
-        let timestamp = self.payload_attributes.payload_attributes.timestamp;
+        let timestamp = self.timestamp_payload_attributes();
         if self.chain_spec().is_jovian_active_at_timestamp(timestamp) {
+            // jovian extra data (https://specs.optimism.io/protocol/jovian/exec-engine.html#minimum-base-fee)
             self.payload_attributes
                 .get_jovian_extra_data(self.chain_spec().base_fee_params_at_timestamp(timestamp))
                 .expect("couldn't get extra data for jovian")
@@ -157,12 +160,86 @@ impl<Db> SequencerContext<Db> {
         self.block_env.timestamp.try_into().expect("timestamp overflow")
     }
 
-    pub fn is_prague_active(&self) -> bool {
-        self.chain_spec().is_prague_active_at_timestamp(self.timestamp())
+    pub fn timestamp_payload_attributes(&self) -> u64 {
+        self.payload_attributes.payload_attributes.timestamp
+    }
+
+    pub fn is_prague_active(&self, timestamp: u64) -> bool {
+        self.chain_spec().is_prague_active_at_timestamp(timestamp)
     }
 }
 
-impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
+const ISTHMUS_ATTRIBUTES_LEN: usize = 176;
+const JOVIAN_ATTRIBUTES_LEN: usize = 178;
+const JOVIAN_L1_ATTRIBUTES_SELECTOR: [u8; 4] = [0x3d, 0xb6, 0xbe, 0x2b];
+
+fn extract_da_footprint_gas_scalar(data: &Bytes) -> Option<u64> {
+    if data.len() < JOVIAN_ATTRIBUTES_LEN {
+        error!("L1 attributes transaction data too short for DA footprint gas scalar: {}", data.len());
+        return None;
+    }
+
+    // Future forks need to be added here
+
+    if !data[0..4].eq(&JOVIAN_L1_ATTRIBUTES_SELECTOR) {
+        error!("L1 attributes transaction data does not have Jovian selector");
+        return None;
+    }
+
+    // Extract the last 2 bytes as big-endian u16
+    let da_footprint_gas_scalar =
+        u16::from_be_bytes([data[JOVIAN_ATTRIBUTES_LEN - 2], data[JOVIAN_ATTRIBUTES_LEN - 1]]);
+
+    Some(da_footprint_gas_scalar as u64)
+}
+
+impl<Db: Database> SequencerContext<Db> {
+    pub fn blob_gas_used_for_jovian(&mut self, txs: &[SimulatedTx]) -> Option<u64> {
+        if txs.is_empty() || !txs[0].tx.is_deposit() {
+            error!("missing deposit transaction");
+            return Some(0);
+        }
+
+        let data = &txs[0].tx.as_deposit().expect("should always be deposit").inner().input;
+        if data.len() == ISTHMUS_ATTRIBUTES_LEN {
+            if !txs.last().expect("txs not empty").tx.is_deposit() {
+                error!("unexpected non-deposit transactions in Jovian activation block");
+                return Some(0);
+            }
+            return Some(0);
+        }
+
+        match extract_da_footprint_gas_scalar(data) {
+            Some(scalar) => {
+                self.da_footprint_gas_scalar = Some(scalar);
+                let mut da_footprint_gas_used: u64 = 0;
+                for tx in txs {
+                    if tx.tx.is_deposit() {
+                        continue;
+                    }
+                    da_footprint_gas_used += tx.tx.estimated_tx_compressed_size() * scalar;
+                }
+                Some(da_footprint_gas_used)
+            }
+            None => {
+                error!("failed to extract DA footprint gas scalar");
+                Some(0)
+            }
+        }
+    }
+
+    // https://specs.optimism.io/protocol/jovian/exec-engine.html#da-footprint-block-limit
+    pub fn blob_gas_used(&mut self, txs: &[SimulatedTx]) -> Option<u64> {
+        let timestamp = self.timestamp_payload_attributes();
+        if self.chain_spec().is_jovian_active_at_timestamp(timestamp) {
+            self.blob_gas_used_for_jovian(txs)
+        } else {
+            Some(0)
+        }
+    }
+}
+
+impl<Db: DatabaseRef + Clone + DatabaseRead + Database> SequencerContext<Db> {
     pub fn seal_frag(
         &mut self,
         mut sorting_data: SortingData<Db>,
@@ -283,7 +360,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let state_changes = self.shared_state.as_mut().take_state_changes();
         let state_root = self.db.calculate_state_root(&state_changes).unwrap().0;
 
-        let (withdrawals_root, requests_hash) = if self.is_prague_active() {
+        let (withdrawals_root, requests_hash) = if self.is_prague_active(self.timestamp()) {
             (
                 Some(
                     withdrawals_root(&state_changes, &self.db)
@@ -296,6 +373,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         };
 
         let extra_data = self.extra_data();
+        let blob_gas_used = self.blob_gas_used(&frag_seq.txs);
 
         let parent_beacon_block_root = self.parent_beacon_block_root();
 
@@ -318,7 +396,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             gas_used,
             extra_data: extra_data.clone(),
             parent_beacon_block_root,
-            blob_gas_used: Some(0),
+            blob_gas_used,
             excess_blob_gas: Some(0),
             requests_hash,
         };
@@ -356,7 +434,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let txs = frag_seq.txs.len() as f64;
         let tps = txs / block_duration;
         let mgas_s = mgas / block_duration;
-        info!("sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)", seal.block_number, txs, mgas_s);
+        let is_jovian_active = self.chain_spec().is_jovian_active_at_timestamp(self.timestamp_payload_attributes());
+        let is_prague_active = self.is_prague_active(self.timestamp());
+        info!(
+            "sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s) jovian_active: {} prague_active: {}",
+            seal.block_number, txs, mgas_s, is_jovian_active, is_prague_active
+        );
 
         let uuid = Uuid::new_v4();
         MetricsUpdate::send(
@@ -371,23 +454,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
 
         let payload_inner = ExecutionPayloadV3 {
             payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-            blob_gas_used: 0,
+            blob_gas_used: blob_gas_used.unwrap_or(0),
             excess_blob_gas: 0,
         };
-        (
-            seal,
-            OpExecutionPayloadEnvelopeV4Patch {
-                execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
-                    payload_inner,
-                    withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
-                },
-                block_value: frag_seq.payment.to(),
-                blobs_bundle: BlobsBundleV1::new(vec![]),
-                should_override_builder: false,
-                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-                execution_requests: vec![],
+        (seal, OpExecutionPayloadEnvelopeV4Patch {
+            execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
+                payload_inner,
+                withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
             },
-        )
+            block_value: frag_seq.payment.to(),
+            blobs_bundle: BlobsBundleV1::new(vec![]),
+            should_override_builder: false,
+            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+            execution_requests: vec![],
+        })
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
