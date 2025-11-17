@@ -142,7 +142,7 @@ impl<Db> SequencerContext<Db> {
     }
 
     pub fn block_number(&self) -> u64 {
-        self.block_env.number
+        self.block_env.number.try_into().expect("block number overflow")
     }
 
     pub fn base_fee(&self) -> u64 {
@@ -150,7 +150,7 @@ impl<Db> SequencerContext<Db> {
     }
 
     pub fn timestamp(&self) -> u64 {
-        self.block_env.timestamp
+        self.block_env.timestamp.try_into().expect("timestamp overflow")
     }
 
     pub fn is_prague_active(&self, timestamp: u64) -> bool {
@@ -304,11 +304,11 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             receipts_root,
             withdrawals_root,
             logs_bloom,
-            timestamp: self.block_env.timestamp,
+            timestamp: self.block_env.timestamp.try_into().expect("timestamp overflow"),
             mix_hash: self.block_env.prevrandao.unwrap_or_default(),
             nonce: BEACON_NONCE.into(),
             base_fee_per_gas: Some(self.block_env.basefee),
-            number: self.block_env.number,
+            number: self.block_env.number.try_into().expect("block number overflow"),
             gas_limit: self.block_env.gas_limit,
             difficulty: U256::ZERO,
             gas_used,
@@ -326,10 +326,10 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             receipts_root,
             logs_bloom,
             prev_randao: self.block_env.prevrandao.unwrap_or_default(),
-            block_number: self.block_env.number,
+            block_number: self.block_env.number.try_into().expect("block number overflow"),
             gas_limit: self.block_env.gas_limit,
             gas_used,
-            timestamp: self.block_env.timestamp,
+            timestamp: self.block_env.timestamp.try_into().expect("timestamp overflow"),
             extra_data,
             base_fee_per_gas: U256::from(self.block_env.basefee),
             block_hash: header.hash_slow(),
@@ -337,7 +337,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         };
         let seal = SealV0 {
             total_frags: frag_seq.next_seq,
-            block_number: self.block_env.number,
+            block_number: self.block_env.number.try_into().expect("block number overflow"),
             gas_used,
             gas_limit: self.block_env.gas_limit,
             parent_hash: self.parent_hash,

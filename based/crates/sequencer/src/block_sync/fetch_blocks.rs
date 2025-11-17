@@ -8,7 +8,7 @@ use bop_db::DatabaseRead;
 use futures::future::join_all;
 use reth_optimism_primitives::OpBlock;
 use reth_primitives::RecoveredBlock;
-use reth_primitives_traits::SignedTransaction;
+use reth_primitives_traits::SignerRecoverable;
 use tracing::{info, warn};
 
 use super::AlloyProvider;
@@ -80,16 +80,14 @@ pub fn convert_rpc_block(
     let consensus_block = block.into_consensus();
 
     // Now convert the transactions
-    let mut recovery_buf = Vec::with_capacity(200);
     let conversion_results: Result<Vec<_>, BlockSyncError> = consensus_block
         .body
         .transactions
         .into_iter()
         .map(|tx| {
             let signed_tx = tx.inner.inner.into_inner();
-            recovery_buf.clear(); // Reuse buffer for next transaction
 
-            let sender = signed_tx.recover_signer_unchecked_with_buf(&mut recovery_buf)?;
+            let sender = signed_tx.recover_signer_unchecked()?;
 
             Ok((signed_tx, sender))
         })

@@ -19,8 +19,8 @@ use bop_common::{
 };
 use indexmap::IndexMap;
 use jsonrpsee::{
-    core::ClientError,
-    http_client::{HttpClientBuilder, transport::HttpBackend},
+    core::{ClientError, middleware::layer::RpcLogger},
+    http_client::{HttpClient, HttpClientBuilder, RpcService, transport::HttpBackend},
 };
 use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reqwest::Url;
@@ -31,7 +31,7 @@ use tracing::{Instrument, debug, error, info, trace};
 use crate::cli::PortalArgs;
 
 pub type RpcClient = jsonrpsee::http_client::HttpClient;
-pub type AuthRpcClient = jsonrpsee::http_client::HttpClient<AuthClientService<HttpBackend>>;
+pub type AuthRpcClient = HttpClient<RpcLogger<RpcService<AuthClientService<HttpBackend>>>>;
 
 #[derive(Clone)]
 pub struct Gateway {

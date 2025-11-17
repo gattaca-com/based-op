@@ -100,7 +100,7 @@ impl DatabaseRead for SequencerDB {
         let provider = self.provider()?;
         let latest_state = LatestStateProviderRef::new(provider.as_ref());
         let hashed_state = latest_state.hashed_post_state(bundle_state);
-        let consistent_view = ConsistentDbView::new_unchecked(self.factory.clone())?;
+        let consistent_view = ConsistentDbView::new(self.factory.clone(), None);
         let parallel_state_root = ParallelStateRoot::new(consistent_view, TrieInput::from_state(hashed_state));
         parallel_state_root.incremental_root_with_updates().map_err(Error::ParallelStateRootError)
     }

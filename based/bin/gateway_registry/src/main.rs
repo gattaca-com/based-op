@@ -18,7 +18,7 @@ use bop_metrics::MetricsConsumer;
 use clap::Parser;
 use jsonrpsee::{
     core::{ClientError, async_trait},
-    server::ServerBuilder,
+    server::{ServerBuilder, ServerConfigBuilder},
 };
 use parking_lot::RwLock;
 use reqwest::Url;
@@ -162,8 +162,9 @@ impl RegistryServer {
 
     pub async fn run(self, addr: SocketAddr) -> eyre::Result<()> {
         let server = ServerBuilder::default()
-            .max_request_body_size(u32::MAX)
-            .max_response_body_size(u32::MAX)
+            .set_config(
+                ServerConfigBuilder::new().max_request_body_size(u32::MAX).max_response_body_size(u32::MAX).build(),
+            )
             .build(addr)
             .await?;
 

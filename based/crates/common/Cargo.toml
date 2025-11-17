@@ -4,6 +4,10 @@ name = "bop-common"
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+default = []
+shmem = []
+
 [dependencies]
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
@@ -85,7 +89,3 @@ uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
-
-[features]
-default = []
-shmem = []

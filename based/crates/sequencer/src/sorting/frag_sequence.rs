@@ -175,6 +175,7 @@ mod tests {
     use reth_optimism_chainspec::BASE_SEPOLIA;
     use reth_optimism_evm::OpEvmConfig;
     use reth_optimism_payload_builder::config::OpDAConfig;
+    use reth_primitives_traits::SignerRecoverable;
     use revm::context::ContextTr;
     use tracing::level_filters::LevelFilter;
 
@@ -270,6 +271,7 @@ mod tests {
             no_tx_pool: None,
             gas_limit: Some(block.gas_limit),
             eip_1559_params: Some(revm_primitives::FixedBytes::from_slice(&block.extra_data[1..9])),
+            min_base_fee: None,
         });
 
         let (mut seq, mut sorting_db) = ctx.start_sequencing(attributes, sim_connections.senders());
@@ -284,7 +286,7 @@ mod tests {
             let db = sorting_db.state();
 
             let new_state = bop_common::db::State::new(db);
-            let _ = std::mem::replace(evm.ctx_mut().db(), new_state);
+            let _ = std::mem::replace(&mut evm.ctx_mut().db(), &new_state);
             let result = simulate_tx_inner(tx, evm, true, true, true).unwrap();
             sorting_db.apply_tx(result);
         }

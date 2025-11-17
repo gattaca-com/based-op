@@ -64,19 +64,19 @@ docs: ## 📚 Build local docs
 build: build-portal build-gateway build-based-op-node build-based-op-geth build-registry build-txproxy ## 🏗️ Build
 
 build-portal: ## 🏗️ Build based portal
-	docker build -t local_based_portal -f ./based/portal.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_portal -f ./based/portal.Dockerfile ./based
 
 build-registry: ## 🏗️ Build based registry
-	docker build -t local_based_registry -f ./based/registry.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_registry -f ./based/registry.Dockerfile ./based
 
 build-gateway: ## 🏗️ Build based gateway
-	docker build -t local_based_gateway -f ./based/gateway.Dockerfile --build-context reth=./reth ./based
+	docker build -t local_based_gateway -f ./based/gateway.Dockerfile ./based
 
 build-txproxy: ## 🏗️ Build based txproxy
-	docker build -t local_based_txproxy -f ./based/txproxy.Dockerfile --build-context reth=./reth ./based --load
+	docker build -t local_based_txproxy -f ./based/txproxy.Dockerfile ./based
 
 build-metrics-exporter: ## 🏗️ Build metrics exporter
-	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile --build-context reth=./reth ./based --load
+	docker build -t local_based_metrics_exporter -f ./based/metrics-exporter.Dockerfile ./based --load
 
 build-based-op-geth: ## 🏗️ Build OP geth from op-eth directory
 	docker build -t local_based_op_geth ../based-op-geth

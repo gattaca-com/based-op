@@ -71,7 +71,7 @@ impl<T: Display + Into<u64> + Default + Clone> PlotSeries<T> {
     }
 
     #[allow(clippy::wrong_self_convention)]
-    fn to_dataset(&mut self, y_min: f64, y_max: f64) -> Dataset {
+    fn to_dataset(&mut self, y_min: f64, y_max: f64) -> Dataset<'_> {
         if self.len() == 2 && self.data[0].1 == 0.0 && self.data[1].1 == 0.0 {
             self.data[0].1 = y_min;
             self.data[1].1 = y_max;

@@ -26,7 +26,7 @@ use bop_db::DatabaseRead;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
-use reth_primitives_traits::{SignedTransaction, block::TestBlock};
+use reth_primitives_traits::block::TestBlock;
 use reth_provider::StorageRootProvider;
 use revm_primitives::b256;
 use sorting::FragSequence;
@@ -42,6 +42,7 @@ mod supervisor;
 
 pub use config::SequencerConfig;
 use context::SequencerContext;
+use reth_primitives_traits::SignerRecoverable;
 pub use simulator::Simulator;
 use sorting::SortingData;
 use tracing::{info, warn};
@@ -169,6 +170,7 @@ where
 /// Contains different states of the Sequencer state machine.
 /// The state is stored as a reference in the Sequencer struct.
 #[derive(Clone, Debug, Default, AsRefStr)]
+#[allow(clippy::large_enum_variant)]
 pub enum SequencerState<Db> {
     /// Waiting for block sync
     Syncing {

@@ -4,8 +4,10 @@ use bop_common::{
     p2p::{self, SignedVersionedMessage},
     signing::ECDSASigner,
 };
-use jsonrpsee::client_transport::ws::Url;
-use reqwest::blocking::{Client, ClientBuilder};
+use reqwest::{
+    Url,
+    blocking::{Client, ClientBuilder},
+};
 use tracing::error;
 
 pub struct Gossiper {

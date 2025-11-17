@@ -13,9 +13,9 @@ use bop_common::{
     time::BlockSyncTimers,
 };
 use reth_consensus::ConsensusError;
-use reth_evm::execute::{
-    BasicBlockExecutorProvider, BlockExecutionError, BlockExecutionOutput, BlockExecutorProvider, Executor,
-    InternalBlockExecutionError, ProviderError,
+use reth_evm::{
+    ConfigureEvm,
+    execute::{BlockExecutionError, BlockExecutionOutput, Executor, InternalBlockExecutionError, ProviderError},
 };
 use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_evm::{OpEvmConfig, OpExecutorProvider};
@@ -35,7 +35,7 @@ pub type AlloyProvider = alloy_provider::RootProvider<op_alloy_network::Optimism
 #[derive(Debug)]
 pub struct BlockSync {
     chain_spec: Arc<OpChainSpec>,
-    execution_factory: BasicBlockExecutorProvider<OpEvmConfig>,
+    execution_factory: OpEvmConfig,
     /// Blocks that we have received from the provider but require a prior block to be applied before this can be.
     /// Sorted list in reverse order by block number.
     pending_blocks: Vec<RecoveredBlock<OpBlock>>,

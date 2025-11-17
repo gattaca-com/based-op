@@ -21,23 +21,18 @@ jobs:
           - name: based-gateway
             context: based
             file: based/gateway.Dockerfile
-            build-contexts: 'reth=./reth'
           - name: key-to-address
             context: based
             file: based/key_to_address.Dockerfile
-            build-contexts: 'reth=./reth'
           - name: based-registry
             context: based
             file: based/registry.Dockerfile
-            build-contexts: 'reth=./reth'
           - name: based-portal
             context: based
             file: based/portal.Dockerfile
-            build-contexts: 'reth=./reth'
           - name: based-txproxy
             context: based
             file: based/txproxy.Dockerfile
-            build-contexts: 'reth=./reth'
         platform:
           - arch: amd64
             runner: ubuntu-latest
@@ -74,7 +69,6 @@ jobs:
             ${{ !contains(github.ref_name, 'rc') && format('{0}/{1}:latest-{2}', env.IMAGE_REG, matrix.image.name, matrix.platform.arch) || '' }}
           cache-from: type=registry,ref=${{ env.IMAGE_REG }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }}
           cache-to: type=registry,ref=${{ env.IMAGE_REG }}/${{ matrix.image.name }}:buildcache-${{ matrix.platform.arch }},mode=max
-          build-contexts: ${{ matrix.image.build-contexts }}
 
   create-manifest:
     needs: build-and-push

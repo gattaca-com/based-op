@@ -434,8 +434,8 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
         context: &mut SequencerContext<Db>,
         env_with_handler_cfg: reth_evm::EvmEnv<op_revm::OpSpecId>,
     ) -> Result<(), BlockExecutionError> {
-        let timestamp = env_with_handler_cfg.block_env.timestamp;
-        let block_number = env_with_handler_cfg.block_env.number;
+        let timestamp = env_with_handler_cfg.block_env.timestamp.try_into().expect("timestamp overflow");
+        let block_number = env_with_handler_cfg.block_env.number.try_into().expect("block number overflow");
         let parent_beacon_block_root = context.parent_beacon_block_root();
         let parent_hash = context.parent_hash();
 

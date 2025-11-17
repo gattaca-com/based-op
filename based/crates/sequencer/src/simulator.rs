@@ -39,11 +39,11 @@ impl<T> SimulationDatabase for T where
 }
 
 /// Simulator thread.
-pub struct Simulator<Db: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error>> {
+pub struct Simulator<Db: DatabaseRef<Error: Send + Sync + 'static + DBErrorMarker + std::error::Error> + Debug> {
     /// Top of frag evm.
-    evm_tof: OpEvm<State<DBFrag<Db>>, NoOpInspector>,
+    evm_tof: OpEvm<State<DBFrag<Db>>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
     /// Evm on top of partially built frag
-    pub evm_sorting: OpEvm<State<DBSorting<Db>>, NoOpInspector>,
+    pub evm_sorting: OpEvm<State<DBSorting<Db>>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
     /// Whether the regolith hardfork is active for the block that the evms are configured for.
     regolith_active: bool,
     /// How to create an EVM.
@@ -56,7 +56,8 @@ impl<
     Db: Database
         + DatabaseRef<
             Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
-        > + Clone,
+        > + Clone
+        + Debug,
 > Simulator<Db>
 {
     pub fn new(db: DBFrag<Db>, evm_config: OpEvmConfig, id: usize, allow_reverts: bool) -> Self {
@@ -71,10 +72,10 @@ impl<
     }
 
     /// Simulates a transaction at the state of the `db` parameter.
-    pub fn simulate_transaction<SimulateTxDb: SimulationDatabase>(
+    pub fn simulate_transaction<SimulateTxDb: SimulationDatabase + Debug>(
         tx: Arc<Transaction>,
         db: SimulateTxDb,
-        evm: &mut OpEvm<State<SimulateTxDb>, NoOpInspector>,
+        evm: &mut OpEvm<State<SimulateTxDb>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
         regolith_active: bool,
         allow_zero_payment: bool,
         allow_revert: bool,
@@ -86,7 +87,7 @@ impl<
     /// Updates internal EVM environments with new configuration
     #[inline]
     pub fn update_evm_environments(&mut self, evm_block_params: EvmEnv<OpSpecId>) {
-        let timestamp = evm_block_params.block_env.timestamp();
+        let timestamp = evm_block_params.block_env.timestamp().try_into().expect("timestamp overflow");
         self.evm_tof.modify_block(|b| *b = evm_block_params.block_env.clone()); // TODO: re-use mem
         self.evm_tof.modify_cfg(|c| *c = evm_block_params.cfg_env.clone());
         self.evm_sorting.modify_block(|b| *b = evm_block_params.block_env.clone()); // TODO: re-use mem
@@ -98,9 +99,9 @@ impl<
 
 /// Simulates a transaction at the passed in EVM's state.
 /// Will not modify the db state after the simulation is complete.
-pub fn simulate_tx_inner<Db: SimulationDatabase>(
+pub fn simulate_tx_inner<Db: SimulationDatabase + Debug>(
     tx: Arc<Transaction>,
-    evm: &mut OpEvm<Db, NoOpInspector>,
+    evm: &mut OpEvm<Db, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
     regolith_active: bool,
     allow_zero_payment: bool,
     allow_revert: bool,

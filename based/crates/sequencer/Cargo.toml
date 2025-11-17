@@ -5,6 +5,10 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+shmem = ["bop-common/shmem"]
+default = []
+
 [dependencies]
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
@@ -20,12 +24,12 @@ crossbeam-channel.workspace = true
 eyre.workspace = true
 futures.workspace = true
 jsonrpsee.workspace = true
-kona-rpc.workspace = true
-kona-interop.workspace = true
 op-alloy-consensus.workspace = true
 op-alloy-network.workspace = true
 op-alloy-rpc-types.workspace = true
 op-alloy-rpc-types-engine.workspace = true
+op-revm.workspace = true
+rand.workspace = true
 reqwest.workspace = true
 reth-chainspec.workspace = true
 reth-consensus.workspace = true
@@ -35,25 +39,20 @@ reth-optimism-chainspec.workspace = true
 reth-optimism-consensus.workspace = true
 reth-optimism-evm.workspace = true
 reth-optimism-forks.workspace = true
-reth-optimism-primitives.workspace = true
 reth-optimism-payload-builder.workspace = true
+reth-optimism-primitives.workspace = true
+reth-optimism-txpool.workspace = true
 reth-primitives.workspace = true
 reth-primitives-traits.workspace = true
 reth-provider.workspace = true
 reth-trie-common.workspace = true
-op-revm.workspace = true
-revm-primitives.workspace = true
-revm-inspector.workspace = true
-revm-handler.workspace = true
 revm.workspace = true
-rand.workspace = true
+revm-handler.workspace = true
+revm-inspector.workspace = true
+revm-primitives.workspace = true
 serde_json.workspace = true
 strum_macros.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-
-[features]
-shmem = ["bop-common/shmem"]
-default = []

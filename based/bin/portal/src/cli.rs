@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use bop_common::config::{LoggingConfig, LoggingFlags};
-use clap::{Parser, command};
+use clap::Parser;
 use reqwest::Url;
 use reth_rpc_layer::JwtSecret;
 use tracing::level_filters::LevelFilter;
