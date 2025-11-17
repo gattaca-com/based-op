@@ -45,3 +45,4 @@ based/temp_registry.json
 temp
 webcontrol
 data
+*.py
