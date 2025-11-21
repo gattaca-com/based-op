@@ -118,6 +118,7 @@ impl FragSequence {
             seq: self.next_seq,
             is_last: false,
             txs: Transactions::from(txs),
+            blob_gas_used: 0,
         };
         let state_update = StateUpdate { receipts, balances };
 

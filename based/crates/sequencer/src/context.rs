@@ -346,6 +346,9 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
     ) -> (FragV0, Option<StateUpdate>) {
         let (mut frag_msg, maybe_update, _) = self.seal_frag(last_frag, frag_seq);
         frag_msg.is_last = true;
+        // TODO: this should be done together with seal_block
+        let blob_gas_used = self.blob_gas_used(&frag_seq.txs);
+        frag_msg.blob_gas_used = blob_gas_used.unwrap_or_default();
         (frag_msg, maybe_update)
     }
 
@@ -427,6 +430,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             receipts_root,
             state_root,
             block_hash: v1.block_hash,
+            blob_gas_used: blob_gas_used.unwrap_or_default(),
         };
 
         let block_duration = frag_seq.start_t.elapsed().as_secs();
