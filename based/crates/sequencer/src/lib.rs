@@ -112,8 +112,9 @@ where
         if use_tx_pool {
             // handle new transaction
             connections.receive_for(Duration::from_millis(10), |msg, senders| {
-                if self.data.timestamp() != 0 &&
-                    self.supervisor
+                if self.data.timestamp() != 0
+                    && self
+                        .supervisor
                         .as_ref()
                         .is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
                 {
@@ -418,14 +419,14 @@ where
 
                 // Gossip last frag before sealing
                 ctx.last_seal_time = Instant::now();
-                let (last_frag, maybe_state) = ctx.seal_last_frag(&mut seq, sorting_data);
+                let (last_frag, maybe_state, blob_gas_used) = ctx.seal_last_frag(&mut seq, sorting_data);
                 let msg =
                     VersionedMessageWithState { msg: VersionedMessage::from(last_frag), state_update: maybe_state };
 
                 let s = senders.send_timeout(msg, Duration::from_millis(10));
                 debug_assert!(s.is_ok(), "couldn't send last frag for 10 millis");
 
-                let (seal, block) = ctx.seal_block(seq);
+                let (seal, block) = ctx.seal_block(seq, blob_gas_used);
 
                 // Gossip seal to p2p and return payload to rpc
                 let msg = VersionedMessageWithState { msg: VersionedMessage::from(seal), state_update: None };

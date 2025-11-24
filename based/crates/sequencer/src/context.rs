@@ -343,17 +343,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         &mut self,
         frag_seq: &mut FragSequence,
         last_frag: SortingData<Db>,
-    ) -> (FragV0, Option<StateUpdate>) {
+    ) -> (FragV0, Option<StateUpdate>, Option<u64>) {
         let (mut frag_msg, maybe_update, _) = self.seal_frag(last_frag, frag_seq);
         frag_msg.is_last = true;
-        // TODO: this should be done together with seal_block
         let blob_gas_used = self.blob_gas_used(&frag_seq.txs);
         frag_msg.blob_gas_used = blob_gas_used.unwrap_or_default();
-        (frag_msg, maybe_update)
+        (frag_msg, maybe_update, blob_gas_used)
     }
 
     /// Finalize the block after the last frag has been sealed
-    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4Patch) {
+    pub fn seal_block(
+        &mut self,
+        frag_seq: FragSequence,
+        blob_gas_used: Option<u64>,
+    ) -> (SealV0, OpExecutionPayloadEnvelopeV4Patch) {
         frag_seq.sorting_telemetry.report(&self.metrics);
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
@@ -376,7 +379,6 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         };
 
         let extra_data = self.extra_data();
-        let blob_gas_used = self.blob_gas_used(&frag_seq.txs);
 
         let parent_beacon_block_root = self.parent_beacon_block_root();
 
@@ -461,17 +463,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             blob_gas_used: blob_gas_used.unwrap_or(0),
             excess_blob_gas: 0,
         };
-        (seal, OpExecutionPayloadEnvelopeV4Patch {
-            execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
-                payload_inner,
-                withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+        (
+            seal,
+            OpExecutionPayloadEnvelopeV4Patch {
+                execution_payload: op_alloy_rpc_types_engine::OpExecutionPayloadV4 {
+                    payload_inner,
+                    withdrawals_root: withdrawals_root.unwrap_or(B256::ZERO),
+                },
+                block_value: frag_seq.payment.to(),
+                blobs_bundle: BlobsBundleV1::new(vec![]),
+                should_override_builder: false,
+                parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
+                execution_requests: vec![],
             },
-            block_value: frag_seq.payment.to(),
-            blobs_bundle: BlobsBundleV1::new(vec![]),
-            should_override_builder: false,
-            parent_beacon_block_root: parent_beacon_block_root.expect("should always be set"),
-            execution_requests: vec![],
-        })
+        )
     }
 }
 impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
