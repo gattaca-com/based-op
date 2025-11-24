@@ -63,6 +63,8 @@ pub struct FragV0 {
     pub seq: u64,
     /// Whether this is the last frag in the sequence
     pub is_last: bool,
+    /// Amount of blob gas used in this frag
+    pub blob_gas_used: u64,
     /// Ordered list of EIP-2718 encoded transactions
     #[serde(with = "ssz_types::serde_utils::list_of_hex_var_list")]
     pub txs: Transactions,
@@ -74,9 +76,10 @@ impl FragV0 {
         seq: u64,
         builder_txs: impl Iterator<Item = &'a BuilderTransaction>,
         is_last: bool,
+        blob_gas_used: u64,
     ) -> Self {
         let txs = builder_txs.map(|tx| tx.encode().to_vec()).map(Transaction::from).collect::<Vec<_>>();
-        Self { block_number, seq, txs: Transactions::from(txs), is_last }
+        Self { block_number, seq, txs: Transactions::from(txs), is_last, blob_gas_used }
     }
 }
 
@@ -96,6 +99,7 @@ pub struct SealV0 {
     pub receipts_root: B256,
     pub state_root: B256,
     pub block_hash: B256,
+    pub blob_gas_used: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize, AsRefStr)]
@@ -226,7 +230,7 @@ mod tests {
         let tx = Transaction::from(vec![1, 2, 3]);
         let txs = Transactions::from(vec![tx]);
 
-        let frag = FragV0 { block_number: 1, seq: 0, is_last: true, txs };
+        let frag = FragV0 { block_number: 1, seq: 0, is_last: true, txs, blob_gas_used: 0 };
 
         let message = VersionedMessage::from(frag);
         let hash = message.tree_hash_root();
@@ -245,6 +249,7 @@ mod tests {
             receipts_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             state_root: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
             block_hash: b256!("e75fae0065403d4091f3d6549c4219db69c96d9de761cfc75fe9792b6166c758"),
+            blob_gas_used: 0,
         };
 
         let message = VersionedMessage::from(sealed);
