@@ -63,7 +63,7 @@ pub struct FragV0 {
     pub seq: u64,
     /// Whether this is the last frag in the sequence
     pub is_last: bool,
-    /// Amount of blob gas used in this frag
+    /// Amount of blob gas used in this frag, in practice this encodes DA footprint post Jovian fork
     pub blob_gas_used: u64,
     /// Ordered list of EIP-2718 encoded transactions
     #[serde(with = "ssz_types::serde_utils::list_of_hex_var_list")]
