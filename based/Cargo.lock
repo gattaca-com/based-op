@@ -1591,6 +1591,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "based-rpc"
+version = "0.1.0"
+dependencies = [
+ "alloy-eips",
+ "alloy-primitives",
+ "alloy-rpc-types",
+ "bop-common",
+ "bop-metrics",
+ "clap",
+ "eyre",
+ "futures",
+ "jsonrpsee",
+ "op-alloy-rpc-types",
+ "op-alloy-rpc-types-engine",
+ "parking_lot",
+ "reqwest",
+ "reth-rpc-layer",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+]
+
+[[package]]
 name = "based-txproxy"
 version = "0.1.0"
 dependencies = [
