@@ -169,6 +169,7 @@ impl<Db> SequencerContext<Db> {
     }
 }
 
+// constants for DA footprint related calculations. (see https://github.com/ethereum-optimism/op-geth/blob/d092a020749f4d788501f05ed1be30320ab102b9/core/types/rollup_cost.go#L46-L65)
 const ISTHMUS_ATTRIBUTES_LEN: usize = 176;
 const JOVIAN_ATTRIBUTES_LEN: usize = 178;
 const JOVIAN_L1_ATTRIBUTES_SELECTOR: [u8; 4] = [0x3d, 0xb6, 0xbe, 0x2b];
@@ -194,6 +195,8 @@ fn extract_da_footprint_gas_scalar(data: &Bytes) -> Option<u64> {
 }
 
 impl<Db: Database> SequencerContext<Db> {
+    // This function is only called when the Jovian hardfork is active.
+    // see https://github.com/ethereum-optimism/op-geth/blob/d092a020749f4d788501f05ed1be30320ab102b9/core/types/rollup_cost.go#L564-566
     pub fn blob_gas_used_for_jovian(&mut self, txs: &[SimulatedTx]) -> Option<u64> {
         if txs.is_empty() || !txs[0].tx.is_deposit() {
             error!("missing deposit transaction");
