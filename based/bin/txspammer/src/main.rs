@@ -219,7 +219,11 @@ impl TxSpammer {
                 let _ = loop {
                     match provider.get_transaction_receipt(tx_hash).await {
                         Ok(Some(receipt)) => break receipt,
-                        _ => {
+                        Err(e) => {
+                            warn!("failed to get transaction receipt: {}", e);
+                            sleep(Duration::from_millis(5)).await;
+                        }
+                        Ok(None) => {
                             sleep(Duration::from_millis(5)).await;
                         }
                     }

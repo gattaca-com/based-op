@@ -8,12 +8,24 @@ use tracing::level_filters::LevelFilter;
 #[command(version, about, name = "based-rpc")]
 pub struct RpcArgs {
     /// The port to run the rpc on
-    #[arg(long = "port", default_value_t = 10545)]
+    #[arg(long = "port", default_value_t = 7545)]
     pub port: u16,
 
-    /// path to the json file containing the frag stream urls
-    #[arg(long = "fragstream_urls")]
-    pub fragstream_urls_path: PathBuf,
+    /// ws url of the frag stream
+    #[arg(long = "frag.url", default_value = "ws://0.0.0.0:9999/state_stream")]
+    pub frag_url: String,
+
+    /// ws url of eth rpc
+    #[arg(long = "eth.ws.url", default_value = "ws://0.0.0.0:8546")]
+    pub eth_ws_url: String,
+
+    /// http url of eth rpc
+    #[arg(long = "eth.http.url", default_value = "http://0.0.0.0:8545")]
+    pub eth_http_url: String,
+
+    /// tx receiver url
+    #[arg(long = "sequencer.url", default_value = "http://0.0.0.0:8545")]
+    pub tx_receiver_url: Option<String>,
 
     /// Enable debug logging
     #[arg(long)]

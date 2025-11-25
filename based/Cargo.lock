@@ -1595,14 +1595,20 @@ name = "based-rpc"
 version = "0.1.0"
 dependencies = [
  "alloy-eips",
+ "alloy-network",
  "alloy-primitives",
+ "alloy-provider",
  "alloy-rpc-types",
  "bop-common",
  "bop-metrics",
  "clap",
+ "crossbeam-channel",
  "eyre",
  "futures",
+ "futures-util",
+ "http",
  "jsonrpsee",
+ "op-alloy-network",
  "op-alloy-rpc-types",
  "op-alloy-rpc-types-engine",
  "parking_lot",
@@ -1612,9 +1618,11 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-websockets",
  "tower",
  "tower-http",
  "tracing",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]

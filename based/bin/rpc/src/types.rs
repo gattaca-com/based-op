@@ -1,0 +1,38 @@
+use alloy_eips::{BlockId, BlockNumberOrTag};
+use alloy_primitives::{Address, B256, Bytes, U256};
+use bop_common::api::OpRpcBlock;
+use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+use op_alloy_rpc_types::OpTransactionReceipt;
+
+
+// taken from https://github.com/gattaca-com/based-op/blob/397d48b73d088f40721ae0ba002d251dcf6f38cc/based/crates/common/src/api.rs#L91-L128
+#[rpc(client, server, namespace = "eth")]
+pub trait EthApi {
+    /// Sends signed transaction, returning its hash
+    #[method(name = "sendRawTransaction")]
+    async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
+
+    /// Returns the receipt of a transaction by transaction hash
+    #[method(name = "getTransactionReceipt")]
+    async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>>;
+
+    /// Returns a block with a given identifier
+    #[method(name = "getBlockByNumber")]
+    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>>;
+
+    /// Returns information about a block by hash.
+    #[method(name = "getBlockByHash")]
+    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>>;
+
+    /// Returns the number of most recent block
+    #[method(name = "blockNumber")]
+    async fn block_number(&self) -> RpcResult<U256>;
+
+    /// Returns the nonce of a given address at a given block number.
+    #[method(name = "getTransactionCount")]
+    async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256>;
+
+    /// Returns the balance of the account of given address.
+    #[method(name = "getBalance")]
+    async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256>;
+}
