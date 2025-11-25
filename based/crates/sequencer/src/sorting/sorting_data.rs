@@ -94,8 +94,11 @@ pub struct SortingData<Db> {
     /// Frag state with applied txs
     pub db: DBSorting<Db>,
     pub gas_remaining: u64,
+    pub block_gas_limit: u64,
     pub da_config: OpDAConfig,
     pub da_remaining: Option<u64>,
+    pub da_used: u64,
+    pub da_footprint_gas_scalar: Option<u64>,
     pub payment: U256,
     pub txs: Vec<SimulatedTx>,
     /// Sort frag until, and then commit
@@ -124,7 +127,7 @@ pub struct SortingData<Db> {
     pub metrics_producer: Producer<MetricsUpdate>,
 }
 
-impl<Db: DatabaseRead> SortingData<Db> {
+impl<Db: DatabaseRead + Database> SortingData<Db> {
     pub fn new(seq: &FragSequence, data: &mut SequencerContext<Db>) -> Self
     where
         Db: Clone + DatabaseRef,
@@ -166,8 +169,11 @@ impl<Db: DatabaseRead> SortingData<Db> {
             next_to_be_applied: None,
             tof_snapshot,
             gas_remaining: seq.gas_remaining,
+            block_gas_limit: data.gas_limit(),
             da_config: data.config.da_config.clone(),
             da_remaining: seq.da_remaining,
+            da_used: seq.da_used,
+            da_footprint_gas_scalar: data.da_footprint_gas_scalar,
             fifo_ordering: data.config.fifo_ordering,
             txs: vec![],
             start_t: Instant::now(),
@@ -338,7 +344,14 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
         let mut sims_sent = 0;
         while self.in_flight_sims < n_sims_per_loop {
             // check if tx DA is smaller than max allowed
-            let too_big = self.tof_snapshot.da_too_big(i, self.da_remaining, self.da_config.max_da_tx_size());
+            let too_big = self.tof_snapshot.da_too_big(
+                i,
+                self.da_remaining,
+                self.da_config.max_da_tx_size(),
+                self.block_gas_limit,
+                self.da_footprint_gas_scalar,
+                self.da_used,
+            );
             // check if we even have enough gas left for next order
             if too_big || self.tof_snapshot.not_enough_gas(i, self.gas_remaining) {
                 self.tof_snapshot.swap_remove_back(i);
@@ -402,7 +415,9 @@ impl<Db: DatabaseRef> SortingData<Db> {
         debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
 
         self.gas_remaining -= gas_used;
-        self.da_remaining = self.da_remaining.map(|da| da.saturating_sub(tx.tx.estimated_tx_compressed_size()));
+        let tx_da_size = tx.tx.estimated_tx_compressed_size();
+        self.da_remaining = self.da_remaining.map(|da| da.saturating_sub(tx_da_size));
+        self.da_used = self.da_used.saturating_add(tx_da_size);
         self.txs.push(tx);
 
         // Send metrics for transaction processing
@@ -474,8 +489,9 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
 
             evm.db_mut().commit_txs(std::iter::once(&mut simulated_tx));
             self.gas_remaining -= simulated_tx.gas_used();
-            self.da_remaining =
-                self.da_remaining.map(|da| da.saturating_sub(simulated_tx.tx.estimated_tx_compressed_size()));
+            let tx_da_size = simulated_tx.tx.estimated_tx_compressed_size();
+            self.da_remaining = self.da_remaining.map(|da| da.saturating_sub(tx_da_size));
+            self.da_used = self.da_used.saturating_add(tx_da_size);
             self.payment += simulated_tx.payment;
             self.txs.push(simulated_tx);
         }

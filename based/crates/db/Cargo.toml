@@ -23,6 +23,7 @@ reth-chainspec.workspace = true
 reth-db.workspace = true
 reth-db-api.workspace = true
 reth-db-common.workspace = true
+reth-engine-tree.workspace = true
 reth-node-types.workspace = true
 reth-optimism-chainspec.workspace = true
 reth-optimism-node.workspace = true

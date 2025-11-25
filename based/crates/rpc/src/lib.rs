@@ -96,7 +96,7 @@ impl RpcServer {
             .await
             .expect("failed to create eth RPC server");
         let mut module = MinimalEthApiServer::into_rpc(self.clone());
-        module.merge(EngineApiServer::into_rpc(self.clone().clone())).expect("failed to merge modules");
+        module.merge(EngineApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         module.merge(ControlApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         module.merge(OpMinerExtApiServer::into_rpc(self.clone())).expect("failed to merge modules");
 

@@ -282,7 +282,7 @@ impl EngineApiServer for PortalServer {
                             },
                             vec![],
                             gateway_payload.parent_beacon_block_root,
-                            RequestsOrHash::default(),
+                            RequestsOrHash::Requests(gateway_payload.execution_requests.clone().into()),
                         )
                         .await
                         .inspect_err(|err| error!(%err, "failed fallback validation"))?;
