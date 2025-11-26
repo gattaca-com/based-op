@@ -5,6 +5,7 @@ mod deps
 
 build:
     just deps::build
+    just -f based/docker/Justfile all
 
 rabby:
     just -f deps/rabby.just build

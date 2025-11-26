@@ -1,0 +1,11 @@
+# Build the docker image from the corresponding `.Dockerfile`
+build image *args:
+    docker build -t local_based_{{image}} -f ./{{image}}.Dockerfile ../ {{args}}
+
+build-portal: (build "portal")
+build-registry: (build "reigstry")
+build-gateway: (build "gateway")
+build-txproxy: (build "txproxy")
+build-metrics-exporter: (build "metrics-exporter" "--load")
+
+all: build-portal build-registry build-gateway build-txproxy build-metrics-exporter
