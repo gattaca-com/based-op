@@ -1,11 +1,19 @@
+set quiet
+
+suppress_output := env("QUIET", "true")
+quiet := if suppress_output == "true" { "--quiet > /dev/null 2>&1 " } else { "" }
+
 # Build the docker image from the corresponding `.Dockerfile`
 build image *args:
-    docker build -t local_based_{{image}} -f ./{{image}}.Dockerfile ../ {{args}}
+    echo "Building {{image}}..."
+    docker build -t local_based_{{image}} -f ./{{image}}.Dockerfile ../ {{args}} \
+    {{quiet}}
 
 build-portal: (build "portal")
-build-registry: (build "reigstry")
+build-registry: (build "registry")
 build-gateway: (build "gateway")
 build-txproxy: (build "txproxy")
 build-metrics-exporter: (build "metrics-exporter" "--load")
 
+[parallel]
 all: build-portal build-registry build-gateway build-txproxy build-metrics-exporter

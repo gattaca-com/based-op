@@ -1,13 +1,14 @@
 toolchain := "nightly"
 
-fmt:
-  rustup toolchain install {{toolchain}} > /dev/null 2>&1 && \
+toolchain:
+  rustup toolchain install {{toolchain}} > /dev/null 2>&1
+
+fmt: toolchain
   cargo +{{toolchain}} fmt
 
-fmt-check:
-  rustup toolchain install {{toolchain}} > /dev/null 2>&1 && \
+fmt-check: toolchain
   cargo +{{toolchain}} fmt --check
 
-clippy:
-  rustup toolchain install {{toolchain}} > /dev/null 2>&1 && \
+clippy: toolchain
   cargo +{{toolchain}} clippy --all-features --no-deps -- -D warnings
+

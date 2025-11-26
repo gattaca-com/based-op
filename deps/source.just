@@ -21,12 +21,13 @@ fetch $folder:
 # Determine if the dependency needs sourcing
 #
 # If the folder is not present, or if force is set, the dependency will be sourced 
+[no-exit-message]
 needs_sourcing $folder:
     #!/usr/bin/env bash
     set -euo pipefail
 	 
     if [[ -e "./$folder" && -z "{{force}}" ]]; then
-        echo "$folder already exists, set $FORCE to override" >&2
+        echo "$folder already exists, set \$FORCE to override" >&2
         exit 1
     fi
 
@@ -39,7 +40,7 @@ ensure $folder:
 
     echo "Checking $folder..."
 
-    just -f {{justfile()}} needs_sourcing $folder > /dev/null 2>&1 || {
+    just -f {{justfile()}} needs_sourcing $folder || {
     # No need to source the dependency
     exit 0
     }

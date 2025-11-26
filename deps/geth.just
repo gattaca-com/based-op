@@ -4,6 +4,11 @@ ref_default := "based/develop"
 repo := env("BASED_OP_GETH_REPO", repo_default)
 ref := env("BASED_OP_GETH_REF", ref_default)
 
+suppress_output := env("QUIET", "true")
+quiet := if suppress_output == "true" { "--quiet 2>&1 > /dev/null" } else { "" }
+
+set quiet
+
 @fetch repo=repo ref=ref:
     REPO={{repo}} REF={{ref}} just -f source.just ensure geth 
     
@@ -11,6 +16,7 @@ ref := env("BASED_OP_GETH_REF", ref_default)
     LOCAL={{source}} just -f source.just ensure geth
 
 # 🏗️ Build OP geth from based-op-geth 
+[working-directory: 'geth']
 build:
-    cd geth && docker build -t local_based_op_geth .
-    
+    echo "Building based-op-geth..."
+    docker build -t local_based_op_geth . {{quiet}}

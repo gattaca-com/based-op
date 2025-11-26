@@ -3,8 +3,8 @@ mod deps
 @prepare:
     just deps::fetch
 
-build:
-    just deps::build
+# 🏗️ Build
+@build: (deps::build)
     just -f based/docker/Justfile all
 
 rabby:
