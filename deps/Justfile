@@ -1,0 +1,10 @@
+set dotenv-load
+set quiet
+
+fetch:
+    just -f geth.just fetch
+    just -f optimism.just fetch
+
+build: fetch
+    just -f geth.just build
+    just -f optimism.just build
