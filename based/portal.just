@@ -1,5 +1,8 @@
 export PORTAL := env("PORTAL", "http://0.0.0.0:8080")
 
+@address:
+    echo $PORTAL
+
 @_rpc method params="[]":
     curl -s -X POST -H "Content-Type: application/json" \
       --data '{"jsonrpc": "2.0", "method": "{{method}}", "params": {{params}}, "id": 1}' \
