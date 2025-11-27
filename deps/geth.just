@@ -5,7 +5,7 @@ repo := env("BASED_OP_GETH_REPO", repo_default)
 ref := env("BASED_OP_GETH_REF", ref_default)
 
 suppress_output := env("QUIET", "true")
-quiet := if suppress_output == "true" { "--quiet 2>&1 > /dev/null" } else { "" }
+quiet := if suppress_output == "true" { "--quiet > /dev/null 2>&1 " } else { "" }
 
 set quiet
 

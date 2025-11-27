@@ -48,6 +48,7 @@ ensure $folder:
     # Cleanup existing copy (only possible if FORCE is set)
     rm -rf $folder || true
         
+    # Link local copy, if configured
     if [ -n "{{uses_local}}" ]; then
         local_path="{{local}}"
         echo "Linking local path $local_path -> $folder"
@@ -55,6 +56,6 @@ ensure $folder:
         exit 0
     fi
         
-    # 3) Fetch from source
+    # Fetch from source
     echo "Fetching $folder from source"
     just -f {{justfile()}} fetch {{folder}}

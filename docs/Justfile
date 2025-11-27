@@ -1,0 +1,15 @@
+set quiet
+
+suppress_output := env("QUIET", "true")
+quiet := if suppress_output == "true" { "> /dev/null 2>&1 " } else { "" }
+
+prepare:
+    npm i {{quiet}}
+
+build: prepare
+    echo "Building docs..."
+    npm run build {{quiet}}
+
+serve: build
+    echo "Serving docs:"
+    npm run start 

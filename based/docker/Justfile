@@ -17,3 +17,7 @@ build-metrics-exporter: (build "metrics-exporter" "--load")
 
 [parallel]
 all: build-portal build-registry build-gateway build-txproxy build-metrics-exporter
+
+# Creates the docker network `name` if it doesn't already exist
+create-network name="based_op_net":
+    docker network inspect {{name}} > /dev/null 2>&1 || docker network create {{name}}
