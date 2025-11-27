@@ -1,9 +1,11 @@
-use alloy_eips::{BlockId, BlockNumberOrTag};
+use alloy_eips::BlockId;
 use alloy_primitives::{Address, B256, Bytes, U256};
-use bop_common::api::OpRpcBlock;
+use alloy_provider::RootProvider;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+use op_alloy_network::Optimism;
 use op_alloy_rpc_types::OpTransactionReceipt;
 
+pub type OpRootProvider = RootProvider<Optimism>;
 
 // taken from https://github.com/gattaca-com/based-op/blob/397d48b73d088f40721ae0ba002d251dcf6f38cc/based/crates/common/src/api.rs#L91-L128
 #[rpc(client, server, namespace = "eth")]
@@ -16,13 +18,13 @@ pub trait EthApi {
     #[method(name = "getTransactionReceipt")]
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>>;
 
-    /// Returns a block with a given identifier
-    #[method(name = "getBlockByNumber")]
-    async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>>;
+    // /// Returns a block with a given identifier
+    // #[method(name = "getBlockByNumber")]
+    // async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>>;
 
-    /// Returns information about a block by hash.
-    #[method(name = "getBlockByHash")]
-    async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>>;
+    // /// Returns information about a block by hash.
+    // #[method(name = "getBlockByHash")]
+    // async fn block_by_hash(&self, hash: B256, full: bool) -> RpcResult<Option<OpRpcBlock>>;
 
     /// Returns the number of most recent block
     #[method(name = "blockNumber")]

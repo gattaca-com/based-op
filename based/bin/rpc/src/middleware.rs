@@ -1,8 +1,3 @@
-use bop_common::{
-    communication::Producer,
-    metrics::{Counter, Metric, MetricsUpdate},
-    utils::uuid,
-};
 use futures::FutureExt;
 use jsonrpsee::{
     MethodResponse,
@@ -29,8 +24,8 @@ pub struct EthApiProxy<S> {
 const SUPPORTED_METHODS: &[&str] = &[
     "eth_sendRawTransaction",
     "eth_getTransactionReceipt",
-    "eth_getBlockByNumber",
-    "eth_getBlockByHash",
+    // "eth_getBlockByNumber",
+    // "eth_getBlockByHash",
     "eth_blockNumber",
     "eth_getTransactionCount",
     "eth_getBalance",
