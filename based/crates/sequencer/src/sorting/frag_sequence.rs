@@ -2,7 +2,7 @@ use alloy_consensus::proofs::ordered_trie_root_with_encoder;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Bloom, U256};
 use bop_common::{
-    p2p::{FragV0, StateUpdate, Transaction, Transactions},
+    p2p::{DetailedStateChange, FragV0, StateUpdate, Transaction, Transactions},
     telemetry::TelemetryUpdate,
     time::Instant,
     transaction::SimulatedTx,
@@ -12,7 +12,7 @@ use revm_primitives::{
     B256, Bytes,
     map::foldhash::{HashMap, HashMapExt},
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::{SortingData, sorting_data::SortingTelemetry};
 use crate::context::SequencerContext;
@@ -82,6 +82,7 @@ impl FragSequence {
         let mut txs = Vec::with_capacity(in_sort.txs.len());
         let mut receipts = HashMap::with_capacity(in_sort.txs.len());
         let mut balances = HashMap::with_capacity(in_sort.txs.len());
+        let mut state_changes = HashMap::default();
         let mut in_sort_da_used = 0;
         let in_sort_txs = in_sort.txs.len();
 
@@ -100,10 +101,18 @@ impl FragSequence {
                     self.txs.len() as u64,
                 ),
             );
-            let address = tx.sender();
-            let balance =
-                in_sort.db.basic_ref(address).map(|a| a.map(|a| a.balance).unwrap_or_default()).unwrap_or(U256::ZERO);
-            balances.insert(address, balance);
+
+            for (address, account) in tx.result_and_state.state.iter() {
+                let state_change: &mut DetailedStateChange = state_changes.entry(*address).or_default();
+                state_change.balance = account.info.balance;
+                state_change.nonce = account.info.nonce;
+                for (slot, value) in account.storage.iter() {
+                    let slot: U256 = *slot;
+                    let value: U256 = value.present_value();
+                    state_change.storage.insert(slot, value);
+                }
+                balances.insert(*address, account.info.balance);
+            }
 
             self.txs.push(tx);
         }
@@ -120,7 +129,7 @@ impl FragSequence {
             txs: Transactions::from(txs),
             blob_gas_used: 0,
         };
-        let state_update = StateUpdate { receipts, balances };
+        let state_update = StateUpdate { receipts, balances, state_changes: Some(state_changes) };
 
         TelemetryUpdate::send(
             uuid,
@@ -296,7 +305,7 @@ mod tests {
         let (_frag, _, _sorting_db) = ctx.seal_frag(sorting_db, &mut seq);
 
         // Seal the block
-        let (_seal, payload) = ctx.seal_block(seq);
+        let (_seal, payload) = ctx.seal_block(seq, None);
         assert_eq!(block.hash_slow(), payload.execution_payload.payload_inner.payload_inner.payload_inner.block_hash);
     }
 }

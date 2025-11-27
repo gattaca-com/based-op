@@ -29,6 +29,7 @@ const SUPPORTED_METHODS: &[&str] = &[
     "eth_blockNumber",
     "eth_getTransactionCount",
     "eth_getBalance",
+    "eth_call",
 ];
 
 impl<S> RpcServiceT for EthApiProxy<S>

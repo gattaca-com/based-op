@@ -159,6 +159,16 @@ pub struct StateUpdate {
     pub receipts: HashMap<B256, OpTransactionReceipt>,
     /// Updated balances for all accounts in txs in FragV0
     pub balances: HashMap<Address, U256>,
+    /// Includes storage
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_changes: Option<HashMap<Address, DetailedStateChange>>,
+}
+
+#[derive(Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct DetailedStateChange {
+    pub balance: U256,
+    pub nonce: u64,
+    pub storage: HashMap<U256, U256>,
 }
 
 impl SignedVersionedMessage {

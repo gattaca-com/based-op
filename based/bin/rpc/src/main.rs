@@ -126,7 +126,7 @@ async fn main() -> eyre::Result<()> {
 
     let server = server_obj.clone();
     tokio::spawn(async move {
-        let address_to_check = Address::from_str("0x4D36DE6a194dDF98EE57323CfA3A45351d35e442").unwrap();
+        let address_to_check = Address::from_str("0x0E2d15588e765f0ba315313C726041EA124e36CB").unwrap();
         let mut interval = interval(Duration::from_secs_f64(0.1));
         loop {
             let transaction_count = server.get_transaction_count(address_to_check).await.unwrap();

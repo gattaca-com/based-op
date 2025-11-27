@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use alloy_network::ReceiptResponse;
 use alloy_primitives::{Address, B256, U256, map::foldhash::HashMap};
-use bop_common::p2p::{EnvV0, FragV0, SealV0, StateUpdate};
+use bop_common::p2p::{DetailedStateChange, EnvV0, FragV0, SealV0, StateUpdate};
 use op_alloy_rpc_types::OpTransactionReceipt;
 use tracing::error;
 
@@ -12,6 +12,7 @@ pub struct UnsealedBlock {
     pub transaction_count_diff: HashMap<Address, u64>,
     pub receipts: HashMap<B256, OpTransactionReceipt>,
     pub balances: HashMap<Address, U256>,
+    pub state_changes: HashMap<Address, DetailedStateChange>,
     pub seal: Option<SealV0>,
 }
 
@@ -44,6 +45,15 @@ impl UnsealedBlock {
             }
             self.receipts.extend(state_update.receipts);
             self.balances.extend(state_update.balances);
+
+            if let Some(state_changes) = state_update.state_changes {
+                for (address, state_change) in state_changes.iter() {
+                    let account = self.state_changes.entry(*address).or_default();
+                    account.balance = state_change.balance;
+                    account.nonce = state_change.nonce;
+                    account.storage.extend(state_change.storage.iter());
+                }
+            }
         }
     }
 
@@ -61,6 +71,10 @@ impl UnsealedBlock {
 
     pub fn get_balance(&self, address: Address) -> Option<U256> {
         self.balances.get(&address).cloned()
+    }
+
+    pub fn get_state_changes(&self) -> HashMap<Address, DetailedStateChange> {
+        self.state_changes.clone()
     }
 }
 
@@ -108,5 +122,18 @@ impl UnsealedBlockStack {
             return Some(root_provider_block_number);
         }
         None
+    }
+
+    pub fn get_state_changes(&self) -> HashMap<Address, DetailedStateChange> {
+        let mut state_changes = HashMap::default();
+        for block in self.blocks.iter() {
+            for (address, state_change) in block.get_state_changes().iter() {
+                let account = state_changes.entry(*address).or_insert_with(DetailedStateChange::default);
+                account.balance = state_change.balance;
+                account.nonce = state_change.nonce;
+                account.storage.extend(state_change.storage.iter());
+            }
+        }
+        state_changes
     }
 }

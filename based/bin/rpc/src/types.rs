@@ -1,9 +1,10 @@
 use alloy_eips::BlockId;
 use alloy_primitives::{Address, B256, Bytes, U256};
 use alloy_provider::RootProvider;
+use alloy_rpc_types::{BlockOverrides, state::StateOverride};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 use op_alloy_network::Optimism;
-use op_alloy_rpc_types::OpTransactionReceipt;
+use op_alloy_rpc_types::{OpTransactionReceipt, OpTransactionRequest};
 
 pub type OpRootProvider = RootProvider<Optimism>;
 
@@ -37,4 +38,13 @@ pub trait EthApi {
     /// Returns the balance of the account of given address.
     #[method(name = "getBalance")]
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256>;
+
+    #[method(name = "call")]
+    async fn call(
+        &self,
+        transaction: OpTransactionRequest,
+        block_number: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
+    ) -> RpcResult<Bytes>;
 }

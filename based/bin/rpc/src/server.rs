@@ -6,15 +6,18 @@ use alloy_primitives::{
     map::foldhash::{HashMap, HashMapExt},
 };
 use alloy_provider::Provider;
-use alloy_rpc_types::Header;
-use bop_common::p2p::{EnvV0, FragV0, SealV0, StateUpdate};
+use alloy_rpc_types::{
+    BlockOverrides, Header,
+    state::{AccountOverride, StateOverride},
+};
+use bop_common::p2p::{DetailedStateChange, EnvV0, FragV0, SealV0, StateUpdate};
 use eyre::Result;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     http_client::HttpClientBuilder,
     types::ErrorObject,
 };
-use op_alloy_rpc_types::OpTransactionReceipt;
+use op_alloy_rpc_types::{OpTransactionReceipt, OpTransactionRequest};
 use parking_lot::RwLock;
 use reqwest::Url;
 use tracing::error;
@@ -47,6 +50,7 @@ impl Server {
                     transaction_count_diff: HashMap::new(),
                     receipts: HashMap::new(),
                     balances: HashMap::new(),
+                    state_changes: HashMap::new(),
                     seal: None,
                 });
             });
@@ -144,6 +148,10 @@ impl Server {
             Ok(self.provider.get_block_number().await?)
         }
     }
+
+    pub fn get_state_changes(&self) -> HashMap<Address, DetailedStateChange> {
+        self.unsealed_stack.read().get_state_changes()
+    }
 }
 
 #[async_trait]
@@ -220,30 +228,79 @@ impl EthApiServer for Server {
     }
 
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
-        match block_number {
-            Some(BlockId::Number(BlockNumberOrTag::Pending)) => {
-                let block_number = self.block_number().await.map_err(|e| {
-                    ErrorObject::owned(
-                        jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                        "Failed to get block number",
-                        Some(e.to_string()),
-                    )
-                })?;
-                Ok(U256::from(block_number))
+        if let Some(BlockId::Number(BlockNumberOrTag::Pending)) = block_number {
+            if let Ok(balance) = self.get_balance(address).await {
+                return Ok(U256::from(balance));
             }
-            _ => {
-                let balance =
-                    self.provider.get_balance(address).block_id(block_number.unwrap_or_default()).await.map_err(
-                        |e| {
-                            ErrorObject::owned(
-                                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                                "Failed to get balance",
-                                Some(e.to_string()),
-                            )
-                        },
-                    )?;
-                Ok(U256::from(balance))
+        }
+
+        let balance =
+            self.provider.get_balance(address).block_id(block_number.unwrap_or_default()).await.map_err(|e| {
+                ErrorObject::owned(
+                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                    "Failed to get balance",
+                    Some(e.to_string()),
+                )
+            })?;
+        Ok(U256::from(balance))
+    }
+
+    async fn call(
+        &self,
+        transaction: OpTransactionRequest,
+        block_number: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
+    ) -> RpcResult<Bytes> {
+        if block_overrides.is_some() {
+            return Err(ErrorObject::owned(
+                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                "Block overrides are not supported",
+                Some("Block overrides are not supported".to_string()),
+            ))
+        }
+
+        if state_overrides.is_some() {
+            return Err(ErrorObject::owned(
+                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                "State overrides are not supported",
+                Some("State overrides are not supported".to_string()),
+            ))
+        }
+
+        let mut state_overrides_full = StateOverride::default();
+
+        let state_overrides_unsealed_block = self.get_state_changes();
+        for (address, state_change) in state_overrides_unsealed_block.iter() {
+            let account = state_overrides_full.entry(*address).or_insert_with(AccountOverride::default);
+            account.balance = Some(state_change.balance);
+            account.nonce = Some(state_change.nonce);
+            if !state_change.storage.is_empty() {
+                if account.state_diff.is_none() {
+                    account.state_diff = Some(Default::default());
+                }
+                let account_storage = account.state_diff.as_mut().unwrap();
+                for (slot, value) in state_change.storage.iter() {
+                    account_storage.insert((*slot).into(), (*value).into());
+                }
             }
+        }
+
+        // info!("overrides: {:?}", state_overrides_full);
+
+        let result = self
+            .provider
+            .call(transaction)
+            .block(block_number.unwrap_or_default())
+            .overrides(state_overrides_full)
+            .await;
+        match result {
+            Ok(result) => Ok(result),
+            Err(e) => Err(ErrorObject::owned(
+                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                "Failed to call",
+                Some(e.to_string()),
+            )),
         }
     }
 }
