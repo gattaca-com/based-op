@@ -1,3 +1,4 @@
+set dotnev-load
 mod docker
 
 # Override where the local data for the gateway will be stored
@@ -5,8 +6,9 @@ default_local_data := canonicalize(join(justfile_directory(), ".local"))
 export LOCAL_DATA := canonicalize(env("LOCAL_DATA", default_local_data))
 export DATA_FOLDER := env("GATEWAY_DATA_FOLDER", "gateway_and_follower")
 
-export GATEWAY_DATA := join(LOCAL_DATA, DATA_FOLDER)
+GATEWAY_DATA := join(LOCAL_DATA, DATA_FOLDER)
 
+# Override these to change where geth, the main node and the gateway store their data
 export BASED_OP_DATA_DIR := join(GATEWAY_DATA, "data")
 export BASED_OP_GETH_DATA_DIR := env("BASED_OP_GETH_DATA_DIR", join(BASED_OP_DATA_DIR, "geth"))
 export BASED_OP_NODE_DATA_DIR := env("BASED_OP_NODE_DATA_DIR", join(BASED_OP_DATA_DIR, "node"))
@@ -15,6 +17,11 @@ export BASED_GATEWAY_DATA_DIR := env("BASED_GATEWAY_DATA_DIR", join(BASED_OP_DAT
 # Override follower node source dir
 export FOLLOWER_NODE_DIR := join(justfile_directory(), "..", "follower_node")
 
+# External environment configuration
+export PORTAL := env("PORTAL", shell(portal + " address"))
+export PUBLIC_IP := env("PUBLIC_IP", shell("curl -s ifconfig.me"))
+
+# Force config creation
 export FORCE := env("FORCE", "")
 
 WALLET_NAME := env("GATEWAY_WALLET", "gateway")
@@ -34,11 +41,8 @@ _generate-dotenv gossip enr enode $dotenv=join(GATEWAY_DATA, ".env"):
 
     l2_chain_id=$({{portal}} l2_chain_id)
 
-    PUBLIC_IP=$(curl -s ifconfig.me)
-    PORTAL=$({{portal}} address)
-
     echo "PORTAL=$PORTAL" >> $dotenv
-    echo "OP_NODE_GOSSIP_IP=$PUBLIC_IP" >> $dotenv
+    echo "OP_NODE_GOSSIP_IP={{public_ip}}" >> $dotenv
     echo "GATEWAY_SEQUENCING_KEY=$GATEWAY_SEQUENCING_KEY" >> $dotenv
     echo "MAIN_OP_NODE_GOSSIP_STATIC={{gossip}}" >> $dotenv
     echo "MAIN_OP_NODE_ENR={{enr}}" >> $dotenv
@@ -60,6 +64,7 @@ _update-dotenv gossip enr enode $dotenv=join(GATEWAY_DATA, ".env"):
 
 @_dump_chain_config dest=join(GATEWAY_DATA, "config"):
     mkdir -p {{dest}}
+    # TODO: check for invalid json files (empty, ...)
     {{portal}} rollup > {{dest}}/rollup.json
     {{portal}} genesis > {{dest}}/genesis.json
 
@@ -122,24 +127,35 @@ create-config $dotenv=join(GATEWAY_DATA, ".env"):
 # Start the gateway service and the overseer TUI
 #
 # Will ensure the gateway is configured correctly before starting the service
-start: docker::create-network create-config
+start $dotenv=join(GATEWAY_DATA, ".env") network="based_op_node": (docker::create-network network) (create-config dotenv)
     #!/usr/bin/env bash
+    set -euo pipefail
+
+    GATEWAY_DATA=$(dirname $dotenv)
     
     # Retrieve IP and port from config
-    ip=$(grep -m2 '^OP_NODE_GOSSIP_IP[[:space:]]*=' {{GATEWAY_DATA}}/.env | tail -n1 | cut -d= -f2)
-    port=$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' {{GATEWAY_DATA}}/.env | cut -d= -f2)
+    ip=$(grep -m2 '^OP_NODE_GOSSIP_IP[[:space:]]*=' $dotenv | tail -n1 | cut -d= -f2)
+    port=$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' $dotenv | cut -d= -f2)
 
     address=$({{wallet}} key {{WALLET_NAME}})
-    jwt=$(cat {{GATEWAY_DATA}}/jwt)
+    jwt=$(cat $GATEWAY_DATA/jwt) 
 
     echo "Registering gateway"
     {{self}} register-gateway "http://$ip:$port" "$address" "$jwt"
 
     # Start services
     echo "Starting gateway and monitoring services..."
-    docker compose -f {{GATEWAY_DATA}}/compose.yml up -d
+    docker compose -f $GATEWAY_DATA/compose.yml up -d
     docker compose -f {{justfile_directory()}}/../monitoring/compose.yml
 
     echo "*** Starting overseer"
     just -f {{justfile_directory()}}/overseer.just start
     
+stop $dotenv=join(GATEWAY_DATA, ".env"):
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    GATEWAY_DATA=$(dirname $dotenv)
+    
+    docker compose -f $GATEWAY_DATA/compose.yml down
+    docker compose -f {{justfile_directory()}}/../monitoring/compose.yml down
