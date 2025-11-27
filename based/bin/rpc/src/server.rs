@@ -292,7 +292,6 @@ impl EthApiServer for Server {
                 }
             }
 
-
             let result = self
                 .provider
                 .call(transaction)
