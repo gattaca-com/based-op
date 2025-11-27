@@ -149,6 +149,10 @@ impl Server {
         }
     }
 
+    pub fn base_block_number(&self) -> Option<u64> {
+        self.unsealed_stack.read().root_provider_block_number
+    }
+
     pub fn get_state_changes(&self) -> HashMap<Address, DetailedStateChange> {
         self.unsealed_stack.read().get_state_changes()
     }
@@ -271,6 +275,7 @@ impl EthApiServer for Server {
 
             let mut state_overrides_full = StateOverride::default();
 
+            let base_block_number = self.base_block_number().unwrap_or_default();
             let state_overrides_unsealed_block = self.get_state_changes();
             for (address, state_change) in state_overrides_unsealed_block.iter() {
                 let account = state_overrides_full.entry(*address).or_insert_with(AccountOverride::default);
@@ -287,10 +292,11 @@ impl EthApiServer for Server {
                 }
             }
 
+
             let result = self
                 .provider
                 .call(transaction)
-                .block(block_number.unwrap_or_default())
+                .block(BlockId::number(base_block_number))
                 .overrides(state_overrides_full)
                 .await;
             match result {
