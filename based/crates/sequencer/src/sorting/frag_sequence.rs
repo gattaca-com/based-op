@@ -12,7 +12,7 @@ use revm_primitives::{
     B256, Bytes,
     map::foldhash::{HashMap, HashMapExt},
 };
-use tracing::{debug, info};
+use tracing::debug;
 
 use super::{SortingData, sorting_data::SortingTelemetry};
 use crate::context::SequencerContext;
