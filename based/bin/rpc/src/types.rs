@@ -45,6 +45,6 @@ pub trait EthApi {
         transaction: OpTransactionRequest,
         block_number: Option<BlockId>,
         state_overrides: Option<StateOverride>,
-        block_overrides: Option<Box<BlockOverrides>>,
+        block_overrides: Option<BlockOverrides>,
     ) -> RpcResult<Bytes>;
 }

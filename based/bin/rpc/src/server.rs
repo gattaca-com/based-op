@@ -250,57 +250,73 @@ impl EthApiServer for Server {
         transaction: OpTransactionRequest,
         block_number: Option<BlockId>,
         state_overrides: Option<StateOverride>,
-        block_overrides: Option<Box<BlockOverrides>>,
+        block_overrides: Option<BlockOverrides>,
     ) -> RpcResult<Bytes> {
-        if block_overrides.is_some() {
-            return Err(ErrorObject::owned(
-                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                "Block overrides are not supported",
-                Some("Block overrides are not supported".to_string()),
-            ))
-        }
+        if let Some(BlockId::Number(BlockNumberOrTag::Pending)) = block_number {
+            if block_overrides.is_some() {
+                return Err(ErrorObject::owned(
+                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                    "Block overrides are not supported",
+                    Some("Block overrides are not supported".to_string()),
+                ));
+            }
 
-        if state_overrides.is_some() {
-            return Err(ErrorObject::owned(
-                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                "State overrides are not supported",
-                Some("State overrides are not supported".to_string()),
-            ))
-        }
+            if state_overrides.is_some() {
+                return Err(ErrorObject::owned(
+                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                    "State overrides are not supported",
+                    Some("State overrides are not supported".to_string()),
+                ));
+            }
 
-        let mut state_overrides_full = StateOverride::default();
+            let mut state_overrides_full = StateOverride::default();
 
-        let state_overrides_unsealed_block = self.get_state_changes();
-        for (address, state_change) in state_overrides_unsealed_block.iter() {
-            let account = state_overrides_full.entry(*address).or_insert_with(AccountOverride::default);
-            account.balance = Some(state_change.balance);
-            account.nonce = Some(state_change.nonce);
-            if !state_change.storage.is_empty() {
-                if account.state_diff.is_none() {
-                    account.state_diff = Some(Default::default());
-                }
-                let account_storage = account.state_diff.as_mut().unwrap();
-                for (slot, value) in state_change.storage.iter() {
-                    account_storage.insert((*slot).into(), (*value).into());
+            let state_overrides_unsealed_block = self.get_state_changes();
+            for (address, state_change) in state_overrides_unsealed_block.iter() {
+                let account = state_overrides_full.entry(*address).or_insert_with(AccountOverride::default);
+                account.balance = Some(state_change.balance);
+                account.nonce = Some(state_change.nonce);
+                if !state_change.storage.is_empty() {
+                    if account.state_diff.is_none() {
+                        account.state_diff = Some(Default::default());
+                    }
+                    let account_storage = account.state_diff.as_mut().unwrap();
+                    for (slot, value) in state_change.storage.iter() {
+                        account_storage.insert((*slot).into(), (*value).into());
+                    }
                 }
             }
-        }
 
-        // info!("overrides: {:?}", state_overrides_full);
-
-        let result = self
-            .provider
-            .call(transaction)
-            .block(block_number.unwrap_or_default())
-            .overrides(state_overrides_full)
-            .await;
-        match result {
-            Ok(result) => Ok(result),
-            Err(e) => Err(ErrorObject::owned(
-                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                "Failed to call",
-                Some(e.to_string()),
-            )),
+            let result = self
+                .provider
+                .call(transaction)
+                .block(block_number.unwrap_or_default())
+                .overrides(state_overrides_full)
+                .await;
+            match result {
+                Ok(result) => Ok(result),
+                Err(e) => Err(ErrorObject::owned(
+                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                    "Failed to call",
+                    Some(e.to_string()),
+                )),
+            }
+        } else {
+            let request = self
+                .provider
+                .call(transaction)
+                .block(block_number.unwrap_or_default())
+                .overrides_opt(state_overrides)
+                .with_block_overrides_opt(block_overrides);
+            let result = request.await;
+            match result {
+                Ok(result) => Ok(result),
+                Err(e) => Err(ErrorObject::owned(
+                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                    "Failed to call",
+                    Some(e.to_string()),
+                )),
+            }
         }
     }
 }
