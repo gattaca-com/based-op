@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use alloy_network::ReceiptResponse;
 use alloy_primitives::{Address, B256, U256, map::foldhash::HashMap};
+use alloy_rpc_types::state::{AccountOverride, StateOverride};
 use bop_common::p2p::{DetailedStateChange, EnvV0, FragV0, SealV0, StateUpdate};
 use op_alloy_rpc_types::OpTransactionReceipt;
 use tracing::error;
@@ -81,11 +82,12 @@ impl UnsealedBlock {
 pub struct UnsealedBlockStack {
     pub blocks: VecDeque<UnsealedBlock>,
     pub root_provider_block_number: Option<u64>,
+    pub overrides: StateOverride,
 }
 
 impl UnsealedBlockStack {
     pub fn new() -> Self {
-        Self { blocks: VecDeque::new(), root_provider_block_number: None }
+        Self { blocks: VecDeque::new(), root_provider_block_number: None, overrides: StateOverride::default() }
     }
 
     pub fn get_transaction_count_diff(&self, address: Address) -> u64 {
@@ -135,5 +137,27 @@ impl UnsealedBlockStack {
             }
         }
         state_changes
+    }
+
+    pub fn rebuild_overrides(&mut self) {
+        let mut state_overrides_full = StateOverride::default();
+
+        let state_overrides_unsealed_block = self.get_state_changes();
+        for (address, state_change) in state_overrides_unsealed_block.iter() {
+            let account = state_overrides_full.entry(*address).or_insert_with(AccountOverride::default);
+            account.balance = Some(state_change.balance);
+            account.nonce = Some(state_change.nonce);
+            if !state_change.storage.is_empty() {
+                if account.state_diff.is_none() {
+                    account.state_diff = Some(Default::default());
+                }
+                let account_storage = account.state_diff.as_mut().unwrap();
+                for (slot, value) in state_change.storage.iter() {
+                    account_storage.insert((*slot).into(), (*value).into());
+                }
+            }
+        }
+
+        self.overrides = state_overrides_full;
     }
 }

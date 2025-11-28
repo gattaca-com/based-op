@@ -6,11 +6,8 @@ use alloy_primitives::{
     map::foldhash::{HashMap, HashMapExt},
 };
 use alloy_provider::Provider;
-use alloy_rpc_types::{
-    BlockOverrides, Header,
-    state::{AccountOverride, StateOverride},
-};
-use bop_common::p2p::{DetailedStateChange, EnvV0, FragV0, SealV0, StateUpdate};
+use alloy_rpc_types::{BlockOverrides, Header, state::StateOverride};
+use bop_common::p2p::{EnvV0, FragV0, SealV0, StateUpdate};
 use eyre::Result;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -103,6 +100,7 @@ impl Server {
         }
         unsealed_block.with_upgraded(|blocks| {
             blocks.blocks.back_mut().unwrap().apply_frag(frag, state_update);
+            blocks.rebuild_overrides();
         });
     }
 
@@ -153,33 +151,34 @@ impl Server {
         self.unsealed_stack.read().root_provider_block_number
     }
 
-    pub fn get_state_changes(&self) -> HashMap<Address, DetailedStateChange> {
-        self.unsealed_stack.read().get_state_changes()
+    pub fn get_state_overrides(&self) -> StateOverride {
+        self.unsealed_stack.read().overrides.clone()
     }
 }
 
 #[async_trait]
 impl EthApiServer for Server {
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
-        let hash = self.tx_receiver_provider.send_raw_transaction(&bytes).await.map_err(|e| {
-            ErrorObject::owned(
+        match self.tx_receiver_provider.send_raw_transaction(&bytes).await {
+            Ok(pending_tx) => Ok(*pending_tx.tx_hash()),
+            Err(e) => Err(ErrorObject::owned(
                 jsonrpsee::types::error::INTERNAL_ERROR_CODE,
                 "Failed to send transaction",
                 Some(e.to_string()),
-            )
-        })?;
-        Ok(*hash.tx_hash())
+            )),
+        }
     }
 
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>> {
-        let receipt = self.get_receipt(hash).await.map_err(|e| {
-            ErrorObject::owned(
+        match self.get_receipt(hash).await {
+            Ok(Some(receipt)) => Ok(Some(receipt)),
+            Ok(None) => Ok(None),
+            Err(e) => Err(ErrorObject::owned(
                 jsonrpsee::types::error::INTERNAL_ERROR_CODE,
                 "Failed to get transaction receipt",
                 Some(e.to_string()),
-            )
-        })?;
-        Ok(receipt)
+            )),
+        }
     }
 
     // async fn block_by_number(&self, number: BlockNumberOrTag, full: bool) -> RpcResult<Option<OpRpcBlock>> {
@@ -191,44 +190,34 @@ impl EthApiServer for Server {
     // }
 
     async fn block_number(&self) -> RpcResult<U256> {
-        let block_number = self.block_number().await.map_err(|e| {
-            ErrorObject::owned(
+        match self.block_number().await {
+            Ok(block_number) => Ok(U256::from(block_number)),
+            Err(e) => Err(ErrorObject::owned(
                 jsonrpsee::types::error::INTERNAL_ERROR_CODE,
                 "Failed to get block number",
                 Some(e.to_string()),
-            )
-        })?;
-        Ok(U256::from(block_number))
+            )),
+        }
     }
 
     async fn transaction_count(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
-        match block_number {
-            Some(BlockId::Number(BlockNumberOrTag::Pending)) => {
-                let block_number = self.block_number().await.map_err(|e| {
-                    ErrorObject::owned(
-                        jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                        "Failed to get block number",
-                        Some(e.to_string()),
-                    )
-                })?;
-                Ok(U256::from(block_number))
-            }
-            _ => {
-                let transaction_count = self
-                    .provider
-                    .get_transaction_count(address)
-                    .block_id(block_number.unwrap_or_default())
-                    .await
-                    .map_err(|e| {
-                        ErrorObject::owned(
-                            jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                            "Failed to get transaction count",
-                            Some(e.to_string()),
-                        )
-                    })?;
-                Ok(U256::from(transaction_count))
+        if let Some(BlockId::Number(BlockNumberOrTag::Pending)) = block_number {
+            if let Ok(transaction_count) = self.get_transaction_count(address).await {
+                return Ok(U256::from(transaction_count));
             }
         }
+
+        let transaction_count =
+            self.provider.get_transaction_count(address).block_id(block_number.unwrap_or_default()).await.map_err(
+                |e| {
+                    ErrorObject::owned(
+                        jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                        "Failed to get transaction count",
+                        Some(e.to_string()),
+                    )
+                },
+            )?;
+        Ok(U256::from(transaction_count))
     }
 
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
@@ -273,30 +262,14 @@ impl EthApiServer for Server {
                 ));
             }
 
-            let mut state_overrides_full = StateOverride::default();
-
             let base_block_number = self.base_block_number().unwrap_or_default();
-            let state_overrides_unsealed_block = self.get_state_changes();
-            for (address, state_change) in state_overrides_unsealed_block.iter() {
-                let account = state_overrides_full.entry(*address).or_insert_with(AccountOverride::default);
-                account.balance = Some(state_change.balance);
-                account.nonce = Some(state_change.nonce);
-                if !state_change.storage.is_empty() {
-                    if account.state_diff.is_none() {
-                        account.state_diff = Some(Default::default());
-                    }
-                    let account_storage = account.state_diff.as_mut().unwrap();
-                    for (slot, value) in state_change.storage.iter() {
-                        account_storage.insert((*slot).into(), (*value).into());
-                    }
-                }
-            }
+            let state_overrides = self.get_state_overrides();
 
             let result = self
                 .provider
                 .call(transaction)
                 .block(BlockId::number(base_block_number))
-                .overrides(state_overrides_full)
+                .overrides(state_overrides)
                 .await;
             match result {
                 Ok(result) => Ok(result),
