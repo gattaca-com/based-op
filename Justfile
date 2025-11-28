@@ -5,7 +5,7 @@ jq := require("jq")
 docker := require("docker")
 
 # Verifies that system dependencies are present
-@doctor:
+@check:
     echo "jq: {{jq}}"
     echo "docker: {{docker}}"
 
