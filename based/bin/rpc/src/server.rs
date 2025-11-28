@@ -61,6 +61,7 @@ impl Server {
         while !unsealed_block.blocks.is_empty() && unsealed_block.blocks.front().unwrap().env.number <= header.number {
             unsealed_block.with_upgraded(|blocks| {
                 blocks.blocks.pop_front();
+                blocks.rebuild_overrides();
                 blocks.root_provider_block_number = Some(header.number);
             });
         }
@@ -147,12 +148,13 @@ impl Server {
         }
     }
 
-    pub fn base_block_number(&self) -> Option<u64> {
-        self.unsealed_stack.read().root_provider_block_number
-    }
-
-    pub fn get_state_overrides(&self) -> StateOverride {
-        self.unsealed_stack.read().overrides.clone()
+    pub fn get_state_overrides(&self) -> (BlockNumberOrTag, StateOverride) {
+        let unsealed_block = self.unsealed_stack.read();
+        if let Some(base_block_number) = unsealed_block.root_provider_block_number {
+            (BlockNumberOrTag::Number(base_block_number), unsealed_block.overrides.clone())
+        } else {
+            (BlockNumberOrTag::Latest, Default::default())
+        }
     }
 }
 
@@ -262,13 +264,12 @@ impl EthApiServer for Server {
                 ));
             }
 
-            let base_block_number = self.base_block_number().unwrap_or_default();
-            let state_overrides = self.get_state_overrides();
+            let (base_block_number, state_overrides) = self.get_state_overrides();
 
             let result = self
                 .provider
                 .call(transaction)
-                .block(BlockId::number(base_block_number))
+                .block(BlockId::Number(base_block_number))
                 .overrides(state_overrides)
                 .await;
             match result {
