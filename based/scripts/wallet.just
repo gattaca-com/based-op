@@ -4,7 +4,7 @@
 export LOCAL_DATA := env("LOCAL_DATA")
 export DATA_FOLDER := join(LOCAL_DATA, env("WALLET_DATA_FOLDER", ".wallet"))
 
-force := env("FORCE", "")
+export FORCE := env("FORCE", "")
 
 tool_image := env("WALLET_TOOL_IMAGE", "ghcr.io/gattaca-com/based-op/key-to-address:latest")
 
@@ -13,7 +13,7 @@ needs_create name:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if [[ -e "$DATA_FOLDER/{{name}}" && -z "{{force}}" ]]; then
+    if [[ -e "$DATA_FOLDER/{{name}}" && -z "$FORCE" ]]; then
       echo "Wallet {{name}} already exists, set \$FORCE to override" >&2
       exit 1
     fi
@@ -23,6 +23,8 @@ needs_create name:
 # Creates the wallet `name` at `$DATA_FOLDER/{{name}}`
 #
 # Will create 2 files, key and address, holding the private key and the address of the wallet
+#
+# Outputs the address of the generated wallet
 create name override="":
     #!/usr/bin/env sh
     set -euo pipefail
@@ -34,12 +36,13 @@ create name override="":
     mkdir -p $DATA_FOLDER/{{name}}
     echo "$key" > $DATA_FOLDER/{{name}}/key
     echo "$address" > $DATA_FOLDER/{{name}}/address
+    echo "$address"
 
 # Remove the wallet `name`
 @remove name:
     rm -rf $DATA_FOLDER/{{name}}
 
-# Ensures the wallet `name` exists, and returns the location where it is stored
+# Ensures the wallet `name` exists, and returns the corresponding address
 ensure name override="":
     #!/usr/bin/env sh
     set -euo pipefail

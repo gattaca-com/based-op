@@ -1,4 +1,4 @@
-set dotnev-load
+set dotenv-load
 mod docker
 
 # Override where the local data for the gateway will be stored
@@ -62,7 +62,7 @@ _update-dotenv gossip enr enode $dotenv=join(GATEWAY_DATA, ".env"):
     sed -i -E \
         -e "s#^MAIN_OP_GETH_ENODE=.*#MAIN_OP_GETH_ENODE={{enode}}#" $dotenv
 
-@_dump_chain_config dest=join(GATEWAY_DATA, "config"):
+@_dump-chain-config dest=join(GATEWAY_DATA, "config"):
     mkdir -p {{dest}}
     # TODO: check for invalid json files (empty, ...)
     {{portal}} rollup > {{dest}}/rollup.json
@@ -99,9 +99,8 @@ create-config $dotenv=join(GATEWAY_DATA, ".env"):
 
     # Ensure wallet is ready
     echo "Retrieving {{WALLET_NAME}} wallet"
-    {{wallet}} ensure {{WALLET_NAME}}
+    export GATEWAY_SEQUENCING_ADDRESS=$({{wallet}} ensure {{WALLET_NAME}})
     export GATEWAY_SEQUENCING_KEY=$({{wallet}} key {{WALLET_NAME}})
-    export GATEWAY_SEQUENCING_ADDRESS=$({{wallet}} address {{WALLET_NAME}})
     
     echo "Retrieving OP Node bootstrap environment"
     gossip=$({{portal}} node_gossip_static)
@@ -115,7 +114,7 @@ create-config $dotenv=join(GATEWAY_DATA, ".env"):
       echo "Gateway Sequencing Wallet:      $GATEWAY_SEQUENCING_ADDRESS"
 
       {{self}} _generate-dotenv "$gossip" "$enr" "$enode" "$dotenv"
-      {{self}} _dump_chain_config "$GATEWAY_DATA/config"
+      {{self}} _dump-chain-config "$GATEWAY_DATA/config"
       {{self}} _link-data "$GATEWAY_DATA/data"
     else
       # Replace values of existing config

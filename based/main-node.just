@@ -1,4 +1,6 @@
-set dotnev-load
+set dotenv-load
+
+import './scripts/consts.just'
  
 # Override where the local data for the main node will be stored
 default_local_data := canonicalize(join(justfile_directory(), ".local"))
@@ -16,8 +18,6 @@ export BASED_OP_NODE_DATA_DIR := env("BASED_OP_NODE_DATA_DIR", join(BASED_OP_DAT
 export MAIN_NODE_DIR := join(justfile_directory(), "..", "main_node")
 
 # External environment configuration 
-export L1_RPC_URL := env("L1_RPC_URL", "http://3.84.162.42:8545")
-export L1_BEACON_RPC_URL := env("L1_BEACON_RPC_URL", "http://3.84.162.42:5051")
 export PUBLIC_IP := env("PUBLIC_IP", shell("curl -s ifconfig.me"))
 
 export OP_PROPOSER_KEY := env("OP_PROPOSER_KEY")
@@ -40,6 +40,7 @@ _populate-chain-cfg $src $dest:
     set -euo pipefail
 
     function nc_copy() {
+       # Copy without overriding destination
        if [! -f $dest/$1 ]; then
          cp $src/$1 $dest/$1
        fi
@@ -54,7 +55,7 @@ _generate-dotenv $cfg=join(MAIN_NODE_DATA, "config") $dotenv=join(MAIN_NODE_DATA
 
     MAIN_NODE_DATA=$(dirname $cfg)
 
-	cp $MAIN_NODE_DIR/env_example $dotenv
+    cp $MAIN_NODE_DIR/env_example $dotenv
     cp $MAIN_NODE_DIR/compose* $MAIN_NODE_DATA
     cp $MAIN_NODE_DIR/tx_receivers_example.json $cfg/tx_receivers.json
 
@@ -90,7 +91,7 @@ create-config chain_cfg $cfg=join(MAIN_NODE_DATA, "config"):
     fi
 
     if [ -d $cfg ]; then
-      echo "❌  Seems like the main node was already configured (see $cfg)."
+      echo "❌ Seems like the main node was already configured (see $cfg)."
       exit 1
     fi
     
@@ -119,7 +120,9 @@ create-config chain_cfg $cfg=join(MAIN_NODE_DATA, "config"):
     {{self}} _link-data "$MAIN_NODE_DATA/data"
     echo "*** Done initializing $MAIN_NODE_DATA" 
 
-    #TODO: echo "make start-main-node OP_BATCHER_KEY=<private-key matching batcher address> OP_PROPOSER_KEY=<private-key matching proposer address> MAIN_KEY=<op-node sequencer private key>"
+# Deploy a new chain and create the appropriate configuration
+config-with-deploy $cfg=join(MAIN_NODE_DATA, "config"):
+    just -f ./scripts/deploy.just deploy-chain $cfg
 
 # Start the Main Node service
 start $cfg=join(MAIN_NODE_DATA, "config"):
@@ -128,13 +131,25 @@ start $cfg=join(MAIN_NODE_DATA, "config"):
     
     # Check Node running
     if [ docker ps --format '{{.Names}}' | grep -wq op-node  ]; then
-		echo "❌  Main node already running."
+		echo "❌ Main node already running."
 		exit 1
 	fi 
 
-    MAIN_NODE_DATA=$(dirname $cfg)
-     
-    # TODO: Check config present
+    if [ ! -d $cfg ]; then
+      echo "❌ $cfg does not exist. run `create-config` to configure"
+      exit 1
+    fi
 
+    MAIN_NODE_DATA=$(dirname $cfg)
+      
     docker compose -f $MAIN_NODE_DATA/compose.yml up -d
     docker compose -f {{justfile_directory()}}/../monitoring/compose.yml up -d
+
+stop $cfg=join(MAIN_NODE_DATA, "config"):
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    MAIN_NODE_DATA=$(dirname $cfg)
+    
+    docker compose -f $MAIN_NODE_DATA/compose.yml down
+    docker compose -f {{justfile_directory()}}/../monitoring/compose.yml down
