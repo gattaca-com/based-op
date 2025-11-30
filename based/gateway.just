@@ -28,9 +28,10 @@ WALLET_NAME := env("GATEWAY_WALLET", "gateway")
 
 # Invocation utils
 self := "just -f " + justfile()
-portal := "just -f " + justfile_directory() + "/portal.just"
-wallet := "just -f " + justfile_directory() + "/scripts/wallet.just"
-link-dir-if-exists-elsewhere := "just -f " + justfile_directory() + "/scripts/link.just link-dir-if-exists-elsewhere"
+parent := "just -f " + join(justfile_directory(), "..", "Justfile")
+portal := "just -f " + join(justfile_directory(), "portal.just")
+wallet := "just -f " + join(justfile_directory(), "scripts", "wallet.just")
+link := "just -f " + join(justfile_directory(), "scripts", "link.just")
 
 _generate-dotenv gossip enr enode $dotenv=join(GATEWAY_DATA, ".env"):
     #!/usr/bin/env bash
@@ -69,9 +70,9 @@ _update-dotenv gossip enr enode $dotenv=join(GATEWAY_DATA, ".env"):
     {{portal}} genesis > {{dest}}/genesis.json
 
 @_link-data dest=BASED_OP_DATA_DIR:
-    {{link-dir-if-exists-elsewhere}} BASED_OP_GETH_DATA_DIR "{{dest}}/geth"
-    {{link-dir-if-exists-elsewhere}} BASED_OP_NODE_DATA_DIR "{{dest}}/node"
-    {{link-dir-if-exists-elsewhere}} BASED_GATEWAY_DATA_DIR "{{dest}}/gateway"
+    {{link}} link-dir-if-exists-elsewhere BASED_OP_GETH_DATA_DIR "{{dest}}/geth"
+    {{link}} link-dir-if-exists-elsewhere BASED_OP_NODE_DATA_DIR "{{dest}}/node"
+    {{link}} link-dir-if-exists-elsewhere BASED_GATEWAY_DATA_DIR "{{dest}}/gateway"
 
 # Create Gateway configuration
 #
@@ -123,6 +124,17 @@ create-config $dotenv=join(GATEWAY_DATA, ".env"):
 
     echo "*** Gateway setup completed!"
 
+_is-configured $cfg=GATEWAY_DATA:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if  [ ! -d $cfg ]; then
+      echo "❌ Gateway and Follower Node does not seem to have been configured at $cfg. run `create-config` to configure"
+      exit 1
+    fi
+
+    echo $cfg
+
 # Start the gateway service and the overseer TUI
 #
 # Will ensure the gateway is configured correctly before starting the service
@@ -145,7 +157,7 @@ start $dotenv=join(GATEWAY_DATA, ".env") network="based_op_node": (docker::creat
     # Start services
     echo "Starting gateway and monitoring services..."
     docker compose -f $GATEWAY_DATA/compose.yml up -d
-    docker compose -f {{justfile_directory()}}/../monitoring/compose.yml
+    {{parent}} monitoring start
 
     echo "*** Starting overseer"
     just -f {{justfile_directory()}}/overseer.just start
@@ -157,4 +169,6 @@ stop $dotenv=join(GATEWAY_DATA, ".env"):
     GATEWAY_DATA=$(dirname $dotenv)
     
     docker compose -f $GATEWAY_DATA/compose.yml down
-    docker compose -f {{justfile_directory()}}/../monitoring/compose.yml down
+
+logs:
+    docker logs based-gateway --tail 100 -f

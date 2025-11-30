@@ -8,8 +8,6 @@ export LOCAL_DATA := canonicalize(env("LOCAL_DATA", default_local_data))
 export DATA_FOLDER := env("MAIN_NODE_DATA_FOLDER", "local_main_node")
 
 MAIN_NODE_DATA := join(LOCAL_DATA, DATA_FOLDER)
-_main-node-data:
-    echo {{MAIN_NODE_DATA}}
 
 # Override these to change where geth and the main node store their data
 export BASED_MAIN_NODE_DATA_DIR := join(MAIN_NODE_DATA, "data")
@@ -31,11 +29,11 @@ export FORCE := env("FORCE", "")
 
 # Invocation utils
 self := "just -f " + justfile()
+link := "just -f " + join(justfile_directory(), "scripts", "link.just")
 
-link-dir-if-exists-elsewhere := "just -f " + justfile_directory() + "/scripts/link.just link-dir-if-exists-elsewhere"
 @_link-data dest=join(BASED_MAIN_NODE_DATA_DIR, "data"):
-    {{link-dir-if-exists-elsewhere}} BASED_OP_GETH_DATA_DIR "{{dest}}/geth"
-    {{link-dir-if-exists-elsewhere}} BASED_OP_NODE_DATA_DIR "{{dest}}/node"
+    {{link}} link-dir-if-exists-elsewhere BASED_OP_GETH_DATA_DIR "{{dest}}/geth"
+    {{link}} link-dir-if-exists-elsewhere BASED_OP_NODE_DATA_DIR "{{dest}}/node"
 
 _populate-chain-cfg $src $dest:
     #!/usr/bin/env bash
@@ -126,6 +124,17 @@ create-config chain_cfg $cfg=join(MAIN_NODE_DATA, "config"):
 config-with-deploy $cfg=join(MAIN_NODE_DATA, "config"):
     just -f ./scripts/deploy.just deploy-chain $cfg
 
+_is-configured $cfg=join(MAIN_NODE_DATA, "config"):
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if  [ ! -d $cfg ]; then
+      echo "❌ main-node does not seem to have been configured at $cfg. run `create-config` to configure"
+      exit 1
+    fi
+
+    echo $cfg
+
 # Start the Main Node service
 start $cfg=join(MAIN_NODE_DATA, "config"):
     #!/usr/bin/env bash
@@ -137,21 +146,26 @@ start $cfg=join(MAIN_NODE_DATA, "config"):
         exit 1
     fi 
 
-    if [ ! -d $cfg ]; then
-      echo "❌ $cfg does not exist. run `create-config` to configure"
-      exit 1
-    fi
-    
+    {{self}} _is-configured $cfg
+
     MAIN_NODE_DATA=$(dirname $cfg)
       
     docker compose -f $MAIN_NODE_DATA/compose.yml up -d
-    docker compose -f {{justfile_directory()}}/../monitoring/compose.yml up -d
 
 stop $cfg=join(MAIN_NODE_DATA, "config"):
     #!/usr/bin/env bash
     set -euo pipefail
 
+    {{self}} _is-configured $cfg
+
     MAIN_NODE_DATA=$(dirname $cfg)
-    
     docker compose -f $MAIN_NODE_DATA/compose.yml down
-    docker compose -f {{justfile_directory()}}/../monitoring/compose.yml down
+
+logs $cfg=join(MAIN_NODE_DATA, "config"):
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    {{self}} _is-configured $cfg
+
+    MAIN_NODE_DATA=$(dirname $cfg)
+    docker compose -f $MAIN_NODE_DATA/compose.yml logs --tail 100 -f

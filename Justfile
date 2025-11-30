@@ -29,3 +29,21 @@ rabby out="./dist":
 
 spamoor *args=("start" "./spamoor-config.yml"):
     just -f scripts/spamoor.just {{args}}
+
+portal *args:
+    just -f based/portal.just {{args}}
+
+registry *args:
+    just -f based/registry.just {{args}}
+
+main-node *args:
+    just -f based/main-node.just {{args}}
+
+gateway *args:
+    just -f based/gateway.just {{args}}
+
+monitoring *args:
+    just -f scripts/monitoring.just {{args}}
+
+other-logs name:
+    just -f based/scripts/other-logs.just {{name}}
