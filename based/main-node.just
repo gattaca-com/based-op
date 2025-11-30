@@ -8,11 +8,13 @@ export LOCAL_DATA := canonicalize(env("LOCAL_DATA", default_local_data))
 export DATA_FOLDER := env("MAIN_NODE_DATA_FOLDER", "local_main_node")
 
 MAIN_NODE_DATA := join(LOCAL_DATA, DATA_FOLDER)
+_main-node-data:
+    echo {{MAIN_NODE_DATA}}
 
 # Override these to change where geth and the main node store their data
 export BASED_MAIN_NODE_DATA_DIR := join(MAIN_NODE_DATA, "data")
-export BASED_OP_GETH_DATA_DIR := env("BASED_OP_GETH_DATA_DIR", join(BASED_OP_DATA_DIR, "geth"))
-export BASED_OP_NODE_DATA_DIR := env("BASED_OP_NODE_DATA_DIR", join(BASED_OP_DATA_DIR, "node"))
+export BASED_OP_GETH_DATA_DIR := env("BASED_OP_GETH_DATA_DIR", join(BASED_MAIN_NODE_DATA_DIR, "geth"))
+export BASED_OP_NODE_DATA_DIR := env("BASED_OP_NODE_DATA_DIR", join(BASED_MAIN_NODE_DATA_DIR, "node"))
 
 # Override main node source dir
 export MAIN_NODE_DIR := join(justfile_directory(), "..", "main_node")
@@ -41,7 +43,7 @@ _populate-chain-cfg $src $dest:
 
     function nc_copy() {
        # Copy without overriding destination
-       if [! -f $dest/$1 ]; then
+       if [ ! -f $dest/$1 ]; then
          cp $src/$1 $dest/$1
        fi
     }
@@ -95,7 +97,7 @@ create-config chain_cfg $cfg=join(MAIN_NODE_DATA, "config"):
       exit 1
     fi
     
-    mkdir -p $MAIN_NODE_DATA
+    mkdir -p $cfg
 
     # Generate JWT if missing
     if [ ! -f $cfg/jwt ]; then
@@ -130,16 +132,16 @@ start $cfg=join(MAIN_NODE_DATA, "config"):
     set -euo pipefail
     
     # Check Node running
-    if [ docker ps --format '{{.Names}}' | grep -wq op-node  ]; then
-		echo "❌ Main node already running."
-		exit 1
-	fi 
+    if [ docker ps --format '{{{{.Names}}' | grep -wq op-node  ]; then
+        echo "❌ Main node already running."
+        exit 1
+    fi 
 
     if [ ! -d $cfg ]; then
       echo "❌ $cfg does not exist. run `create-config` to configure"
       exit 1
     fi
-
+    
     MAIN_NODE_DATA=$(dirname $cfg)
       
     docker compose -f $MAIN_NODE_DATA/compose.yml up -d

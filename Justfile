@@ -21,7 +21,11 @@ docker := require("docker")
 docs:
     just -f docs/Justfile serve
 
-rabby:
+# Build and link rabby in the configured output folder
+rabby out="./dist":
     just -f deps/rabby.just build
-    ln -s deps/rabby/dist dist/rabby
-    ln -s deps/rabby/dist-mv2 dist/rabby-mv2
+    ln -s deps/rabby/dist {{out}}/rabby
+    ln -s deps/rabby/dist-mv2 {{out}}/rabby-mv2
+
+spamoor *args=("start" "./spamoor-config.yml"):
+    just -f scripts/spamoor.just {{args}}
