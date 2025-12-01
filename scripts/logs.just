@@ -2,7 +2,7 @@ set quiet
 
 # Invocation utils
 self := "just -f " + justfile()
-parent := "just -f " + join(justfile_directory(), "..", "..", "Justfile")
+parent := "just -f " + join(justfile_directory(), "Justfile")
 
 logs := self + " docker-logs"
 
@@ -33,3 +33,11 @@ batcher:
 
 proposer:
     {{logs}} op-proposer
+    
+## The following are here to provide a consistent interface
+
+follower-node:
+    {{parent}} follower-node logs
+
+main-node:
+    {{parent}} main-node logs

@@ -96,7 +96,7 @@ gateway-spam port: # TODO: improve docs
        --mock Spammer \
        --sequencer.commit_sealed_frags_to_db
 
-gateway-bench port: #TODO: improve docs
+gateway-bench port: # TODO: improve docs
     #!/usr/bin/env bash
     set -euo pipefail
 
