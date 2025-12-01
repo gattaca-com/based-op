@@ -41,8 +41,8 @@ registry *args:
 main-node *args:
     just -f based/main-node.just {{args}}
 
-gateway *args:
-    just -f based/gateway.just {{args}}
+follower-node *args:
+    just -f based/follower-node.just {{args}}
 
 monitoring *args:
     just -f scripts/monitoring.just {{args}}
