@@ -23,6 +23,7 @@ pub struct EthApiProxy<S> {
 
 const SUPPORTED_METHODS: &[&str] = &[
     "eth_sendRawTransaction",
+    "eth_sendRawTransactionSync",
     "eth_getTransactionReceipt",
     // "eth_getBlockByNumber",
     // "eth_getBlockByHash",

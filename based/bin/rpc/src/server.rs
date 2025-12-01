@@ -10,7 +10,10 @@ use alloy_primitives::{
 };
 use alloy_provider::Provider;
 use alloy_rpc_types::{BlockOverrides, Header, state::StateOverride};
-use bop_common::p2p::{EnvV0, FragV0, SealV0, StateUpdate};
+use bop_common::{
+    p2p::{EnvV0, FragV0, SealV0, StateUpdate},
+    transaction::Transaction,
+};
 use eyre::Result;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -98,6 +101,7 @@ impl Server {
     }
 
     pub fn on_frag(&self, frag: FragV0, state_update: Option<StateUpdate>) {
+        self.notify_tx_send_sync_waiter(&state_update);
         let mut unsealed_block = self.unsealed_stack.upgradable_read();
         if unsealed_block.blocks.is_empty() {
             return;
@@ -111,6 +115,13 @@ impl Server {
             return;
         }
 
+        unsealed_block.with_upgraded(|blocks| {
+            blocks.blocks.back_mut().unwrap().apply_frag(frag, state_update);
+            blocks.rebuild_overrides();
+        });
+    }
+
+    pub fn notify_tx_send_sync_waiter(&self, state_update: &Option<StateUpdate>) {
         if let Some(state_update) = &state_update {
             let mut tx_send_sync_waiter = self.tx_send_sync_waiter.upgradable_read();
             for (tx_hash, receipt) in state_update.receipts.iter() {
@@ -123,11 +134,6 @@ impl Server {
                 }
             }
         }
-
-        unsealed_block.with_upgraded(|blocks| {
-            blocks.blocks.back_mut().unwrap().apply_frag(frag, state_update);
-            blocks.rebuild_overrides();
-        });
     }
 
     pub async fn get_transaction_count(&self, address: Address) -> Result<u64> {
@@ -191,7 +197,10 @@ impl Server {
 impl EthApiServer for Server {
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         match self.tx_receiver_provider.send_raw_transaction(&bytes).await {
-            Ok(pending_tx) => Ok(*pending_tx.tx_hash()),
+            Ok(pending_tx) => {
+                debug!("sent transaction with hash {}", *pending_tx.tx_hash());
+                Ok(*pending_tx.tx_hash())
+            }
             Err(e) => Err(ErrorObject::owned(
                 jsonrpsee::types::error::INTERNAL_ERROR_CODE,
                 "Failed to send transaction",
@@ -200,7 +209,12 @@ impl EthApiServer for Server {
         }
     }
 
-    async fn send_raw_transaction_sync(&self, bytes: Bytes, timeout_ms: u64) -> RpcResult<OpTransactionReceipt> {
+    async fn send_raw_transaction_sync(
+        &self,
+        bytes: Bytes,
+        maybe_timeout_ms: Option<u64>,
+    ) -> RpcResult<OpTransactionReceipt> {
+        let timeout_ms = maybe_timeout_ms.unwrap_or(3000);
         if timeout_ms > 3000 {
             return Err(ErrorObject::owned(
                 jsonrpsee::types::error::INTERNAL_ERROR_CODE,
@@ -209,10 +223,24 @@ impl EthApiServer for Server {
             ));
         }
 
-        let start = Instant::now();
+        let tx_hash = match Transaction::decode(bytes.clone()) {
+            Ok(tx) => tx.tx_hash(),
+            Err(e) => {
+                return Err(ErrorObject::owned(
+                    jsonrpsee::types::error::INVALID_PARAMS_CODE,
+                    "Invalid transaction bytes",
+                    Some(e.to_string()),
+                ));
+            }
+        };
+        let (tx_send_sync_waiter_tx, tx_send_sync_waiter_rx) = oneshot::channel();
+        self.tx_send_sync_waiter.write().insert(tx_hash, tx_send_sync_waiter_tx);
 
-        let pending_tx = match self.tx_receiver_provider.send_raw_transaction(&bytes).await {
-            Ok(pending_tx) => pending_tx,
+        let start = Instant::now();
+        match self.tx_receiver_provider.send_raw_transaction(&bytes).await {
+            Ok(_pending_tx) => {
+                // Transaction sent successfully, tx_hash already calculated above
+            }
             Err(e) => {
                 return Err(ErrorObject::owned(
                     jsonrpsee::types::error::INTERNAL_ERROR_CODE,
@@ -220,12 +248,9 @@ impl EthApiServer for Server {
                     Some(e.to_string()),
                 ))
             }
-        };
+        }
 
-        let tx_hash = *pending_tx.tx_hash();
-
-        let (tx_send_sync_waiter_tx, tx_send_sync_waiter_rx) = oneshot::channel();
-        self.tx_send_sync_waiter.write().insert(tx_hash, tx_send_sync_waiter_tx);
+        debug!("sent transaction sync with hash {}", tx_hash);
 
         match tx_send_sync_waiter_rx.await {
             Ok(receipt) => return Ok(receipt),

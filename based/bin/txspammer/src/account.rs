@@ -2,7 +2,7 @@ use alloy_consensus::{SignableTransaction, TxEip1559, TxEnvelope};
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{B256, Bytes, U256};
 use alloy_provider::{Provider, RootProvider};
-use alloy_rpc_types::AccessList;
+use alloy_rpc_types::{AccessList, TransactionReceipt};
 use alloy_signer::SignerSync;
 use alloy_signer_local::PrivateKeySigner;
 
@@ -88,6 +88,39 @@ impl Account {
         to.balance += spec.value;
 
         Ok(*tx.tx_hash())
+    }
+
+    pub async fn transfer_sync(
+        &mut self,
+        to: &mut Account,
+        spec: &TxSpec,
+        provider: &RootProvider,
+        sequencer: &Option<RootProvider>,
+    ) -> eyre::Result<TransactionReceipt> {
+        let tx = TxEip1559 {
+            chain_id: spec.chain_id,
+            nonce: self.nonce,
+            gas_limit: spec.gas_limit,
+            max_fee_per_gas: spec.max_fee_per_gas,
+            max_priority_fee_per_gas: spec.max_priority_fee_per_gas,
+            to: to.signer.address().into(),
+            value: spec.value,
+            access_list: AccessList::default(),
+            input: Bytes::new(),
+        };
+
+        let sig = self.signer.sign_hash_sync(&tx.signature_hash()).unwrap();
+        let tx: TxEnvelope = tx.into_signed(sig).into();
+        let encoded = tx.encoded_2718();
+        let provider_to_use = sequencer.as_ref().unwrap_or(provider);
+
+        let receipt = provider_to_use.send_raw_transaction_sync(&encoded).await.unwrap();
+
+        self.nonce += 1;
+        self.balance -= spec.value + U256::from(spec.gas_limit) * U256::from(spec.max_fee_per_gas);
+        to.balance += spec.value;
+
+        Ok(receipt)
     }
 
     pub async fn _self_transfer(

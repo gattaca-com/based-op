@@ -24,7 +24,7 @@ pub struct RpcArgs {
     pub eth_http_url: String,
 
     /// tx receiver url
-    #[arg(long = "sequencer.url", default_value = "http://0.0.0.0:8545")]
+    #[arg(long = "sequencer.url")]
     pub tx_receiver_url: Option<String>,
 
     /// Enable debug logging
