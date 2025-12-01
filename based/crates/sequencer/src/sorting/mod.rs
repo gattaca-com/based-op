@@ -92,28 +92,59 @@ impl ActiveOrders {
     }
 
     /// Checks whether the DA requirement for the order at `id` exceeds the available DA.
-    pub fn da_too_big(&mut self, id: usize, da_remaining: Option<u64>, max_da: Option<u64>) -> bool {
-        (match max_da {
-            Some(remaining) => {
-                let da = self.orders[id].estimated_da();
-                let too_large = da.is_none_or(|da| da > remaining);
-                if too_large {
-                    debug!(?id, ?max_da, ?da, "tx DA too large");
-                }
-                too_large
+    pub fn da_too_big(
+        &mut self,
+        id: usize,
+        block_da_remaining: Option<u64>,
+        tx_max_da: Option<u64>,
+        block_gas_limit: u64,
+        da_footprint_gas_scalar: Option<u64>,
+        da_used: u64,
+    ) -> bool {
+        if let Some(tx_max_da) = tx_max_da {
+            let da = self.orders[id].estimated_da();
+            let too_large = da.is_none_or(|da| da > tx_max_da);
+            if too_large {
+                debug!(?id, ?tx_max_da, ?da, "tx DA too large");
+                return true;
             }
-            None => false,
-        }) || (match da_remaining {
-            Some(remaining) => {
-                let da = self.orders[id].estimated_da();
-                let too_large = da.is_none_or(|da| da > remaining);
-                if too_large {
-                    debug!(?id, ?da_remaining, ?da, "tx DA too large for block");
-                }
-                too_large
+        }
+
+        if let Some(block_da_remaining) = block_da_remaining {
+            let da = self.orders[id].estimated_da();
+            let too_large = da.is_none_or(|da| da > block_da_remaining);
+            if too_large {
+                debug!(?id, ?block_da_remaining, ?da, "tx DA too large for block");
+                return true;
             }
-            None => false,
-        })
+        }
+
+        // Post Jovian: the tx DA footprint must be less than the block gas limit
+        if let Some(da_footprint_gas_scalar) = da_footprint_gas_scalar {
+            let tx_da_size = self.orders[id].estimated_da();
+            if let Some(tx_da_size) = tx_da_size {
+                // Calculate total DA bytes used if we add this transaction
+                let total_da_bytes_used = da_used + tx_da_size;
+
+                // Calculate DA footprint in gas: total_da_bytes_used * da_footprint_gas_scalar
+                let tx_da_footprint = total_da_bytes_used.saturating_mul(da_footprint_gas_scalar);
+
+                // Check if adding this transaction would exceed the block gas limit
+                if tx_da_footprint > block_gas_limit {
+                    debug!(
+                        ?id,
+                        ?total_da_bytes_used,
+                        ?tx_da_size,
+                        ?tx_da_footprint,
+                        ?block_gas_limit,
+                        "tx DA footprint exceeds block gas limit"
+                    );
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 }
 

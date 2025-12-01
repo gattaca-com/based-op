@@ -280,7 +280,7 @@ impl BlockSync {
 
         // Validate receipts/ gas used
         self.timers.validate.time(|| {
-            reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &res.receipts)
+            reth_optimism_consensus::validate_block_post_execution(block, &self.chain_spec, &res)
                 .map_err(BlockExecutionError::other)
         })?;
 

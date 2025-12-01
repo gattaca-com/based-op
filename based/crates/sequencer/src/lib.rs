@@ -28,6 +28,7 @@ use reth_optimism_primitives::OpTransactionSigned;
 use reth_primitives::RecoveredBlock;
 use reth_primitives_traits::block::TestBlock;
 use reth_provider::StorageRootProvider;
+use revm::Database;
 use revm_primitives::b256;
 use sorting::FragSequence;
 use strum_macros::AsRefStr;
@@ -107,16 +108,21 @@ where
             }
         });
 
-        // handle new transaction
-        connections.receive_for(Duration::from_millis(10), |msg, senders| {
-            if self.data.timestamp() != 0 &&
-                self.supervisor.as_ref().is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
-            {
-                return;
-            }
+        let use_tx_pool = self.data.payload_attributes.no_tx_pool.is_none_or(|no_tx_pool| !no_tx_pool);
+        if use_tx_pool {
+            // handle new transaction
+            connections.receive_for(Duration::from_millis(10), |msg, senders| {
+                if self.data.timestamp() != 0 &&
+                    self.supervisor
+                        .as_ref()
+                        .is_some_and(|validator| !validator.is_valid(&msg, self.data.timestamp()))
+                {
+                    return;
+                }
 
-            self.state.handle_new_tx(msg, &mut self.data, senders);
-        });
+                self.state.handle_new_tx(msg, &mut self.data, senders);
+            });
+        }
 
         // handle sim results
         connections.receive_for(Duration::from_millis(10), |msg, _| {
@@ -412,14 +418,14 @@ where
 
                 // Gossip last frag before sealing
                 ctx.last_seal_time = Instant::now();
-                let (last_frag, maybe_state) = ctx.seal_last_frag(&mut seq, sorting_data);
+                let (last_frag, maybe_state, blob_gas_used) = ctx.seal_last_frag(&mut seq, sorting_data);
                 let msg =
                     VersionedMessageWithState { msg: VersionedMessage::from(last_frag), state_update: maybe_state };
 
                 let s = senders.send_timeout(msg, Duration::from_millis(10));
                 debug_assert!(s.is_ok(), "couldn't send last frag for 10 millis");
 
-                let (seal, block) = ctx.seal_block(seq);
+                let (seal, block) = ctx.seal_block(seq, blob_gas_used);
 
                 // Gossip seal to p2p and return payload to rpc
                 let msg = VersionedMessageWithState { msg: VersionedMessage::from(seal), state_update: None };
@@ -529,7 +535,7 @@ where
                     return self;
                 }
                 data.timers.handle_sim.start();
-                sort_data.handle_sim(simulated_tx, sender, data.as_ref().basefee, simtime);
+                sort_data.handle_sim(simulated_tx, sender, data.base_fee(), simtime);
                 data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
@@ -548,7 +554,7 @@ where
         self
     }
 }
-impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
+impl<Db: Clone + DatabaseRef + DatabaseRead + Database> SequencerState<Db> {
     /// Performs periodic state machine updates:
     ///
     /// - Seals transaction fragments when timing threshold reached
@@ -557,7 +563,7 @@ impl<Db: Clone + DatabaseRef + DatabaseRead> SequencerState<Db> {
     /// Used to maintain block production cadence.
     fn tick(self, data: &mut SequencerContext<Db>, connections: &mut SpineConnections<Db>) -> Self {
         use SequencerState::*;
-        let base_fee = data.as_ref().basefee;
+        let base_fee = data.base_fee();
         match self {
             Sorting(mut seq, sorting_data)
                 if sorting_data.should_seal_frag() && sorting_data.should_send_next_sims() =>

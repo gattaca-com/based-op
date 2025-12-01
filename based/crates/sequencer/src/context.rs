@@ -14,7 +14,7 @@ use bop_common::{
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
     time::Timer,
-    transaction::Transaction,
+    transaction::{SimulatedTx, Transaction},
     typedefs::*,
 };
 use bop_db::{DatabaseRead, DatabaseWrite};
@@ -29,7 +29,7 @@ use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::{OpHardfork, OpHardforks};
 use reth_provider::StorageRootProvider;
 use revm_primitives::{B256, Bytes, U256, b256};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::{FragSequence, SequencerConfig, block_sync::BlockSync, sorting::SortingData};
@@ -80,6 +80,7 @@ pub struct SequencerContext<Db> {
     pub telemetry: Producer<TelemetryUpdate>,
     pub metrics: Producer<MetricsUpdate>,
     pub last_seal_time: Instant,
+    pub da_footprint_gas_scalar: Option<u64>,
 }
 
 impl<Db: DatabaseRead> SequencerContext<Db> {
@@ -106,6 +107,7 @@ impl<Db: DatabaseRead> SequencerContext<Db> {
             timers: Default::default(),
             telemetry: telemetry_queue().into(),
             last_seal_time: Instant::now(),
+            da_footprint_gas_scalar: None,
         }
     }
 }
@@ -115,11 +117,16 @@ impl<Db> SequencerContext<Db> {
     }
 
     pub fn extra_data(&self) -> Bytes {
-        let timestamp = self.payload_attributes.payload_attributes.timestamp;
-        if self.chain_spec().is_holocene_active_at_timestamp(timestamp) {
+        let timestamp = self.timestamp_payload_attributes();
+        if self.chain_spec().is_jovian_active_at_timestamp(timestamp) {
+            // jovian extra data (https://specs.optimism.io/protocol/jovian/exec-engine.html#minimum-base-fee)
+            self.payload_attributes
+                .get_jovian_extra_data(self.chain_spec().base_fee_params_at_timestamp(timestamp))
+                .expect("couldn't get extra data for jovian")
+        } else if self.chain_spec().is_holocene_active_at_timestamp(timestamp) {
             self.payload_attributes
                 .get_holocene_extra_data(self.chain_spec().base_fee_params_at_timestamp(timestamp))
-                .expect("couldn't get extra data")
+                .expect("couldn't get extra data for holocene")
         } else {
             Bytes::default()
         }
@@ -146,11 +153,15 @@ impl<Db> SequencerContext<Db> {
     }
 
     pub fn base_fee(&self) -> u64 {
-        self.block_env.basefee
+        self.block_env.basefee.max(self.payload_attributes.min_base_fee.unwrap_or(0))
     }
 
     pub fn timestamp(&self) -> u64 {
         self.block_env.timestamp.try_into().expect("timestamp overflow")
+    }
+
+    pub fn timestamp_payload_attributes(&self) -> u64 {
+        self.payload_attributes.payload_attributes.timestamp
     }
 
     pub fn is_prague_active(&self, timestamp: u64) -> bool {
@@ -158,7 +169,80 @@ impl<Db> SequencerContext<Db> {
     }
 }
 
-impl<Db: DatabaseRef + Clone + DatabaseRead> SequencerContext<Db> {
+// constants for DA footprint related calculations. (see https://github.com/ethereum-optimism/op-geth/blob/d092a020749f4d788501f05ed1be30320ab102b9/core/types/rollup_cost.go#L46-L65)
+const ISTHMUS_ATTRIBUTES_LEN: usize = 176;
+const JOVIAN_ATTRIBUTES_LEN: usize = 178;
+const JOVIAN_L1_ATTRIBUTES_SELECTOR: [u8; 4] = [0x3d, 0xb6, 0xbe, 0x2b];
+
+fn extract_da_footprint_gas_scalar(data: &Bytes) -> Option<u64> {
+    if data.len() < JOVIAN_ATTRIBUTES_LEN {
+        error!("L1 attributes transaction data too short for DA footprint gas scalar: {}", data.len());
+        return None;
+    }
+
+    // Future forks need to be added here
+
+    if !data[0..4].eq(&JOVIAN_L1_ATTRIBUTES_SELECTOR) {
+        error!("L1 attributes transaction data does not have Jovian selector");
+        return None;
+    }
+
+    // Extract the last 2 bytes as big-endian u16
+    let da_footprint_gas_scalar =
+        u16::from_be_bytes([data[JOVIAN_ATTRIBUTES_LEN - 2], data[JOVIAN_ATTRIBUTES_LEN - 1]]);
+
+    Some(da_footprint_gas_scalar as u64)
+}
+
+impl<Db: Database> SequencerContext<Db> {
+    // This function is only called when the Jovian hardfork is active.
+    // see https://github.com/ethereum-optimism/op-geth/blob/d092a020749f4d788501f05ed1be30320ab102b9/core/types/rollup_cost.go#L564-566
+    pub fn blob_gas_used_for_jovian(&mut self, txs: &[SimulatedTx]) -> Option<u64> {
+        if txs.is_empty() || !txs[0].tx.is_deposit() {
+            error!("missing deposit transaction");
+            return Some(0);
+        }
+
+        let data = &txs[0].tx.as_deposit().expect("should always be deposit").inner().input;
+        if data.len() == ISTHMUS_ATTRIBUTES_LEN {
+            if !txs.last().expect("txs not empty").tx.is_deposit() {
+                error!("unexpected non-deposit transactions in Jovian activation block");
+                return Some(0);
+            }
+            return Some(0);
+        }
+
+        match extract_da_footprint_gas_scalar(data) {
+            Some(scalar) => {
+                self.da_footprint_gas_scalar = Some(scalar);
+                let mut da_footprint_gas_used: u64 = 0;
+                for tx in txs {
+                    if tx.tx.is_deposit() {
+                        continue;
+                    }
+                    da_footprint_gas_used += tx.tx.estimated_tx_compressed_size() * scalar;
+                }
+                Some(da_footprint_gas_used)
+            }
+            None => {
+                error!("failed to extract DA footprint gas scalar");
+                Some(0)
+            }
+        }
+    }
+
+    // https://specs.optimism.io/protocol/jovian/exec-engine.html#da-footprint-block-limit
+    pub fn blob_gas_used(&mut self, txs: &[SimulatedTx]) -> Option<u64> {
+        let timestamp = self.timestamp_payload_attributes();
+        if self.chain_spec().is_jovian_active_at_timestamp(timestamp) {
+            self.blob_gas_used_for_jovian(txs)
+        } else {
+            Some(0)
+        }
+    }
+}
+
+impl<Db: DatabaseRef + Clone + DatabaseRead + Database> SequencerContext<Db> {
     pub fn seal_frag(
         &mut self,
         mut sorting_data: SortingData<Db>,
@@ -188,7 +272,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         if self.tx_pool.handle_new_tx(
             tx.clone(),
             self.shared_state.as_ref(),
-            self.as_ref().basefee,
+            self.base_fee(),
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
         ) {
@@ -208,7 +292,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         self.payload_attributes = attributes;
         let simulator_evm_block_params = self.new_block_params();
         self.block_env = simulator_evm_block_params.block_env.clone();
-        self.base_fee = self.block_env.basefee;
+        self.base_fee = self.base_fee();
 
         // send new block params to simulators
         senders.send(simulator_evm_block_params.clone()).expect("should never fail");
@@ -262,14 +346,20 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         &mut self,
         frag_seq: &mut FragSequence,
         last_frag: SortingData<Db>,
-    ) -> (FragV0, Option<StateUpdate>) {
+    ) -> (FragV0, Option<StateUpdate>, Option<u64>) {
         let (mut frag_msg, maybe_update, _) = self.seal_frag(last_frag, frag_seq);
         frag_msg.is_last = true;
-        (frag_msg, maybe_update)
+        let blob_gas_used = self.blob_gas_used(&frag_seq.txs);
+        frag_msg.blob_gas_used = blob_gas_used.unwrap_or_default();
+        (frag_msg, maybe_update, blob_gas_used)
     }
 
     /// Finalize the block after the last frag has been sealed
-    pub fn seal_block(&mut self, frag_seq: FragSequence) -> (SealV0, OpExecutionPayloadEnvelopeV4Patch) {
+    pub fn seal_block(
+        &mut self,
+        frag_seq: FragSequence,
+        blob_gas_used: Option<u64>,
+    ) -> (SealV0, OpExecutionPayloadEnvelopeV4Patch) {
         frag_seq.sorting_telemetry.report(&self.metrics);
         let gas_used = frag_seq.gas_used;
         let canyon_active = self.chain_spec().fork(OpHardfork::Canyon).active_at_timestamp(self.timestamp());
@@ -307,14 +397,14 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             timestamp: self.block_env.timestamp.try_into().expect("timestamp overflow"),
             mix_hash: self.block_env.prevrandao.unwrap_or_default(),
             nonce: BEACON_NONCE.into(),
-            base_fee_per_gas: Some(self.block_env.basefee),
+            base_fee_per_gas: Some(self.base_fee()),
             number: self.block_env.number.try_into().expect("block number overflow"),
             gas_limit: self.block_env.gas_limit,
             difficulty: U256::ZERO,
             gas_used,
             extra_data: extra_data.clone(),
             parent_beacon_block_root,
-            blob_gas_used: Some(0),
+            blob_gas_used,
             excess_blob_gas: Some(0),
             requests_hash,
         };
@@ -331,7 +421,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             gas_used,
             timestamp: self.block_env.timestamp.try_into().expect("timestamp overflow"),
             extra_data,
-            base_fee_per_gas: U256::from(self.block_env.basefee),
+            base_fee_per_gas: U256::from(self.base_fee()),
             block_hash: header.hash_slow(),
             transactions,
         };
@@ -345,6 +435,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             receipts_root,
             state_root,
             block_hash: v1.block_hash,
+            blob_gas_used: blob_gas_used.unwrap_or_default(),
         };
 
         let block_duration = frag_seq.start_t.elapsed().as_secs();
@@ -352,7 +443,12 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
         let txs = frag_seq.txs.len() as f64;
         let tps = txs / block_duration;
         let mgas_s = mgas / block_duration;
-        info!("sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s)", seal.block_number, txs, mgas_s);
+        let is_jovian_active = self.chain_spec().is_jovian_active_at_timestamp(self.timestamp_payload_attributes());
+        let is_prague_active = self.is_prague_active(self.timestamp());
+        info!(
+            "sealed block {} with {} txs, {mgas} MGas ({:.2} MGas/s) jovian_active: {} prague_active: {}",
+            seal.block_number, txs, mgas_s, is_jovian_active, is_prague_active
+        );
 
         let uuid = Uuid::new_v4();
         MetricsUpdate::send(
@@ -367,7 +463,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
 
         let payload_inner = ExecutionPayloadV3 {
             payload_inner: ExecutionPayloadV2 { payload_inner: v1, withdrawals: vec![] },
-            blob_gas_used: 0,
+            blob_gas_used: blob_gas_used.unwrap_or(0),
             excess_blob_gas: 0,
         };
         (seal, OpExecutionPayloadEnvelopeV4Patch {
