@@ -173,5 +173,5 @@ stop $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
 logs:
     docker logs based-gateway --tail 100 -f
 
-follower-node-proxy:
-    docker run --rm network kt-based-op -p 8545:8545 cars10/simprox simprox --skip-ssl-verify=true -l 127.0.0.1:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545
+proxy network="kt-based-op" port="8545":
+    docker run --rm network {{network}} -p {{host}}:8545 cars10/simprox simprox --skip-ssl-verify=true -l 127.0.0.1:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545

@@ -1,11 +1,14 @@
 import '../based/scripts/consts.just'
 
-export BOP_EL_POR := env("BOP_EL_PORT") # TODO: Determine default or how to extract this 
+export BOP_EL_PORT := env("BOP_EL_PORT") # TODO: Determine default or how to extract this 
+export OP_EL_PORT := env("OP_EL_PORT") # TODO: Determine default or how to extract this
 export BOP_NODE_PORT := env("BOP_NODE_PORT") # TODO: Determine default or how to extract this 
 export SEQ := env("SEQ") # TODO: Determine default or how to extract this
 
 # Invocation utils
 self := "just -f " + justfile()
+portal := "just -f " + join(justfile_directory(), "portal.just")
+follower-node := "just -f " + join(justfile_directory(), "..", "follower-node.just")
 
 tx:
     cast publish --rpc-url http://0.0.0.0:$BASED_OP_GETH_PORT {{shell(self + " _dummy-tx")}}
@@ -70,3 +73,40 @@ env:
           "extraData": "0x010203", \
         } \
       }]
+
+based-manifest = canonicalize(join(justfile_directory(), "..", "based", "Cargo.toml"))
+
+tx-spammer:
+    PORTAL_PORT="$({{portal}} address |  cut -d':' -f3)" BOP_EL_PORT=$BOP_EL_PORT cargo test --manifest-path {{based-manifest}}  --release \
+      -- tx_spammer --ignored --nocapture
+
+gateway-spam port: # TODO: improve docs
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    FOLLOWER_NODE_DATA=$({{follower-node}} + '_is-configured')
+    GATEWAY_DATA="$FOLLOWER_NODE_DATA"/data/gateway
+
+    cargo run --manifest-path {{based-manifest}} --profile=release --bin bop-gateway --features shmem \
+    -- --db.datadir $FOLLOWER_NODE_DATA/data/gateway \
+       --rpc.fallback_url http://127.0.0.1:$OP_EL_PORT \
+       --chain $FOLLOWER_NODE_DATA/config/genesis.json \
+       --rpc.port {{port}} \
+       --gossip.root_peer_url http://127.0.0.1:$BOP_NODE_PORT \
+       --mock Spammer \
+       --sequencer.commit_sealed_frags_to_db
+
+gateway-bench port: #TODO: improve docs
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    FOLLOWER_NODE_DATA=$({{follower-node}} + '_is-configured')
+    GATEWAY_DATA="$FOLLOWER_NODE_DATA"/data/gateway
+
+    cargo run --manifest-path {{based-manifest}} --profile=release-with-debug --bin bop-gateway --features shmem \
+    -- --db.datadir $FOLLOWER_NODE_DATA/data/gateway \
+       --rpc.fallback_url http://127.0.0.1:$OP_EL_PORT \
+       --chain $FOLLOWER_NODE_DATA/config/genesis.json \
+       --rpc.port {{port}} \
+       --gossip.root_peer_url http://127.0.0.1:$BOP_NODE_PORT \
+       --mock Benchmark
