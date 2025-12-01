@@ -6,3 +6,4 @@ export L1_RPC_URL := env("L1_RPC_URL", "http://3.84.162.42:8545")
 export L1_BEACON_RPC_URL := env("L1_BEACON_RPC_URL", "http://3.84.162.42:5051")
 
 export BASED_OP_GETH_PORT := env("BASED_OP_GETH_PORT", "8645")
+export FOLLOWER_NODE_HOST := env("FOLLOWER_NODE_HOST", "http://localhost")

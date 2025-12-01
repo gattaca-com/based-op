@@ -88,7 +88,7 @@ create-config $cfg=join(MAIN_NODE_DATA, "config"):
      
     # Generate JWT if missing
     if [ ! -f $MAIN_NODE_DATA/jwt ]; then
-      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/'  > $GATEWAY_DATA/jwt
+      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/'  > $MAIN_NODE_DATA/jwt
     fi
 
     {{self}} _populate-intent
@@ -120,7 +120,7 @@ deploy-chain $cfg=join(MAIN_NODE_DATA, "config"):
     # World accessible permissions
     {{self}} _op-deployer $cfg --entrypoint sh -c "chmod 666 /config/*"
 
-	echo "*** Deployment complete! See chain config in $cfg"
+    echo "*** Deployment complete! See chain config in $cfg"
     
     exit 0
 
