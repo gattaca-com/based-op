@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{
@@ -17,7 +20,9 @@ use jsonrpsee::{
 use op_alloy_rpc_types::{OpTransactionReceipt, OpTransactionRequest};
 use parking_lot::RwLock;
 use reqwest::Url;
-use tracing::error;
+use tokio::sync::oneshot;
+use tracing::{debug, error};
+use ttlhashmap::TtlHashMap;
 
 use crate::{
     middleware::RpcClient,
@@ -30,11 +35,17 @@ pub struct Server {
     unsealed_stack: Arc<RwLock<UnsealedBlockStack>>,
     provider: OpRootProvider,
     tx_receiver_provider: OpRootProvider,
+    tx_send_sync_waiter: Arc<RwLock<TtlHashMap<B256, oneshot::Sender<OpTransactionReceipt>>>>,
 }
 
 impl Server {
     pub fn new(provider: OpRootProvider, tx_receiver_provider: OpRootProvider) -> Self {
-        Self { unsealed_stack: Arc::new(RwLock::new(UnsealedBlockStack::new())), provider, tx_receiver_provider }
+        Self {
+            unsealed_stack: Arc::new(RwLock::new(UnsealedBlockStack::new())),
+            provider,
+            tx_receiver_provider,
+            tx_send_sync_waiter: Arc::new(RwLock::new(TtlHashMap::new(Duration::from_millis(1000)))), /* TODO: make this configurable */
+        }
     }
 
     pub fn on_env(&self, env: EnvV0) {
@@ -99,6 +110,20 @@ impl Server {
             );
             return;
         }
+
+        if let Some(state_update) = &state_update {
+            let mut tx_send_sync_waiter = self.tx_send_sync_waiter.upgradable_read();
+            for (tx_hash, receipt) in state_update.receipts.iter() {
+                let tx_hash_b256 = B256::from(*tx_hash);
+                if tx_send_sync_waiter.contains_key(&tx_hash_b256) {
+                    tx_send_sync_waiter.with_upgraded(|waiter| {
+                        let sender = waiter.remove(&tx_hash_b256).unwrap(); // unwrap is safe because we just checked that the key exists
+                        let _ = sender.send(receipt.clone());
+                    });
+                }
+            }
+        }
+
         unsealed_block.with_upgraded(|blocks| {
             blocks.blocks.back_mut().unwrap().apply_frag(frag, state_update);
             blocks.rebuild_overrides();
@@ -156,6 +181,10 @@ impl Server {
             (BlockNumberOrTag::Latest, Default::default())
         }
     }
+
+    pub fn cleanup_tx_send_sync_waiter(&self) {
+        self.tx_send_sync_waiter.write().cleanup();
+    }
 }
 
 #[async_trait]
@@ -169,6 +198,54 @@ impl EthApiServer for Server {
                 Some(e.to_string()),
             )),
         }
+    }
+
+    async fn send_raw_transaction_sync(&self, bytes: Bytes, timeout_ms: u64) -> RpcResult<OpTransactionReceipt> {
+        if timeout_ms > 3000 {
+            return Err(ErrorObject::owned(
+                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                "Timeout is too long, maximum is 3000ms",
+                Some("Timeout is too long, maximum is 3000ms".to_string()),
+            ));
+        }
+
+        let start = Instant::now();
+
+        let pending_tx = match self.tx_receiver_provider.send_raw_transaction(&bytes).await {
+            Ok(pending_tx) => pending_tx,
+            Err(e) => {
+                return Err(ErrorObject::owned(
+                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                    "Failed to send transaction",
+                    Some(e.to_string()),
+                ))
+            }
+        };
+
+        let tx_hash = *pending_tx.tx_hash();
+
+        let (tx_send_sync_waiter_tx, tx_send_sync_waiter_rx) = oneshot::channel();
+        self.tx_send_sync_waiter.write().insert(tx_hash, tx_send_sync_waiter_tx);
+
+        match tx_send_sync_waiter_rx.await {
+            Ok(receipt) => return Ok(receipt),
+            _ => {
+                debug!("waiting for transaction receipt, waiter dropped");
+            }
+        }
+
+        while start.elapsed() < Duration::from_millis(timeout_ms) {
+            if let Ok(Some(receipt)) = self.get_receipt(tx_hash).await {
+                return Ok(receipt);
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        Err(ErrorObject::owned(
+            jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+            "Timeout waiting for transaction receipt",
+            Some("Timeout waiting for transaction receipt".to_string()),
+        ))
     }
 
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>> {

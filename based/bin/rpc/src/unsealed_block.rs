@@ -19,19 +19,17 @@ pub struct UnsealedBlock {
 
 impl UnsealedBlock {
     pub fn apply_frag(&mut self, frag: FragV0, state_update: Option<StateUpdate>) {
-        if self.current_frag.is_none() {
-            if frag.seq != 0 {
-                error!("expected first frag to have seq 0 but got seq {}", frag.seq);
-                return;
-            }
-        } else {
-            let current_frag = self.current_frag.as_ref().unwrap();
+        if let Some(current_frag) = &self.current_frag {
             let expected_seq = current_frag.seq + 1;
             if expected_seq != frag.seq {
                 error!("expected frag seq {} but got seq {}", expected_seq, frag.seq);
                 return;
             }
+        } else if frag.seq != 0 {
+            error!("expected first frag to have seq 0 but got seq {}", frag.seq);
+            return;
         }
+
         if self.seal.is_some() {
             error!("trying to apply frag after seal");
             return;

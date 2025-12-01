@@ -124,16 +124,26 @@ async fn main() -> eyre::Result<()> {
         }
     });
 
+    if cfg!(debug_assertions) {
+        let server = server_obj.clone();
+        tokio::spawn(async move {
+            let address_to_check = Address::from_str("0x0E2d15588e765f0ba315313C726041EA124e36CB").unwrap();
+            let mut interval = interval(Duration::from_secs_f64(0.1));
+            loop {
+                let transaction_count = server.get_transaction_count(address_to_check).await.unwrap();
+                let balance = server.get_balance(address_to_check).await.unwrap();
+                let block_number = server.block_number().await.unwrap();
+                info!("block number: {} count: {} balance: {:?}", block_number, transaction_count, balance);
+                interval.tick().await;
+            }
+        });
+    }
+
     let server = server_obj.clone();
     tokio::spawn(async move {
-        let address_to_check = Address::from_str("0x0E2d15588e765f0ba315313C726041EA124e36CB").unwrap();
-        let mut interval = interval(Duration::from_secs_f64(0.1));
         loop {
-            let transaction_count = server.get_transaction_count(address_to_check).await.unwrap();
-            let balance = server.get_balance(address_to_check).await.unwrap();
-            let block_number = server.block_number().await.unwrap();
-            info!("block number: {} count: {} balance: {:?}", block_number, transaction_count, balance);
-            interval.tick().await;
+            server.cleanup_tx_send_sync_waiter();
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     });
 

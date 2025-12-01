@@ -15,6 +15,10 @@ pub trait EthApi {
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
 
+    /// Sends signed transaction, waiting for it to be mined and returning the receipt
+    #[method(name = "sendRawTransactionSync")]
+    async fn send_raw_transaction_sync(&self, bytes: Bytes, timeout_ms: u64) -> RpcResult<OpTransactionReceipt>;
+
     /// Returns the receipt of a transaction by transaction hash
     #[method(name = "getTransactionReceipt")]
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<OpTransactionReceipt>>;
