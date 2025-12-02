@@ -32,15 +32,15 @@ frag:
           "blockNumber": {{shell(self + " _block-number")}}, \
           "seq": {{SEQ}}, \
           "isLast": true, \
-          "txs": [\"{{shell(self + " _dummy-tx | xxd -r -p | base64")}}\"],
-          "version": 0,
+          "txs": [\"{{shell(self + " _dummy-tx | xxd -r -p | base64")}}\"], \
+          "version": 0, \
         } \
       }]
 
 seal:
     {{self}} _rpc based_sealFrag \
       [{ \
-        "signature": "0x4fc733cc2f0b680e15452db40b9453412ccb25507582b192c1ea4fc4deaf709845002ab44af42327ed4b8b12943412810a8d9984ea1609dfc6f77338f8c395b41c",
+        "signature": "0x4fc733cc2f0b680e15452db40b9453412ccb25507582b192c1ea4fc4deaf709845002ab44af42327ed4b8b12943412810a8d9984ea1609dfc6f77338f8c395b41c", \
         "message": { \
           "totalFrags": 8, \
           "blockNumber": {{shell(self + " _block-number")}}, \
@@ -58,7 +58,7 @@ seal:
 env:
     {{self}} _rpc based_env \
       [{ \
-        "signature": "0x4fc733cc2f0b680e15452db40b9453412ccb25507582b192c1ea4fc4deaf709845002ab44af42327ed4b8b12943412810a8d9984ea1609dfc6f77338f8c395b41c",
+        "signature": "0x4fc733cc2f0b680e15452db40b9453412ccb25507582b192c1ea4fc4deaf709845002ab44af42327ed4b8b12943412810a8d9984ea1609dfc6f77338f8c395b41c", \
         "message": { \
           "totalFrags": 2, \
           "number": {{shell(self + " _block-number")}}, \
@@ -74,7 +74,7 @@ env:
         } \
       }]
 
-based-manifest = canonicalize(join(justfile_directory(), "..", "based", "Cargo.toml"))
+based-manifest := canonicalize(join(justfile_directory(), "..", "based", "Cargo.toml"))
 
 tx-spammer:
     PORTAL_PORT="$({{portal}} address |  cut -d':' -f3)" BOP_EL_PORT=$BOP_EL_PORT cargo test --manifest-path {{based-manifest}}  --release \
