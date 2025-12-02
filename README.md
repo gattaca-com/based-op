@@ -52,7 +52,7 @@ A couple of commands tend to come in handy (from the top `based-op` directory):
 
 - `just stop follower-node`
 - `just start follower-node`
-- `just overseer start`
+- `just start overseer`
 - `just logs follower-node`
 - `just logs based-op-node`
 - `just logs based-op-geth`

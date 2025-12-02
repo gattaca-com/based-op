@@ -41,15 +41,13 @@ echo $(($RAW % 50000 + 1))
 self := "just -f " + justfile()
 wallet := "just -f " + justfile_directory() + "/wallet.just"
 
-_op-deployer $cfg *args:
+_op-deployer $cfg *runtime-args:
     docker run -v $cfg:/config -e DEPLOYER_CACHE_DIR=$DEPLOYER_CACHE_DIR \
-     {{op_deployer_image}} {{args}}
+      {{op_deployer_image}} {{runtime-args}}
 
-_init-deployer $cfg=join(MAIN_NODE_DATA, "config"):
-    {{self}} _op-deployer $cfg \
-      --entrypoint sh -c "/usr/local/bin/op-deployer" \
-      init --l1-chain-id $L1_CHAIN_ID --l2-chain-ids $L2_CHAIN_ID \
-      --workdir /config && chmod 666 /config/*
+_fix-permissions $cfg:
+    docker run -v $cfg:/config --entrypoint sh {{op_deployer_image}} -c \
+      "find /config -mindepth 1 -exec chmod 666 {} \; && chmod 755 /config"
 
 _populate-intent $cfg=join(MAIN_NODE_DATA, "config"):
     #!/usr/bin/env bash
@@ -76,7 +74,7 @@ create-config $cfg=join(MAIN_NODE_DATA, "config"):
     MAIN_NODE_DATA=$(dirname $cfg)
 
     if [ -n "$FORCE" ]; then
-      echo "FORCE set, removing existing config..."
+      echo "FORCE set, removing existing config at $MAIN_NODE_DATA..."
       rm -rf $MAIN_NODE_DATA || true
     fi
 
@@ -86,10 +84,8 @@ create-config $cfg=join(MAIN_NODE_DATA, "config"):
 
     mkdir -p $cfg
      
-    # Generate JWT if missing
-    if [ ! -f $MAIN_NODE_DATA/jwt ]; then
-      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/'  > $MAIN_NODE_DATA/jwt
-    fi
+    {{self}} _op-deployer $cfg op-deployer init --l1-chain-id $L1_CHAIN_ID --l2-chain-ids $L2_CHAIN_ID --workdir /config
+    {{self}} _fix-permissions $cfg
 
     {{self}} _populate-intent
 
@@ -98,8 +94,8 @@ create-config $cfg=join(MAIN_NODE_DATA, "config"):
 @_dump-chain-config $dest=join(MAIN_NODE_DATA, "config"):
     mkdir -p {{dest}}
 
-    {{self}} _op-deployer op-deployer inspect genesis --workdir /config $L2_CHAIN_ID_HEX > $dest/genesis.json
-    {{self}} _op-deployer op-deployer inspect rollup --workdir /config $L2_CHAIN_ID_HEX > $dest/rollup.json
+    {{self}} _op-deployer $cfg op-deployer inspect genesis --workdir /config $L2_CHAIN_ID_HEX > $dest/genesis.json
+    {{self}} _op-deployer $cfg op-deployer inspect rollup --workdir /config $L2_CHAIN_ID_HEX > $dest/rollup.json
 
 # Setup and deploy a new chain on the configured L1
 deploy-chain $cfg=join(MAIN_NODE_DATA, "config"):
@@ -118,7 +114,7 @@ deploy-chain $cfg=join(MAIN_NODE_DATA, "config"):
     {{self}} _dump-chain-config $cfg
      
     # World accessible permissions
-    {{self}} _op-deployer $cfg --entrypoint sh -c "chmod 666 /config/*"
+    {{self}} _fix-permissions $cfg
 
     echo "*** Deployment complete! See chain config in $cfg"
     

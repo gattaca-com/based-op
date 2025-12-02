@@ -6,13 +6,6 @@ parent := "just -f " + join(justfile_directory(), "Justfile")
 
 logs := self + " docker-logs"
 
-follower-node:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    GATEWAY_DATA=$({{parent}} gateway _is-configured)
-    docker compose -f $GATEWAY_DATA/compose.yml logs --tail 100 -f
-
 docker-logs container:
     docker logs {{container}} --tail 100 -f
 
@@ -38,6 +31,9 @@ proposer:
 
 follower-node:
     {{parent}} follower-node logs
+
+gateway:
+    {{parent}} follower-node logs-gateway
 
 main-node:
     {{parent}} main-node logs

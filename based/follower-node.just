@@ -170,8 +170,11 @@ stop $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     
     docker compose -f $FOLLOWER_NODE_DATA/compose.yml down
 
-logs:
+logs-gateway:
     docker logs based-gateway --tail 100 -f
+
+logs $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
+    docker compose -f $(dirname $FOLLOWER_NODE_DATA)/compose.yml logs --tail 100 -f
 
 proxy network="kt-based-op" port="8545":
     docker run --rm network {{network}} -p {{host}}:8545 cars10/simprox simprox --skip-ssl-verify=true -l 127.0.0.1:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545

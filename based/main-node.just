@@ -3,8 +3,8 @@ set dotenv-load
 import './scripts/consts.just'
  
 # Override where the local data for the main node will be stored
-default_local_data := canonicalize(join(justfile_directory(), ".local"))
-export LOCAL_DATA := canonicalize(env("LOCAL_DATA", default_local_data))
+default_local_data := join(justfile_directory(), ".local")
+export LOCAL_DATA := canonicalize(env("LOCAL_DATA", shell("mkdir -p " + default_local_data + " | echo " + default_local_data)))
 export DATA_FOLDER := env("MAIN_NODE_DATA_FOLDER", "local_main_node")
 
 MAIN_NODE_DATA := join(LOCAL_DATA, DATA_FOLDER)
@@ -49,7 +49,7 @@ _populate-chain-cfg $src $dest:
     nc_copy state.json
     nc_copy genesis.json
 
-_generate-dotenv $cfg=join(MAIN_NODE_DATA, "config") $dotenv=join(MAIN_NODE_DATA, ".env"):
+_generate-dotenv $cfg=join(MAIN_NODE_DATA, "config") $dotenv=join(cfg, ".env"):
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -72,6 +72,33 @@ _generate-dotenv $cfg=join(MAIN_NODE_DATA, "config") $dotenv=join(MAIN_NODE_DATA
     echo "OP_NODE_GOSSIP_IP=$PUBLIC_IP" >> $dotenv
     echo "OP_BATCHER_PRIVATE_KEY=$OP_BATCHER_KEY" >> $dotenv
     echo "OP_PROPOSER_PRIVATE_KEY=$OP_PROPOSER_KEY" >> $dotenv
+
+# Finalize configuration, assuming that chain config is present at $cfg
+_finalize-config $cfg=join(MAIN_NODE_DATA, "config"):
+    #!/usr/bin/env bash
+    set -euo pipefail
+     
+    MAIN_NODE_DATA=$(dirname $cfg)
+     
+    # Generate JWT if missing
+    if [ ! -f $MAIN_NODE_DATA/jwt ]; then
+      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > $MAIN_NODE_DATA/jwt
+    fi
+     
+    # Generate .env if missing
+    dotenv=$MAIN_NODE_DATA/.env
+    if [ ! -f $dotenv ]; then
+      {{self}} _generate-dotenv
+    fi
+
+    # Initialize registry if missing
+    registry=$cfg/registry.json
+    if [ ! -f $registry ]; then
+      echo "[]" > $registry
+    fi 
+    
+    {{self}} _link-data "$MAIN_NODE_DATA/data"
+    echo "*** Done initializing $MAIN_NODE_DATA" 
 
 # Create the Main Node configuration
 #
@@ -97,32 +124,15 @@ create-config chain_cfg $cfg=join(MAIN_NODE_DATA, "config"):
     
     mkdir -p $cfg
 
-    # Generate JWT if missing
-    if [ ! -f $cfg/jwt ]; then
-      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > $cfg/jwt
-    fi 
-     
     # Copy chain config files
     {{self}} _populate-chain-cfg {{chain_cfg}} $cfg
-     
-    # Generate .env if missing
-    dotenv=$MAIN_NODE_DATA/.env
-    if [ ! -f $dotenv ]; then
-      {{self}} _generate-dotenv
-    fi
 
-    # Initialize registry if missing
-    registry=$cfg/registry.json
-    if [ ! -f $registry ]; then
-      echo "[]" > $registry
-    fi 
+    {{self}} _finalize-config $cfg
     
-    {{self}} _link-data "$MAIN_NODE_DATA/data"
-    echo "*** Done initializing $MAIN_NODE_DATA" 
-
 # Deploy a new chain and create the appropriate configuration
 config-with-deploy $cfg=join(MAIN_NODE_DATA, "config"):
     just -f ./scripts/deploy.just deploy-chain $cfg
+    {{self}} _finalize-config $cfg
 
 _is-configured $cfg=join(MAIN_NODE_DATA, "config"):
     #!/usr/bin/env bash
@@ -141,7 +151,7 @@ start $cfg=join(MAIN_NODE_DATA, "config"):
     set -euo pipefail
     
     # Check Node running
-    if [ docker ps --format '{{{{.Names}}' | grep -wq op-node  ]; then
+    if docker ps --format '{{{{.Names}}' | grep -wq op-node ; then
         echo "❌ Main node already running."
         exit 1
     fi 
