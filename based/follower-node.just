@@ -19,7 +19,7 @@ export FOLLOWER_NODE_DIR := join(justfile_directory(), "..", "follower_node")
 
 # External environment configuration
 export PORTAL := env("PORTAL", shell(portal + " address"))
-export PUBLIC_IP := env("PUBLIC_IP", shell("curl -s ifconfig.me"))
+export PUBLIC_IP := env("PUBLIC_IP", shell("curl -4s ifconfig.me"))
 
 # Force config creation
 export FORCE := env("FORCE", "")
@@ -43,7 +43,7 @@ _generate-dotenv gossip enr enode $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     l2_chain_id=$({{portal}} l2_chain_id)
 
     echo "PORTAL=$PORTAL" >> $dotenv
-    echo "OP_NODE_GOSSIP_IP={{public_ip}}" >> $dotenv
+    echo "OP_NODE_GOSSIP_IP=$PUBLIC_IP" >> $dotenv
     echo "GATEWAY_SEQUENCING_KEY=$GATEWAY_SEQUENCING_KEY" >> $dotenv
     echo "MAIN_OP_NODE_GOSSIP_STATIC={{gossip}}" >> $dotenv
     echo "MAIN_OP_NODE_ENR={{enr}}" >> $dotenv
@@ -87,6 +87,7 @@ create-config $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     # If FORCE is set, reset the config
     if [ -n "$FORCE" ]; then
       echo "FORCE set, removing existing config..."
+      {{self}} stop || true
       rm -rf $FOLLOWER_NODE_DATA || true
       {{wallet}} remove {{WALLET_NAME}}
     fi
@@ -152,7 +153,7 @@ start $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (docker:
     jwt=$(cat $FOLLOWER_NODE_DATA/jwt) 
 
     echo "Registering gateway"
-    {{self}} register-gateway "http://$ip:$port" "$address" "$jwt"
+    {{portal}} register-gateway "http://$ip:$port" "$address" "$jwt"
 
     # Start services
     echo "Starting gateway and monitoring services..."
@@ -177,4 +178,4 @@ logs $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     docker compose -f $(dirname $FOLLOWER_NODE_DATA)/compose.yml logs --tail 100 -f
 
 proxy network="kt-based-op" port="8545":
-    docker run --rm network {{network}} -p {{host}}:8545 cars10/simprox simprox --skip-ssl-verify=true -l 127.0.0.1:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545
+    docker run --rm network {{network}} -p {{port}}:8545 cars10/simprox simprox --skip-ssl-verify=true -l 127.0.0.1:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545

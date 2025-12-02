@@ -18,7 +18,7 @@ export BASED_OP_NODE_DATA_DIR := env("BASED_OP_NODE_DATA_DIR", join(BASED_MAIN_N
 export MAIN_NODE_DIR := join(justfile_directory(), "..", "main_node")
 
 # External environment configuration 
-export PUBLIC_IP := env("PUBLIC_IP", shell("curl -s ifconfig.me"))
+export PUBLIC_IP := env("PUBLIC_IP", shell("curl -4s ifconfig.me"))
 
 export OP_PROPOSER_KEY := env("OP_PROPOSER_KEY")
 export OP_BATCHER_KEY := env("OP_BATCHER_KEY")
@@ -49,7 +49,7 @@ _populate-chain-cfg $src $dest:
     nc_copy state.json
     nc_copy genesis.json
 
-_generate-dotenv $cfg=join(MAIN_NODE_DATA, "config") $dotenv=join(cfg, ".env"):
+_generate-dotenv $cfg=join(MAIN_NODE_DATA, "config") $dotenv=join(shell("dirname " + cfg), ".env"):
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -140,6 +140,11 @@ _is-configured $cfg=join(MAIN_NODE_DATA, "config"):
 
     if  [ ! -d $cfg ]; then
       echo "❌ main-node does not seem to have been configured at $cfg. run `create-config` to configure"
+      exit 1
+    fi
+
+    if [ ! -d $(dirname $cfg)/data ]; then
+      echo "❌ main-node configuration seems to not have been finalized correctly at $cfg. Ensure that the chain state is present under $cfg/config and run `_finalize-config $cfg` to finalize."
       exit 1
     fi
 

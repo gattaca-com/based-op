@@ -37,7 +37,7 @@ spamoor *args=("start ./spamoor-config.yml"):
 
 # Run recipes from scripts/overseer.just
 overseer *args=("start"):
-    just -f scripts/overseer.just {{args}}
+    just -f based/overseer.just {{args}}
 
 # Run recipes from based/portal.just
 portal *args:

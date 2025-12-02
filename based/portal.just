@@ -22,7 +22,9 @@ l2_chain_id: (_rpc "portal_l2ChainId")
 rollup: (_rpc "portal_fileRollup")
 genesis: (_rpc "portal_fileGenesis")
 
-register-gateway url address jwt: (_rpc "registry_registerGateway" "[\"{{url}}\", \"{{address}}\", \"{{jwt}}\"]") 
+register-gateway url address jwt: 
+    {{self}} _rpc "registry_registerGateway" \
+      "['{{url}}', '{{address}}', '{{jwt}}']"
 
 # Start the portal service and view logs (for main sequencing node)
 start:

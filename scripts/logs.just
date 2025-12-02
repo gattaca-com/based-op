@@ -2,7 +2,7 @@ set quiet
 
 # Invocation utils
 self := "just -f " + justfile()
-parent := "just -f " + join(justfile_directory(), "Justfile")
+parent := "just -f " + join(justfile_directory(), "..", "Justfile")
 
 logs := self + " docker-logs"
 
@@ -37,3 +37,6 @@ gateway:
 
 main-node:
     {{parent}} main-node logs
+
+portal:
+    {{parent}} portal logs

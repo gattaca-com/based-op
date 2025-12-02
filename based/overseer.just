@@ -1,5 +1,9 @@
-import 'portal.just'
-import 'scripts/consts.just'
+import './scripts/consts.just'
 
-start:
-    docker exec -it based-gateway overseer --portal-url {{PORTAL}} --rich-wallet-key {{DUMMY_RICH_WALLET_PRIVATE_KEY}}
+parent := "just -f " + join(justfile_directory(), "..", "Justfile")
+
+# Start overseer
+@start:
+    docker exec -it based-gateway overseer \
+      --portal-url $({{parent}} portal address) \
+      --rich-wallet-key {{DUMMY_RICH_WALLET_PRIVATE_KEY}}
