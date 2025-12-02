@@ -7,3 +7,9 @@ export L1_BEACON_RPC_URL := env("L1_BEACON_RPC_URL", "https://ethereum-sepolia-b
 
 export BASED_OP_GETH_PORT := env("BASED_OP_GETH_PORT", "8645")
 export FOLLOWER_NODE_HOST := env("FOLLOWER_NODE_HOST", "http://localhost")
+
+export PUBLIC_IP := shell("echo ${PUBLIC_IP:-$(curl -4s ifconfig.me)}")
+
+default_local_data := join(canonicalize(justfile_directory()), "..", "..", ".local")
+prepare_local_data := "mkdir -p " + default_local_data + " | echo " + default_local_data
+export LOCAL_DATA := canonicalize(shell("echo ${LOCAL_DATA:-$(" + prepare_local_data + ")}"))

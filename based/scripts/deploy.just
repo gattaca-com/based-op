@@ -2,8 +2,6 @@ set dotenv-load
 
 import './consts.just'
 
-default_local_data := canonicalize(join(justfile_directory(), "..", ".local"))
-export LOCAL_DATA := canonicalize(env("LOCAL_DATA", default_local_data))
 export DATA_FOLDER := env("MAIN_NODE_DATA_FOLDER", "local_main_node")
 
 MAIN_NODE_DATA := join(LOCAL_DATA, DATA_FOLDER)

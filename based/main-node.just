@@ -3,8 +3,6 @@ set dotenv-load
 import './scripts/consts.just'
  
 # Override where the local data for the main node will be stored
-default_local_data := join(justfile_directory(), ".local")
-export LOCAL_DATA := canonicalize(env("LOCAL_DATA", shell("mkdir -p " + default_local_data + " | echo " + default_local_data)))
 export DATA_FOLDER := env("MAIN_NODE_DATA_FOLDER", "local_main_node")
 
 MAIN_NODE_DATA := join(LOCAL_DATA, DATA_FOLDER)
@@ -18,8 +16,6 @@ export BASED_OP_NODE_DATA_DIR := env("BASED_OP_NODE_DATA_DIR", join(BASED_MAIN_N
 export MAIN_NODE_DIR := join(justfile_directory(), "..", "main_node")
 
 # External environment configuration 
-export PUBLIC_IP := env("PUBLIC_IP", shell("curl -4s ifconfig.me"))
-
 export OP_PROPOSER_KEY := env("OP_PROPOSER_KEY")
 export OP_BATCHER_KEY := env("OP_BATCHER_KEY")
 export OP_SEQUENCER_KEY := env("OP_SEQUENCER_KEY")
@@ -61,7 +57,7 @@ _generate-dotenv $cfg=join(MAIN_NODE_DATA, "config") $dotenv=join(shell("dirname
 
     # TODO: $(MAKE) fix-compose # Unable to find it
 
-    game_factory=$(jq -r '.opChainDeployments[0].disputeGameFactoryProxyAddress' $cfg/state.json)
+    game_factory=$(jq -r '.opChainDeployments[0].DisputeGameFactoryProxy' $cfg/state.json)
     l2_chain_id=$(jq -r '.l2_chain_id' $cfg/rollup.json)
 
     echo "DISPUTE_GAME_FACTORY_ADDRESS=$game_factory" >> $dotenv

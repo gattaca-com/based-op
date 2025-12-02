@@ -1,9 +1,8 @@
-set dotenv-load
+import "./scripts/consts.just"
+
 mod docker
 
 # Override where the local data for the gateway will be stored
-default_local_data := canonicalize(join(justfile_directory(), ".local"))
-export LOCAL_DATA := canonicalize(env("LOCAL_DATA", default_local_data))
 export DATA_FOLDER := env("FOLLOWER_NODE_DATA_FOLDER", "gateway_and_follower")
 
 FOLLOWER_NODE_DATA := join(LOCAL_DATA, DATA_FOLDER)
@@ -18,8 +17,7 @@ export BASED_GATEWAY_DATA_DIR := env("BASED_GATEWAY_DATA_DIR", join(BASED_OP_DAT
 export FOLLOWER_NODE_DIR := join(justfile_directory(), "..", "follower_node")
 
 # External environment configuration
-export PORTAL := env("PORTAL", shell(portal + " address"))
-export PUBLIC_IP := env("PUBLIC_IP", shell("curl -4s ifconfig.me"))
+export PORTAL := shell("echo ${PORTAL:-$(" + portal + " address)}")
 
 # Force config creation
 export FORCE := env("FORCE", "")
@@ -149,7 +147,7 @@ start $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (docker:
     ip=$(grep -m2 '^OP_NODE_GOSSIP_IP[[:space:]]*=' $dotenv | tail -n1 | cut -d= -f2)
     port=$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' $dotenv | cut -d= -f2)
 
-    address=$({{wallet}} key {{WALLET_NAME}})
+    address=$({{wallet}} address {{WALLET_NAME}})
     jwt=$(cat $FOLLOWER_NODE_DATA/jwt) 
 
     echo "Registering gateway"
@@ -160,8 +158,7 @@ start $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (docker:
     docker compose -f $FOLLOWER_NODE_DATA/compose.yml up -d
     {{parent}} monitoring start
 
-    echo "*** Starting overseer"
-    just -f {{justfile_directory()}}/overseer.just start
+    echo "*** To start the overseer run \`start overseer\`"
     
 stop $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     #!/usr/bin/env bash

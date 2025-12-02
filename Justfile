@@ -1,3 +1,5 @@
+set dotenv-load
+
 export LOCAL_DATA := canonicalize(env("LOCAL_DATA", shell('mkdir -p .local && echo ".local"')))
 
 mod deps

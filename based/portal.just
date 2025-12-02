@@ -24,7 +24,7 @@ genesis: (_rpc "portal_fileGenesis")
 
 register-gateway url address jwt: 
     {{self}} _rpc "registry_registerGateway" \
-      "['{{url}}', '{{address}}', '{{jwt}}']"
+      "[[\"{{url}}\", \"{{address}}\", \"{{jwt}}\"]]"
 
 # Start the portal service and view logs (for main sequencing node)
 start:
