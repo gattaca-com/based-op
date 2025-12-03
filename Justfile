@@ -90,6 +90,38 @@ quick-start:
     {{self}} main-node config-with-deploy
     {{self}} main-node start
     {{self}} follower-node create-config
-    {{self}} follower-node start
+    {{self}} follower-node start-dev
 
     {{self}} overseer start
+
+
+reset-and-start-full-stack-local:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    export PUBLIC_IP=127.0.0.1
+
+    if [ -z "${OP_BATCHER_KEY}" ]; then
+      echo "OP_BATCHER_KEY environment variable is not set"
+      exit 1
+    fi
+
+    if [ -z "${OP_PROPOSER_KEY}" ]; then
+      echo "OP_PROPOSER_KEY environment variable is not set"
+      exit 1
+    fi
+
+    if [ -z "${OP_SEQUENCER_KEY}" ]; then
+      echo "OP_SEQUENCER_KEY environment variable is not set"
+      exit 1
+    fi
+
+    rm -rf .local
+
+    just main-node config-with-deploy
+    just main-node start
+    just follower-node create-config
+    just follower-node start-dev
+    echo "Waiting for 10 seconds before starting the overseer"
+    sleep 10
+    just start overseer

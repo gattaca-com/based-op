@@ -90,7 +90,8 @@ create-config $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
       {{wallet}} remove {{WALLET_NAME}}
     fi
 
-    mkdir -p $FOLLOWER_NODE_DATA 
+    mkdir -p $FOLLOWER_NODE_DATA
+    mkdir -p $FOLLOWER_NODE_DATA/config
      
     # Generate JWT if missing
     if [ ! -f $FOLLOWER_NODE_DATA/config/jwt ]; then
