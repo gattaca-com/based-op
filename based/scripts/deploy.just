@@ -78,6 +78,7 @@ create-config $cfg=join(MAIN_NODE_DATA, "config"):
 
     if [ -d $cfg ]; then
         echo "❌ Seems like information of a previous chain is already present. Please remove $cfg to deploy a new one."
+        exit 1
     fi 
 
     mkdir -p $cfg

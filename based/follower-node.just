@@ -93,8 +93,8 @@ create-config $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     mkdir -p $FOLLOWER_NODE_DATA 
      
     # Generate JWT if missing
-    if [ ! -f $FOLLOWER_NODE_DATA/jwt ]; then
-      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/'  > $FOLLOWER_NODE_DATA/jwt
+    if [ ! -f $FOLLOWER_NODE_DATA/config/jwt ]; then
+      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/'  > $FOLLOWER_NODE_DATA/config/jwt
     fi
 
     # Ensure wallet is ready
@@ -134,10 +134,10 @@ _is-configured $cfg=FOLLOWER_NODE_DATA:
 
     echo $cfg
 
-# Start the gateway service and the overseer TUI
+# Start the gateway service 
 #
 # Will ensure the gateway is configured correctly before starting the service
-start $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (docker::create-network network) (create-config dotenv)
+start-dev $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (docker::create-network network) (create-config dotenv)
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -148,7 +148,7 @@ start $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (docker:
     port=$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' $dotenv | cut -d= -f2)
 
     address=$({{wallet}} address {{WALLET_NAME}})
-    jwt=$(cat $FOLLOWER_NODE_DATA/jwt) 
+    jwt=$(cat $FOLLOWER_NODE_DATA/config/jwt) 
 
     echo "Registering gateway"
     {{portal}} register-gateway "http://$ip:$port" "$address" "$jwt"
@@ -156,9 +156,12 @@ start $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (docker:
     # Start services
     echo "Starting gateway and monitoring services..."
     docker compose -f $FOLLOWER_NODE_DATA/compose.yml up -d
-    {{parent}} monitoring start
 
     echo "*** To start the overseer run \`start overseer\`"
+
+# Start the gateway service as well as the monitoring services
+start $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (start-dev dotenv network)
+    {{parent}} monitoring start
     
 stop $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     #!/usr/bin/env bash
@@ -172,7 +175,7 @@ logs-gateway:
     docker logs based-gateway --tail 100 -f
 
 logs $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
-    docker compose -f $(dirname $FOLLOWER_NODE_DATA)/compose.yml logs --tail 100 -f
+    docker compose -f $(dirname $dotenv)/compose.yml logs --tail 100 -f
 
 proxy network="kt-based-op" port="8545":
     docker run --rm network {{network}} -p {{port}}:8545 cars10/simprox simprox --skip-ssl-verify=true -l 127.0.0.1:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545

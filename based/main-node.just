@@ -77,8 +77,8 @@ _finalize-config $cfg=join(MAIN_NODE_DATA, "config"):
     MAIN_NODE_DATA=$(dirname $cfg)
      
     # Generate JWT if missing
-    if [ ! -f $MAIN_NODE_DATA/jwt ]; then
-      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > $MAIN_NODE_DATA/jwt
+    if [ ! -f $cfg/jwt ]; then
+      openssl rand -hex 32 | tr -d '\n' | sed 's/^/0x/' > $cfg/jwt
     fi
      
     # Generate .env if missing
