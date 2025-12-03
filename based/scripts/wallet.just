@@ -8,12 +8,14 @@ export FORCE := env("FORCE", "")
 
 tool_image := env("WALLET_TOOL_IMAGE", "ghcr.io/gattaca-com/based-op/key-to-address:latest")
 
+self := "just -f " + justfile()
+
 [no-exit-message]
 needs_create name:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if [[ -e "$DATA_FOLDER/{{name}}" && -z "$FORCE" ]]; then
+    if [[ -e "{{join(DATA_FOLDER, name)}}" && -z "$FORCE" ]]; then
       echo "Wallet {{name}} already exists, set \$FORCE to override" >&2
       exit 1
     fi
@@ -33,14 +35,15 @@ create name override="":
     key=$(echo "$wallet" | head -n1)
     address=$(echo "$wallet" | head -n2 | tail -n1)
 
-    mkdir -p $DATA_FOLDER/{{name}}
-    echo "$key" > $DATA_FOLDER/{{name}}/key
-    echo "$address" > $DATA_FOLDER/{{name}}/address
+    mkdir -p {{join(DATA_FOLDER, name)}}
+    echo "$key" > {{join(DATA_FOLDER, name, "key")}}
+    echo "$address" > {{join(DATA_FOLDER, name, "adrress")}}
     echo "$address"
 
 # Remove the wallet `name`
+[no-exit-message]
 @remove name:
-    rm -rf $DATA_FOLDER/{{name}}
+    rm -rf {{join(DATA_FOLDER, "name")}}
 
 # Ensures the wallet `name` exists, and returns the corresponding address
 ensure name override="":
@@ -49,21 +52,26 @@ ensure name override="":
     
     mkdir -p $DATA_FOLDER 
 
-    just -f {{justfile()}} needs_create {{name}} || {
+    {{self}} needs_create {{name}} || {
         # No need to create the wallet 
         exit 0 
     }
 
     # Cleanup existing copy (only possible if FORCE is set)
-    rm -rf $DATA_FOLDER/{{name}} || true
+    {{self}} remove {{name}} || true
 
     # Create the wallet
-    just -f {{justfile()}} create {{name}} {{override}}
+    {{self}} create {{name}} {{override}}
 
 # Returns the key of the wallet `name`
 @key name:
-    cat $DATA_FOLDER/{{name}}/key
+    cat {{join(DATA_FOLDER, name, "key")}}
 
 # Returns the address of the wallet `name`
 @address name:
-    cat $DATA_FOLDER/{{name}}/address
+    cat {{join(DATA_FOLDER, name, "address")}}
+
+# Backup the named wallet at `dest`
+backup name dest:
+    mkdir -p {{join(invocation_directory(), dest, name)}}
+    cp -r {{join(DATA_FOLDER, name)}} {{join(invocation_directory(), dest, name)}}
