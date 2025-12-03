@@ -83,6 +83,8 @@ test name:
 
 # Cleanup all the local state of the project
 reset:
+    {{self}} main-node reset
+    {{self}} follower-node reset
     rm -rf $LOCAL_DATA
 
 # TODO: consider some sort of interactive config if needed
@@ -109,7 +111,7 @@ reset-and-start-full-stack-local:
     echo 'OP_SEQUENCER_KEY={{env("OP_SEQUENCER_KEY")}}'
 
     echo "Resetting configuration and deploying new L2 from scratch"
-    {{self}} reset
+    {{self}} reset || true
 
     {{self}} main-node config-with-deploy
     {{self}} main-node start

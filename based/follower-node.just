@@ -23,6 +23,7 @@ export PORTAL := shell("echo ${PORTAL:-$(" + portal + " address)}")
 export FORCE := env("FORCE", "")
 
 WALLET_NAME := env("FOLLOWER_NODE_WALLET", "gateway")
+PORTAL_TIMEOUT := env("PORTAL_TIMEOUT", "30")
 
 # Invocation utils
 self := "just -f " + justfile()
@@ -48,19 +49,33 @@ _generate-dotenv gossip enr enode $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     echo "MAIN_OP_GETH_ENODE={{enode}}" >> $dotenv
     echo "NETWORK_ID=$l2_chain_id" >> $dotenv
 
-_update-dotenv gossip enr enode $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
+_replace-env-var var new_value target_file:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    sed -i -E \
-        -e "s#^MAIN_OP_NODE_GOSSIP_STATIC=.*#MAIN_OP_NODE_GOSSIP_STATIC={{gossip}}#" $dotenv
+    target_file={{canonicalize(target_file)}}
 
-    sed -i -E \
-        -e "s#^MAIN_OP_NODE_ENR=.*#MAIN_OP_NODE_ENR={{enr}}#" $dotenv
-
-    sed -i -E \
-        -e "s#^MAIN_OP_GETH_ENODE=.*#MAIN_OP_GETH_ENODE={{enode}}#" $dotenv
-
+    awk -v new_value="{{new_value}}" '''
+      BEGIN { found = 0 }
+      /^{{var}}=/ { 
+        print "{{var}}=" new_value
+        found = 1
+        next 
+      }
+      { print }
+      END { 
+        if (!found) print "{{var}}=" new_value 
+      }''' \
+      {{target_file}} > "replacement.tmp" && mv "replacement.tmp" {{target_file}} 
+  
+_update-dotenv gossip enr enode $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
+    #!/usr/bin/env bash
+    set -euo pipefail
+     
+    {{self}} _replace-env-var "MAIN_OP_NODE_GOSSIP_STATIC" "{{gossip}}" "$dotenv"
+    {{self}} _replace-env-var "MAIN_OP_NODE_ENR" "{{enr}}" "$dotenv"
+    {{self}} _replace-env-var "MAIN_OP_GETH_ENODE" "{{enode}}" "$dotenv"
+   
 @_dump-chain-config dest=join(FOLLOWER_NODE_DATA, "config"):
     mkdir -p {{dest}}
     # TODO: check for invalid json files (empty, ...)
@@ -71,6 +86,27 @@ _update-dotenv gossip enr enode $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     {{link}} link-dir-if-exists-elsewhere BASED_OP_GETH_DATA_DIR "{{dest}}/geth"
     {{link}} link-dir-if-exists-elsewhere BASED_OP_NODE_DATA_DIR "{{dest}}/node"
     {{link}} link-dir-if-exists-elsewhere BASED_GATEWAY_DATA_DIR "{{dest}}/gateway"
+    
+_retry cmd timeout=PORTAL_TIMEOUT:
+    #!/usr/bin/env bash
+    start_time=$(date +%s)
+    deadline=$((start_time + {{timeout}}))
+
+    while true; do
+      # We only print the output of the command that succeeds
+      if output=$({{cmd}} 2>/dev/null); then
+        printf '%s\n' "$output"  # Print exactly what the command output
+        break
+      fi
+
+      now=$(date +%s)
+      if (( now >= deadline )); then
+        echo "Deadline reached, exiting."
+        exit 1
+      fi
+
+      sleep 1
+    done
 
 # Create Gateway configuration
 #
@@ -104,9 +140,9 @@ create-config $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     export GATEWAY_SEQUENCING_KEY=$({{wallet}} key {{WALLET_NAME}})
     
     echo "Retrieving OP Node bootstrap environment"
-    gossip=$({{portal}} node_gossip_static)
-    enr=$({{portal}} node_enr)
-    enode=$({{portal}} geth_enode)
+    gossip=$({{self}} _retry "{{portal}} node_gossip_static")
+    enr=$({{self}} _retry "{{portal}} node_enr")
+    enode=$({{self}} _retry "{{portal}} geth_enode")
     
     # Generate .env if missing
     if [ ! -f $dotenv ]; then
@@ -169,7 +205,8 @@ stop $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     set -euo pipefail
 
     FOLLOWER_NODE_DATA=$(dirname $dotenv)
-    
+    {{self}} _is-configured $FOLLOWER_NODE_DATA
+
     docker compose -f $FOLLOWER_NODE_DATA/compose.yml down
 
 logs-gateway:
@@ -180,3 +217,13 @@ logs $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
 
 proxy network="kt-based-op" port="8545":
     docker run --rm network {{network}} -p {{port}}:8545 cars10/simprox simprox --skip-ssl-verify=true -l 127.0.0.1:8545 -t op-el-2-op-geth-op-node-op-kurtosis:8545
+
+# Remove all config from main-node and cleanup containers
+reset $cfg=join(FOLLOWER_NODE_DATA, "config"):
+    #!/usr/bin/env bash
+
+    {{self}} _is-configured $cfg || exit 0
+
+    FOLLOWER_NODE_DATA=$(dirname $cfg)
+    docker compose -f $FOLLOWER_NODE_DATA/compose.yml rm -s -f
+    rm -rf $FOLLOWER_NODE_DATA

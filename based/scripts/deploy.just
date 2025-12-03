@@ -40,11 +40,11 @@ self := "just -f " + justfile()
 wallet := "just -f " + justfile_directory() + "/wallet.just"
 
 _op-deployer $cfg *runtime-args:
-    docker run -v $cfg:/config -e DEPLOYER_CACHE_DIR=$DEPLOYER_CACHE_DIR \
+    docker run --rm -v $cfg:/config -e DEPLOYER_CACHE_DIR=$DEPLOYER_CACHE_DIR \
       {{op_deployer_image}} {{runtime-args}}
 
 _fix-permissions $cfg:
-    docker run -v $cfg:/config --entrypoint sh {{op_deployer_image}} -c \
+    docker run --rm -v $cfg:/config --entrypoint sh {{op_deployer_image}} -c \
       "find /config -mindepth 1 -exec chmod 666 {} \; && chmod 755 /config"
 
 _populate-intent $cfg=join(MAIN_NODE_DATA, "config"):

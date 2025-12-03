@@ -180,3 +180,13 @@ logs $cfg=join(MAIN_NODE_DATA, "config"):
 
     MAIN_NODE_DATA=$(dirname $cfg)
     docker compose -f $MAIN_NODE_DATA/compose.yml logs --tail 100 -f
+
+# Remove all config from main-node and cleanup containers
+reset $cfg=join(MAIN_NODE_DATA, "config"):
+    #!/usr/bin/env bash
+
+    {{self}} _is-configured $cfg || exit 0
+
+    MAIN_NODE_DATA=$(dirname $cfg)
+    docker compose -f $MAIN_NODE_DATA/compose.yml rm -s -f
+    rm -rf $MAIN_NODE_DATA

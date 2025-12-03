@@ -1,5 +1,8 @@
 export PORTAL := env("PORTAL", "http://0.0.0.0:8080")
 
+# Normally JQ doesn't return error if its return was empty or null. -e fixes that
+export JQ_ARGS := env("JQ_ARGS", "-e")
+
 service-name := "based-portal"
 
 # Invocation utils
@@ -12,7 +15,7 @@ self := "just -f " + justfile()
 @_rpc method params="[]":
     curl -s -X POST -H "Content-Type: application/json" \
       --data '{"jsonrpc": "2.0", "method": "{{method}}", "params": {{params}}, "id": 1}' \
-      {{PORTAL}} | jq -r '.result'
+      {{PORTAL}} | jq -r $JQ_ARGS '.result'
 
 node_gossip_static: (_rpc "portal_opNodeGossipStatic")
 node_enr: (_rpc "portal_opNodeBootnodeEnr")
@@ -22,8 +25,9 @@ l2_chain_id: (_rpc "portal_l2ChainId")
 rollup: (_rpc "portal_fileRollup")
 genesis: (_rpc "portal_fileGenesis")
 
-register-gateway url address jwt: 
-    {{self}} _rpc "registry_registerGateway" \
+@register-gateway url address jwt: 
+    # The portal returns null on success so we remove the -e flag
+    JQ_ARGS="" {{self}} _rpc "registry_registerGateway" \
       "[[\"{{url}}\", \"{{address}}\", \"{{jwt}}\"]]"
 
 # Start the portal service and view logs (for main sequencing node)
