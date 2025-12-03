@@ -83,10 +83,10 @@ create-config $cfg=join(MAIN_NODE_DATA, "config"):
 
     mkdir -p $cfg
 
-    {{self}} _populate-intent
-     
     {{self}} _op-deployer $cfg op-deployer init --l1-chain-id $L1_CHAIN_ID --l2-chain-ids $L2_CHAIN_ID --workdir /config
     {{self}} _fix-permissions $cfg
+
+    {{self}} _populate-intent
 
     exit 0
 
