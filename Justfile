@@ -2,7 +2,8 @@ set dotenv-load
 
 export LOCAL_DATA := canonicalize(env("LOCAL_DATA", shell('mkdir -p .local && echo ".local"')))
 
-mod deps
+self := "just -f " + justfile()
+deps := "just -f " + join(justfile_directory(), "deps", "Justfile")
 
 # Verifies that system dependencies are present
 @check:
@@ -13,12 +14,13 @@ mod deps
 
 # Prepare the local environment: fetch deps, build them, setup toolchains...
 @prepare:
-    just deps::fetch
+    {{deps}} fetch
     cd docs && npm i
     cd based && rustup toolchain install 
 
 # 🏗️ Build
-@build: deps::build
+@build:  
+    {{deps}} build
     just -f based/docker/Justfile all
  
 # 📚 Build local docs
@@ -69,18 +71,25 @@ logs name:
 
 # Start the given service 
 start name:
-    just -f {{justfile()}} {{name}} start
+    {{self}} {{name}} start
  
 # Stop the given service 
 stop name:
-    just -f {{justfile()}} {{name}} stop
+    {{self}} {{name}} stop
 
 # Run a test recipe described in scripts/test.just
 test name:
     just -f scripts/test.just {{name}}
 
-# TODO: setup main node, start main node, setup follower-node, start follower-node (& gateway) 
-# 
+# Cleanup all the local state of the project
+reset:
+    rm -rf $LOCAL_DATA
+
 # TODO: consider some sort of interactive config if needed
 quick-start:
-    exit 1
+    {{self}} main-node config-with-deploy
+    {{self}} main-node start
+    {{self}} follower-node create-config
+    {{self}} follower-node start
+
+    {{self}} overseer start
