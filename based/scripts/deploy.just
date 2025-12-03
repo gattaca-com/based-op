@@ -87,8 +87,6 @@ create-config $cfg=join(MAIN_NODE_DATA, "config"):
     {{self}} _populate-intent
     {{self}} _fix-permissions $cfg
 
-    {{self}} _populate-intent
-
     exit 0
 
 @_dump-chain-config $dest=join(MAIN_NODE_DATA, "config"):
