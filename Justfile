@@ -122,6 +122,6 @@ reset-and-start-full-stack-local:
     just main-node start
     just follower-node create-config
     just follower-node start-dev
-    echo "Waiting for 10 seconds before starting the overseer"
-    sleep 10
+    echo "Waiting for 15 seconds before starting the overseer"
+    sleep 15
     just start overseer
