@@ -74,4 +74,4 @@ ensure name override="":
 # Backup the named wallet at `dest`
 backup name dest:
     mkdir -p {{join(invocation_directory(), dest, name)}}
-    cp -r {{join(DATA_FOLDER, name)}} {{join(invocation_directory(), dest, name)}}
+    cp -r {{join(DATA_FOLDER, name)}}/* {{join(invocation_directory(), dest, name)}}

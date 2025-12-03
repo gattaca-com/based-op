@@ -92,36 +92,29 @@ quick-start:
     {{self}} follower-node create-config
     {{self}} follower-node start-dev
 
+    echo "Waiting for 10 seconds before starting the overseer" && sleep 10
     {{self}} overseer start
 
 
-reset-and-start-full-stack-local:
+# Cleanup all local state
+reset-and-start-full-stack-local: 
     #!/usr/bin/env bash
     set -euo pipefail
 
     export PUBLIC_IP=127.0.0.1
 
-    if [ -z "${OP_BATCHER_KEY}" ]; then
-      echo "OP_BATCHER_KEY environment variable is not set"
-      exit 1
-    fi
+    echo "Ensuring required environment variables are available..."
+    echo 'OP_BATCHER_KEY={{env("OP_BATCHER_KEY")}}'
+    echo 'OP_PROPOSER_KEY={{env("OP_PROPOSER_KEY")}}'
+    echo 'OP_SEQUENCER_KEY={{env("OP_SEQUENCER_KEY")}}'
 
-    if [ -z "${OP_PROPOSER_KEY}" ]; then
-      echo "OP_PROPOSER_KEY environment variable is not set"
-      exit 1
-    fi
+    echo "Resetting configuration and deploying new L2 from scratch"
+    {{self}} reset
 
-    if [ -z "${OP_SEQUENCER_KEY}" ]; then
-      echo "OP_SEQUENCER_KEY environment variable is not set"
-      exit 1
-    fi
+    {{self}} main-node config-with-deploy
+    {{self}} main-node start
+    {{self}} follower-node create-config
+    {{self}} follower-node start-dev
 
-    rm -rf .local
-
-    just main-node config-with-deploy
-    just main-node start
-    just follower-node create-config
-    just follower-node start-dev
-    echo "Waiting for 15 seconds before starting the overseer"
-    sleep 15
-    just start overseer
+    echo "Waiting for 15 seconds before starting the overseer" && sleep 15
+    {{self}} start overseer
