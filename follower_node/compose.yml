@@ -66,7 +66,7 @@ services:
       - --verifier.l1-confs=1
       - --rollup.config=/config/rollup.json
       - --rpc.addr=0.0.0.0
-      - --rpc.port=8547
+      - --rpc.port=$OP_NODE_RPC_PORT
       - --rpc.enable-admin
       - --l1=$L1_RPC_URL
       - --l1.rpckind=standard
@@ -85,7 +85,7 @@ services:
       - --syncmode=execution-layer
       - --metrics.enabled=true
       - --metrics.addr=0.0.0.0
-      - --metrics.port=8011
+      - --metrics.port=$OP_NODE_METRICS_PORT
     volumes:
       - ./data/node:/data/op-node
       - ./config:/config
@@ -108,7 +108,7 @@ services:
       - --eth_client.url=$PORTAL
       - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
-      - --gossip.root_peer_url=http://0.0.0.0:8547
+      - --gossip.root_peer_url=http://0.0.0.0:$OP_NODE_RPC_PORT
       - --log.dir=/var/log/app
     volumes:
       - ./config:/config
