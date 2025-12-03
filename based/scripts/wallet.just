@@ -37,7 +37,7 @@ create name override="":
 
     mkdir -p {{join(DATA_FOLDER, name)}}
     echo "$key" > {{join(DATA_FOLDER, name, "key")}}
-    echo "$address" > {{join(DATA_FOLDER, name, "adrress")}}
+    echo "$address" > {{join(DATA_FOLDER, name, "address")}}
     echo "$address"
 
 # Remove the wallet `name`
