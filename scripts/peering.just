@@ -2,6 +2,8 @@
 export LOCAL_DATA := env("LOCAL_DATA")
 export DATA_FOLDER := join(LOCAL_DATA, env("PEERING_DATA_FOLDER", ".peering"))
 
+pyenv := join(DATA_FOLDER, "bin", "activate")
+
 export OP_GETH_RPC := env("OP_GETH_RPC", "http://localhost:8545")
 export BOP_GETH_RPC := env("BOP_GETH_RPC", "http://localhost:8645")
 
@@ -25,12 +27,12 @@ _check-block-number:
     echo "Based OP Geth and OP Geth not synced!"
     exit 1
 
-_pyenv:
+_ensure-pyenv:
     #!/usr/bin/env bash
     set -euo pipefail 
 
     python3 -m venv {{DATA_FOLDER}}
-    source {{DATA_FOLDER}}/bin/activate
+    source {{pyenv}} 
 
     pip install requests
 
@@ -39,6 +41,7 @@ peering:
     set -euo pipefail
 
     {{self}} _check-block-number || {
-      {{self}} _pyenv
+      {{self}} _ensure-pyenv
+      source {{pyenv}}
       python3 {{join(justfile_directory(), "..", "peering.py")}}
     }
