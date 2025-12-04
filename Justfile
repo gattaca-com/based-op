@@ -87,6 +87,10 @@ reset:
     {{self}} follower-node reset
     rm -rf $LOCAL_DATA
 
+# Run a recipe from scripts/ci.just
+ci *args:
+    just -f scripts/ci.just {{args}}
+
 # TODO: consider some sort of interactive config if needed
 quick-start:
     {{self}} main-node config-with-deploy
