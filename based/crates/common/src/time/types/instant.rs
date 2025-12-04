@@ -3,7 +3,7 @@ use std::ops::{Add, AddAssign, Sub};
 use serde::{Deserialize, Serialize};
 
 use super::{Duration, Nanos};
-use crate::time::{global_clock, nanos_for_100, rdtscp};
+use crate::time::{global_clock, nanos_for_100};
 // Socket is in the top 2 bits, rdtscp counter in lower 62
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
 #[repr(C)]
@@ -14,7 +14,7 @@ impl Instant {
 
     #[inline]
     pub fn now() -> Self {
-        Instant(rdtscp())
+        Instant(global_clock().raw())
     }
 
     #[inline]

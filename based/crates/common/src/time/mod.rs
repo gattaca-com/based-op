@@ -29,6 +29,7 @@ fn nanos_for_100() -> u64 {
 /// - On other platforms: falls back to quanta's fastest timestamper
 ///
 /// Performance: ~6-9ns on x86/ARM vs ~20ns for SystemTime::now
+#[allow(dead_code)]
 fn rdtscp() -> u64 {
     #[cfg(all(target_arch = "x86_64", not(target_arch = "wasm32")))]
     #[allow(clippy::uninit_assumed_init, invalid_value)]
