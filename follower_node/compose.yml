@@ -102,6 +102,7 @@ services:
     container_name: based-gateway
     command:
       - --rpc.port=$GATEWAY_PORT
+      - --rpc.port_no_auth=$GATEWAY_PORT_NO_AUTH
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway

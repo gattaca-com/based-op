@@ -118,5 +118,7 @@ reset-and-start-full-stack-local:
     {{self}} follower-node create-config
     {{self}} follower-node start-dev
 
-    echo "Waiting for 15 seconds before starting the overseer" && sleep 15
+    echo "Waiting for 15 seconds before triggering peering and starting the overseer" && sleep 15
+    
+    python peering.py
     {{self}} start overseer
