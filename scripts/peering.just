@@ -1,5 +1,4 @@
-
-export LOCAL_DATA := env("LOCAL_DATA")
+export LOCAL_DATA := env("LOCAL_DATA", join(invocation_directory(), ".local"))
 export DATA_FOLDER := join(LOCAL_DATA, env("PEERING_DATA_FOLDER", ".peering"))
 
 pyenv := join(DATA_FOLDER, "bin", "activate")
