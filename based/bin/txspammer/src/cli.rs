@@ -40,6 +40,10 @@ pub struct TxSpammerArgs {
     /// Max priority fee per gas (miner tip) for EIP-1559 transactions (in Wei).
     #[arg(long = "max_priority_fee_per_gas", default_value_t = 20)]
     pub max_priority_fee_per_gas: u128,
+    /// Send eth_sendRawTransactionSync. this sends the transaction and waits for the receipt over and over to test
+    /// inclusion latency.
+    #[arg(long = "send_sync", action = clap::ArgAction::SetTrue)]
+    pub send_sync: bool,
 
     // --- Network Configuration ---
     /// The JSON-RPC URL of the Ethereum node (HTTP or WebSocket).

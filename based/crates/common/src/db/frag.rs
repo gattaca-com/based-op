@@ -51,7 +51,7 @@ impl<Db: DatabaseRef> DBFrag<Db> {
         let mut guard = self.db.write();
 
         for t in txs {
-            let evm_state = std::mem::take(&mut t.result_and_state.state);
+            let evm_state = t.result_and_state.state.clone();
             for a in evm_state.keys() {
                 let _ = guard.load_cache_account(*a);
             }

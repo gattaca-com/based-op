@@ -1,37 +1,37 @@
 [package]
 edition.workspace = true
-name = "txspammer"
+name = "based-rpc"
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-alloy-consensus.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
-alloy-provider = "1.1.2" # Need this for eth_sendRawTransactionSync
 alloy-rpc-types.workspace = true
-alloy-signer.workspace = true
-alloy-signer-local.workspace = true
-
+alloy-provider.workspace = true
+alloy-network.workspace = true
 bop-common.workspace = true
-
+bop-metrics.workspace = true
 clap.workspace = true
 eyre.workspace = true
 futures.workspace = true
-futures-util.workspace = true
-http.workspace = true
 jsonrpsee.workspace = true
 op-alloy-rpc-types.workspace = true
 op-alloy-rpc-types-engine.workspace = true
+op-alloy-network.workspace = true
 parking_lot.workspace = true
-rand.workspace = true
 reqwest.workspace = true
 reth-rpc-layer.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tokio-websockets.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
+tokio-websockets.workspace = true
+http.workspace = true
+futures-util.workspace = true
+crossbeam-channel.workspace = true
+tracing-subscriber.workspace = true
+ttlhashmap = "0.1.0"

@@ -17,17 +17,17 @@ pub type ExtraData = VariableList<u8, MaxExtraDataSize>;
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvV0 {
-    number: u64,
-    parent_hash: B256,
-    beneficiary: Address,
-    timestamp: u64,
-    gas_limit: u64,
-    basefee: u64,
-    difficulty: U256,
-    prevrandao: B256,
+    pub number: u64,
+    pub parent_hash: B256,
+    pub beneficiary: Address,
+    pub timestamp: u64,
+    pub gas_limit: u64,
+    pub basefee: u64,
+    pub difficulty: U256,
+    pub prevrandao: B256,
     #[serde(with = "ssz_types::serde_utils::hex_var_list")]
-    extra_data: ExtraData,
-    parent_beacon_block_root: B256,
+    pub extra_data: ExtraData,
+    pub parent_beacon_block_root: B256,
 }
 
 impl EnvV0 {
@@ -159,6 +159,16 @@ pub struct StateUpdate {
     pub receipts: HashMap<B256, OpTransactionReceipt>,
     /// Updated balances for all accounts in txs in FragV0
     pub balances: HashMap<Address, U256>,
+    /// Includes storage
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_changes: Option<HashMap<Address, DetailedStateChange>>,
+}
+
+#[derive(Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct DetailedStateChange {
+    pub balance: U256,
+    pub nonce: u64,
+    pub storage: HashMap<U256, U256>,
 }
 
 impl SignedVersionedMessage {

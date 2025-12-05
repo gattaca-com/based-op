@@ -39,6 +39,7 @@ struct TxSpammer {
     sequencer: Option<RootProvider>,
     root_account: Account,
     target_accounts: Vec<Account>,
+    send_sync_account: Option<Account>,
     tx_spec: TxSpec,
     args: TxSpammerArgs,
     request_rx: Option<Receiver<(TxHash, Instant)>>,
@@ -90,6 +91,7 @@ impl TxSpammer {
             sequencer,
             root_account,
             target_accounts: Vec::new(),
+            send_sync_account: None,
             tx_spec,
             args,
             request_rx: Some(request_rx),
@@ -130,6 +132,12 @@ impl TxSpammer {
         }
 
         self.target_accounts = target_accounts;
+
+        if self.args.send_sync {
+            let mut account = Account::new(account_generator.next());
+            account.refresh(provider).await.expect("failed to fetch account nonce and balance");
+            self.send_sync_account = Some(account);
+        }
     }
 
     pub async fn fund_target_accounts(&mut self) {
@@ -139,7 +147,7 @@ impl TxSpammer {
         let threshold = parse_ether("0.01").unwrap();
 
         // Fund target accounts
-        for account in self.target_accounts.iter_mut() {
+        for account in self.target_accounts.iter_mut().chain(self.send_sync_account.iter_mut()) {
             let amount_to_fund = funding_amount.saturating_sub(account.balance);
             if amount_to_fund.is_zero() || amount_to_fund < threshold {
                 continue;
@@ -166,7 +174,7 @@ impl TxSpammer {
         sleep(std::time::Duration::from_secs(1)).await;
 
         // Verifying account states
-        for account in self.target_accounts.iter_mut() {
+        for account in self.target_accounts.iter_mut().chain(self.send_sync_account.iter_mut()) {
             account.refresh(provider).await.expect("failed to fetch account nonce and balance");
             if funding_amount.saturating_sub(account.balance) > threshold {
                 panic!(
@@ -178,6 +186,7 @@ impl TxSpammer {
             print!("Verifying {:?} balance: {} eth     \r", account.signer.address(), format_ether(account.balance));
             stdout().flush().unwrap();
         }
+
         info!("All {} target accounts are funded and ready.              ", self.target_accounts.len());
     }
 
@@ -219,7 +228,11 @@ impl TxSpammer {
                 let _ = loop {
                     match provider.get_transaction_receipt(tx_hash).await {
                         Ok(Some(receipt)) => break receipt,
-                        _ => {
+                        Err(e) => {
+                            warn!("failed to get transaction receipt: {}", e);
+                            sleep(Duration::from_millis(5)).await;
+                        }
+                        Ok(None) => {
                             sleep(Duration::from_millis(5)).await;
                         }
                     }
@@ -302,6 +315,42 @@ impl TxSpammer {
             });
         }
     }
+
+    pub fn spawn_sync_spammer(&self) {
+        let Some(mut send_sync_account) = self.send_sync_account.clone() else {
+            return;
+        };
+        let full_provider = self.full_provider.clone();
+        let tx_spec = self.tx_spec.clone();
+        let mut accounts_clone = self.target_accounts.clone();
+        let mut rag2 = rand::rngs::StdRng::seed_from_u64(Instant::now().elapsed().as_nanos() as u64);
+        let n = accounts_clone.len();
+        let mut latencies = Percentile::new();
+        let mut log_timer = Instant::now();
+        tokio::spawn(async move {
+            loop {
+                let to = &mut accounts_clone[rag2.random_range(0..n)];
+                let start_sending_at = Instant::now();
+                send_sync_account.transfer_sync(to, &tx_spec, &full_provider, &None).await.expect("failed to send tx");
+                let latency = start_sending_at.elapsed();
+                latencies.add(latency.as_secs_f64());
+
+                if log_timer.elapsed() > Duration::from_secs(5) {
+                    let p50 = latencies.percentile(50.0).unwrap_or(0.0);
+                    let p95 = latencies.percentile(95.0).unwrap_or(0.0);
+                    let p99 = latencies.percentile(99.0).unwrap_or(0.0);
+                    info!(
+                        "Send sync: Last 5s: {} tx confirmed, Latency P50: {:.2}s, P95: {:.2}s, P99: {:.2}s",
+                        latencies.len(),
+                        p50,
+                        p95,
+                        p99
+                    );
+                    log_timer = Instant::now();
+                }
+            }
+        });
+    }
 }
 
 #[tokio::main]
@@ -336,6 +385,10 @@ async fn main() -> eyre::Result<()> {
 
     spammer.spawn_stats_logger();
     spammer.spawn_spammer();
+
+    if spammer.args.send_sync {
+        spammer.spawn_sync_spammer();
+    }
 
     tokio::signal::ctrl_c().await.expect("failed to listen for ctrl-c");
     info!("Received Ctrl-C, shutting down...");

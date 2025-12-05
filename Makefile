@@ -30,8 +30,8 @@ L2_CHAIN_ID?=$(shell \
 L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
 PORTAL?=http://0.0.0.0:8080
 TXPROXY?=http://0.0.0.0:8090
-L1_RPC_URL?=http://3.84.162.42:8545
-L1_BEACON_RPC_URL?=http://3.84.162.42:5051
+L1_RPC_URL?=https://ethereum-sepolia-rpc.publicnode.com
+L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
 PUBLIC_IP?=$(shell curl ifconfig.me)
 # if GATEWAY_SEQUENCING_KEY is set, use that one, otherwise key_to_address will generate a new one
 GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
