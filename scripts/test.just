@@ -1,14 +1,12 @@
 import '../based/scripts/consts.just'
 
-export BOP_EL_PORT := env("BOP_EL_PORT") # TODO: Determine default or how to extract this 
-export OP_EL_PORT := env("OP_EL_PORT") # TODO: Determine default or how to extract this
-export BOP_NODE_PORT := env("BOP_NODE_PORT") # TODO: Determine default or how to extract this 
-export SEQ := env("SEQ") # TODO: Determine default or how to extract this
+export BOP_EL_PORT := env("BOP_EL_PORT", shell("source $(" + parent + " follower-node _is-configured)/.env && echo $OP_GETH_ENGINE_RPC_PORT")) 
+export OP_EL_PORT := env("OP_EL_PORT", shell("source $(" + parent + " main-node _is-configured)/../.env && echo $OP_GETH_ENGINE_RPC_PORT"))
+export BOP_NODE_PORT := env("BOP_NODE_PORT", shell("source $(" + parent + " main-node _is-configured)/../.env && echo $OP_NODE_GOSSIP_PORT")) 
 
 # Invocation utils
 self := "just -f " + justfile()
-portal := "just -f " + join(justfile_directory(), "portal.just")
-follower-node := "just -f " + join(justfile_directory(), "..", "follower-node.just")
+parent := "just -f " + join(justfile_directory(), "..", "Justfile")
 
 tx:
     cast publish --rpc-url http://0.0.0.0:$BASED_OP_GETH_PORT {{shell(self + " _dummy-tx")}}
@@ -24,13 +22,13 @@ _dummy-tx:
     curl -X POST --url $FOLLOWER_NODE_HOST:BASED_OP_GETH_PORT -H "Content-Type: application/json" \
      --data '{"jsonrpc", "2.0", method: "{{method}}", "params": {{params}}, "id": 1}'
 
-frag:
+frag seq:
     {{self}} _rpc based_newFrag \
       [{ \
         "signature": "0xa47da12abd5563f45332e637d1de946c3576902a245511d86826743c8af1f1e2093d4f5efd5b9630c0acc5f2bb23f236b4f7bdbe0d21d281b2bd2ff60c6cf1861b", \
         "message": { \
           "blockNumber": {{shell(self + " _block-number")}}, \
-          "seq": {{SEQ}}, \
+          "seq": {{seq}}, \
           "isLast": true, \
           "txs": [\"{{shell(self + " _dummy-tx | xxd -r -p | base64")}}\"], \
           "version": 0, \
@@ -77,14 +75,14 @@ env:
 based-manifest := canonicalize(join(justfile_directory(), "..", "based", "Cargo.toml"))
 
 tx-spammer:
-    PORTAL_PORT="$({{portal}} address |  cut -d':' -f3)" BOP_EL_PORT=$BOP_EL_PORT cargo test --manifest-path {{based-manifest}}  --release \
+    PORTAL_PORT="$({{parent}} portal address |  cut -d':' -f3)" cargo test --manifest-path {{based-manifest}}  --release \
       -- tx_spammer --ignored --nocapture
 
 gateway-spam port: # TODO: improve docs
     #!/usr/bin/env bash
     set -euo pipefail
 
-    FOLLOWER_NODE_DATA=$({{follower-node}} + '_is-configured')
+    FOLLOWER_NODE_DATA=$({{parent}} follower-node _is-configured)
     GATEWAY_DATA="$FOLLOWER_NODE_DATA"/data/gateway
 
     cargo run --manifest-path {{based-manifest}} --profile=release --bin bop-gateway --features shmem \
@@ -100,7 +98,7 @@ gateway-bench port: # TODO: improve docs
     #!/usr/bin/env bash
     set -euo pipefail
 
-    FOLLOWER_NODE_DATA=$({{follower-node}} + '_is-configured')
+    FOLLOWER_NODE_DATA=$({{parent}} follower-node _is-configured)
     GATEWAY_DATA="$FOLLOWER_NODE_DATA"/data/gateway
 
     cargo run --manifest-path {{based-manifest}} --profile=release-with-debug --bin bop-gateway --features shmem \

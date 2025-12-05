@@ -11,6 +11,7 @@ deps := "just -f " + join(justfile_directory(), "deps", "Justfile")
     echo "docker: {{require('docker')}}"
     echo "cast: {{require('cast')}}"
     echo "rustup: {{require('rustup')}}"
+    echo "python: {{require('python')}}"
 
 # Prepare the local environment: fetch deps, build them, setup toolchains...
 @prepare:
