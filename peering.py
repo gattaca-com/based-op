@@ -38,7 +38,8 @@ class NodePeering:
         for url in self.node_urls:
             self_info = self.node_opp2p_self(url)
             node_addresses = self_info.get('addresses', [])
-            multi_addresses[url] = node_addresses
+            node_local = [re.sub(r'\/ip4\/[0-9\.]*\/', '/ip4/127.0.0.1/', addr) for addr in node_addresses]
+            multi_addresses[url] = node_local
             print(f"Node at {url} has addresses: {node_addresses}")
 
         for (url1, addrs1), (url2, addrs2) in combinations(multi_addresses.items(), 2):
