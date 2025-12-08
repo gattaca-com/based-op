@@ -2,6 +2,8 @@ root := join(justfile_directory(), "..")
 assets := canonicalize(join(root, ".github", "assets"))
 
 parent := "just -f " + join(root, "Justfile")
+based := "just -f " + join(root, "based", "docker", "Justfile")
+deps := "just -f " + join(root, "deps", "Justfile")
 
 # Prepare chain config from known values 
 prepare:
@@ -25,6 +27,25 @@ prepare:
 
     echo "*** Main Node and Follower Node configured! Use \`run\` to start both"
 
+# Run the configured chain
 @run: (prepare)
     {{parent}} main-node start
     {{parent}} follower-node start-dev
+
+# Run tests on the configured chain
+test: 
+    {{parent}} test tx
+
+# Stop the configured chain
+@stop:
+    {{parent}} main-node stop
+    {{parent}} follower-node stop
+    
+# Save the built images of the used services
+export-images dest:
+    docker save local_based_op_node | gzip > {{dest}}/based-op-node.tar.gz
+    docker save local_based_op_deployer | gzip > {{dest}}/based-op-deployer.tar.gz
+    docker save local_based_op_geth | gzip > {{dest}}/based-op-geth.tar.gz
+    {{based}} export-all {{dest}}
+
+

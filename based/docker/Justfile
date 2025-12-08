@@ -9,6 +9,10 @@ build image *args:
     docker build -t local_based_{{image}} -f ./{{image}}.Dockerfile ../ {{args}} \
     {{quiet}}
 
+save image dest:
+    echo "Exporting {{image}}..."
+    docker save local_based{{image}} | gzip > {{dest}}/based-{{image}}.tar.gz
+
 build-portal: (build "portal")
 build-registry: (build "registry")
 build-gateway: (build "gateway")
@@ -17,6 +21,9 @@ build-metrics-exporter: (build "metrics-exporter" "--load")
 
 [parallel]
 all: build-portal build-registry build-gateway build-txproxy build-metrics-exporter
+
+[parallel]
+export-all dest: (save "portal" dest) (save "registry" dest) (save "gateway" dest) (save "txproxy" dest) (save "metrics-exporter" dest)
 
 # Creates the docker network `name` if it doesn't already exist
 create-network name="based_op_net":

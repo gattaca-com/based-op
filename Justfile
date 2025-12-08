@@ -1,6 +1,10 @@
 set dotenv-load
 
-export LOCAL_DATA := canonicalize(env("LOCAL_DATA", shell('mkdir -p .local && echo ".local"')))
+export LOCAL_DATA := canonicalize(env("LOCAL_DATA", shell('mkdir -p .local && realpath .local')))
+
+# dev = use locally built images
+# prod = use releases
+export BASED_ENV := env("BASED_ENV", "prod")
 
 self := "just -f " + justfile()
 deps := "just -f " + join(justfile_directory(), "deps", "Justfile")

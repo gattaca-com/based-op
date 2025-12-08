@@ -1,0 +1,99 @@
+name: Project integration tests
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASED_ENV: dev
+  PORTAL_TIMEOUT: 180
+
+jobs:
+  # Build images and publish as artifacts
+  build:
+    name: Build images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Install Just
+        uses: taiki-e/install-action@just
+
+      - name: Build Docker images
+        run: |
+          just build
+        
+      - name: Save Docker images to tarballs
+        run: |
+          mkdir -p artifacts
+          just ci export-images $(realpath ./artifacts)
+
+      - name: Upload images artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: based-op-images
+          path: artifacts
+
+  # Use published artifacts and run nodes
+  test:
+    name: Configure nodes & run tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Install Just
+        uses: taiki-e/install-action@just
+
+      - name: Install Foundry 
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Download images artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: based-op-images
+          path: /tmp/artifacts/images
+
+      - name: Load Docker images
+        run: |
+          set -euo pipefail
+          find /tmp/artifacts/images -type f -exec docker load -i {} \;
+
+      - name: Prepare configuration
+        run: |
+          set -euo pipefail
+          just ci prepare
+
+      - name: Publish configuration artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: config
+          path: .local
+
+      - name: Start Based OP services
+        run: |
+          set -euo pipefail
+          just ci run
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          just ci test
+      
+      - name: Teardown
+        if: always()
+        run: |
+          just ci stop

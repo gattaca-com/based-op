@@ -28,7 +28,7 @@ needs_create name:
 #
 # Outputs the address of the generated wallet
 create name override="":
-    #!/usr/bin/env sh
+    #!/usr/bin/env bash
     set -euo pipefail
 
     wallet=$(docker run --rm -i {{tool_image}} {{override}})
@@ -47,7 +47,7 @@ create name override="":
 
 # Ensures the wallet `name` exists, and returns the corresponding address
 ensure name override="":
-    #!/usr/bin/env sh
+    #!/usr/bin/env bash
     set -euo pipefail
     
     mkdir -p $DATA_FOLDER 
