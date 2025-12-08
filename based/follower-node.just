@@ -22,6 +22,9 @@ export PORTAL := shell("echo ${PORTAL:-$(" + portal + " address)}")
 # Force config creation
 export FORCE := env("FORCE", "")
 
+# Use local or release images
+export BASED_ENV := env("BASED_ENV", "prod")
+
 WALLET_NAME := env("FOLLOWER_NODE_WALLET", "gateway")
 PORTAL_TIMEOUT := env("PORTAL_TIMEOUT", "30")
 
@@ -37,7 +40,7 @@ _generate-dotenv gossip enr enode $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     set -euo pipefail
     
     cp $FOLLOWER_NODE_DIR/env_example $dotenv
-    cp $FOLLOWER_NODE_DIR/compose* $(dirname $dotenv) 
+    cp $FOLLOWER_NODE_DIR/compose.{{BASED_ENV}}.yml $(dirname $dotenv)/compose.yml
 
     l2_chain_id=$({{portal}} l2_chain_id)
 
@@ -165,7 +168,7 @@ _is-configured $cfg=FOLLOWER_NODE_DATA:
     set -euo pipefail
 
     if  [ ! -d $cfg ]; then
-      echo "❌ Gateway and Follower Node does not seem to have been configured at $cfg. run `create-config` to configure"
+      echo "❌ Gateway and Follower Node does not seem to have been configured at $cfg. run \`create-config\` to configure"
       exit 1
     fi
 

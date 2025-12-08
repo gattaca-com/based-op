@@ -22,6 +22,9 @@ export OP_SEQUENCER_KEY := env("OP_SEQUENCER_KEY")
 
 # Force config creation
 export FORCE := env("FORCE", "")
+#
+# Use local or release images
+export BASED_ENV := env("BASED_ENV", "prod")
 
 # Invocation utils
 self := "just -f " + justfile()
@@ -52,7 +55,7 @@ _generate-dotenv $cfg=join(MAIN_NODE_DATA, "config") $dotenv=join(shell("dirname
     MAIN_NODE_DATA=$(dirname $cfg)
 
     cp $MAIN_NODE_DIR/env_example $dotenv
-    cp $MAIN_NODE_DIR/compose* $MAIN_NODE_DATA
+    cp $MAIN_NODE_DIR/compose.{{BASED_ENV}}.yml $MAIN_NODE_DATA/compose.yml
     cp $MAIN_NODE_DIR/tx_receivers_example.json $cfg/tx_receivers.json
 
     # TODO: $(MAKE) fix-compose # Unable to find it
@@ -135,7 +138,7 @@ _is-configured $cfg=join(MAIN_NODE_DATA, "config"):
     set -euo pipefail
 
     if  [ ! -d $cfg ]; then
-      echo "❌ main-node does not seem to have been configured at $cfg. run `create-config` to configure"
+      echo "❌ main-node does not seem to have been configured at $cfg. run \`create-config\` to configure"
       exit 1
     fi
 
