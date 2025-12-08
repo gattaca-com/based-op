@@ -81,7 +81,9 @@ create-config $cfg=join(MAIN_NODE_DATA, "config"):
         exit 1
     fi 
 
+    # Ensure directory exists and has write permissions
     mkdir -p $cfg
+    chmod 755 $cfg || true
 
     {{self}} _op-deployer $cfg op-deployer init --l1-chain-id $L1_CHAIN_ID --l2-chain-ids $L2_CHAIN_ID --workdir /config
     {{self}} _populate-intent
