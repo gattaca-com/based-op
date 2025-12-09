@@ -3,9 +3,11 @@ name: Project integration tests
 on:
   pull_request:
     branches:
+      - develop
       - main
   push:
     branches:
+      - develop
       - main
 
 concurrency:
