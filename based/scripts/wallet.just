@@ -53,6 +53,7 @@ ensure name override="":
     mkdir -p $DATA_FOLDER 
 
     {{self}} needs_create {{name}} || {
+        {{self}} address {{name}}
         # No need to create the wallet 
         exit 0 
     }
