@@ -67,12 +67,10 @@ jobs:
 
       - name: Load Docker images
         run: |
-          set -euo pipefail
           find /tmp/artifacts/images -type f -exec docker load -i {} \;
 
       - name: Prepare configuration
         run: |
-          set -euo pipefail
           just ci prepare
 
       - name: Publish configuration artifact
@@ -84,13 +82,11 @@ jobs:
 
       - name: Start Based OP services
         run: |
-          set -euo pipefail
           just ci run
 
       - name: Run tests
         shell: bash
         run: |
-          set -euo pipefail
           just ci test
       
       - name: Teardown

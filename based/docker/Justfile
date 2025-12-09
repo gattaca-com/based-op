@@ -11,7 +11,7 @@ build image *args:
 
 save image dest:
     echo "Exporting {{image}}..."
-    docker save local_based{{image}} | gzip > {{dest}}/based-{{image}}.tar.gz
+    docker save local_based_{{image}} | gzip > {{dest}}/based-{{image}}.tar.gz
 
 build-portal: (build "portal")
 build-registry: (build "registry")
