@@ -1,4 +1,5 @@
-export PORTAL := env("PORTAL", "http://0.0.0.0:8080")
+export PORTAL_PORT := env("PORTAL_PORT", "8080")
+export PORTAL := env("PORTAL", "http://0.0.0.0:" + PORTAL_PORT)
 
 # Normally JQ doesn't return error if its return was empty or null. -e fixes that
 export JQ_ARGS := env("JQ_ARGS", "-e")

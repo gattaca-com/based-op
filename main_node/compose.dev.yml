@@ -157,6 +157,7 @@ services:
       - --registry.url=http://0.0.0.0:${REGISTRY_PORT}
       - --gateway.timeout_ms=200
       - --log.dir=/var/log/app
+      - --port=${PORTAL_PORT}
     volumes:
       - ./config:/config
       - /tmp:/tmp
