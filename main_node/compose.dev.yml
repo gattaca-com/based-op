@@ -147,6 +147,7 @@ services:
 
   based-portal:
     image: local_based_portal:latest
+    container_name: based-portal
     network_mode: "host"
     # Override inter-container URLs for bridge networking
     command:
