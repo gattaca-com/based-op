@@ -80,15 +80,15 @@ jobs:
           cp .env.example .env
           just ci prepare
 
-      - name: Publish configuration artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: config
-          include-hidden-files: true
-          path: |
-            .local
-            !.local/**/data
+      # - name: Publish configuration artifact
+      #   uses: actions/upload-artifact@v4
+      #   if: always()
+      #   with:
+      #     name: config
+      #     include-hidden-files: true
+      #     path: |
+      #       .local
+      #       !.local/**/data
 
       - name: Start Based OP services
         run: |
