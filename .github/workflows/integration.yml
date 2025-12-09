@@ -86,7 +86,9 @@ jobs:
         with:
           name: config
           include-hidden-files: true
-          path: .local
+          path: |
+            .local
+            !.local/**/data
 
       - name: Start Based OP services
         run: |
