@@ -9,7 +9,7 @@ fetch:
     {{optimism}} fetch
 
 build: fetch
-    #!/usr/bin/env
+    #!/usr/bin/env bash
     
     ({{geth}} fetch; {{geth}} build) &
     ({{optimism}} fetch; {{optimism}} build) &
