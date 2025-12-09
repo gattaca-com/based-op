@@ -1,8 +1,8 @@
 import '../based/scripts/consts.just'
 
-export BOP_EL_PORT := env("BOP_EL_PORT", shell("source $(" + parent + " follower-node _is-configured)/.env && echo $OP_GETH_ENGINE_RPC_PORT")) 
-export OP_EL_PORT := env("OP_EL_PORT", shell("source $(" + parent + " main-node _is-configured)/../.env && echo $OP_GETH_ENGINE_RPC_PORT"))
-export BOP_NODE_PORT := env("BOP_NODE_PORT", shell("source $(" + parent + " main-node _is-configured)/../.env && echo $OP_NODE_GOSSIP_PORT")) 
+export BOP_EL_PORT := env("BOP_EL_PORT", shell("grep '^OP_GETH_ENGINE_RPC_PORT=' $(" + parent + " follower-node _is-configured)/.env | cut -d'=' -f2")) 
+export OP_EL_PORT := env("OP_EL_PORT", shell("grep '^OP_GETH_ENGINE_RPC_PORT=' $(" + parent + " main-node _is-configured)/../.env | cut -d'=' -f2"))
+export BOP_NODE_PORT := env("BOP_NODE_PORT", shell("grep '^OP_NODE_GOSSIP_PORT=' $(" + parent + " main-node _is-configured)/../.env | cut -d'=' -f2")) 
 
 # Invocation utils
 self := "just -f " + justfile()
