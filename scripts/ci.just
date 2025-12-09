@@ -9,9 +9,12 @@ deps := "just -f " + join(root, "deps", "Justfile")
 prepare:
     #!/usr/bin/env bash
     set -euo pipefail
+
+    # Ensure LOCAL_DATA folder is available
+    mkdir -p $LOCAL_DATA
     
     # Populate wallets from backup
-    cp -r --update=none {{join(assets, "wallets")}} {{join(env("LOCAL_DATA"), ".wallet")}} || true
+    cp -r --update=none {{join(assets, "wallets")}} {{join("$LOCAL_DATA", ".wallet")}} || true
 
     {{parent}} main-node _is-configured || {
       echo "*** Using chain config at {{assets}} to configure Main Node..."
