@@ -1,10 +1,16 @@
 set dotenv-load
 set quiet
 
+geth := "just -f " + join(justfile_directory(), "geth.just")
+optimism := "just -f " + join(justfile_directory(), "optimism.just")
+
 fetch:
-    just -f geth.just fetch
-    just -f optimism.just fetch
+    {{geth}} fetch
+    {{optimism}} fetch
 
 build: fetch
-    just -f geth.just build
-    just -f optimism.just build
+    #!/usr/bin/env
+    
+    ({{geth}} fetch; {{geth}} build) &
+    ({{optimism}} fetch; {{optimism}} build) &
+    wait

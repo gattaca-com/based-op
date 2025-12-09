@@ -24,9 +24,14 @@ deps := "just -f " + join(justfile_directory(), "deps", "Justfile")
     cd based && rustup toolchain install 
 
 # 🏗️ Build
-@build:  
-    {{deps}} build
-    just -f based/docker/Justfile all
+build:  
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    {{deps}} build &
+    just -f based/docker/Justfile all &
+
+    wait
  
 # 📚 Build local docs
 docs:
