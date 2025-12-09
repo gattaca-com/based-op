@@ -13,10 +13,10 @@ export MAIN_NODE_DIR := join(justfile_directory(), "..", "..", "main_node")
 export L1_CHAIN_ID := env("L1_CHAIN_ID", "11155111") # Default to Sepolia
 export L2_CHAIN_ID := env("L2_CHAIN_ID", shell(gen-l2-chain-id))
 
-export OP_PROPOSER_KEY := env("OP_PROPOSER_KEY")
-export OP_BATCHER_KEY := env("OP_BATCHER_KEY")
-export OP_SEQUENCER_KEY := env("OP_SEQUENCER_KEY")
-
+export OP_PROPOSER_KEY := env("OP_PROPOSER_KEY", shell(wallet + " key proposer"))
+export OP_BATCHER_KEY := env("OP_BATCHER_KEY", shell(wallet + " key batcher"))
+export OP_SEQUENCER_KEY := env("OP_SEQUENCER_KEY", shell(wallet + " key sequencer"))
+#
 # Force config creation
 export FORCE := env("FORCE", "")
 
@@ -37,7 +37,7 @@ echo $(($RAW % 50000 + 1))
 
 # Invocation utils
 self := "just -f " + justfile()
-wallet := "just -f " + justfile_directory() + "/wallet.just"
+wallet := "just -f " + join(justfile_directory(), "wallet.just")
 
 _op-deployer $cfg *runtime-args:
     docker run --rm -v $cfg:/config -e DEPLOYER_CACHE_DIR=$DEPLOYER_CACHE_DIR \

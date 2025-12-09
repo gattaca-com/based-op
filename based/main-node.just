@@ -16,9 +16,9 @@ export BASED_OP_NODE_DATA_DIR := env("BASED_OP_NODE_DATA_DIR", join(BASED_MAIN_N
 export MAIN_NODE_DIR := join(justfile_directory(), "..", "main_node")
 
 # External environment configuration 
-export OP_PROPOSER_KEY := env("OP_PROPOSER_KEY")
-export OP_BATCHER_KEY := env("OP_BATCHER_KEY")
-export OP_SEQUENCER_KEY := env("OP_SEQUENCER_KEY")
+export OP_PROPOSER_KEY := env("OP_PROPOSER_KEY", shell(wallet + " key proposer"))
+export OP_BATCHER_KEY := env("OP_BATCHER_KEY", shell(wallet + " key batcher"))
+export OP_SEQUENCER_KEY := env("OP_SEQUENCER_KEY", shell(wallet + " key sequencer"))
 
 # Force config creation
 export FORCE := env("FORCE", "")
@@ -29,6 +29,7 @@ export BASED_ENV := env("BASED_ENV", "prod")
 # Invocation utils
 self := "just -f " + justfile()
 link := "just -f " + join(justfile_directory(), "scripts", "link.just")
+wallet := "just -f " + join(justfile_directory(), "scripts", "wallet.just")
 
 @_link-data dest=join(BASED_MAIN_NODE_DATA_DIR, "data"):
     {{link}} link-dir-if-exists-elsewhere BASED_OP_GETH_DATA_DIR "{{dest}}/geth"

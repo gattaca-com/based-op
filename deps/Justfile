@@ -4,13 +4,17 @@ set quiet
 geth := "just -f " + join(justfile_directory(), "geth.just")
 optimism := "just -f " + join(justfile_directory(), "optimism.just")
 
-fetch:
-    {{geth}} fetch
-    {{optimism}} fetch
+_fetch dep:
+    just -f {{join(justfile_directory(), dep + ".just")}} fetch
 
-build: fetch
-    #!/usr/bin/env bash
-    
-    ({{geth}} fetch; {{geth}} build) &
-    ({{optimism}} fetch; {{optimism}} build) &
-    wait
+[parallel]
+fetch: (_fetch "geth") (_fetch "optimism")
+
+_build dep: (_fetch dep)
+    just -f {{join(justfile_directory(), dep + ".just")}} build
+
+[parallel]
+build: (_build "geth") (_build "optimism")
+
+hash dep:
+    git -C {{join(justfile_directory(), dep)}} rev-parse --verify --short HEAD
