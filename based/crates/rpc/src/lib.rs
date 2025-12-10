@@ -10,7 +10,7 @@ use bop_common::{
     api::{ControlApiServer, EngineApiServer, MinimalEthApiServer, MinimalMevApiServer, OpMinerExtApiServer},
     communication::{
         Producer, Sender, Spine,
-        messages::{EngineApi, RpcError, RpcResult},
+        messages::{EngineApi, RpcResult},
     },
     config::GatewayArgs,
     db::DatabaseRead,
@@ -165,17 +165,16 @@ impl MinimalMevApiServer for RpcServer {
     async fn send_bundle(&self, bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
         trace!(?bundle, "new bundle request");
 
+        // Convert to internal bundle type
         let bundle = Bundle::<Bytes>::from(bundle);
         let bundle_hash = bundle.bundle_hash();
 
-        // Decode the bundle transactions
-        let bundle = bundle.try_decode().map_err(RpcError::InvalidBundle)?;
+        // Validate the bundle on a separate thread to avoid blocking this one.
+        let bundle = tokio::task::spawn_blocking(move || bundle.try_decode()?.validate()).await?;
 
         // TODO:
-        // - Convert to internal bundle type, initial validation (op tx types)
-        // - Get hash to return according to <https://docs.titanbuilder.xyz/api/eth_sendbundle#bundle-hash>
         // - Wrap in order, send to sequencer
-        // - Metrics
+        // - Telemetry
 
         Ok(EthBundleHash { bundle_hash })
     }
