@@ -5,10 +5,15 @@ use std::{
     sync::OnceLock,
 };
 
+use alloy_consensus::transaction::Recovered;
 use alloy_eips::{Decodable2718, eip2718::Eip2718Error};
 use alloy_primitives::{B256, Bytes, TxHash, U64};
 use alloy_rpc_types::mev::EthSendBundle;
 use op_alloy_consensus::OpTxEnvelope;
+use reth_primitives_traits::SignedTransaction;
+
+/// Type alias for a validated bundle.
+pub type ValidatedBundle = Bundle<Recovered<OpTxEnvelope>>;
 
 /// An internal, minimal bundle type.
 #[derive(Debug)]
@@ -85,6 +90,8 @@ impl Bundle<Bytes> {
 pub enum BundleValidationError {
     #[error("invalid transaction encoding: {0:?}")]
     DecodeError(#[from] Eip2718Error),
+    #[error("invalid signature on transaction: {0:?}")]
+    InvalidSignature(TxHash),
 }
 
 impl Bundle<OpTxEnvelope> {
@@ -92,5 +99,23 @@ impl Bundle<OpTxEnvelope> {
     pub fn bundle_hash(&self) -> B256 {
         // SAFETY: At this point, the bundle hash is guaranteed to be initialized.
         *self.bundle_hash.get().expect("bundle hash is not initialized")
+    }
+
+    /// Validates the bundle, including signature validation of included transactions.
+    ///
+    /// This is a CPU-intensive operation.
+    pub fn validate(self) -> Result<ValidatedBundle, BundleValidationError> {
+        let recovered = self
+            .transactions
+            .into_iter()
+            .map(|tx| tx.try_into_recovered().map_err(|tx| BundleValidationError::InvalidSignature(tx.tx_hash())))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Bundle {
+            block_number: self.block_number,
+            transactions: recovered,
+            reverting_tx_hashes: self.reverting_tx_hashes,
+            bundle_hash: self.bundle_hash,
+        })
     }
 }
