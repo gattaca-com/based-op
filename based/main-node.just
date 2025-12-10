@@ -100,6 +100,15 @@ _finalize-config $cfg=join(MAIN_NODE_DATA, "config"):
     {{self}} _link-data "$MAIN_NODE_DATA/data"
     echo "*** Done initializing $MAIN_NODE_DATA" 
 
+# Create a backup of the chain config at `destination`
+backup-config $dest $cfg=join(MAIN_NODE_DATA, "config"):
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    cp $cfg/rollup.json $dest
+    cp $cfg/state.json $dest
+    cp $cfg/genesis.json $dest
+
 # Create the Main Node configuration
 #
 # Arguments:

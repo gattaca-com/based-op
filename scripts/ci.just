@@ -5,6 +5,18 @@ parent := "just -f " + join(root, "Justfile")
 based := "just -f " + join(root, "based", "docker", "Justfile")
 deps := "just -f " + join(root, "deps", "Justfile")
 
+# Upgrade the stored chain config with the one currently in use
+_upgrade:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    {{parent}} main-node _is-configured || {
+      echo "*** No active chain configuration!"
+      exit 1
+    }
+
+    {{parent}} main-node backup-config {{assets}}
+
 # Prepare chain config from known values 
 prepare:
     #!/usr/bin/env bash
