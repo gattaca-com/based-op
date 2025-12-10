@@ -15,7 +15,7 @@ use bop_common::{
     config::GatewayArgs,
     db::DatabaseRead,
     fabric::FabricGatewayApiServer,
-    order::bundle::Bundle,
+    order::{Order, bundle::Bundle},
     p2p::SignedVersionedMessage,
     telemetry::{TelemetryUpdate, telemetry_queue},
     time::Duration,
@@ -57,7 +57,7 @@ pub fn start_rpc<Db: DatabaseRead>(
 // TODO: timing
 #[derive(Debug, Clone)]
 struct RpcServer {
-    new_order_tx: Sender<Arc<Transaction>>,
+    new_order_tx: Sender<Arc<Order>>,
     engine_timeout: Duration,
     engine_rpc_tx: Sender<EngineApi>,
     jwt: JwtSecret,
@@ -149,11 +149,15 @@ impl MinimalEthApiServer for RpcServer {
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         trace!(?bytes, "new request");
 
-        let tx = Arc::new(Transaction::decode(bytes)?);
+        let tx = Transaction::decode(bytes)?;
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
 
         let hash = tx.tx_hash();
-        let _ = self.new_order_tx.send(tx.into());
+        let order = Arc::new(Order::from(tx));
+
+        if let Err(e) = self.new_order_tx.send(order.into()) {
+            tracing::error!(?e, "failed to send transaction order to sequencer");
+        }
 
         Ok(hash)
     }
@@ -170,10 +174,14 @@ impl MinimalMevApiServer for RpcServer {
         let bundle_hash = bundle.bundle_hash();
 
         // Validate the bundle on a separate thread to avoid blocking this one.
-        let bundle = tokio::task::spawn_blocking(move || bundle.try_decode()?.validate()).await?;
+        let bundle = tokio::task::spawn_blocking(move || bundle.try_decode()?.validate()).await??;
+        let order = Arc::new(Order::from(bundle));
+
+        if let Err(e) = self.new_order_tx.send(order.into()) {
+            tracing::error!(?e, "failed to send bundle order to sequencer");
+        }
 
         // TODO:
-        // - Wrap in order, send to sequencer
         // - Telemetry
 
         Ok(EthBundleHash { bundle_hash })
