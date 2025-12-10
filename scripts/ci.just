@@ -20,7 +20,9 @@ _upgrade:
 
     {{parent}} main-node backup-config {{assets}}
 
-# Prepare chain config from known values 
+# Prepare chain config
+#
+# Will deploy a new chain each time, using a known wallet
 prepare:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -33,7 +35,7 @@ prepare:
 
     {{parent}} main-node _is-configured || {
       echo "*** Using chain config at {{assets}} to configure Main Node..."
-      {{parent}} main-node create-config {{assets}}
+      {{parent}} main-node config-with-deploy 
     }
 
     {{parent}} follower-node _is-configured || {
