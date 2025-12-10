@@ -5,6 +5,10 @@ parent := "just -f " + join(root, "Justfile")
 based := "just -f " + join(root, "based", "docker", "Justfile")
 deps := "just -f " + join(root, "deps", "Justfile")
 
+export DOCKER_CACHING := '''
+--cache-from type=registry,ref=ghcr.io/$GITHUB_REPOSITORY/$IMAGE_NAME:cache \
+--cache-to type=registry,ref=ghcr.io/$GITHUB_REPOSITORY/$IMAGE_NAME:cache,mode=max'''
+
 @build:
     {{parent}} build
 

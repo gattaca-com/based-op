@@ -3,10 +3,19 @@ set quiet
 suppress_output := env("QUIET", "true")
 quiet := if suppress_output == "true" { "--quiet > /dev/null 2>&1 " } else { "" }
 
+# Inject caching into docker builds
+caching := env("DOCKER_CACHING", "")
+
 # Build the docker image from the corresponding `.Dockerfile`
 build image *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    IMAGE_NAME="{{image}}"
+
     echo "Building {{image}}..."
-    docker build -t local_based_{{image}} -f ./{{image}}.Dockerfile ../ {{args}} \
+    docker buildx build -t local_based_{{image}} -f ./{{image}}.Dockerfile ../ {{args}} \
+    {{caching}} \
     {{quiet}}
 
 save image dest:
