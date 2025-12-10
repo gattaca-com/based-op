@@ -17,7 +17,7 @@ alloy-primitives = { version = "1.0.41", default-features = false, features = [
 ] }
 alloy-provider = "1.0.41"
 alloy-rlp = "0.3.12"
-alloy-rpc-types = { version = "1.0.41", features = ["engine"] }
+alloy-rpc-types = { version = "1.0.41", features = ["engine", "mev"] }
 alloy-signer = "1.0.41"
 alloy-signer-local = "1.0.41"
 alloy-transport = "1.0.41"
@@ -44,7 +44,12 @@ futures = "0.3.31"
 hickory-resolver = "=0.25.0-alpha.5" # Use the exact version reth expects
 http = "1.3.1"
 hyper = "1.5.2"
-jsonrpsee = { version = "0.26", features = ["http-client", "macros", "server", "jsonrpsee-client-transport"] }
+jsonrpsee = { version = "0.26", features = [
+  "http-client",
+  "macros",
+  "server",
+  "jsonrpsee-client-transport",
+] }
 metrics = "0.24.1"
 metrics-exporter-prometheus = "0.16.2"
 mio = { features = ["net", "os-poll"], version = "1.0.4" }
@@ -76,7 +81,9 @@ reth-db-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "
 reth-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-evm" }
 reth-execution-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-execution-errors" }
 reth-engine-tree = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-engine-tree" }
-reth-node-ethereum = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-node-ethereum", features = ["test-utils"] }
+reth-node-ethereum = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-node-ethereum", features = [
+  "test-utils",
+] }
 reth-node-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-node-types" }
 reth-optimism-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-chainspec" }
 reth-optimism-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-cli" }
@@ -89,7 +96,9 @@ reth-optimism-txpool = { git = "https://github.com/gattaca-com/based-op-reth", r
 reth-optimism-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-primitives" }
 reth-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-primitives" }
 reth-primitives-traits = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-primitives-traits" }
-reth-provider = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-provider", features = ["test-utils"] }
+reth-provider = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-provider", features = [
+  "test-utils",
+] }
 reth-revm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-revm" }
 reth-rpc-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-rpc-builder" }
 reth-rpc-layer = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-rpc-layer" }
@@ -97,7 +106,9 @@ reth-stages-types = { git = "https://github.com/gattaca-com/based-op-reth", rev 
 reth-storage-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-storage-api" }
 reth-storage-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-storage-errors" }
 reth-trie = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie" }
-reth-trie-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-common", features = ["test-utils"] }
+reth-trie-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-common", features = [
+  "test-utils",
+] }
 reth-trie-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-db" }
 reth-trie-parallel = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-parallel" }
 
@@ -129,7 +140,11 @@ tower = { version = "0.5", features = ["timeout"] }
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "time"] }
+tracing-subscriber = { version = "0.3.20", features = [
+  "env-filter",
+  "fmt",
+  "time",
+] }
 tree_hash = "0.10"
 tree_hash_derive = "0.10"
 uuid = { version = "1.12.1", features = ["serde", "v4"] }

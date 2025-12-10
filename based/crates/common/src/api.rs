@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::{Address, B256, Bytes, U64};
-use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
+use alloy_rpc_types::{
+    engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus},
+    mev::{EthBundleHash, EthSendBundle},
+};
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpExecutionPayloadV4, OpPayloadAttributes};
@@ -81,6 +84,15 @@ pub trait MinimalEthApi {
     /// Sends signed transaction, returning its hash
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
+}
+
+#[rpc(client, server, namespace = "eth")]
+pub trait MinimalMevApi {
+    /// Sends an atomic bundle of transactions, returning the bundle hash.
+    ///
+    /// ref: <https://docs.titanbuilder.xyz/api/eth_sendbundle>
+    #[method(name = "sendBundle")]
+    async fn send_bundle(&self, bundle: EthSendBundle) -> RpcResult<EthBundleHash>;
 }
 
 #[rpc(client, server, namespace = "registry")]

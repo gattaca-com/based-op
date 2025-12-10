@@ -1,10 +1,13 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use alloy_primitives::{B256, Bytes, U64};
-use alloy_rpc_types::engine::JwtSecret;
+use alloy_rpc_types::{
+    engine::JwtSecret,
+    mev::{EthBundleHash, EthSendBundle},
+};
 use axum::{Router, routing::get};
 use bop_common::{
-    api::{ControlApiServer, EngineApiServer, MinimalEthApiServer, OpMinerExtApiServer},
+    api::{ControlApiServer, EngineApiServer, MinimalEthApiServer, MinimalMevApiServer, OpMinerExtApiServer},
     communication::{
         Producer, Sender, Spine,
         messages::{EngineApi, RpcResult},
@@ -152,6 +155,24 @@ impl MinimalEthApiServer for RpcServer {
         let _ = self.new_order_tx.send(tx.into());
 
         Ok(hash)
+    }
+}
+
+#[async_trait]
+impl MinimalMevApiServer for RpcServer {
+    #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
+    async fn send_bundle(&self, bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
+        trace!(?bundle, "new bundle request");
+
+        // TODO:
+        // - Convert to internal bundle type, initial validation (op tx types)
+        // - Get hash to return according to <https://docs.titanbuilder.xyz/api/eth_sendbundle#bundle-hash>
+        // - Wrap in order, send to sequencer
+        // - Metrics
+
+        let bundle_hash = bundle.bundle_hash();
+
+        Ok(EthBundleHash { bundle_hash })
     }
 }
 
