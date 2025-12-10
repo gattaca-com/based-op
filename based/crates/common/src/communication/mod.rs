@@ -11,7 +11,7 @@ use reth_evm::EvmEnv;
 use shared_memory::ShmemError;
 use thiserror::Error;
 
-use crate::{p2p::VersionedMessageWithState, typedefs::*};
+use crate::{order::Order, p2p::VersionedMessageWithState, typedefs::*};
 
 pub mod queue;
 pub mod seqlock;
@@ -25,7 +25,6 @@ pub use walkie_talkie::WalkieTalkie;
 
 use crate::{
     time::{Duration, IngestionTime, Instant, Timer},
-    transaction::Transaction,
     utils::{full_last_part_of_typename, last_part_of_typename},
 };
 
@@ -260,8 +259,8 @@ pub struct Spine<Db: 'static> {
     sender_engine_rpc_to_sequencer: Sender<EngineApi>,
     receiver_engine_rpc_to_sequencer: CrossBeamReceiver<EngineApi>,
 
-    sender_eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
-    receiver_eth_rpc_to_sequencer: CrossBeamReceiver<Arc<Transaction>>,
+    sender_eth_rpc_to_sequencer: Sender<Arc<Order>>,
+    receiver_eth_rpc_to_sequencer: CrossBeamReceiver<Arc<Order>>,
 
     sender_blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     receiver_blockfetch_to_sequencer: CrossBeamReceiver<BlockSyncMessage>,
@@ -371,7 +370,7 @@ from_spine!(SimulatorToSequencer, simulator_to_sequencer, Sender);
 from_spine!(SequencerToSimulator<Db>, sequencer_to_simulator, Sender);
 from_spine!(SequencerToExternal, sequencer_to_rpc, Sender);
 from_spine!(messages::EngineApi, engine_rpc_to_sequencer, Sender);
-from_spine!(Arc<Transaction>, eth_rpc_to_sequencer, Sender);
+from_spine!(Arc<Order>, eth_rpc_to_sequencer, Sender);
 from_spine!(BlockSyncMessage, blockfetch_to_sequencer, Sender);
 from_spine!(messages::BlockFetch, sequencer_to_blockfetch, Sender);
 
@@ -400,7 +399,7 @@ pub struct SendersSpine<Db> {
     sequencer_to_rpc: Sender<SequencerToExternal>,
     simulator_to_sequencer: Sender<SimulatorToSequencer>,
     engine_rpc_to_sequencer: Sender<EngineApi>,
-    eth_rpc_to_sequencer: Sender<Arc<Transaction>>,
+    eth_rpc_to_sequencer: Sender<Arc<Order>>,
     blockfetch_to_sequencer: Sender<BlockSyncMessage>,
     sequencer_frag_broadcast: Sender<VersionedMessageWithState>,
     evm_block_params: Producer<InternalMessage<EvmEnv<OpSpecId>>>,
@@ -446,7 +445,7 @@ pub struct ReceiversSpine<Db> {
     sequencer_to_simulator: Receiver<SequencerToSimulator<Db>>,
     sequencer_to_rpc: Receiver<SequencerToExternal>,
     engine_rpc_to_sequencer: Receiver<EngineApi>,
-    eth_rpc_to_sequencer: Receiver<Arc<Transaction>>,
+    eth_rpc_to_sequencer: Receiver<Arc<Order>>,
     blockfetch_to_sequencer: Receiver<BlockSyncMessage>,
     sequencer_frag_broadcast: Receiver<VersionedMessageWithState>,
     evm_block_params: Receiver<EvmEnv<OpSpecId>, Consumer<InternalMessage<EvmEnv<OpSpecId>>>>,
