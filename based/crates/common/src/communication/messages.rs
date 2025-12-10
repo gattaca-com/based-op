@@ -22,6 +22,7 @@ use tokio::sync::oneshot::{self};
 use crate::{
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::{DBFrag, DBSorting},
+    order::bundle::BundleValidationError,
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
     typedefs::*,
@@ -268,6 +269,9 @@ pub enum RpcError {
     #[error("invalid transaction bytes")]
     InvalidTransaction(#[from] alloy_rlp::Error),
 
+    #[error("invalid bundle: {0}")]
+    InvalidBundle(#[from] BundleValidationError),
+
     #[error("jsonrpsee error {0}")]
     Jsonrpsee(#[from] jsonrpsee::core::ClientError),
 
@@ -308,6 +312,12 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::NoReturn => internal_error(),
 
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
+                ErrorCode::InvalidParams.code(),
+                ErrorCode::InvalidParams.message(),
+                Some(error.to_string()),
+            ),
+
+            RpcError::InvalidBundle(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
                 Some(error.to_string()),

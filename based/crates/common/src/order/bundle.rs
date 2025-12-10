@@ -5,7 +5,7 @@ use std::{
     sync::OnceLock,
 };
 
-use alloy_eips::Decodable2718;
+use alloy_eips::{Decodable2718, eip2718::Eip2718Error};
 use alloy_primitives::{B256, Bytes, TxHash, U64};
 use alloy_rpc_types::mev::EthSendBundle;
 use op_alloy_consensus::OpTxEnvelope;
@@ -49,23 +49,21 @@ impl Bundle<Bytes> {
     /// Calculates the bundle hash similarly to <https://docs.titanbuilder.xyz/api/eth_sendbundle#bundle-hash>,
     /// but using only the supported fields.
     pub fn bundle_hash(&self) -> B256 {
-        self.bundle_hash
-            .get_or_init(|| {
-                let mut hasher = wyhash::WyHash::default();
-                let mut bytes = [0u8; 32];
-                for i in 0..4 {
-                    self.hash(&mut hasher);
-                    let hash = hasher.finish();
-                    bytes[(i * 8)..((i + 1) * 8)].copy_from_slice(&hash.to_be_bytes());
-                }
+        *self.bundle_hash.get_or_init(|| {
+            let mut hasher = wyhash::WyHash::default();
+            let mut bytes = [0u8; 32];
+            for i in 0..4 {
+                self.hash(&mut hasher);
+                let hash = hasher.finish();
+                bytes[(i * 8)..((i + 1) * 8)].copy_from_slice(&hash.to_be_bytes());
+            }
 
-                B256::from(bytes)
-            })
-            .clone()
+            B256::from(bytes)
+        })
     }
 
     /// Tries to decode the RLP-encoded transactions into a bundle of [`OpTxEnvelope`]s.
-    pub fn try_decode(self) -> Result<Bundle<OpTxEnvelope>, alloy_rlp::Error> {
+    pub fn try_decode(self) -> Result<Bundle<OpTxEnvelope>, BundleValidationError> {
         // Ensure the bundle hash is initialized before converting.
         let _ = self.bundle_hash();
         let transactions = self
@@ -83,10 +81,16 @@ impl Bundle<Bytes> {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum BundleValidationError {
+    #[error("invalid transaction encoding: {0:?}")]
+    DecodeError(#[from] Eip2718Error),
+}
+
 impl Bundle<OpTxEnvelope> {
     /// Returns the bundle hash of the bundle.
     pub fn bundle_hash(&self) -> B256 {
         // SAFETY: At this point, the bundle hash is guaranteed to be initialized.
-        self.bundle_hash.get().expect("bundle hash is not initialized").clone()
+        *self.bundle_hash.get().expect("bundle hash is not initialized")
     }
 }
