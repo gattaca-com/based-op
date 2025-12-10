@@ -6,6 +6,7 @@ pub mod db;
 pub mod eth;
 pub mod fabric;
 pub mod metrics;
+pub mod order;
 pub mod p2p;
 pub mod shared;
 pub mod signing;
