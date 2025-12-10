@@ -5,6 +5,9 @@ parent := "just -f " + join(root, "Justfile")
 based := "just -f " + join(root, "based", "docker", "Justfile")
 deps := "just -f " + join(root, "deps", "Justfile")
 
+@build:
+    {{parent}} build
+
 # Upgrade the stored chain config with the one currently in use
 _upgrade:
     #!/usr/bin/env bash

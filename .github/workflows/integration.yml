@@ -1,14 +1,12 @@
 name: Project integration tests
 
 on:
-  pull_request:
-    branches:
-      - develop
-      - main
-  push:
-    branches:
-      - develop
-      - main
+  workflow_call:
+    inputs:
+      sha:
+        description: "git sha to checkout"
+        required: true
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -17,6 +15,8 @@ concurrency:
 env:
   BASED_ENV: dev
   PORTAL_TIMEOUT: 180
+  STARTUP_DELAY: 15
+  GITHUB_REPOSITORY: ${{ github.repository }}
 
 jobs:
   # Build images and publish as artifacts
@@ -26,17 +26,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.sha }}
           fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Install Just
-        uses: taiki-e/install-action@just
+      - uses: taiki-e/install-action@just
 
       - name: Build Docker images
         run: |
-          just build
+          just ci build
         
       - name: Save Docker images to tarballs
         run: |
@@ -57,6 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.sha }}
           fetch-depth: 0
       
       - name: Install Just
@@ -90,15 +91,12 @@ jobs:
       #       .local
       #       !.local/**/data
 
-      - name: Start Based OP services
+      - name: Start services and run tests
         run: |
           just ci run
-
-      - name: Run tests
-        shell: bash
-        run: |
+          sleep {{ env.STARTUP_DELAY }}
           just ci test
-      
+
       - name: Teardown
         if: always()
         run: |
