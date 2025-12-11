@@ -61,18 +61,20 @@ impl PortalServer {
         let fallback_eth_client = create_client(args.fallback_eth_url.clone(), timeout)?;
         let op_node_client = create_client(args.op_node_url.clone(), timeout)?;
         let fallback_client = create_auth_client(args.fallback_url.clone(), args.fallback_jwt(), timeout)?;
-        let metrics = metrics_queue().into();
+        let signer = Arc::new(args.gateway_signer()?);
+        let metrics: Producer<MetricsUpdate> = metrics_queue().into();
+        let args = Arc::new(args);
 
         let temp = Self {
             geth_client: fallback_eth_client,
             geth_engine_client: fallback_client,
             op_node_client,
-            gateway_manager: Arc::new(GatewayManager::new_from_args(&args, metrics)),
+            gateway_manager: Arc::new(GatewayManager::new_from_args(&args, signer, metrics.clone())),
             new_payload_block_number: Arc::new(AtomicU64::new(0)),
             new_payload_block_hash: Arc::new(RwLock::new(B256::ZERO)),
             current_block_number: Arc::new(AtomicU64::new(0)),
             metrics,
-            args: Arc::new(args),
+            args,
         };
 
         let _ = temp.gateway_manager.update_gateway_list().await;
@@ -261,6 +263,9 @@ impl EngineApiServer for PortalServer {
         });
 
         let Some(gateway) = self.gateway_manager.current_gateway().await else { return Ok(fallback_fut.await??) };
+        let Some(gateway_client) = gateway.client().await else { return Ok(fallback_fut.await??) };
+        let gateway_for_task = gateway.clone();
+        let gateway_for_log = gateway.clone();
 
         let gateway_fut: tokio::task::JoinHandle<Result<OpExecutionPayloadEnvelopeV4Patch, _>> = tokio::spawn(
             {
@@ -268,8 +273,7 @@ impl EngineApiServer for PortalServer {
                 let fallback_client = self.geth_engine_client.clone();
 
                 async move {
-                    let gateway_payload = gateway
-                        .client
+                    let gateway_payload = gateway_client
                         .get_payload_v4(payload_id)
                         .await
                         .inspect_err(|err| error!(%err, "failed gateway"))?;
@@ -288,10 +292,10 @@ impl EngineApiServer for PortalServer {
                         .inspect_err(|err| error!(%err, "failed fallback validation"))?;
 
                     if payload_status.is_valid() {
-                        trace!(?gateway, ?gateway_payload, ?payload_status, "gateway response");
+                        trace!(?gateway_for_task, ?gateway_payload, ?payload_status, "gateway response");
                         Ok(gateway_payload)
                     } else {
-                        error!(?gateway, ?gateway_payload, ?payload_status, "gateway response");
+                        error!(?gateway_for_task, ?gateway_payload, ?payload_status, "gateway response");
                         Err(RpcError::Internal)
                     }
                 }
@@ -304,10 +308,11 @@ impl EngineApiServer for PortalServer {
         // ignore join errors
         let fallback = fallback?;
         let gateway = gateway?;
-        if let Ok(gateway) = gateway.as_ref() {
+        if let Ok(gateway_payload) = gateway.as_ref() {
             info!(
                 "block {}: successfully served from based-gateway {:?}",
-                gateway.execution_payload.payload_inner.payload_inner.payload_inner.block_number, gateway
+                gateway_payload.execution_payload.payload_inner.payload_inner.payload_inner.block_number,
+                gateway_for_log
             );
             MetricsUpdate::send_ref(
                 uuid(),

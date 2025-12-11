@@ -1,10 +1,9 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use alloy_primitives::{B256, Bytes, U64};
-use alloy_rpc_types::engine::JwtSecret;
 use axum::{Router, routing::get};
 use bop_common::{
-    api::{ControlApiServer, EngineApiServer, MinimalEthApiServer, OpMinerExtApiServer},
+    api::{BasedAuthApiServer, ControlApiServer, EngineApiServer, MinimalEthApiServer, OpMinerExtApiServer},
     communication::{
         Producer, Sender, Spine,
         messages::{EngineApi, RpcResult},
@@ -19,15 +18,18 @@ use bop_common::{
 };
 use jsonrpsee::{
     core::async_trait,
-    server::{ServerBuilder, ServerConfigBuilder},
+    server::{ServerBuilder, ServerConfigBuilder, middleware::rpc::RpcServiceBuilder},
 };
 use reth_optimism_payload_builder::config::OpDAConfig;
-use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
 use tokio::{net::TcpListener, runtime::Runtime};
 use tracing::{Level, error, info, trace};
 
-use crate::state_stream::{StreamState, state_stream};
+use crate::{
+    auth::{AuthConfig, AuthManager, AuthRpc},
+    state_stream::{StreamState, state_stream},
+};
 
+mod auth;
 mod engine;
 mod fabric;
 pub mod gossiper;
@@ -45,7 +47,8 @@ pub fn start_rpc<Db: DatabaseRead>(
     let addr_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
     let addr_no_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port_no_auth);
     let addr_ws = SocketAddr::new(config.rpc_host.into(), config.rpc_port_ws);
-    let server = RpcServer::new(spine, config.sequencer_jwt(), rx_spawner, da_config);
+    let auth_manager = Arc::new(AuthManager::new(AuthConfig::from(config)));
+    let server = RpcServer::new(spine, auth_manager, rx_spawner, da_config);
     rt.spawn(server.run(addr_auth, addr_no_auth, addr_ws));
 }
 
@@ -56,16 +59,16 @@ struct RpcServer {
     new_order_tx: Sender<Arc<Transaction>>,
     engine_timeout: Duration,
     engine_rpc_tx: Sender<EngineApi>,
-    jwt: JwtSecret,
     telemetry_producer: Producer<TelemetryUpdate>,
     frag_receiver_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
     da_config: OpDAConfig,
+    auth_manager: Arc<AuthManager>,
 }
 
 impl RpcServer {
     pub fn new<Db>(
         spine: &Spine<Db>,
-        jwt: JwtSecret,
+        auth_manager: Arc<AuthManager>,
         frag_receiver_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
         da_config: OpDAConfig,
     ) -> Self {
@@ -73,25 +76,29 @@ impl RpcServer {
             new_order_tx: spine.into(),
             engine_rpc_tx: spine.into(),
             engine_timeout: Duration::from_secs(1),
-            jwt,
             telemetry_producer: telemetry_queue().into(),
             frag_receiver_spawner,
             da_config,
+            auth_manager,
         }
     }
 
     #[tracing::instrument(skip_all, name = "rpc")]
     pub async fn run(self, addr_auth: SocketAddr, addr_no_auth: SocketAddr, addr_ws: SocketAddr) {
         info!(%addr_auth, "starting RPC server");
-        let validator = JwtAuthValidator::new(self.jwt);
-        let auth_layer = AuthLayer::new(validator);
-        let service_builder = tower::ServiceBuilder::new().layer(auth_layer).timeout(std::time::Duration::from_secs(2));
+
+        let auth_rpc = AuthRpc::new(self.auth_manager.clone());
+
+        let http_middleware =
+            tower::ServiceBuilder::new().layer(auth_rpc.http_layer()).timeout(std::time::Duration::from_secs(2));
+        let rpc_middleware = RpcServiceBuilder::new().layer(auth_rpc.rpc_layer());
 
         let server_auth = ServerBuilder::default()
             .set_config(
                 ServerConfigBuilder::new().max_request_body_size(u32::MAX).max_response_body_size(u32::MAX).build(),
             )
-            .set_http_middleware(service_builder)
+            .set_http_middleware(http_middleware)
+            .set_rpc_middleware(rpc_middleware)
             .build(addr_auth)
             .await
             .expect("failed to create eth RPC server");
@@ -99,6 +106,7 @@ impl RpcServer {
         module.merge(EngineApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         module.merge(ControlApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         module.merge(OpMinerExtApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        module.merge(BasedAuthApiServer::into_rpc(auth_rpc)).expect("failed to merge modules");
 
         let server_handle_auth = server_auth.start(module);
 

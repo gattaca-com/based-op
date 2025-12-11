@@ -23,6 +23,11 @@ tokio.workspace = true
 tower.workspace = true
 tracing.workspace = true
 tree_hash.workspace = true
+dashmap = "6.1"
+hex = "0.4"
+http.workspace = true
+thiserror.workspace = true
+http-body-util = "0.1.3"
 
 [dev-dependencies]
 alloy-consensus.workspace = true

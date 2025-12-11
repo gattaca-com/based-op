@@ -1,5 +1,6 @@
 pub mod actor;
 pub mod api;
+pub mod auth;
 pub mod communication;
 pub mod config;
 pub mod db;
