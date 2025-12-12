@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, str::FromStr as _, sync::Arc};
 
 use alloy_primitives::{B256, Bytes, U64};
 use alloy_rpc_types::{
@@ -18,24 +18,29 @@ use bop_common::{
     order::{Order, bundle::Bundle},
     p2p::SignedVersionedMessage,
     telemetry::{TelemetryUpdate, telemetry_queue},
-    time::Duration,
+    time::{self, Duration},
     transaction::Transaction,
 };
 use jsonrpsee::{
     core::async_trait,
     server::{ServerBuilder, ServerConfigBuilder},
 };
+use op_alloy_consensus::interop;
 use reth_optimism_payload_builder::config::OpDAConfig;
 use reth_rpc_layer::{AuthLayer, JwtAuthValidator};
 use tokio::{net::TcpListener, runtime::Runtime};
 use tracing::{Level, error, info, trace};
 
-use crate::state_stream::{StreamState, state_stream};
+use crate::{
+    state_stream::{StreamState, state_stream},
+    supervisor::{SuperVisorConfig, SupervisorValidator},
+};
 
 mod engine;
 mod fabric;
 pub mod gossiper;
 mod state_stream;
+mod supervisor;
 
 const STATE_STREAM_PATH: &str = "/state_stream";
 
@@ -49,7 +54,20 @@ pub fn start_rpc<Db: DatabaseRead>(
     let addr_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
     let addr_no_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port_no_auth);
     let addr_ws = SocketAddr::new(config.rpc_host.into(), config.rpc_port_ws);
-    let server = RpcServer::new(spine, config.sequencer_jwt(), rx_spawner, da_config);
+    let mut server = RpcServer::new(spine, config.sequencer_jwt(), rx_spawner, da_config);
+
+    // Configure supervisor
+    if let Some(supervisor) = config.supervisor_url.as_ref() {
+        let safety_level = interop::SafetyLevel::from_str(
+            config.supervisor_safety_level.as_ref().expect("supervisor safety level is required"),
+        )
+        .unwrap();
+        let config = SuperVisorConfig { url: supervisor.clone(), safety_level };
+
+        let supervisor = rt.block_on(SupervisorValidator::new(&config));
+        server = server.with_supervisor(supervisor);
+    }
+
     rt.spawn(server.run(addr_auth, addr_no_auth, addr_ws));
 }
 
@@ -64,6 +82,8 @@ struct RpcServer {
     telemetry_producer: Producer<TelemetryUpdate>,
     frag_receiver_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
     da_config: OpDAConfig,
+    /// The cross-chain transaction validator.
+    supervisor: Option<SupervisorValidator>,
 }
 
 impl RpcServer {
@@ -81,7 +101,14 @@ impl RpcServer {
             telemetry_producer: telemetry_queue().into(),
             frag_receiver_spawner,
             da_config,
+            supervisor: None,
         }
+    }
+
+    /// Set the supervisor validator for RPC transaction validation (only for cross-chain transactions)
+    pub fn with_supervisor(mut self, supervisor: SupervisorValidator) -> Self {
+        self.supervisor = Some(supervisor);
+        self
     }
 
     #[tracing::instrument(skip_all, name = "rpc")]
@@ -118,6 +145,7 @@ impl RpcServer {
             .expect("failed to create eth RPC server");
         let mut module = FabricGatewayApiServer::into_rpc(self.clone());
         module.merge(MinimalEthApiServer::into_rpc(self.clone())).expect("failed to merge modules");
+        module.merge(MinimalMevApiServer::into_rpc(self.clone())).expect("failed to merge modules");
         let server_handle_no_auth = server_no_auth.start(module);
 
         let state = StreamState { frags_tx: self.frag_receiver_spawner.clone() };
@@ -149,7 +177,17 @@ impl MinimalEthApiServer for RpcServer {
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256> {
         trace!(?bytes, "new request");
 
-        let tx = Transaction::decode(bytes)?;
+        let tx = Transaction::decode(bytes).inspect_err(|e| tracing::error!(?e, "failed to decode transaction"))?;
+
+        // TODO(mempirate): in sequencer validation, this was using block_env. Is that an issue? Is this good enough?
+        let now = time::utils::unix_millis();
+        if let Some(supervisor) = &self.supervisor {
+            supervisor
+                .validate(&tx, now as u64)
+                .await
+                .inspect_err(|e| tracing::error!(?e, "failed to validate transaction"))?;
+        }
+
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
 
         let hash = tx.tx_hash();
@@ -181,7 +219,7 @@ impl MinimalMevApiServer for RpcServer {
             tracing::error!(?e, "failed to send bundle order to sequencer");
         }
 
-        // TODO:
+        // TODO(mempirate):
         // - Telemetry
 
         Ok(EthBundleHash { bundle_hash })

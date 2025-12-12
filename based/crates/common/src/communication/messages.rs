@@ -12,6 +12,7 @@ use alloy_rpc_types::engine::{
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
+use reth_optimism_node::txpool::supervisor::InteropTxValidatorError;
 use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
@@ -269,6 +270,9 @@ pub enum RpcError {
     #[error("invalid transaction bytes")]
     InvalidTransaction(#[from] alloy_rlp::Error),
 
+    #[error("invalid cross-chain transaction")]
+    InvalidCrossChainTransaction(#[from] InteropTxValidatorError),
+
     #[error("invalid bundle: {0}")]
     InvalidBundle(#[from] BundleValidationError),
 
@@ -312,6 +316,12 @@ impl From<RpcError> for RpcErrorObject<'static> {
             RpcError::NoReturn => internal_error(),
 
             RpcError::InvalidTransaction(error) => RpcErrorObject::owned(
+                ErrorCode::InvalidParams.code(),
+                ErrorCode::InvalidParams.message(),
+                Some(error.to_string()),
+            ),
+
+            RpcError::InvalidCrossChainTransaction(error) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
                 Some(error.to_string()),
