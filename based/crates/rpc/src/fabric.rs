@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use alloy_eips::Decodable2718;
 use alloy_primitives::B256;
@@ -32,7 +32,7 @@ impl FabricGatewayApiServer for RpcServer {
 
         // Send the transaction to the sequencer
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
-        let order = Arc::new(Order::from(tx));
+        let order = Order::from(tx);
         let _ = self.new_order_tx.send(order.into());
 
         // Wait for the transaction to be committed

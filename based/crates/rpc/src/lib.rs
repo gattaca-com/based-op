@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr as _, sync::Arc};
+use std::{net::SocketAddr, str::FromStr as _};
 
 use alloy_primitives::{B256, Bytes, U64};
 use alloy_rpc_types::{
@@ -75,7 +75,7 @@ pub fn start_rpc<Db: DatabaseRead>(
 // TODO: timing
 #[derive(Debug, Clone)]
 struct RpcServer {
-    new_order_tx: Sender<Arc<Order>>,
+    new_order_tx: Sender<Order>,
     engine_timeout: Duration,
     engine_rpc_tx: Sender<EngineApi>,
     jwt: JwtSecret,
@@ -191,7 +191,7 @@ impl MinimalEthApiServer for RpcServer {
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
 
         let hash = tx.tx_hash();
-        let order = Arc::new(Order::from(tx));
+        let order = Order::from(tx);
 
         if let Err(e) = self.new_order_tx.send(order.into()) {
             tracing::error!(?e, "failed to send transaction order to sequencer");
@@ -213,7 +213,7 @@ impl MinimalMevApiServer for RpcServer {
 
         // Validate the bundle on a separate thread to avoid blocking this one.
         let bundle = tokio::task::spawn_blocking(move || bundle.try_decode()?.validate()).await??;
-        let order = Arc::new(Order::from(bundle));
+        let order = Order::from(bundle);
 
         if let Err(e) = self.new_order_tx.send(order.into()) {
             tracing::error!(?e, "failed to send bundle order to sequencer");

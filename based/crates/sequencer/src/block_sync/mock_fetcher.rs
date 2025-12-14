@@ -12,6 +12,7 @@ use bop_common::{
     },
     config::MockMode,
     db::{DBFrag, DatabaseRead},
+    order::Order,
     signing::ECDSASigner,
     time::{Duration, Instant, utils::vsync_busy},
     transaction::Transaction,
@@ -193,8 +194,9 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
         let tx = OpTxEnvelope::Eip1559(signed_tx);
         let hash = tx.tx_hash();
         let envelope = tx.encoded_2718().into();
-        let tx = Arc::new(Transaction::new(tx, from.address, envelope));
-        connections.send(tx);
+        // let tx = Arc::new(Transaction::new(tx, from.address, envelope));
+        let tx = Order::from(Transaction::new(tx, from.address, envelope));
+        connections.send(Arc::new(tx));
         hash
     }
 
