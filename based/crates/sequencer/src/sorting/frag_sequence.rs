@@ -295,7 +295,7 @@ mod tests {
         let (_frag, _, _sorting_db) = ctx.seal_frag(sorting_db, &mut seq);
 
         // Seal the block
-        let (_seal, payload) = ctx.seal_block(seq);
+        let (_seal, payload) = ctx.seal_block(seq, None);
         assert_eq!(block.hash_slow(), payload.execution_payload.payload_inner.payload_inner.payload_inner.block_hash);
     }
 }

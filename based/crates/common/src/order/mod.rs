@@ -19,6 +19,18 @@ impl From<Transaction> for Order {
     }
 }
 
+impl From<Arc<Transaction>> for Order {
+    fn from(tx: Arc<Transaction>) -> Self {
+        Order::Tx(tx)
+    }
+}
+
+impl From<Arc<ValidatedBundle>> for Order {
+    fn from(bundle: Arc<ValidatedBundle>) -> Self {
+        Order::Bundle(bundle)
+    }
+}
+
 impl From<ValidatedBundle> for Order {
     fn from(bundle: ValidatedBundle) -> Self {
         Order::Bundle(Arc::new(bundle))
