@@ -13,6 +13,14 @@ pub struct Active {
     senders: FxHashMap<Address, usize>,
 }
 
+/// Orders that are ready to be executed by the sequencer.
+pub struct PendingOrders {
+    transactions: FxHashMap<Address, SimulatedTxList>,
+    // bundles: Vec<Arc<
+}
+
+struct SimulatedBundle {}
+
 impl Active {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {

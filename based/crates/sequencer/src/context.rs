@@ -269,7 +269,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             self.deposits.push_back(tx);
             return;
         }
-        if self.tx_pool.handle_new_tx(
+        if self.tx_pool.handle_tx(
             tx.clone(),
             self.shared_state.as_ref(),
             self.base_fee(),

@@ -2,19 +2,19 @@
 
 use std::{
     hash::{Hash, Hasher},
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 
 use alloy_eips::{Decodable2718, Encodable2718, eip2718::Eip2718Error};
-use alloy_primitives::{B256, Bytes, TxHash, U64};
+use alloy_primitives::{B256, Bytes, TxHash, U64, U256};
 use alloy_rpc_types::mev::EthSendBundle;
 use op_alloy_consensus::OpTxEnvelope;
-use reth_primitives_traits::SignedTransaction;
+use reth_primitives_traits::{InMemorySize, SignedTransaction};
+
+use crate::transaction::{SimulatedTx, Transaction};
 
 /// Type alias for a validated bundle.
 pub type ValidatedBundle = Bundle<Transaction>;
-
-use super::Transaction;
 
 /// An internal, minimal bundle type.
 #[derive(Debug)]
@@ -106,7 +106,7 @@ impl Bundle<OpTxEnvelope> {
     ///
     /// This is a CPU-intensive operation.
     pub fn validate(self) -> Result<ValidatedBundle, BundleValidationError> {
-        let recovered = self
+        let transactions = self
             .transactions
             .into_iter()
             .map(|tx| {
@@ -120,9 +120,41 @@ impl Bundle<OpTxEnvelope> {
 
         Ok(Bundle {
             block_number: self.block_number,
-            transactions: recovered,
+            transactions,
             reverting_tx_hashes: self.reverting_tx_hashes,
             bundle_hash: self.bundle_hash,
         })
+    }
+}
+
+impl InMemorySize for Bundle<Transaction> {
+    fn size(&self) -> usize {
+        self.transactions.iter().map(|tx| tx.size()).sum()
+    }
+}
+
+impl InMemorySize for Bundle<SimulatedTx> {
+    fn size(&self) -> usize {
+        self.transactions.iter().map(|tx| tx.size()).sum()
+    }
+}
+
+impl ValidatedBundle {
+    pub fn bundle_hash(&self) -> B256 {
+        // SAFETY: At this point, the bundle hash is guaranteed to be initialized.
+        *self.bundle_hash.get().expect("bundle hash is not initialized")
+    }
+}
+
+/// A simulated bundle.
+pub struct SimulatedBundle {
+    validated: Arc<ValidatedBundle>,
+    simulated: Vec<SimulatedTx>,
+    total_payment: U256,
+}
+
+impl SimulatedBundle {
+    pub fn new(validated: Arc<ValidatedBundle>, simulated: Vec<SimulatedTx>, total_payment: U256) -> Self {
+        Self { validated, simulated, total_payment }
     }
 }

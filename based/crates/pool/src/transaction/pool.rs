@@ -5,6 +5,7 @@ use alloy_primitives::Address;
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders, messages::SequencerToSimulator},
     db::{DBFrag, DatabaseRead},
+    order::{Order, bundle::ValidatedBundle},
     telemetry::TelemetryUpdate,
     time::Duration,
     transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
@@ -20,13 +21,74 @@ pub struct TxPool {
     pool_data: HashMap<Address, TxList>,
     /// Current list of all simulated mineable txs in the pool
     pub active_txs: Active,
+    /// List of queued bundles in the pool, waiting to become valid.
+    queued_bundles: Vec<Arc<ValidatedBundle>>,
     /// Current memory size of the pool in bytes
     pub mem_size: usize,
 }
 
 impl TxPool {
     pub fn new(capacity: usize) -> Self {
-        Self { pool_data: HashMap::with_capacity(capacity), active_txs: Active::with_capacity(capacity), mem_size: 0 }
+        Self {
+            pool_data: HashMap::with_capacity(capacity),
+            active_txs: Active::with_capacity(capacity),
+            queued_bundles: Vec::with_capacity(capacity),
+            mem_size: 0,
+        }
+    }
+
+    /// Handles a new [`Order`] from the sequencer.
+    pub fn handle_order<Db: DatabaseRead>(
+        &mut self,
+        order: Order,
+        db: &DBFrag<Db>,
+        base_fee: u64,
+        syncing: bool,
+        sim_sender: Option<&SendersSpine<Db>>,
+    ) {
+        // We can't just call `handle_new_tx` here because we need to handle bundles differently. They must always
+        // remain atomic, which means that we can not add individual txs to the pending list.
+        match order {
+            Order::Tx(tx) => {
+                self.handle_tx(tx, db, base_fee, syncing, sim_sender);
+            }
+            Order::Bundle(bundle) => {
+                // TODO(mempirate): Handle bundles
+            }
+        }
+    }
+
+    pub fn handle_bundle<Db: DatabaseRead>(
+        &mut self,
+        bundle: Arc<ValidatedBundle>,
+        db: &DBFrag<Db>,
+        base_fee: u64,
+        syncing: bool,
+        sim_sender: Option<&SendersSpine<Db>>,
+    ) {
+        if syncing {
+            // Short-circuit here
+            return;
+        }
+
+        // Simple transaction validation closure
+        let validate_tx = |tx: &Transaction| {
+            let state_nonce = db.get_nonce(tx.sender()).expect("failed to get nonce");
+            let nonce = tx.nonce();
+
+            // Only accept transactions with the correct nonce
+            // TODO: We might want a bundle queueing mechanism.
+            if nonce != state_nonce || !tx.valid_for_block(base_fee) {
+                return false;
+            }
+
+            true
+        };
+
+        // Validate all transactions in the bundle
+        if !bundle.transactions.iter().all(validate_tx) {
+            return;
+        }
     }
 
     /// Handles an incoming transaction.
@@ -35,7 +97,7 @@ impl TxPool {
     /// If syncing is false we will fill the active list.
     /// If sim_sender is Some, and we are not syncing, we will also send simulation requests for the
     /// first tx for each sender to the simulator.
-    pub fn handle_new_tx<Db: DatabaseRead>(
+    pub fn handle_tx<Db: DatabaseRead>(
         &mut self,
         new_tx: Arc<Transaction>,
         db: &DBFrag<Db>,

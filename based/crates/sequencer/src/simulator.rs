@@ -10,6 +10,7 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
     db::{DBFrag, DBSorting, DatabaseRead, State},
+    order::bundle::{SimulatedBundle, ValidatedBundle},
     time::{Duration, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
     typedefs::*,
@@ -129,6 +130,64 @@ pub fn simulate_tx_inner<Db: SimulationDatabase + Debug>(
     }
 
     Ok(SimulatedTx::new(tx, result_and_state, payment, deposit_nonce, sim_start.elapsed()))
+}
+
+/// Simulates a bundle atomically, committing state changes between transactions
+/// so each subsequent transaction sees the effects of previous ones.
+///
+/// The EVM's database must be a `State<Db>` wrapper. Commits go to State's
+/// in-memory cache, NOT to the underlying database.
+pub fn simulate_bundle_inner<Db: DatabaseRef + Debug>(
+    bundle: Arc<ValidatedBundle>,
+    evm: &mut OpEvm<State<Db>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
+    regolith_active: bool,
+    allow_zero_payment: bool,
+    allow_revert: bool,
+) -> Result<SimulatedBundle, SimulationError>
+where
+    Db::Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
+{
+    let coinbase = evm.block().beneficiary;
+
+    // Get initial coinbase balance BEFORE any transactions
+    let start_balance = balance_from_db(evm.db_mut(), coinbase);
+
+    let mut simulated = Vec::with_capacity(bundle.transactions.len());
+
+    for tx in bundle.transactions.iter() {
+        let sim_start = Nanos::now();
+        let deposit_nonce = (tx.is_deposit() && regolith_active).then(|| nonce_from_db(evm.db_mut(), tx.sender()));
+
+        let result_and_state =
+            evm.transact_raw(tx.to_op_tx_env()).map_err(|e| SimulationError::EvmError(format!("{e:?}")))?;
+
+        if !allow_revert && !result_and_state.result.is_success() {
+            return Err(SimulationError::RevertWithDisallowedRevert);
+        }
+
+        // Commit to State's in-memory cache (not the underlying db)
+        // so subsequent transactions see these state changes
+        // TODO(mempirate): validate that this is actually the case and we're not committing to underlying db
+        evm.db_mut().commit_ref(&result_and_state.state);
+
+        simulated.push(SimulatedTx::new(
+            tx.clone().into(),
+            result_and_state,
+            U256::ZERO, // Per-tx payment not meaningful for bundles
+            deposit_nonce,
+            sim_start.elapsed(),
+        ));
+    }
+
+    // Calculate total payment AFTER all transactions
+    let end_balance = balance_from_db(evm.db_mut(), coinbase);
+    let total_payment = end_balance.saturating_sub(start_balance);
+
+    if !allow_zero_payment && total_payment == U256::ZERO {
+        return Err(SimulationError::ZeroPayment);
+    }
+
+    Ok(SimulatedBundle::new(bundle, simulated, total_payment))
 }
 
 #[inline]
