@@ -5,15 +5,16 @@ use std::{
     sync::OnceLock,
 };
 
-use alloy_consensus::transaction::Recovered;
-use alloy_eips::{Decodable2718, eip2718::Eip2718Error};
+use alloy_eips::{Decodable2718, Encodable2718, eip2718::Eip2718Error};
 use alloy_primitives::{B256, Bytes, TxHash, U64};
 use alloy_rpc_types::mev::EthSendBundle;
 use op_alloy_consensus::OpTxEnvelope;
 use reth_primitives_traits::SignedTransaction;
 
 /// Type alias for a validated bundle.
-pub type ValidatedBundle = Bundle<Recovered<OpTxEnvelope>>;
+pub type ValidatedBundle = Bundle<Transaction>;
+
+use super::Transaction;
 
 /// An internal, minimal bundle type.
 #[derive(Debug)]
@@ -108,7 +109,13 @@ impl Bundle<OpTxEnvelope> {
         let recovered = self
             .transactions
             .into_iter()
-            .map(|tx| tx.try_into_recovered().map_err(|tx| BundleValidationError::InvalidSignature(tx.tx_hash())))
+            .map(|tx| {
+                let recovered =
+                    tx.try_into_recovered().map_err(|tx| BundleValidationError::InvalidSignature(tx.tx_hash()))?;
+                let (tx, signer) = recovered.into_parts();
+                let encoded = tx.encoded_2718();
+                Ok::<_, BundleValidationError>(Transaction::new(tx, signer, encoded.into()))
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Bundle {
