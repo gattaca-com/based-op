@@ -139,7 +139,7 @@ impl<Db: DatabaseRead + Database> SortingData<Db> {
         let tof_snapshot = if data.payload_attributes.no_tx_pool.unwrap_or_default() {
             ActiveOrders::empty()
         } else {
-            ActiveOrders::new(data.tx_pool.clone_active(), data.config.fifo_ordering)
+            ActiveOrders::new(data.tx_pool.snapshot(), data.config.fifo_ordering)
         };
         let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());

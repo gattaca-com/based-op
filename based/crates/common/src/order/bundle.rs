@@ -5,11 +5,13 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+use alloy_consensus::Transaction as _;
 use alloy_eips::{Decodable2718, Encodable2718, eip2718::Eip2718Error};
-use alloy_primitives::{B256, Bytes, TxHash, U64, U256};
+use alloy_primitives::{Address, B256, Bytes, TxHash, U64, U256};
 use alloy_rpc_types::mev::EthSendBundle;
 use op_alloy_consensus::OpTxEnvelope;
 use reth_primitives_traits::{InMemorySize, SignedTransaction};
+use uuid::Uuid;
 
 use crate::transaction::{SimulatedTx, Transaction};
 
@@ -19,6 +21,7 @@ pub type ValidatedBundle = Bundle<Transaction>;
 /// An internal, minimal bundle type.
 #[derive(Debug)]
 pub struct Bundle<T> {
+    pub id: Uuid,
     pub block_number: U64,
     pub transactions: Vec<T>,
     pub reverting_tx_hashes: Option<Vec<TxHash>>,
@@ -33,11 +36,18 @@ impl From<EthSendBundle> for Bundle<Bytes> {
             if bundle.reverting_tx_hashes.is_empty() { None } else { Some(bundle.reverting_tx_hashes) };
 
         Self {
+            id: Uuid::new_v4(),
             block_number: U64::from(bundle.block_number),
             transactions: bundle.txs,
             reverting_tx_hashes,
             bundle_hash: OnceLock::new(),
         }
+    }
+}
+
+impl<T> Bundle<T> {
+    pub fn id(&self) -> Uuid {
+        self.id
     }
 }
 
@@ -79,6 +89,7 @@ impl Bundle<Bytes> {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Bundle {
+            id: self.id,
             block_number: self.block_number,
             transactions,
             reverting_tx_hashes: self.reverting_tx_hashes,
@@ -119,6 +130,7 @@ impl Bundle<OpTxEnvelope> {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Bundle {
+            id: self.id,
             block_number: self.block_number,
             transactions,
             reverting_tx_hashes: self.reverting_tx_hashes,
@@ -147,14 +159,38 @@ impl ValidatedBundle {
 }
 
 /// A simulated bundle.
+#[derive(Debug, Clone)]
 pub struct SimulatedBundle {
+    /// The original validated bundle.
     validated: Arc<ValidatedBundle>,
+    /// The simulated transactions in the bundle.
     simulated: Vec<SimulatedTx>,
-    total_payment: U256,
+    /// The total payment of the bundle.
+    total_payment: Option<U256>,
 }
 
 impl SimulatedBundle {
-    pub fn new(validated: Arc<ValidatedBundle>, simulated: Vec<SimulatedTx>, total_payment: U256) -> Self {
-        Self { validated, simulated, total_payment }
+    /// Creates a new unsimulated bundle from a validated bundle.
+    pub fn new(validated: Arc<ValidatedBundle>) -> Self {
+        Self { validated, simulated: Vec::new(), total_payment: None }
+    }
+
+    /// Sets the simulation results for the bundle.
+    pub fn set_simulation_results(&mut self, simulated: Vec<SimulatedTx>, total_payment: U256) {
+        self.simulated = simulated;
+        self.total_payment = Some(total_payment);
+    }
+
+    /// Returns the nonce of the first transaction for the given sender in the bundle (if present).
+    pub fn nonce_of(&self, sender: Address) -> Option<u64> {
+        self.validated.transactions.iter().find(|tx| tx.sender() == sender).map(|tx| tx.nonce())
+    }
+
+    pub fn validated(&self) -> &ValidatedBundle {
+        &self.validated
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.validated.id()
     }
 }

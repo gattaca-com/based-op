@@ -187,7 +187,7 @@ where
         return Err(SimulationError::ZeroPayment);
     }
 
-    Ok(SimulatedBundle::new(bundle, simulated, total_payment))
+    Ok(SimulatedBundle::new(bundle).set_simulation_results(simulated, total_payment))
 }
 
 #[inline]

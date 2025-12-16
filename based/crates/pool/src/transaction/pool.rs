@@ -5,24 +5,26 @@ use alloy_primitives::Address;
 use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders, messages::SequencerToSimulator},
     db::{DBFrag, DatabaseRead},
-    order::{Order, bundle::ValidatedBundle},
+    order::{
+        Order, SimulatedOrder,
+        bundle::{SimulatedBundle, ValidatedBundle},
+    },
     telemetry::TelemetryUpdate,
     time::Duration,
-    transaction::{SimulatedTx, SimulatedTxList, Transaction, TxList},
+    transaction::{SimulatedTxList, Transaction, TxList},
 };
 use reth_optimism_primitives::transaction::OpTransaction;
 use reth_primitives_traits::InMemorySize;
 
-use crate::transaction::active::Active;
+use crate::transaction::pending::{PendingOrders, PendingOrdersView};
 
+// TODO(mempirate): We need a way to understand if a bundle can be executed or not, and then
 #[derive(Clone, Debug, Default)]
 pub struct TxPool {
     /// maps an eoa to all pending txs
     pool_data: HashMap<Address, TxList>,
     /// Current list of all simulated mineable txs in the pool
-    pub active_txs: Active,
-    /// List of queued bundles in the pool, waiting to become valid.
-    queued_bundles: Vec<Arc<ValidatedBundle>>,
+    pub pending_orders: PendingOrders,
     /// Current memory size of the pool in bytes
     pub mem_size: usize,
 }
@@ -31,8 +33,7 @@ impl TxPool {
     pub fn new(capacity: usize) -> Self {
         Self {
             pool_data: HashMap::with_capacity(capacity),
-            active_txs: Active::with_capacity(capacity),
-            queued_bundles: Vec::with_capacity(capacity),
+            pending_orders: PendingOrders::with_capacity(capacity),
             mem_size: 0,
         }
     }
@@ -53,7 +54,7 @@ impl TxPool {
                 self.handle_tx(tx, db, base_fee, syncing, sim_sender);
             }
             Order::Bundle(bundle) => {
-                // TODO(mempirate): Handle bundles
+                self.handle_bundle(bundle, db, base_fee, syncing, sim_sender);
             }
         }
     }
@@ -82,6 +83,13 @@ impl TxPool {
                 return false;
             }
 
+            // Check the next nonce for this sender in the pending orders.
+            // TODO(mempirate): This should compare effective gas prices, and swap if more profitable.
+            let pending_nonce = self.pending_orders.next_nonce(tx.sender());
+            if pending_nonce.is_some_and(|pending| pending == nonce) {
+                return false;
+            }
+
             true
         };
 
@@ -89,6 +97,11 @@ impl TxPool {
         if !bundle.transactions.iter().all(validate_tx) {
             return;
         }
+
+        self.mem_size = self.mem_size.saturating_add(bundle.size());
+        self.pending_orders.put_bundle(SimulatedBundle::new(bundle));
+
+        // TODO(mempirate): Request simulation for the bundle.
     }
 
     /// Handles an incoming transaction.
@@ -127,17 +140,24 @@ impl TxPool {
                 tx_list.put(new_tx.clone());
                 self.mem_size = self.mem_size.saturating_add(new_tx.size());
 
+                // Check the next nonce for this sender in the pending orders.
+                // TODO(mempirate): This should compare effective gas prices, and swap if more profitable.
+                let pending_nonce = self.pending_orders.next_nonce(new_tx.sender());
+                if pending_nonce.is_some_and(|pending| pending == nonce) {
+                    return false;
+                }
+
                 if !syncing {
                     let valid_for_block = new_tx.valid_for_block(base_fee);
                     if is_next_nonce && valid_for_block {
                         // If this is the first tx for a sender, and it can be processed, simulate it and add to active.
                         TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
-                        self.active_txs.put(SimulatedTxList::new(None, tx_list));
+                        self.pending_orders.put_tx_list(SimulatedTxList::new(None, tx_list));
                         self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                     } else if valid_for_block {
                         // If we already have the first tx for this sender and it's in active we might be able to
                         // add this tx to its pending list.
-                        if let Some(simulated_tx_list) = self.active_txs.tx_list_mut(new_tx.sender_ref()) {
+                        if let Some(simulated_tx_list) = self.pending_orders.tx_list_mut(new_tx.sender_ref()) {
                             if tx_list.nonce_ready(state_nonce, base_fee, nonce) {
                                 simulated_tx_list.new_pending(tx_list.ready(state_nonce, base_fee).unwrap());
                             }
@@ -149,10 +169,17 @@ impl TxPool {
                 let tx_list = TxList::from(new_tx.clone());
 
                 if !syncing {
+                    // Check the next nonce for this sender in the pending orders.
+                    // TODO(mempirate): This should compare effective gas prices, and swap if more profitable.
+                    let pending_nonce = self.pending_orders.next_nonce(new_tx.sender());
+                    if pending_nonce.is_some_and(|pending| pending == nonce) {
+                        return false;
+                    }
+
                     // If this is the first tx for a sender, and it can be processed, simulate it and add to active.
                     if is_next_nonce && new_tx.valid_for_block(base_fee) {
                         TxPool::send_sim_requests_for_tx(&new_tx, db, sim_sender);
-                        self.active_txs.put(SimulatedTxList::new(None, &tx_list));
+                        self.pending_orders.put_tx_list(SimulatedTxList::new(None, &tx_list));
                         self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                     }
                 }
@@ -166,18 +193,28 @@ impl TxPool {
     }
 
     /// Validates simualted tx. If valid, fetch its TxList and save the new [SimulatedTxList] to `active_txs`.
-    pub fn handle_simulated(&mut self, simulated_tx: SimulatedTx) {
-        let Some(tx_list) = self.pool_data.get(simulated_tx.sender_ref()) else {
-            tracing::warn!(sender = ?simulated_tx.sender(), "Couldn't find tx list for valid simulated tx");
-            return;
-        };
+    /// TODO(mempirate): Handle `SimulatedOrder` here
+    pub fn handle_simulated(&mut self, order: SimulatedOrder) {
+        match order {
+            SimulatedOrder::Tx(simulated_tx) => {
+                let Some(tx_list) = self.pool_data.get(simulated_tx.sender_ref()) else {
+                    tracing::warn!(sender = ?simulated_tx.sender(), "Couldn't find tx list for valid simulated tx");
+                    return;
+                };
 
-        // Refresh active txs with the latest tx_list and simulated tx.
-        // TODO: probably unecassary to copy the tx_list here.
-        let simulated_tx_list = SimulatedTxList::new(Some(simulated_tx), tx_list);
-        let mem_size = simulated_tx_list.mem_size();
-        self.active_txs.put(simulated_tx_list);
-        self.mem_size = self.mem_size.saturating_add(mem_size);
+                // Refresh active txs with the latest tx_list and simulated tx.
+                // TODO: probably unecassary to copy the tx_list here.
+                let simulated_tx_list = SimulatedTxList::new(Some(simulated_tx), tx_list);
+                let mem_size = simulated_tx_list.mem_size();
+                self.pending_orders.put_tx_list(simulated_tx_list);
+                self.mem_size = self.mem_size.saturating_add(mem_size);
+            }
+
+            SimulatedOrder::Bundle(simulated_bundle) => {
+                tracing::debug!(id = %simulated_bundle.id(), "Received simulated bundle");
+                self.pending_orders.put_bundle(simulated_bundle);
+            }
+        }
     }
 
     /// Removes a transaction with sender and nonce from the pool.
@@ -197,7 +234,7 @@ impl TxPool {
             }
         }
 
-        self.active_txs.forward(sender, nonce, &mut f);
+        self.pending_orders.forward(sender, nonce, &mut f);
     }
 
     pub fn remove_mined_txs<'a, T: OpTransaction + TransactionTrait + 'a>(
@@ -222,7 +259,7 @@ impl TxPool {
                     self.pool_data.remove(sender);
                 }
             }
-            self.active_txs.forward(sender, nonce, &mut f);
+            self.pending_orders.forward(sender, nonce, &mut f);
         }
     }
 
@@ -240,12 +277,12 @@ impl TxPool {
         // If enabled, fill the active list with non-simulated txs and send off the first tx for each sender to
         // simulator.
         if !syncing {
-            self.active_txs.clear();
+            self.pending_orders.clear();
             for (sender, tx_list) in self.pool_data.iter() {
                 let db_nonce = db.get_nonce(*sender).unwrap();
                 if let Some(ready) = tx_list.ready(db_nonce, base_fee) {
                     TxPool::send_sim_requests_for_tx(ready.peek().unwrap(), db, sim_sender);
-                    self.active_txs.put(SimulatedTxList::new(None, tx_list));
+                    self.pending_orders.put_tx_list(SimulatedTxList::new(None, tx_list));
                     self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                 }
             }
@@ -268,28 +305,13 @@ impl TxPool {
     }
 
     #[inline]
-    pub fn clone_active(&self) -> Vec<SimulatedTxList> {
-        self.active_txs.clone_txs()
-    }
-
-    #[inline]
-    pub fn active(&self) -> &[SimulatedTxList] {
-        self.active_txs.txs()
-    }
-
-    #[inline]
-    pub fn num_active_txs(&self) -> usize {
-        self.active_txs.num_txs()
-    }
-
-    #[inline]
-    pub fn active_empty(&self) -> bool {
-        self.active_txs.is_empty()
+    pub fn snapshot(&self) -> PendingOrdersView {
+        self.pending_orders.view()
     }
 
     #[inline]
     pub fn clear(&mut self) {
-        self.active_txs.clear();
+        self.pending_orders.clear();
         self.pool_data.clear();
         self.mem_size = 0;
     }

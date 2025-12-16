@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::transaction::Transaction;
+use crate::transaction::{SimulatedTx, Transaction};
 
 pub mod bundle;
-use bundle::ValidatedBundle;
+pub use bundle::{SimulatedBundle, ValidatedBundle};
 
 /// An order is either a transaction or an atomic bundle of transactions. They are the basic building blocks
 /// of a block, and used as such in building algorithms.
@@ -52,4 +52,9 @@ impl Order {
             _ => None,
         }
     }
+}
+
+pub enum SimulatedOrder {
+    Tx(SimulatedTx),
+    Bundle(SimulatedBundle),
 }

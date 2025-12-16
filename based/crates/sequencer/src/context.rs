@@ -505,7 +505,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         );
 
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
-        self.tx_pool.active_txs.clear();
+        self.tx_pool.pending_orders.clear();
         self.tx_pool.remove_mined_txs(block.transactions_with_sender(), &mut self.telemetry);
 
         if let Some(base_fee) = block.base_fee_per_gas {
