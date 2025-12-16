@@ -12,9 +12,7 @@ version = "0.1.0"
 alloy-consensus = "1.0.41"
 alloy-eips = "1.0.41"
 alloy-network = "1.0.41"
-alloy-primitives = { version = "1.0.41", default-features = false, features = [
-  "getrandom",
-] }
+alloy-primitives = { version = "1.0.41", default-features = false, features = ["getrandom"] }
 alloy-provider = "1.0.41"
 alloy-rlp = "0.3.12"
 alloy-rpc-types = { version = "1.0.41", features = ["engine", "mev"] }
@@ -25,7 +23,6 @@ alloy-transport-http = "1.0.41"
 auto_impl = "1.3.0"
 axum = { version = "0.8.1", features = ["macros", "ws"] }
 
-wyhash = "0.6.0"
 backtrace = "0.3.73"
 bitflags = "2.6.0"
 bop-common = { path = "crates/common" }
@@ -42,35 +39,28 @@ either = "1.15.0"
 ethereum_ssz = "0.9.0"
 eyre = "0.6.12"
 futures = "0.3.31"
-hickory-resolver = "=0.25.0-alpha.5" # Use the exact version reth expects
+hickory-resolver = "=0.25.0-alpha.5"                                                                           # Use the exact version reth expects
 http = "1.3.1"
 hyper = "1.5.2"
-jsonrpsee = { version = "0.26", features = [
-  "http-client",
-  "macros",
-  "server",
-  "jsonrpsee-client-transport",
-] }
+indexmap = "2.12"
+jsonrpsee = { version = "0.26", features = ["http-client", "jsonrpsee-client-transport", "macros", "server"] }
 metrics = "0.24.1"
 metrics-exporter-prometheus = "0.16.2"
 mio = { features = ["net", "os-poll"], version = "1.0.4" }
 mio_httpc = { features = ["native"], version = "0.10.6" }
 moka = "0.12.10"
-op-alloy-consensus = { version = "0.22.0", default-features = false, features = [
-  "k256",
-] }
+op-alloy-consensus = { version = "0.22.0", default-features = false, features = ["k256"] }
 op-alloy-flz = { version = "0.13.1", default-features = false }
 op-alloy-network = "0.22.0"
 op-alloy-rpc-types = "0.22.0"
-op-alloy-rpc-types-engine = { version = "0.22.0", default-features = false, features = [
-  "serde",
-] }
+op-alloy-rpc-types-engine = { version = "0.22.0", default-features = false, features = ["serde"] }
 op-revm = "12.0.1"
 parking_lot = "0.12.3"
 paste = "0.1.18"
 quanta = "0.12.3"
 rand = "0.9.0"
 reqwest = { version = "0.12.12", features = ["blocking", "json"] }
+wyhash = "0.6.0"
 
 reth-chain-state = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-chain-state" }
 reth-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-chainspec" }
@@ -79,9 +69,9 @@ reth-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "
 reth-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-db" }
 reth-db-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-db-api" }
 reth-db-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-db-common" }
+reth-engine-tree = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-engine-tree" }
 reth-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-evm" }
 reth-execution-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-execution-errors" }
-reth-engine-tree = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-engine-tree" }
 reth-node-ethereum = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-node-ethereum", features = [
   "test-utils",
 ] }
@@ -93,8 +83,8 @@ reth-optimism-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev 
 reth-optimism-forks = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-forks" }
 reth-optimism-node = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-node" }
 reth-optimism-payload-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-payload-builder" }
-reth-optimism-txpool = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-txpool" }
 reth-optimism-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-primitives" }
+reth-optimism-txpool = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-txpool" }
 reth-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-primitives" }
 reth-primitives-traits = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-primitives-traits" }
 reth-provider = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-provider", features = [
@@ -113,17 +103,11 @@ reth-trie-common = { git = "https://github.com/gattaca-com/based-op-reth", rev =
 reth-trie-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-db" }
 reth-trie-parallel = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-parallel" }
 
-revm = { version = "31.0.1", features = [
-  "optional_balance_check",
-  "secp256k1",
-  "std",
-], default-features = false }
+revm = { version = "31.0.1", features = ["optional_balance_check", "secp256k1", "std"], default-features = false }
 revm-handler = "12.0.0"
 revm-inspector = "12.0.1"
 revm-interpreter = "29.0.1"
-revm-primitives = { version = "21.0.2", features = [
-  "std",
-], default-features = false }
+revm-primitives = { version = "21.0.2", features = ["std"], default-features = false }
 
 rustc-hash = "2.0.0"
 serde = { version = "1.0.217", features = ["derive"] }
@@ -141,11 +125,7 @@ tower = { version = "0.5", features = ["timeout"] }
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.20", features = [
-  "env-filter",
-  "fmt",
-  "time",
-] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "time"] }
 tree_hash = "0.10"
 tree_hash_derive = "0.10"
 uuid = { version = "1.12.1", features = ["serde", "v4"] }

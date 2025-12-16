@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
-use crate::transaction::{SimulatedTx, Transaction};
+use alloy_primitives::U256;
+
+use crate::transaction::{SimulatedTx, SimulatedTxList, Transaction};
 
 pub mod bundle;
 pub use bundle::{SimulatedBundle, ValidatedBundle};
 
-/// An order is either a transaction or an atomic bundle of transactions. They are the basic building blocks
-/// of a block, and used as such in building algorithms.
+/// An order is either a transaction or an atomic bundle of transactions.
 #[derive(Debug, Clone)]
 pub enum Order {
     Tx(Arc<Transaction>),
@@ -54,7 +55,45 @@ impl Order {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum SimulatedOrder {
     Tx(SimulatedTx),
     Bundle(SimulatedBundle),
+}
+
+/// An order that is ready to be executed in the next block.
+#[derive(Debug, Clone)]
+pub enum PendingOrder {
+    Tx(SimulatedTxList),
+    Bundle(SimulatedBundle),
+}
+
+impl PendingOrder {
+    pub fn as_tx_list(&self) -> Option<&SimulatedTxList> {
+        match self {
+            PendingOrder::Tx(list) => Some(list),
+            _ => None,
+        }
+    }
+
+    pub fn as_tx_list_mut(&mut self) -> Option<&mut SimulatedTxList> {
+        match self {
+            PendingOrder::Tx(list) => Some(list),
+            _ => None,
+        }
+    }
+
+    pub fn as_bundle(&self) -> Option<&SimulatedBundle> {
+        match self {
+            PendingOrder::Bundle(bundle) => Some(bundle),
+            _ => None,
+        }
+    }
+
+    pub fn weight(&self) -> U256 {
+        match self {
+            PendingOrder::Tx(list) => list.weight(),
+            PendingOrder::Bundle(bundle) => bundle.weight(),
+        }
+    }
 }

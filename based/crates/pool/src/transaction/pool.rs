@@ -6,7 +6,7 @@ use bop_common::{
     communication::{Producer, SendersSpine, TrackedSenders, messages::SequencerToSimulator},
     db::{DBFrag, DatabaseRead},
     order::{
-        Order, SimulatedOrder,
+        Order, PendingOrder, SimulatedOrder,
         bundle::{SimulatedBundle, ValidatedBundle},
     },
     telemetry::TelemetryUpdate,
@@ -16,7 +16,7 @@ use bop_common::{
 use reth_optimism_primitives::transaction::OpTransaction;
 use reth_primitives_traits::InMemorySize;
 
-use crate::transaction::pending::{PendingOrders, PendingOrdersView};
+use crate::transaction::pending::PendingOrders;
 
 // TODO(mempirate): We need a way to understand if a bundle can be executed or not, and then
 #[derive(Clone, Debug, Default)]
@@ -305,8 +305,8 @@ impl TxPool {
     }
 
     #[inline]
-    pub fn snapshot(&self) -> PendingOrdersView {
-        self.pending_orders.view()
+    pub fn snapshot(&self) -> impl Iterator<Item = PendingOrder> + '_ {
+        self.pending_orders.snapshot()
     }
 
     #[inline]

@@ -186,11 +186,21 @@ impl SimulatedBundle {
         self.validated.transactions.iter().find(|tx| tx.sender() == sender).map(|tx| tx.nonce())
     }
 
+    /// Returns the inner validated bundle.
     pub fn validated(&self) -> &ValidatedBundle {
         &self.validated
     }
 
+    /// Returns the id of the bundle.
     pub fn id(&self) -> Uuid {
         self.validated.id()
+    }
+
+    /// Returns the weight of the bundle.
+    pub fn weight(&self) -> U256 {
+        // If we have the simulated payment, use that. Else sum the priority fees of the transactions.
+        self.total_payment.unwrap_or_else(|| {
+            self.validated().transactions.iter().map(|tx| U256::from(tx.priority_fee_or_price())).sum()
+        })
     }
 }
