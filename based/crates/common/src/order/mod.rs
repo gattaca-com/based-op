@@ -71,10 +71,10 @@ impl Order {
     }
 
     /// Returns the pool telemetry update.
-    pub fn pool_telemetry(&self) -> Telemetry {
+    pub fn pool_telemetry(&self) -> Vec<Telemetry> {
         match self {
-            Order::Tx(tx) => tx.to_added_to_pool_telemetry(),
-            Order::Bundle(bundle) => todo!("add telemetry for bundle"),
+            Order::Tx(tx) => vec![tx.to_added_to_pool_telemetry()],
+            Order::Bundle(bundle) => bundle.transactions.iter().map(|tx| tx.to_added_to_pool_telemetry()).collect(),
         }
     }
 }
@@ -119,9 +119,7 @@ impl SimulatedOrder {
     pub fn result_and_state<'a>(&'a self) -> Option<ResultAndState<'a>> {
         match self {
             SimulatedOrder::Tx(tx) => Some(ResultAndState::Single(&tx.result_and_state)),
-            SimulatedOrder::Bundle(bundle) => {
-                bundle.result_and_state().map(|result_and_state| ResultAndState::Many(result_and_state))
-            }
+            SimulatedOrder::Bundle(bundle) => bundle.result_and_state().map(ResultAndState::Many),
         }
     }
 
@@ -140,10 +138,16 @@ impl SimulatedOrder {
         }
     }
 
-    pub fn included_telemetry(&self, frag: Uuid, id_in_frag: usize) -> Telemetry {
+    pub fn included_telemetry(&self, frag: Uuid, id_in_frag: usize) -> Vec<Telemetry> {
         match self {
-            SimulatedOrder::Tx(tx) => tx.to_included_telemetry(frag, id_in_frag),
-            SimulatedOrder::Bundle(bundle) => todo!(),
+            SimulatedOrder::Tx(tx) => vec![tx.to_included_telemetry(frag, id_in_frag)],
+            SimulatedOrder::Bundle(bundle) => bundle
+                .transactions()
+                .iter()
+                .enumerate()
+                // Make sure to increment the id_in_frag for each transaction in the bundle.
+                .map(|(i, tx)| tx.to_included_telemetry(frag, id_in_frag + i))
+                .collect(),
         }
     }
 }

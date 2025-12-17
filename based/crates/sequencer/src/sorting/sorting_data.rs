@@ -441,9 +441,9 @@ impl<Db: DatabaseRef> SortingData<Db> {
         let sim_time = order.sim_time().expect("order was simulated");
 
         self.db.commit_ref(result_and_state.state());
-        TelemetryUpdate::send(
+        TelemetryUpdate::send_batch(
             order.uuid(),
-            order.to_included_telemetry(self.uuid, self.transactions.len()),
+            order.included_telemetry(self.uuid, self.transactions.len()),
             &mut self.telemetry_producer,
         );
 

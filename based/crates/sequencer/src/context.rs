@@ -277,7 +277,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
         ) {
-            TelemetryUpdate::send(uuid, telemetry, &mut self.telemetry);
+            TelemetryUpdate::send_batch(uuid, telemetry, &mut self.telemetry);
         }
     }
 

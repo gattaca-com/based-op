@@ -40,6 +40,13 @@ impl TelemetryUpdate {
         producer.produce(&msg);
     }
 
+    pub fn send_batch(identifier: Uuid, updates: Vec<Telemetry>, producer: &mut Producer<Self>) {
+        for update in updates {
+            let msg = Self { identifier, t: Nanos::now(), update };
+            producer.produce(&msg);
+        }
+    }
+
     pub fn send_ref(identifier: Uuid, update: Telemetry, producer: &Producer<Self>) {
         let msg = Self { identifier, t: Nanos::now(), update };
         producer.produce_without_first(&msg);
