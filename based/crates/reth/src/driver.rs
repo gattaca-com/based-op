@@ -2,14 +2,15 @@ use std::time::Instant;
 
 use alloy_primitives::B256;
 use alloy_rpc_types::Block;
+use bop_common::p2p::{EnvV0, FragV0, SealV0};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
-use bop_common::p2p::{EnvV0, FragV0, SealV0};
-
-use crate::error::{DriverError, ValidateSealError};
-use crate::exec::{apply_exec_output, UnsealedExecutor};
-use crate::unsealed_block::UnsealedBlock;
+use crate::{
+    error::{DriverError, ValidateSealError},
+    exec::{UnsealedExecutor, apply_exec_output},
+    unsealed_block::UnsealedBlock,
+};
 
 /// Result of submitting a frag to the driver.
 #[derive(Debug, Clone, Copy)]
@@ -102,10 +103,7 @@ impl Driver {
                     Cmd::SealFragV0 { seal, resp } => {
                         respond(resp, inner.handle_seal_frag_v0(seal).await);
                     }
-                    Cmd::ForkchoiceUpdated {
-                        new_block_number,
-                        resp,
-                    } => {
+                    Cmd::ForkchoiceUpdated { new_block_number, resp } => {
                         respond(resp, inner.handle_forkchoice_updated(new_block_number).await);
                     }
                     Cmd::GetHeaderView { resp } => {
@@ -135,24 +133,14 @@ impl Driver {
     /// Validates and finalizes the current unsealed block using the provided seal.
     pub async fn seal_frag_v0(&self, seal_v0: SealV0) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx
-            .send(Cmd::SealFragV0 {
-                resp: resp_tx,
-                seal: seal_v0,
-            })
-            .await?;
+        self.tx.send(Cmd::SealFragV0 { resp: resp_tx, seal: seal_v0 }).await?;
         resp_rx.await?.into_result()
     }
 
     /// Notifies the driver about a forkchoice update and resets state on mismatch.
     pub async fn forkchoice_updated(&self, new_block_number: u64) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx
-            .send(Cmd::ForkchoiceUpdated {
-                new_block_number,
-                resp: resp_tx,
-            })
-            .await?;
+        self.tx.send(Cmd::ForkchoiceUpdated { new_block_number, resp: resp_tx }).await?;
         resp_rx.await?.into_result()
     }
 
@@ -161,21 +149,12 @@ impl Driver {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         if self.tx.send(Cmd::GetHeaderView { resp: resp_tx }).await.is_err() {
-            return HeaderView {
-                enabled: false,
-                header: None,
-            };
+            return HeaderView { enabled: false, header: None };
         }
 
         match resp_rx.await {
-            Ok(reply) => reply.into_result().unwrap_or(HeaderView {
-                enabled: false,
-                header: None,
-            }),
-            Err(_) => HeaderView {
-                enabled: false,
-                header: None,
-            },
+            Ok(reply) => reply.into_result().unwrap_or(HeaderView { enabled: false, header: None }),
+            Err(_) => HeaderView { enabled: false, header: None },
         }
     }
 }
@@ -194,10 +173,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             let current_num = current.env.number;
 
             if current_num >= env.number {
-                return Err(DriverError::UnsealedBlockInProgress {
-                    current: current_num,
-                    incoming: env.number,
-                });
+                return Err(DriverError::UnsealedBlockInProgress { current: current_num, incoming: env.number });
             }
 
             info!(old = current_num, new = env.number, "env advanced, resetting");
@@ -218,11 +194,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
         };
 
         if ub.env.number != new_block_number {
-            info!(
-                old = ub.env.number,
-                new = new_block_number,
-                "forkchoiceUpdated block mismatch: resetting unsealed"
-            );
+            info!(old = ub.env.number, new = new_block_number, "forkchoiceUpdated block mismatch: resetting unsealed");
             self.reset_current_unsealed_block();
         }
 
@@ -239,11 +211,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
         info!(for_block = frag.block_number, current = ub.env.number, "new frag received");
 
         if frag.block_number < ub.env.number {
-            info!(
-                frag_block = frag.block_number,
-                env_number = ub.env.number,
-                "stale frag (older block), ignoring"
-            );
+            info!(frag_block = frag.block_number, env_number = ub.env.number, "stale frag (older block), ignoring");
             return Ok(FragStatus::Valid);
         }
 
@@ -318,26 +286,17 @@ impl<E: UnsealedExecutor> DriverInner<E> {
     ) -> Result<(), ValidateSealError> {
         let expected_block_hash: B256 = presealed_block.header.hash.into();
         if expected_block_hash != seal.block_hash {
-            return Err(ValidateSealError::BlockHashMismatch {
-                expected: expected_block_hash,
-                got: seal.block_hash,
-            });
+            return Err(ValidateSealError::BlockHashMismatch { expected: expected_block_hash, got: seal.block_hash });
         }
 
         let expected_parent_hash = presealed_block.header.parent_hash;
         if expected_parent_hash != seal.parent_hash {
-            return Err(ValidateSealError::ParentHashMismatch {
-                expected: expected_parent_hash,
-                got: seal.parent_hash,
-            });
+            return Err(ValidateSealError::ParentHashMismatch { expected: expected_parent_hash, got: seal.parent_hash });
         }
 
         let expected_state_root = presealed_block.header.state_root;
         if expected_state_root != seal.state_root {
-            return Err(ValidateSealError::StateRootMismatch {
-                expected: expected_state_root,
-                got: seal.state_root,
-            });
+            return Err(ValidateSealError::StateRootMismatch { expected: expected_state_root, got: seal.state_root });
         }
 
         let expected_tx_root = presealed_block.header.transactions_root;
@@ -358,26 +317,17 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
         let expected_gas_used = presealed_block.header.gas_used;
         if expected_gas_used != seal.gas_used {
-            return Err(ValidateSealError::GasUsedMismatch {
-                expected: expected_gas_used,
-                got: seal.gas_used,
-            });
+            return Err(ValidateSealError::GasUsedMismatch { expected: expected_gas_used, got: seal.gas_used });
         }
 
         let expected_gas_limit = presealed_block.header.gas_limit;
         if expected_gas_limit != seal.gas_limit {
-            return Err(ValidateSealError::GasLimitMismatch {
-                expected: expected_gas_limit,
-                got: seal.gas_limit,
-            });
+            return Err(ValidateSealError::GasLimitMismatch { expected: expected_gas_limit, got: seal.gas_limit });
         }
 
         let expected_total_frags = ub.frags.len() as u64;
         if expected_total_frags != seal.total_frags {
-            return Err(ValidateSealError::TotalFragsMismatch {
-                expected: expected_total_frags,
-                got: seal.total_frags,
-            });
+            return Err(ValidateSealError::TotalFragsMismatch { expected: expected_total_frags, got: seal.total_frags });
         }
 
         Ok(())

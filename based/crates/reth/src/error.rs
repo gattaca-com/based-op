@@ -13,11 +13,10 @@ pub enum DriverError {
     #[error("driver not initialized, call env_v0 first")]
     NotInitialized,
 
-    #[error("cannot open a new unsealed block while there's one already in progress (current={current}, incoming={incoming})")]
-    UnsealedBlockInProgress {
-        current: u64,
-        incoming: u64,
-    },
+    #[error(
+        "cannot open a new unsealed block while there's one already in progress (current={current}, incoming={incoming})"
+    )]
+    UnsealedBlockInProgress { current: u64, incoming: u64 },
 
     #[error("seal mismatch: {what}")]
     SealMismatch { what: String },
@@ -62,7 +61,6 @@ pub enum ValidateSealError {
     TotalFragsMismatch { expected: u64, got: u64 },
 }
 
-
 #[derive(Debug, Error)]
 pub enum UnsealedBlockError {
     #[error("failed to decode EIP-2718 tx at index {index}")]
@@ -84,7 +82,6 @@ pub enum UnsealedBlockError {
     #[error("received frag after last frag already accepted")]
     AlreadyEnded,
 }
-
 
 #[derive(Debug, Error)]
 pub enum ExecError {

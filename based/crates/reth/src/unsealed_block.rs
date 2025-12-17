@@ -1,8 +1,9 @@
 use alloy_consensus::{Header, TxEnvelope};
-use alloy_eips::eip2718::{Decodable2718};
+use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::{Log, TransactionReceipt};
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
+
 use crate::error::UnsealedBlockError;
 
 pub struct UnsealedBlock {
@@ -55,11 +56,7 @@ impl UnsealedBlock {
                 let Some(last_known) = self.frags.get(last_seq as usize) else {
                     return false;
                 };
-                if last_known.is_last {
-                    false
-                } else {
-                    last_known.seq + 1 == f.seq
-                }
+                if last_known.is_last { false } else { last_known.seq + 1 == f.seq }
             }
         }
     }
@@ -70,17 +67,12 @@ impl UnsealedBlock {
     }
 
     /// Decoded txs iterator (lazy decode)
-    pub fn transactions_iter_decoded(
-        &self,
-    ) -> impl Iterator<Item = Result<TxEnvelope, UnsealedBlockError>> + '_ {
-        self.transactions_iter_bytes()
-            .enumerate()
-            .map(|(index, tx)| {
-                // allocate a Vec<u8> to decode from
-                let raw: Vec<u8> = tx.iter().copied().collect();
-                TxEnvelope::decode_2718_exact(&raw)
-                    .map_err(|source| UnsealedBlockError::TxDecode { index, source })
-            })
+    pub fn transactions_iter_decoded(&self) -> impl Iterator<Item = Result<TxEnvelope, UnsealedBlockError>> + '_ {
+        self.transactions_iter_bytes().enumerate().map(|(index, tx)| {
+            // allocate a Vec<u8> to decode from
+            let raw: Vec<u8> = tx.iter().copied().collect();
+            TxEnvelope::decode_2718_exact(&raw).map_err(|source| UnsealedBlockError::TxDecode { index, source })
+        })
     }
 
     /// Decoded txs (allocates Vec), like Go `Transactions()` but decoded
@@ -90,9 +82,7 @@ impl UnsealedBlock {
 
     /// Raw tx bytes (allocates Vec<Vec<u8>>), like Go `ByteTransactions()`
     pub fn byte_transactions(&self) -> Vec<Vec<u8>> {
-        self.transactions_iter_bytes()
-            .map(|tx| tx.iter().copied().collect::<Vec<u8>>())
-            .collect()
+        self.transactions_iter_bytes().map(|tx| tx.iter().copied().collect::<Vec<u8>>()).collect()
     }
 
     // Return the last frag on the list.
@@ -112,18 +102,12 @@ impl UnsealedBlock {
     /// Validate frag against current state (equivalent to your ValidateNewFragV0 + sequencing gate).
     pub fn validate_new_frag(&self, f: &FragV0) -> Result<(), UnsealedBlockError> {
         if f.block_number < self.env.number {
-            return Err(UnsealedBlockError::StaleFrag {
-                frag_block: f.block_number,
-                env_number: self.env.number,
-            });
+            return Err(UnsealedBlockError::StaleFrag { frag_block: f.block_number, env_number: self.env.number });
         }
 
         // must target current block
         if f.block_number > self.env.number {
-            return Err(UnsealedBlockError::WrongBlock {
-                frag_block: f.block_number,
-                env_number: self.env.number,
-            });
+            return Err(UnsealedBlockError::WrongBlock { frag_block: f.block_number, env_number: self.env.number });
         }
 
         // sequencing

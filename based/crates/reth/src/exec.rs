@@ -1,11 +1,10 @@
 use std::future::Future;
 
-use alloy_primitives::{BlockNumber, B256};
+use alloy_primitives::{B256, BlockNumber};
 use alloy_rpc_types::{Block, Log, TransactionReceipt};
 use bop_common::p2p::{EnvV0, FragV0};
 
-use crate::error::ExecError;
-use crate::unsealed_block::UnsealedBlock;
+use crate::{error::ExecError, unsealed_block::UnsealedBlock};
 
 #[derive(Debug, Clone)]
 pub struct ExecOutput {
@@ -29,21 +28,11 @@ pub trait UnsealedExecutor: Send {
         frag: &FragV0,
     ) -> impl Future<Output = Result<ExecOutput, ExecError>> + Send + '_;
 
-    fn seal(
-        &mut self,
-        ub: &UnsealedBlock,
-    ) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
+    fn seal(&mut self, ub: &UnsealedBlock) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
 
-    fn set_canonical(
-        &mut self,
-        b: &Block,
-    ) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
+    fn set_canonical(&mut self, b: &Block) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
 
-    fn get_block(
-        &self,
-        hash: B256,
-        number: BlockNumber,
-    ) -> impl Future<Output = Result<Block, ExecError>> + Send + '_;
+    fn get_block(&self, hash: B256, number: BlockNumber) -> impl Future<Output = Result<Block, ExecError>> + Send + '_;
 
     /// Reset overlay state completely.
     fn reset(&mut self);
@@ -70,26 +59,14 @@ impl UnsealedExecutor for NoopExecutor {
         _ub: &UnsealedBlock,
         _frag: &FragV0,
     ) -> impl Future<Output = Result<ExecOutput, ExecError>> + Send + '_ {
-        async move {
-            Ok(ExecOutput {
-                receipts: vec![],
-                logs: vec![],
-                gas_used_delta: 0,
-            })
-        }
+        async move { Ok(ExecOutput { receipts: vec![], logs: vec![], gas_used_delta: 0 }) }
     }
 
-    fn seal(
-        &mut self,
-        _ub: &UnsealedBlock,
-    ) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
+    fn seal(&mut self, _ub: &UnsealedBlock) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
         async move { Ok(()) }
     }
 
-    fn set_canonical(
-        &mut self,
-        _b: &Block,
-    ) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
+    fn set_canonical(&mut self, _b: &Block) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
         async move { Ok(()) }
     }
 
