@@ -1,4 +1,5 @@
 use std::time::Instant;
+use alloy_primitives::B256;
 use alloy_rpc_types::Block;
 use anyhow::Context;
 use tokio::sync::{mpsc, oneshot};
@@ -49,6 +50,9 @@ pub enum DriverError {
 
     #[error(transparent)]
     UnsealedBlock(#[from] UnsealedBlockError),
+
+    #[error(transparent)]
+    ValidateSeal(#[from] ValidateSealError),
 }
 
 impl From<mpsc::error::SendError<Cmd>> for DriverError {
@@ -111,7 +115,7 @@ pub struct DriverInner<E: UnsealedExecutor> {
 }
 
 impl Driver {
-    pub fn spawn<E: UnsealedExecutor + 'static>(inner: DriverInner<E>) -> Self {
+    pub fn spawn<E: UnsealedExecutor + 'static + std::marker::Sync>(inner: DriverInner<E>) -> Self {
         let (tx, mut rx) = mpsc::channel::<Cmd>(256);
 
         tokio::spawn(async move {
@@ -308,24 +312,81 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             return Ok(());
         }
 
-        if ub.env.number != seal.block_number {
-            return Err(DriverError::SealMismatch {
-                what: format!("block number mismatch (ub={}, seal={})", ub.env.number, seal.block_number),
-            });
-        }
-
         let presealed_block = self.exec.get_block(seal.block_hash, seal.block_number).await?;
-
+        self.validate_seal_frag_v0(&presealed_block, &ub, seal).await?;
 
         self.exec.set_canonical(&presealed_block).await.context("sealFragV0")?;
 
+        self.reset_current_unsealed_block();
 
-        info!(elapsed_ms = start.elapsed().as_millis(), "frag sealed");
+        info!(elapsed_ms = start.elapsed().as_millis(), "block sealed");
         Ok(())
     }
 
-    async fn validate_seal_frag_v0(&mut self, presealed_bloc: Block, seal: SealV0) -> Result<(), DriverError> {
+    async fn validate_seal_frag_v0(&self, presealed_block: &Block, ub: &UnsealedBlock, seal: SealV0) -> Result<(), ValidateSealError> {
+        let expected_block_hash: B256 = presealed_block.header.hash.into();
+        if expected_block_hash != seal.block_hash {
+            return Err(ValidateSealError::BlockHashMismatch {
+                expected: expected_block_hash,
+                got: seal.block_hash,
+            });
+        }
 
+        let expected_parent_hash = presealed_block.header.parent_hash;
+        if expected_parent_hash != seal.parent_hash {
+            return Err(ValidateSealError::ParentHashMismatch {
+                expected: expected_parent_hash,
+                got: seal.parent_hash,
+            });
+        }
+
+        let expected_state_root = presealed_block.header.state_root;
+        if expected_state_root != seal.state_root {
+            return Err(ValidateSealError::StateRootMismatch {
+                expected: expected_state_root,
+                got: seal.state_root,
+            });
+        }
+
+        let expected_tx_root = presealed_block.header.transactions_root;
+        if expected_tx_root != seal.transactions_root {
+            return Err(ValidateSealError::TransactionsRootMismatch {
+                expected: expected_tx_root,
+                got: seal.transactions_root,
+            });
+        }
+
+        let expected_receipts_root = presealed_block.header.receipts_root;
+        if expected_receipts_root != seal.receipts_root {
+            return Err(ValidateSealError::ReceiptsRootMismatch {
+                expected: expected_receipts_root,
+                got: seal.receipts_root,
+            });
+        }
+
+        let expected_gas_used = presealed_block.header.gas_used;
+        if expected_gas_used != seal.gas_used {
+            return Err(ValidateSealError::GasUsedMismatch {
+                expected: expected_gas_used,
+                got: seal.gas_used,
+            });
+        }
+
+        let expected_gas_limit = presealed_block.header.gas_limit;
+        if expected_gas_limit != seal.gas_limit {
+            return Err(ValidateSealError::GasLimitMismatch {
+                expected: expected_gas_limit,
+                got: seal.gas_limit,
+            });
+        }
+
+        let expected_total_frags = ub.frags.len() as u64;
+        if expected_total_frags != seal.total_frags {
+            return Err(ValidateSealError::TotalFragsMismatch {
+                expected: expected_total_frags,
+                got: seal.total_frags,
+            });
+        }
         Ok(())
     }
 
@@ -342,4 +403,32 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             .map(|ub| ub.temp_header());
         HeaderView { enabled: true, header }
     }
+}
+
+
+#[derive(Debug, Error)]
+pub enum ValidateSealError {
+    #[error("block hash mismatch, expected {expected:?}, got {got:?}")]
+    BlockHashMismatch { expected: B256, got: B256 },
+
+    #[error("parent hash mismatch, expected {expected:?}, got {got:?}")]
+    ParentHashMismatch { expected: B256, got: B256 },
+
+    #[error("state root mismatch, expected {expected:?}, got {got:?}")]
+    StateRootMismatch { expected: B256, got: B256 },
+
+    #[error("transactions root mismatch, expected {expected:?}, got {got:?}")]
+    TransactionsRootMismatch { expected: B256, got: B256 },
+
+    #[error("receipts root mismatch, expected {expected:?}, got {got:?}")]
+    ReceiptsRootMismatch { expected: B256, got: B256 },
+
+    #[error("gas used mismatch, expected {expected}, got {got}")]
+    GasUsedMismatch { expected: u64, got: u64 },
+
+    #[error("gas limit mismatch, expected {expected}, got {got}")]
+    GasLimitMismatch { expected: u64, got: u64 },
+
+    #[error("total frags mismatch, expected {expected}, got {got}")]
+    TotalFragsMismatch { expected: u64, got: u64 },
 }
