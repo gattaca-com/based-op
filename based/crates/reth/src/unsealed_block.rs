@@ -38,7 +38,7 @@ pub struct UnsealedBlock {
     /// - `Some(n)` means `frags[n]` is considered the latest known fragment
     pub last_sequence_number: Option<u64>,
     /// Block hash.
-    pub hash: FixedBytes<32>,
+    pub hash: B256,
 
     /// Transaction receipts for executed transactions.
     pub receipts: Vec<TransactionReceipt>,

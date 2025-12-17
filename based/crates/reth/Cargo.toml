@@ -15,10 +15,6 @@ op-alloy-rpc-types.workspace = true
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
 thiserror.workspace = true
-anyhow.workspace = true
 tokio.workspace = true
-oneshot.workspace = true
-reth_optimism_evm.workspace = true
-reth_revm.workspace = true
-revm.workspace = true
+anyhow = "1.0.98"
 

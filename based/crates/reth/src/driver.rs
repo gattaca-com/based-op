@@ -1,11 +1,11 @@
 use std::time::Instant;
-
+use alloy_rpc_types::Block;
 use anyhow::Context;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 use thiserror::Error;
 
-use bop_common::p2p::{EnvV0, FragV0};
+use bop_common::p2p::{EnvV0, FragV0, SealV0};
 
 use crate::exec::{apply_exec_output, ExecError, UnsealedExecutor};
 use crate::unsealed_block::{UnsealedBlock, UnsealedBlockError};
@@ -31,6 +31,15 @@ pub enum DriverError {
 
     #[error("driver not initialized, call env_v0 first")]
     NotInitialized,
+
+    #[error("cannot open a new unsealed block while there's one already in progress (current={current}, incoming={incoming})")]
+    UnsealedBlockInProgress {
+        current: u64,
+        incoming: u64,
+    },
+
+    #[error("seal mismatch: {what}")]
+    SealMismatch { what: String },
 
     #[error(transparent)]
     Exec(#[from] ExecError),
@@ -79,12 +88,9 @@ fn respond<T>(resp: Resp<T>, res: Result<T, DriverError>) {
 }
 
 enum Cmd {
-    // RPC
     EnvV0 { env: EnvV0, resp: Resp<()> },
     NewFragV0 { frag: FragV0, resp: Resp<FragStatus> },
-    SealFragV0 { resp: Resp<()> },
-
-    // ExEx
+    SealFragV0 { seal: SealV0, resp: Resp<()> },
     ForkchoiceUpdated { new_block_number: u64, resp: Resp<()> },
     GetHeaderView { resp: Resp<HeaderView> },
 }
@@ -119,8 +125,8 @@ impl Driver {
                     Cmd::NewFragV0 { frag, resp } => {
                         respond(resp, inner.handle_new_frag_v0(frag).await);
                     }
-                    Cmd::SealFragV0 { resp } => {
-                        respond(resp, inner.handle_seal_frag_v0().await);
+                    Cmd::SealFragV0 { seal, resp } => {
+                        respond(resp, inner.handle_seal_frag_v0(seal).await);
                     }
                     Cmd::ForkchoiceUpdated {
                         new_block_number,
@@ -152,9 +158,9 @@ impl Driver {
         resp_rx.await?.into_result()
     }
 
-    pub async fn seal_frag_v0(&self) -> Result<(), DriverError> {
+    pub async fn seal_frag_v0(&self, seal_v0: SealV0) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx.send(Cmd::SealFragV0 { resp: resp_tx }).await?;
+        self.tx.send(Cmd::SealFragV0 { resp: resp_tx, seal: seal_v0 }).await?;
         resp_rx.await?.into_result()
     }
 
@@ -202,38 +208,24 @@ impl<E: UnsealedExecutor> DriverInner<E> {
     async fn handle_env_v0(&mut self, env: EnvV0) -> Result<(), DriverError> {
         info!(block = env.number, "envV0 received");
 
-        match self.current_unsealed_block.as_mut() {
-            None => {
-                self.exec
-                    .ensure_env(&env)
-                    .context("exec.ensure_env")?;
-                self.current_unsealed_block = Some(UnsealedBlock::new(env));
-                self.fcu_count_since_unseal_reset = 0;
-                Ok(())
-            }
-            Some(ub) => {
-                if ub.env.number != env.number {
-                    info!(
-                        old = ub.env.number,
-                        new = env.number,
-                        "env changed block number, resetting"
-                    );
-                    self.exec.reset();
-                    self.exec
-                        .ensure_env(&env)
-                        .context("exec.ensure_env")?;
-                    ub.reset_to_env(env);
-                    self.fcu_count_since_unseal_reset = 0;
-                    return Ok(());
-                }
+        if let Some(current) = self.current_unsealed_block.as_ref() {
+            let current_num = current.env.number;
 
-                self.exec
-                    .ensure_env(&env)
-                    .context("exec.ensure_env")?;
-                ub.env = env;
-                Ok(())
+            if current_num >= env.number {
+                return Err(DriverError::UnsealedBlockInProgress {
+                    current: current_num,
+                    incoming: env.number,
+                });
             }
+
+            info!(old = current_num, new = env.number, "env advanced, resetting");
+            self.reset_current_unsealed_block()
         }
+
+        self.exec.ensure_env(&env).context("exec.ensure_env")?;
+        self.current_unsealed_block = Some(UnsealedBlock::new(env));
+        self.fcu_count_since_unseal_reset = 0;
+        Ok(())
     }
 
     async fn handle_forkchoice_updated(&mut self, new_block_number: u64) -> Result<(), DriverError> {
@@ -305,12 +297,35 @@ impl<E: UnsealedExecutor> DriverInner<E> {
         Ok(FragStatus::Valid)
     }
 
-    async fn handle_seal_frag_v0(&mut self) -> Result<(), DriverError> {
+    async fn handle_seal_frag_v0(&mut self, seal: SealV0) -> Result<(), DriverError> {
+        let start = Instant::now();
         let Some(ub) = self.current_unsealed_block.as_ref() else {
             return Err(DriverError::NotInitialized);
         };
 
-        self.exec.seal(ub).await.context("sealFragV0")?;
+        if ub.env.number > seal.block_number {
+            info!(ub = ub.env.number, seal = seal.block_number, "stale seal, dropping");
+            return Ok(());
+        }
+
+        if ub.env.number != seal.block_number {
+            return Err(DriverError::SealMismatch {
+                what: format!("block number mismatch (ub={}, seal={})", ub.env.number, seal.block_number),
+            });
+        }
+
+        let presealed_block = self.exec.get_block(seal.block_hash, seal.block_number).await?;
+
+
+        self.exec.set_canonical(&presealed_block).await.context("sealFragV0")?;
+
+
+        info!(elapsed_ms = start.elapsed().as_millis(), "frag sealed");
+        Ok(())
+    }
+
+    async fn validate_seal_frag_v0(&mut self, presealed_bloc: Block, seal: SealV0) -> Result<(), DriverError> {
+
         Ok(())
     }
 

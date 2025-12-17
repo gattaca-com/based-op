@@ -1,4 +1,7 @@
-use alloy_rpc_types::{Log, TransactionReceipt};
+use std::future::Future;
+
+use alloy_primitives::{BlockNumber, B256};
+use alloy_rpc_types::{Block, Log, TransactionReceipt};
 use bop_common::p2p::{EnvV0, FragV0};
 use thiserror::Error;
 
@@ -32,10 +35,27 @@ pub trait UnsealedExecutor: Send {
     /// Execute all txs in `frag` on top of current overlay state.
     ///
     /// MUST be cumulative: txs execute after all previous frags' txs.
-    async fn execute_frag(&mut self, ub: &UnsealedBlock, frag: &FragV0) -> Result<ExecOutput, ExecError>;
+    fn execute_frag<'a>(
+        &'a mut self,
+        ub: &'a UnsealedBlock,
+        frag: &'a FragV0,
+    ) -> impl Future<Output = Result<ExecOutput, ExecError>> + Send + 'a;
 
-    /// Finalize (post-exec changes, compute roots if needed, etc.)
-    async fn seal(&mut self, ub: &UnsealedBlock) -> Result<(), ExecError>;
+    fn set_canonical<'a>(
+        &'a mut self,
+        b: &'a Block,
+    ) -> impl Future<Output = Result<(), ExecError>> + Send + 'a;
+
+    fn seal<'a>(
+        &'a mut self,
+        ub: &'a UnsealedBlock,
+    ) -> impl Future<Output = Result<(), ExecError>> + Send + 'a;
+
+    fn get_block<'a>(
+        &'a self,
+        hash: B256,
+        number: BlockNumber,
+    ) -> impl Future<Output = Result<Block, ExecError>> + Send + 'a;
 
     /// Reset overlay state completely.
     fn reset(&mut self);
@@ -57,12 +77,34 @@ impl UnsealedExecutor for NoopExecutor {
         Ok(())
     }
 
-    async fn execute_frag(&mut self, _ub: &UnsealedBlock, _frag: &FragV0) -> Result<ExecOutput, ExecError> {
-        Ok(ExecOutput { receipts: vec![], logs: vec![], gas_used_delta: 0 })
+    fn execute_frag<'a>(
+        &'a mut self,
+        _ub: &'a UnsealedBlock,
+        _frag: &'a FragV0,
+    ) -> impl Future<Output = Result<ExecOutput, ExecError>> + Send + 'a {
+        async move { Ok(ExecOutput { receipts: vec![], logs: vec![], gas_used_delta: 0 }) }
     }
 
-    async fn seal(&mut self, _ub: &UnsealedBlock) -> Result<(), ExecError> {
-        Ok(())
+    fn set_canonical<'a>(
+        &'a mut self,
+        _b: &'a Block,
+    ) -> impl Future<Output = Result<(), ExecError>> + Send + 'a {
+        async move { Ok(()) }
+    }
+
+    fn seal<'a>(
+        &'a mut self,
+        _ub: &'a UnsealedBlock,
+    ) -> impl Future<Output = Result<(), ExecError>> + Send + 'a {
+        async move { Ok(()) }
+    }
+
+    fn get_block<'a>(
+        &'a self,
+        _hash: B256,
+        _number: BlockNumber,
+    ) -> impl Future<Output = Result<Block, ExecError>> + Send + 'a {
+        async move { Ok(Block::default()) }
     }
 
     fn reset(&mut self) {}
