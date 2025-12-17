@@ -27,6 +27,7 @@ chrono.workspace = true
 clap.workspace = true
 crossbeam-channel.workspace = true
 directories.workspace = true
+either.workspace = true
 ethereum_ssz.workspace = true
 eyre.workspace = true
 http.workspace = true

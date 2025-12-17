@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip7685::RequestsOrHash;
@@ -15,12 +15,11 @@ use bop_common::{
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::DatabaseWrite,
     metrics::{Gauge, Metric, MetricsUpdate},
-    order::Order,
+    order::{Order, PendingOrder, SimulatedOrder},
     p2p::{EnvV0, VersionedMessage, VersionedMessageWithState},
     shared::SharedState,
     telemetry::{self, Telemetry, TelemetryUpdate, system::SystemNotification},
     time::{Duration, Repeater},
-    transaction::Transaction,
     typedefs::{BlockSyncMessage, DatabaseRef},
 };
 use bop_db::DatabaseRead;
@@ -109,15 +108,8 @@ where
         let use_tx_pool = self.data.payload_attributes.no_tx_pool.is_none_or(|no_tx_pool| !no_tx_pool);
         if use_tx_pool {
             // handle new transaction
-            connections.receive_for(Duration::from_millis(10), |msg: Order, senders| match msg {
-                Order::Tx(tx) => {
-                    // TODO(mempirate): Should we go with `handle_new_order`? Can we just deal with orders here, and
-                    // change txpool to an order pool?
-                    self.state.handle_new_tx(tx, &mut self.data, senders);
-                }
-                Order::Bundle(bundle) => {
-                    // TODO(mempirate): Handle bundles
-                }
+            connections.receive_for(Duration::from_millis(10), |msg: Order, senders| {
+                self.state.handle_new_order(msg, &mut self.data, senders)
             });
         }
 
@@ -378,7 +370,7 @@ where
                     "received FCU when Sorting. Sending already Fragged txs back to the pools and syncing to the new head."
                 );
                 for tx in frag_seq.txs.into_iter().skip(frag_seq.n_force_include_txs) {
-                    ctx.handle_tx(tx.tx, senders);
+                    ctx.handle_order(Order::Tx(tx.tx), senders);
                 }
                 let start = ctx.db.head_block_number().expect("couldn't get db head block number");
                 let stop = start + 1;
@@ -502,15 +494,15 @@ where
         }
     }
 
-    /// Sends a new transaction to the tx pool.
-    /// If we are sorting, we pass Some(senders) to the tx pool so it can send top-of-frag simulations.
-    fn handle_new_tx(&mut self, tx: Arc<Transaction>, ctx: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+    /// Sends a new order to the order pool.
+    fn handle_new_order(&mut self, order: Order, ctx: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+        // Add the (unsimulated) order to the TOF snapshot.
+        // TODO(mempirate): This might cause issues because it hasn't been simulated, where do we add sim info?
         if let SequencerState::Sorting(_, sorting_data) = self {
-            sorting_data
-                .tof_snapshot
-                .push_front(bop_common::transaction::SimulatedTxList { current: None, pending: tx.clone().into() });
+            sorting_data.tof_snapshot.push_front(PendingOrder::from(order.clone()));
         }
-        ctx.handle_tx(tx, senders);
+
+        ctx.handle_order(order, senders);
     }
 
     /// Processes transaction simulation results from the simulator actor.
@@ -521,6 +513,7 @@ where
         let (sender, nonce) = result.sender_info;
         let state_id = result.state_id;
         let simtime = result.simtime;
+        // TODO(mempirate): Handle bundle simulations.
         match result.msg {
             SimulatorToSequencerMsg::Tx(simulated_tx) => {
                 let SequencerState::Sorting(_, sort_data) = &mut self else {
@@ -531,13 +524,16 @@ where
                 if !sort_data.is_valid(state_id) {
                     return self;
                 }
+
                 data.timers.handle_sim.start();
-                sort_data.handle_sim(simulated_tx, sender, data.base_fee(), simtime);
+                sort_data.handle_sim(simulated_tx.map(SimulatedOrder::Tx), sender, data.base_fee(), simtime);
                 data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
                 match simulated_tx {
-                    Ok(res) if data.shared_state.as_ref().is_valid(state_id) => data.tx_pool.handle_simulated(res),
+                    Ok(res) if data.shared_state.as_ref().is_valid(state_id) => {
+                        data.tx_pool.handle_simulated(SimulatedOrder::Tx(res))
+                    }
                     Ok(_) => {
                         // No-op if the simulation is on a different fragment.
                         // We would have already re-sent the tx for sim on the correct fragment.
@@ -547,6 +543,32 @@ where
                     }
                 }
             }
+            SimulatorToSequencerMsg::Bundle(simulated_bundle) => {
+                let SequencerState::Sorting(_, sort_data) = &mut self else {
+                    return self;
+                };
+
+                // handle sim on wrong state
+                if !sort_data.is_valid(state_id) {
+                    return self;
+                }
+
+                data.timers.handle_sim.start();
+                sort_data.handle_sim(simulated_bundle.map(SimulatedOrder::Bundle), sender, data.base_fee(), simtime);
+                data.timers.handle_sim.stop();
+            }
+            SimulatorToSequencerMsg::BundleTopOfFrag(simulated_bundle) => match simulated_bundle {
+                Ok(res) if data.shared_state.as_ref().is_valid(state_id) => {
+                    data.tx_pool.handle_simulated(SimulatedOrder::Bundle(res))
+                }
+                Ok(_) => {
+                    // No-op if the simulation is on a different fragment.
+                    // We would have already re-sent the bundle for sim on the correct fragment.
+                }
+                Err(_e) => {
+                    data.tx_pool.remove(&sender, nonce, &mut data.telemetry);
+                }
+            },
         }
         self
     }

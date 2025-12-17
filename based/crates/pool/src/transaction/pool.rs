@@ -46,30 +46,26 @@ impl TxPool {
         base_fee: u64,
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
-    ) {
+    ) -> bool {
         // We can't just call `handle_new_tx` here because we need to handle bundles differently. They must always
         // remain atomic, which means that we can not add individual txs to the pending list.
         match order {
-            Order::Tx(tx) => {
-                self.handle_tx(tx, db, base_fee, syncing, sim_sender);
-            }
-            Order::Bundle(bundle) => {
-                self.handle_bundle(bundle, db, base_fee, syncing, sim_sender);
-            }
+            Order::Tx(tx) => self.handle_tx(tx, db, base_fee, syncing, sim_sender),
+            Order::Bundle(bundle) => self.handle_bundle(bundle, db, base_fee, syncing, sim_sender),
         }
     }
 
-    pub fn handle_bundle<Db: DatabaseRead>(
+    fn handle_bundle<Db: DatabaseRead>(
         &mut self,
         bundle: Arc<ValidatedBundle>,
         db: &DBFrag<Db>,
         base_fee: u64,
         syncing: bool,
         sim_sender: Option<&SendersSpine<Db>>,
-    ) {
+    ) -> bool {
         if syncing {
             // Short-circuit here
-            return;
+            return false;
         }
 
         // Simple transaction validation closure
@@ -95,13 +91,16 @@ impl TxPool {
 
         // Validate all transactions in the bundle
         if !bundle.transactions.iter().all(validate_tx) {
-            return;
+            return false;
         }
 
         self.mem_size = self.mem_size.saturating_add(bundle.size());
-        self.pending_orders.put_bundle(SimulatedBundle::new(bundle));
+        self.pending_orders.put_bundle(SimulatedBundle::new(bundle.clone()));
 
-        // TODO(mempirate): Request simulation for the bundle.
+        // Request top-of-frag simulation for the bundle.
+        TxPool::send_sim_requests_for_bundle(&bundle, db, sim_sender);
+
+        true
     }
 
     /// Handles an incoming transaction.
@@ -110,7 +109,7 @@ impl TxPool {
     /// If syncing is false we will fill the active list.
     /// If sim_sender is Some, and we are not syncing, we will also send simulation requests for the
     /// first tx for each sender to the simulator.
-    pub fn handle_tx<Db: DatabaseRead>(
+    fn handle_tx<Db: DatabaseRead>(
         &mut self,
         new_tx: Arc<Transaction>,
         db: &DBFrag<Db>,
@@ -298,6 +297,23 @@ impl TxPool {
             if let Err(error) = sim_sender
                 .send_timeout(SequencerToSimulator::SimulateTxTof(tx.clone(), db.clone()), Duration::from_millis(10))
             {
+                tracing::warn!(?error, "couldn't send simulator message");
+                debug_assert!(false, "Couldn't send simulator message");
+            }
+        }
+    }
+
+    /// Sends a simulation request for a bundle to the simulator.
+    fn send_sim_requests_for_bundle<Db: DatabaseRead>(
+        bundle: &Arc<ValidatedBundle>,
+        db: &DBFrag<Db>,
+        sim_sender: Option<&SendersSpine<Db>>,
+    ) {
+        if let Some(sim_sender) = sim_sender {
+            if let Err(error) = sim_sender.send_timeout(
+                SequencerToSimulator::SimulateBundleTof(bundle.clone(), db.clone()),
+                Duration::from_millis(10),
+            ) {
                 tracing::warn!(?error, "couldn't send simulator message");
                 debug_assert!(false, "Couldn't send simulator message");
             }

@@ -150,6 +150,10 @@ impl SimulatedTx {
         self.result_and_state.result.gas_used()
     }
 
+    pub fn estimated_da(&self) -> u64 {
+        self.tx.estimated_tx_compressed_size()
+    }
+
     pub fn to_included_telemetry(&self, frag: Uuid, id_in_frag: usize) -> Telemetry {
         Telemetry::Tx(Tx::Included(IncludedInFrag {
             frag,

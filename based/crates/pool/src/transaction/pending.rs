@@ -71,8 +71,8 @@ impl PendingOrders {
 
     /// Adds a bundle to the pending orders, overriding any existing bundle with the same id.
     pub fn put_bundle(&mut self, bundle: SimulatedBundle) {
-        let key = OrderKey::from(bundle.validated().id());
-        for tx in bundle.validated().transactions.iter() {
+        let key = OrderKey::from(bundle.validated_ref().id());
+        for tx in bundle.validated_ref().transactions.iter() {
             let entry = self
                 .senders
                 .entry(tx.sender())
@@ -141,7 +141,7 @@ impl PendingOrders {
                 }
 
                 PendingOrder::Bundle(bundle) => {
-                    if bundle.validated().transactions.iter().any(|tx| tx.nonce() <= nonce) {
+                    if bundle.validated_ref().transactions.iter().any(|tx| tx.nonce() <= nonce) {
                         self.orders.shift_remove(entry);
                         to_remove.push(index);
                     }

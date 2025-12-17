@@ -11,6 +11,7 @@ use bop_common::{
     },
     db::{DBSorting, state::ensure_create2_deployer},
     metrics::{Counter, Gauge, Histogram, Metric, MetricsUpdate},
+    order::{PendingOrder, SimulatedOrder},
     telemetry::{Telemetry, TelemetryUpdate},
     time::{Duration, Instant},
     transaction::{SimulatedTx, Transaction},
@@ -26,7 +27,6 @@ use reth_evm::{
 use reth_optimism_evm::OpBlockExecutionError;
 use reth_optimism_payload_builder::config::OpDAConfig;
 use revm_primitives::{Address, U256};
-use tracing::{debug, trace};
 use uuid::Uuid;
 
 use super::FragSequence;
@@ -100,7 +100,7 @@ pub struct SortingData<Db> {
     pub da_used: u64,
     pub da_footprint_gas_scalar: Option<u64>,
     pub payment: U256,
-    pub txs: Vec<SimulatedTx>,
+    pub transactions: Vec<SimulatedTx>,
     /// Sort frag until, and then commit
     pub until: Instant,
     /// We wait until these are back before we apply the next
@@ -118,7 +118,7 @@ pub struct SortingData<Db> {
     /// While sim results come back, we keep track of the most valuable one here.
     /// If when all results are back (i.e. `in_flight_sims == 0`) this is Some,
     /// we apply it to the `db` and send off the next batch of sims.
-    pub next_to_be_applied: Option<SimulatedTx>,
+    pub next_to_be_applied: Option<SimulatedOrder>,
 
     pub start_t: Instant,
 
@@ -139,7 +139,7 @@ impl<Db: DatabaseRead + Database> SortingData<Db> {
         let tof_snapshot = if data.payload_attributes.no_tx_pool.unwrap_or_default() {
             ActiveOrders::empty()
         } else {
-            ActiveOrders::new(data.tx_pool.snapshot(), data.config.fifo_ordering)
+            ActiveOrders::new(data.tx_pool.snapshot().collect(), data.config.fifo_ordering)
         };
         let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
@@ -155,7 +155,7 @@ impl<Db: DatabaseRead + Database> SortingData<Db> {
             &mut telemetry_producer,
         );
 
-        debug!(da_remaining = seq.da_remaining, gas_remaining = seq.gas_remaining, "new sorting data created");
+        tracing::debug!(da_remaining = seq.da_remaining, gas_remaining = seq.gas_remaining, "new sorting data created");
 
         let since_last_seal = data.last_seal_time.elapsed().into();
         let adjusted_frag_time =
@@ -175,7 +175,7 @@ impl<Db: DatabaseRead + Database> SortingData<Db> {
             da_used: seq.da_used,
             da_footprint_gas_scalar: data.da_footprint_gas_scalar,
             fifo_ordering: data.config.fifo_ordering,
-            txs: vec![],
+            transactions: vec![],
             start_t: Instant::now(),
             telemetry: Default::default(),
             uuid,
@@ -187,11 +187,11 @@ impl<Db: DatabaseRead + Database> SortingData<Db> {
 
 impl<Db> SortingData<Db> {
     pub fn is_empty(&self) -> bool {
-        self.txs.is_empty()
+        self.transactions.is_empty()
     }
 
     pub fn gas_used(&self) -> u64 {
-        self.txs.iter().map(|t| t.gas_used()).sum()
+        self.transactions.iter().map(|t| t.gas_used()).sum()
     }
 
     pub fn payment(&self) -> U256 {
@@ -203,9 +203,10 @@ impl<Db> SortingData<Db> {
     }
 
     /// Handles the result of a simulation. `simulated_tx` simulated_at_id should be pre-verified.
+    /// TODO(mempirate): Somehow generalize this to handle both tx and bundle simulations
     pub fn handle_sim(
         &mut self,
-        simulated_tx: SimulationResult<SimulatedTx>,
+        simulated_order: SimulationResult<SimulatedOrder>,
         sender: Address,
         base_fee: u64,
         simtime: Duration,
@@ -213,10 +214,11 @@ impl<Db> SortingData<Db> {
         self.in_flight_sims -= 1;
         self.telemetry.tot_sim_time += simtime;
 
-        trace!("handling sender {sender}");
+        tracing::trace!(%sender, "handling simulation result");
+
         // handle errored sim
-        let Ok(simulated_tx) = simulated_tx.inspect_err(|e| {
-            tracing::trace!("error {e} for tx: {}", sender);
+        let Ok(order) = simulated_order.inspect_err(|e| {
+            tracing::trace!(%sender, error = ?e, "error handling simulation result");
             // Send metric for simulation error
             MetricsUpdate::send(
                 self.uuid,
@@ -229,8 +231,7 @@ impl<Db> SortingData<Db> {
             return;
         };
 
-        trace!("succesful for nonce {}", simulated_tx.nonce_ref());
-        if self.gas_remaining < simulated_tx.gas_used() {
+        if self.gas_remaining < order.gas_used() {
             self.tof_snapshot.remove_from_sender(sender, base_fee);
             return;
         }
@@ -250,13 +251,14 @@ impl<Db> SortingData<Db> {
             &mut self.metrics_producer,
         );
 
-        let tx_to_put_back = if simulated_tx.gas_used() < self.gas_remaining &&
-            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment < simulated_tx.payment && !self.fifo_ordering)
+        let tx_to_put_back = if order.gas_used() < self.gas_remaining &&
+            self.next_to_be_applied.as_ref().is_none_or(|t| t.payment() < order.payment() && !self.fifo_ordering)
         {
-            self.next_to_be_applied.replace(simulated_tx)
+            self.next_to_be_applied.replace(order)
         } else {
-            Some(simulated_tx)
+            Some(order)
         };
+
         if let Some(tx) = tx_to_put_back {
             self.tof_snapshot.put(tx, self.fifo_ordering)
         }
@@ -276,8 +278,8 @@ impl<Db> SortingData<Db> {
             Telemetry::Frag(bop_common::telemetry::Frag::SorterFinish {
                 success: true,
                 payment: self.payment.into(),
-                best_order_value: self.txs.iter().map(|t| t.payment).max().unwrap_or_default().into(),
-                n_txs: self.txs.len(),
+                best_order_value: self.transactions.iter().map(|t| t.payment).max().unwrap_or_default().into(),
+                n_txs: self.transactions.len(),
                 gas_used: self.gas_used(),
             }),
             &mut self.telemetry_producer,
@@ -286,7 +288,7 @@ impl<Db> SortingData<Db> {
         // Send metrics for fragment size and duration
         MetricsUpdate::send(
             self.uuid,
-            Metric::SetGauge(Gauge::GatewayFragTxCount, self.txs.len() as f64),
+            Metric::SetGauge(Gauge::GatewayFragTxCount, self.transactions.len() as f64),
             &mut self.metrics_producer,
         );
 
@@ -330,7 +332,7 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
                     found = true;
 
                     debug_assert!(res.tx.is_deposit(), "somehow found a valid sim that wasn't a deposit");
-                    self.apply_tx(res);
+                    self.apply_order(SimulatedOrder::Tx(res));
                 });
             }
         }
@@ -361,17 +363,45 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
                 i -= 1;
                 continue;
             }
-            let order = self.tof_snapshot[i].next_to_sim();
-            debug_assert!(order.is_some(), "Unsimmable TxList should have been cleared previously");
-            let tx_to_sim = order.unwrap();
-            senders.send(SequencerToSimulator::SimulateTx(tx_to_sim, self.state()));
-            self.in_flight_sims += 1;
-            self.telemetry.n_sims_sent += 1;
-            sims_sent += 1;
-            if i == 0 {
-                break;
+
+            let state = self.state();
+            // Make a copy of i to avoid closure capture issues.
+            let k = i;
+
+            let mut postprocess = || {
+                self.in_flight_sims += 1;
+                self.telemetry.n_sims_sent += 1;
+                sims_sent += 1;
+                // If we've reached the end of the snapshot, return true to break the loop.
+                if i == 0 {
+                    return true;
+                }
+
+                i -= 1;
+                false
+            };
+
+            match &mut self.tof_snapshot[k] {
+                PendingOrder::Tx(list) => {
+                    let tx = list.next_to_sim();
+                    debug_assert!(tx.is_some(), "Unsimmable TxList should have been cleared previously");
+
+                    if let Some(tx) = tx {
+                        senders.send(SequencerToSimulator::SimulateTx(tx, state));
+                        if postprocess() {
+                            break;
+                        }
+                    }
+                }
+                PendingOrder::Bundle(bundle) => {
+                    if !bundle.is_simulated() {
+                        senders.send(SequencerToSimulator::SimulateBundle(bundle.validated(), state));
+                        if postprocess() {
+                            break;
+                        }
+                    }
+                }
             }
-            i -= 1;
         }
 
         // Send metrics for simulation requests
@@ -402,23 +432,29 @@ impl<Db: Clone + DatabaseRef> SortingData<Db> {
 }
 
 impl<Db: DatabaseRef> SortingData<Db> {
-    pub fn apply_tx(&mut self, tx: SimulatedTx) {
-        self.db.commit_ref(&tx.result_and_state.state);
+    pub fn apply_order(&mut self, order: SimulatedOrder) {
+        let result_and_state = order.result_and_state().expect("order was simulated");
+        let sim_time = order.sim_time().expect("order was simulated");
+
+        self.db.commit_ref(result_and_state.state());
         TelemetryUpdate::send(
-            tx.uuid,
-            tx.to_included_telemetry(self.uuid, self.txs.len()),
+            order.uuid(),
+            tx.to_included_telemetry(self.uuid, self.transactions.len()),
             &mut self.telemetry_producer,
         );
 
-        let sim_time = tx.sim_time;
-        let gas_used = tx.as_ref().result.gas_used();
-        debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply tx {tx:#?}");
+        let gas_used = result_and_state.gas_used();
+        debug_assert!(self.gas_remaining > gas_used, "had too little gas remaining to apply order {order:#?}");
 
         self.gas_remaining -= gas_used;
-        let tx_da_size = tx.tx.estimated_tx_compressed_size();
-        self.da_remaining = self.da_remaining.map(|da| da.saturating_sub(tx_da_size));
-        self.da_used = self.da_used.saturating_add(tx_da_size);
-        self.txs.push(tx);
+        let order_da = order.estimated_da();
+        self.da_remaining = self.da_remaining.map(|da| da.saturating_sub(order_da));
+        self.da_used = self.da_used.saturating_add(order_da);
+
+        match order {
+            SimulatedOrder::Tx(tx) => self.transactions.push(tx),
+            SimulatedOrder::Bundle(bundle) => self.transactions.extend(bundle.into_transactions()),
+        }
 
         // Send metrics for transaction processing
         MetricsUpdate::send(
@@ -429,9 +465,13 @@ impl<Db: DatabaseRef> SortingData<Db> {
     }
 
     pub fn maybe_apply(&mut self, base_fee: u64) {
-        if let Some(tx_to_apply) = std::mem::take(&mut self.next_to_be_applied) {
-            self.tof_snapshot.remove_from_sender(tx_to_apply.sender(), base_fee);
-            self.apply_tx(tx_to_apply);
+        if let Some(order) = std::mem::take(&mut self.next_to_be_applied) {
+            // Clean up the TOF snapshot
+            for sender in order.senders() {
+                self.tof_snapshot.remove_from_sender(sender, base_fee);
+            }
+
+            self.apply_order(order);
         }
     }
 }
@@ -493,7 +533,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display>> SortingD
             self.da_remaining = self.da_remaining.map(|da| da.saturating_sub(tx_da_size));
             self.da_used = self.da_used.saturating_add(tx_da_size);
             self.payment += simulated_tx.payment;
-            self.txs.push(simulated_tx);
+            self.transactions.push(simulated_tx);
         }
 
         Ok(())

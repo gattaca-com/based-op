@@ -79,15 +79,15 @@ impl FragSequence {
         self.payment += in_sort.payment();
         let uuid = in_sort.uuid;
 
-        let mut txs = Vec::with_capacity(in_sort.txs.len());
-        let mut receipts = HashMap::with_capacity(in_sort.txs.len());
-        let mut balances = HashMap::with_capacity(in_sort.txs.len());
+        let mut txs = Vec::with_capacity(in_sort.transactions.len());
+        let mut receipts = HashMap::with_capacity(in_sort.transactions.len());
+        let mut balances = HashMap::with_capacity(in_sort.transactions.len());
         let mut in_sort_da_used = 0;
-        let in_sort_txs = in_sort.txs.len();
+        let in_sort_txs = in_sort.transactions.len();
 
-        for tx in in_sort.txs {
+        for tx in in_sort.transactions {
             self.gas_used += tx.gas_used();
-            in_sort_da_used += tx.tx.estimated_tx_compressed_size();
+            in_sort_da_used += tx.estimated_da();
 
             txs.push(Transaction::from(tx.tx.encode().to_vec()));
             receipts.insert(
@@ -167,8 +167,8 @@ mod tests {
     use alloy_primitives::Bytes;
     use alloy_rpc_types::engine::PayloadAttributes;
     use bop_common::{
-        communication::Spine, db::DBFrag, shared::SharedState, time::Duration, transaction::Transaction,
-        utils::initialize_test_tracing,
+        communication::Spine, db::DBFrag, order::SimulatedOrder, shared::SharedState, time::Duration,
+        transaction::Transaction, utils::initialize_test_tracing,
     };
     use bop_db::AlloyDB;
     use op_alloy_rpc_types_engine::OpPayloadAttributes;
@@ -288,7 +288,7 @@ mod tests {
             let new_state = bop_common::db::State::new(db);
             let _ = std::mem::replace(&mut evm.ctx_mut().db(), &new_state);
             let result = simulate_tx_inner(tx, evm, true, true, true).unwrap();
-            sorting_db.apply_tx(result);
+            sorting_db.apply_order(SimulatedOrder::Tx(result));
         }
 
         // Apply the frag of non-must include txs

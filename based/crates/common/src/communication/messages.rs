@@ -23,7 +23,7 @@ use tokio::sync::oneshot::{self};
 use crate::{
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     db::{DBFrag, DBSorting},
-    order::bundle::BundleValidationError,
+    order::{SimulatedBundle, ValidatedBundle, bundle::BundleValidationError},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
     typedefs::*,
@@ -360,12 +360,20 @@ pub enum SequencerToSimulator<Db> {
     /// Simulate Tx Top of frag
     //TODO: Db could be set on frag commit once we broadcast msgs to sims
     SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
+    /// Simulate a bundle.
+    SimulateBundle(Arc<ValidatedBundle>, DBSorting<Db>),
+    /// Simulate a bundle Top of frag
+    SimulateBundleTof(Arc<ValidatedBundle>, DBFrag<Db>),
 }
 impl<Db> SequencerToSimulator<Db> {
+    /// Returns simulation info.
+    /// TODO(mempirate): return type for bundle?
     pub fn sim_info(&self) -> (Address, u64, u64) {
         match self {
             SequencerToSimulator::SimulateTx(t, db) => (t.sender(), t.nonce(), db.state_id()),
             SequencerToSimulator::SimulateTxTof(t, db) => (t.sender(), t.nonce(), db.state_id()),
+            SequencerToSimulator::SimulateBundle(b, db) => todo!("What to return here?"),
+            SequencerToSimulator::SimulateBundleTof(b, db) => todo!("What to return here?"),
         }
     }
 }
@@ -395,13 +403,18 @@ impl SimulatorToSequencer {
 
 pub type SimulationResult<T> = Result<T, SimulationError>;
 
+/// TODO(mempirate): Simplify? Just use orders here?
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SimulatorToSequencerMsg {
     /// Simulation on top of any state.
     Tx(SimulationResult<SimulatedTx>),
-    /// Simulation on top of a fragment. Used by the transaction pool.
+    /// Simulation on top of a fragment. Used by the order pool.
     TxPoolTopOfFrag(SimulationResult<SimulatedTx>),
+    /// Simulation on top of a bundle.
+    Bundle(SimulationResult<SimulatedBundle>),
+    /// Simulation on top of a bundle. Used by the order pool.
+    BundleTopOfFrag(SimulationResult<SimulatedBundle>),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]

@@ -1809,6 +1809,7 @@ dependencies = [
  "clap",
  "crossbeam-channel",
  "directories",
+ "either",
  "ethereum_ssz",
  "eyre",
  "http",

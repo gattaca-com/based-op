@@ -13,7 +13,11 @@ use op_alloy_consensus::OpTxEnvelope;
 use reth_primitives_traits::{InMemorySize, SignedTransaction};
 use uuid::Uuid;
 
-use crate::transaction::{SimulatedTx, Transaction};
+use crate::{
+    order::ResultAndStateMany,
+    time::Nanos,
+    transaction::{SimulatedTx, Transaction},
+};
 
 /// Type alias for a validated bundle.
 pub type ValidatedBundle = Bundle<Transaction>;
@@ -139,7 +143,7 @@ impl Bundle<OpTxEnvelope> {
     }
 }
 
-impl InMemorySize for Bundle<Transaction> {
+impl InMemorySize for ValidatedBundle {
     fn size(&self) -> usize {
         self.transactions.iter().map(|tx| tx.size()).sum()
     }
@@ -152,6 +156,10 @@ impl InMemorySize for Bundle<SimulatedTx> {
 }
 
 impl ValidatedBundle {
+    pub fn uuid(&self) -> Uuid {
+        self.id
+    }
+
     pub fn bundle_hash(&self) -> B256 {
         // SAFETY: At this point, the bundle hash is guaranteed to be initialized.
         *self.bundle_hash.get().expect("bundle hash is not initialized")
@@ -167,18 +175,26 @@ pub struct SimulatedBundle {
     simulated: Vec<SimulatedTx>,
     /// The total payment of the bundle.
     total_payment: Option<U256>,
+    /// The result and state of the bundle, after simulating all transactions.
+    result_and_state: Option<ResultAndStateMany>,
 }
 
 impl SimulatedBundle {
     /// Creates a new unsimulated bundle from a validated bundle.
     pub fn new(validated: Arc<ValidatedBundle>) -> Self {
-        Self { validated, simulated: Vec::new(), total_payment: None }
+        Self { validated, simulated: Vec::new(), total_payment: None, result_and_state: None }
     }
 
     /// Sets the simulation results for the bundle.
-    pub fn set_simulation_results(&mut self, simulated: Vec<SimulatedTx>, total_payment: U256) {
+    pub fn set_simulation_results(
+        &mut self,
+        simulated: Vec<SimulatedTx>,
+        total_payment: U256,
+        result_and_state: ResultAndStateMany,
+    ) {
         self.simulated = simulated;
         self.total_payment = Some(total_payment);
+        self.result_and_state = Some(result_and_state);
     }
 
     /// Returns the nonce of the first transaction for the given sender in the bundle (if present).
@@ -186,9 +202,36 @@ impl SimulatedBundle {
         self.validated.transactions.iter().find(|tx| tx.sender() == sender).map(|tx| tx.nonce())
     }
 
+    /// Returns true if the bundle has a transaction for the given sender.
+    pub fn has_sender(&self, sender: Address) -> bool {
+        self.validated.transactions.iter().any(|tx| tx.sender() == sender)
+    }
+
+    /// Returns true if the bundle has been simulated.
+    pub fn is_simulated(&self) -> bool {
+        self.result_and_state.is_some()
+    }
+
     /// Returns the inner validated bundle.
-    pub fn validated(&self) -> &ValidatedBundle {
+    pub fn validated(&self) -> Arc<ValidatedBundle> {
+        self.validated.clone()
+    }
+
+    /// Returns a reference to the inner validated bundle.
+    pub fn validated_ref(&self) -> &ValidatedBundle {
         &self.validated
+    }
+
+    pub fn transactions(&self) -> &[SimulatedTx] {
+        &self.simulated
+    }
+
+    pub fn transactions_mut(&mut self) -> &mut [SimulatedTx] {
+        &mut self.simulated
+    }
+
+    pub fn into_transactions(self) -> Vec<SimulatedTx> {
+        self.simulated
     }
 
     /// Returns the id of the bundle.
@@ -200,7 +243,42 @@ impl SimulatedBundle {
     pub fn weight(&self) -> U256 {
         // If we have the simulated payment, use that. Else sum the priority fees of the transactions.
         self.total_payment.unwrap_or_else(|| {
-            self.validated().transactions.iter().map(|tx| U256::from(tx.priority_fee_or_price())).sum()
+            self.validated_ref().transactions.iter().map(|tx| U256::from(tx.priority_fee_or_price())).sum()
         })
+    }
+
+    /// Returns the simulated payment of the bundle, if available.
+    pub fn payment(&self) -> Option<U256> {
+        self.total_payment
+    }
+
+    /// Returns the gas limit of the bundle (i.e. sum of all transactions' gas limits)
+    pub fn gas_limit(&self) -> u64 {
+        self.validated.transactions.iter().map(|tx| tx.gas_limit()).sum()
+    }
+
+    /// Returns the estimated DA size of the bundle (i.e. sum of all transactions' estimated DA sizes)
+    pub fn estimated_da(&self) -> u64 {
+        self.validated.transactions.iter().map(|tx| tx.estimated_tx_compressed_size()).sum()
+    }
+
+    /// Returns the gas used by the bundle if it has been simulated.
+    pub fn gas_used(&self) -> u64 {
+        self.simulated.iter().map(|tx| tx.gas_used()).sum()
+    }
+
+    /// Returns an iterator over the senders of the transactions in the bundle.
+    pub fn senders(&self) -> impl Iterator<Item = Address> {
+        self.validated.transactions.iter().map(|tx| tx.sender())
+    }
+
+    /// Returns the result and state of the bundle, if it has been simulated.
+    pub fn result_and_state(&self) -> Option<&ResultAndStateMany> {
+        self.result_and_state.as_ref()
+    }
+
+    /// Returns the simulation time of the bundle, if it has been simulated.
+    pub fn sim_time(&self) -> Option<Nanos> {
+        self.simulated.first().map(|tx| tx.sim_time)
     }
 }
