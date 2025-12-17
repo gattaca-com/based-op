@@ -63,10 +63,8 @@ impl ActiveOrders {
 
             match order {
                 PendingOrder::Tx(list) => {
-                    if list.sender() == sender {
-                        if list.pop(base_fee) {
-                            to_remove.push(index);
-                        }
+                    if list.sender() == sender && list.pop(base_fee) {
+                        to_remove.push(index);
                     }
                 }
                 PendingOrder::Bundle(bundle) => {
