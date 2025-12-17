@@ -11,12 +11,14 @@ use crate::error::{DriverError, ValidateSealError};
 use crate::exec::{apply_exec_output, UnsealedExecutor};
 use crate::unsealed_block::UnsealedBlock;
 
+/// Result of submitting a frag to the driver.
 #[derive(Debug, Clone, Copy)]
 pub enum FragStatus {
     Valid,
     Invalid,
 }
 
+/// Actor handle for sending unsealed-block commands to the driver task.
 #[derive(Clone)]
 pub struct Driver {
     tx: mpsc::Sender<Cmd>,
@@ -72,6 +74,8 @@ pub struct HeaderView {
     pub header: Option<alloy_consensus::Header>,
 }
 
+/// Single-threaded state owned by the driver task (unsealed block + executor + counters).
+/// Essentialy should be implemented using based-op-reth
 pub struct DriverInner<E: UnsealedExecutor> {
     pub enabled_unsealed_as_latest: bool,
     pub current_unsealed_block: Option<UnsealedBlock>,
@@ -80,6 +84,7 @@ pub struct DriverInner<E: UnsealedExecutor> {
 }
 
 impl Driver {
+    /// Spawns the driver actor task and returns a handle used to send commands to it.
     pub fn spawn<E: UnsealedExecutor + 'static>(inner: DriverInner<E>) -> Self {
         let (tx, mut rx) = mpsc::channel::<Cmd>(256);
 
@@ -113,42 +118,64 @@ impl Driver {
         Self { tx }
     }
 
+    /// Starts a new unsealed block execution context for the given environment.
     pub async fn env_v0(&self, env: EnvV0) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
         self.tx.send(Cmd::EnvV0 { env, resp: resp_tx }).await?;
         resp_rx.await?.into_result()
     }
 
+    /// Executes and records a fragment against the current unsealed block.
     pub async fn new_frag_v0(&self, frag: FragV0) -> Result<FragStatus, DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
         self.tx.send(Cmd::NewFragV0 { frag, resp: resp_tx }).await?;
         resp_rx.await?.into_result()
     }
 
+    /// Validates and finalizes the current unsealed block using the provided seal.
     pub async fn seal_frag_v0(&self, seal_v0: SealV0) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx.send(Cmd::SealFragV0 { resp: resp_tx, seal: seal_v0 }).await?;
-        resp_rx.await?.into_result()
-    }
-
-    pub async fn forkchoice_updated(&self, new_block_number: u64) -> Result<(), DriverError> {
-        let (resp_tx, resp_rx) = oneshot::channel();
         self.tx
-            .send(Cmd::ForkchoiceUpdated { new_block_number, resp: resp_tx })
+            .send(Cmd::SealFragV0 {
+                resp: resp_tx,
+                seal: seal_v0,
+            })
             .await?;
         resp_rx.await?.into_result()
     }
 
+    /// Notifies the driver about a forkchoice update and resets state on mismatch.
+    pub async fn forkchoice_updated(&self, new_block_number: u64) -> Result<(), DriverError> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.tx
+            .send(Cmd::ForkchoiceUpdated {
+                new_block_number,
+                resp: resp_tx,
+            })
+            .await?;
+        resp_rx.await?.into_result()
+    }
+
+    /// Returns a best-effort view of the current unsealed header used as "latest" when enabled.
     pub async fn header_view(&self) -> HeaderView {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         if self.tx.send(Cmd::GetHeaderView { resp: resp_tx }).await.is_err() {
-            return HeaderView { enabled: false, header: None };
+            return HeaderView {
+                enabled: false,
+                header: None,
+            };
         }
 
         match resp_rx.await {
-            Ok(reply) => reply.into_result().unwrap_or(HeaderView { enabled: false, header: None }),
-            Err(_) => HeaderView { enabled: false, header: None },
+            Ok(reply) => reply.into_result().unwrap_or(HeaderView {
+                enabled: false,
+                header: None,
+            }),
+            Err(_) => HeaderView {
+                enabled: false,
+                header: None,
+            },
         }
     }
 }
@@ -263,7 +290,15 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             return Ok(());
         }
 
-        let presealed_block = self.exec.get_block(seal.block_hash, seal.block_number).await?;
+        let presealed_block = self.exec.get_block(seal.block_hash, seal.block_number).await;
+
+        let presealed_block = match presealed_block {
+            Ok(b) => b,
+            Err(e) => {
+                self.reset_current_unsealed_block();
+                return Err(DriverError::from(e));
+            }
+        };
 
         self.validate_seal_frag_v0(&presealed_block, ub, &seal)?;
 
