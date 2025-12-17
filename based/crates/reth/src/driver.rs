@@ -2,14 +2,14 @@ use std::time::Instant;
 
 use alloy_primitives::B256;
 use alloy_rpc_types::Block;
-use anyhow::Context;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
 use bop_common::p2p::{EnvV0, FragV0, SealV0};
+
 use crate::error::{DriverError, ValidateSealError};
 use crate::exec::{apply_exec_output, UnsealedExecutor};
-use crate::unsealed_block::{UnsealedBlock};
+use crate::unsealed_block::UnsealedBlock;
 
 #[derive(Debug, Clone, Copy)]
 pub enum FragStatus {
@@ -21,7 +21,6 @@ pub enum FragStatus {
 pub struct Driver {
     tx: mpsc::Sender<Cmd>,
 }
-
 
 impl From<mpsc::error::SendError<Cmd>> for DriverError {
     fn from(_: mpsc::error::SendError<Cmd>) -> Self {
@@ -75,15 +74,13 @@ pub struct HeaderView {
 
 pub struct DriverInner<E: UnsealedExecutor> {
     pub enabled_unsealed_as_latest: bool,
-
     pub current_unsealed_block: Option<UnsealedBlock>,
     pub exec: E,
-
     pub fcu_count_since_unseal_reset: usize,
 }
 
 impl Driver {
-    pub fn spawn<E: UnsealedExecutor + 'static + Sync>(inner: DriverInner<E>) -> Self {
+    pub fn spawn<E: UnsealedExecutor + 'static>(inner: DriverInner<E>) -> Self {
         let (tx, mut rx) = mpsc::channel::<Cmd>(256);
 
         tokio::spawn(async move {
@@ -124,9 +121,7 @@ impl Driver {
 
     pub async fn new_frag_v0(&self, frag: FragV0) -> Result<FragStatus, DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx
-            .send(Cmd::NewFragV0 { frag, resp: resp_tx })
-            .await?;
+        self.tx.send(Cmd::NewFragV0 { frag, resp: resp_tx }).await?;
         resp_rx.await?.into_result()
     }
 
@@ -139,10 +134,7 @@ impl Driver {
     pub async fn forkchoice_updated(&self, new_block_number: u64) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
         self.tx
-            .send(Cmd::ForkchoiceUpdated {
-                new_block_number,
-                resp: resp_tx,
-            })
+            .send(Cmd::ForkchoiceUpdated { new_block_number, resp: resp_tx })
             .await?;
         resp_rx.await?.into_result()
     }
@@ -151,21 +143,12 @@ impl Driver {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         if self.tx.send(Cmd::GetHeaderView { resp: resp_tx }).await.is_err() {
-            return HeaderView {
-                enabled: false,
-                header: None,
-            };
+            return HeaderView { enabled: false, header: None };
         }
 
         match resp_rx.await {
-            Ok(reply) => reply.into_result().unwrap_or(HeaderView {
-                enabled: false,
-                header: None,
-            }),
-            Err(_) => HeaderView {
-                enabled: false,
-                header: None,
-            },
+            Ok(reply) => reply.into_result().unwrap_or(HeaderView { enabled: false, header: None }),
+            Err(_) => HeaderView { enabled: false, header: None },
         }
     }
 }
@@ -191,10 +174,10 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             }
 
             info!(old = current_num, new = env.number, "env advanced, resetting");
-            self.reset_current_unsealed_block()
+            self.reset_current_unsealed_block();
         }
 
-        self.exec.ensure_env(&env).context("exec.ensure_env")?;
+        self.exec.ensure_env(&env).await?;
         self.current_unsealed_block = Some(UnsealedBlock::new(env));
         self.fcu_count_since_unseal_reset = 0;
         Ok(())
@@ -281,9 +264,10 @@ impl<E: UnsealedExecutor> DriverInner<E> {
         }
 
         let presealed_block = self.exec.get_block(seal.block_hash, seal.block_number).await?;
-        self.validate_seal_frag_v0(&presealed_block, &ub, seal).await?;
 
-        self.exec.set_canonical(&presealed_block).await.context("sealFragV0")?;
+        self.validate_seal_frag_v0(&presealed_block, ub, &seal)?;
+
+        self.exec.set_canonical(&presealed_block).await?;
 
         self.reset_current_unsealed_block();
 
@@ -291,7 +275,12 @@ impl<E: UnsealedExecutor> DriverInner<E> {
         Ok(())
     }
 
-    async fn validate_seal_frag_v0(&self, presealed_block: &Block, ub: &UnsealedBlock, seal: SealV0) -> Result<(), ValidateSealError> {
+    fn validate_seal_frag_v0(
+        &self,
+        presealed_block: &Block,
+        ub: &UnsealedBlock,
+        seal: &SealV0,
+    ) -> Result<(), ValidateSealError> {
         let expected_block_hash: B256 = presealed_block.header.hash.into();
         if expected_block_hash != seal.block_hash {
             return Err(ValidateSealError::BlockHashMismatch {
@@ -355,20 +344,16 @@ impl<E: UnsealedExecutor> DriverInner<E> {
                 got: seal.total_frags,
             });
         }
+
         Ok(())
     }
 
     fn get_header_view(&self) -> HeaderView {
         if !self.enabled_unsealed_as_latest {
-            return HeaderView {
-                enabled: false,
-                header: None,
-            };
+            return HeaderView { enabled: false, header: None };
         }
-        let header = self
-            .current_unsealed_block
-            .as_ref()
-            .map(|ub| ub.temp_header());
+
+        let header = self.current_unsealed_block.as_ref().map(|ub| ub.temp_header());
         HeaderView { enabled: true, header }
     }
 }

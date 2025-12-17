@@ -18,32 +18,32 @@ pub struct ExecOutput {
 /// Everything else is just state-machine + bookkeeping.
 pub trait UnsealedExecutor: Send {
     /// Ensure the executor context is ready for this env (initialize overlay state, block env, etc.)
-    fn ensure_env(&mut self, env: &EnvV0) -> Result<(), ExecError>;
+    fn ensure_env(&mut self, env: &EnvV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
 
     /// Execute all txs in `frag` on top of current overlay state.
     ///
     /// MUST be cumulative: txs execute after all previous frags's txs.
-    fn execute_frag<'a>(
-        &'a mut self,
-        ub: &'a UnsealedBlock,
-        frag: &'a FragV0,
-    ) -> impl Future<Output = Result<ExecOutput, ExecError>> + Send + 'a;
+    fn execute_frag(
+        &mut self,
+        ub: &UnsealedBlock,
+        frag: &FragV0,
+    ) -> impl Future<Output = Result<ExecOutput, ExecError>> + Send + '_;
 
-    fn set_canonical<'a>(
-        &'a mut self,
-        b: &'a Block,
-    ) -> impl Future<Output = Result<(), ExecError>> + Send + 'a;
+    fn seal(
+        &mut self,
+        ub: &UnsealedBlock,
+    ) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
 
-    fn seal<'a>(
-        &'a mut self,
-        ub: &'a UnsealedBlock,
-    ) -> impl Future<Output = Result<(), ExecError>> + Send + 'a;
+    fn set_canonical(
+        &mut self,
+        b: &Block,
+    ) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
 
-    fn get_block<'a>(
-        &'a self,
+    fn get_block(
+        &self,
         hash: B256,
         number: BlockNumber,
-    ) -> impl Future<Output = Result<Block, ExecError>> + Send + 'a;
+    ) -> impl Future<Output = Result<Block, ExecError>> + Send + '_;
 
     /// Reset overlay state completely.
     fn reset(&mut self);
@@ -61,37 +61,43 @@ pub fn apply_exec_output(ub: &mut UnsealedBlock, out: ExecOutput) {
 pub struct NoopExecutor;
 
 impl UnsealedExecutor for NoopExecutor {
-    fn ensure_env(&mut self, _env: &EnvV0) -> Result<(), ExecError> {
-        Ok(())
-    }
-
-    fn execute_frag<'a>(
-        &'a mut self,
-        _ub: &'a UnsealedBlock,
-        _frag: &'a FragV0,
-    ) -> impl Future<Output = Result<ExecOutput, ExecError>> + Send + 'a {
-        async move { Ok(ExecOutput { receipts: vec![], logs: vec![], gas_used_delta: 0 }) }
-    }
-
-    fn set_canonical<'a>(
-        &'a mut self,
-        _b: &'a Block,
-    ) -> impl Future<Output = Result<(), ExecError>> + Send + 'a {
+    fn ensure_env(&mut self, _env: &EnvV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
         async move { Ok(()) }
     }
 
-    fn seal<'a>(
-        &'a mut self,
-        _ub: &'a UnsealedBlock,
-    ) -> impl Future<Output = Result<(), ExecError>> + Send + 'a {
+    fn execute_frag(
+        &mut self,
+        _ub: &UnsealedBlock,
+        _frag: &FragV0,
+    ) -> impl Future<Output = Result<ExecOutput, ExecError>> + Send + '_ {
+        async move {
+            Ok(ExecOutput {
+                receipts: vec![],
+                logs: vec![],
+                gas_used_delta: 0,
+            })
+        }
+    }
+
+    fn seal(
+        &mut self,
+        _ub: &UnsealedBlock,
+    ) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
         async move { Ok(()) }
     }
 
-    fn get_block<'a>(
-        &'a self,
+    fn set_canonical(
+        &mut self,
+        _b: &Block,
+    ) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
+        async move { Ok(()) }
+    }
+
+    fn get_block(
+        &self,
         _hash: B256,
         _number: BlockNumber,
-    ) -> impl Future<Output = Result<Block, ExecError>> + Send + 'a {
+    ) -> impl Future<Output = Result<Block, ExecError>> + Send + '_ {
         async move { Ok(Block::default()) }
     }
 
