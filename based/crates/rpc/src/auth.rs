@@ -161,9 +161,9 @@ where
     S: Service<HttpRequest, Response = HttpResponse>,
     S::Future: Send + 'static,
 {
-    type Response = HttpResponse;
     type Error = S::Error;
     type Future = Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + Send>>;
+    type Response = HttpResponse;
 
     fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx).map_err(Into::into)
@@ -256,11 +256,9 @@ impl<S> RpcServiceT for GatewayRPCAuth<S>
 where
     S: RpcServiceT<MethodResponse = MethodResponse>,
 {
-    type MethodResponse = MethodResponse;
-
-    type NotificationResponse = S::NotificationResponse;
-
     type BatchResponse = S::BatchResponse;
+    type MethodResponse = MethodResponse;
+    type NotificationResponse = S::NotificationResponse;
 
     fn call<'a>(&self, request: Request<'a>) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
         let auth = request.extensions().get::<Authentication>();

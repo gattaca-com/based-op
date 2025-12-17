@@ -35,9 +35,8 @@ use tokio::sync::RwLock;
 use tower::{Layer, Service};
 use tracing::{Instrument, debug, error, info, trace, warn};
 
-use crate::{cli::PortalArgs, clients::create_client};
-
 use super::RpcClient;
+use crate::{cli::PortalArgs, clients::create_client};
 
 pub type GatewayClient = HttpClient<RpcLogger<RpcService<GatewayClientService<HttpBackend>>>>;
 
@@ -70,11 +69,9 @@ impl<S, B> Service<HttpRequest<B>> for GatewayClientService<S>
 where
     S: Service<HttpRequest<B>>,
 {
-    type Response = S::Response;
-
     type Error = S::Error;
-
     type Future = S::Future;
+    type Response = S::Response;
 
     fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
