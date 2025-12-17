@@ -1,15 +1,15 @@
 use std::time::Instant;
+
 use alloy_primitives::B256;
 use alloy_rpc_types::Block;
 use anyhow::Context;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
-use thiserror::Error;
 
 use bop_common::p2p::{EnvV0, FragV0, SealV0};
-
-use crate::exec::{apply_exec_output, ExecError, UnsealedExecutor};
-use crate::unsealed_block::{UnsealedBlock, UnsealedBlockError};
+use crate::error::{DriverError, ValidateSealError};
+use crate::exec::{apply_exec_output, UnsealedExecutor};
+use crate::unsealed_block::{UnsealedBlock};
 
 #[derive(Debug, Clone, Copy)]
 pub enum FragStatus {
@@ -22,38 +22,6 @@ pub struct Driver {
     tx: mpsc::Sender<Cmd>,
 }
 
-#[derive(Debug, Error)]
-pub enum DriverError {
-    #[error("failed to send command to driver task (task not running)")]
-    DriverGone,
-
-    #[error("failed to receive response from driver task (response dropped)")]
-    ResponseDropped,
-
-    #[error("driver not initialized, call env_v0 first")]
-    NotInitialized,
-
-    #[error("cannot open a new unsealed block while there's one already in progress (current={current}, incoming={incoming})")]
-    UnsealedBlockInProgress {
-        current: u64,
-        incoming: u64,
-    },
-
-    #[error("seal mismatch: {what}")]
-    SealMismatch { what: String },
-
-    #[error(transparent)]
-    Exec(#[from] ExecError),
-
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
-
-    #[error(transparent)]
-    UnsealedBlock(#[from] UnsealedBlockError),
-
-    #[error(transparent)]
-    ValidateSeal(#[from] ValidateSealError),
-}
 
 impl From<mpsc::error::SendError<Cmd>> for DriverError {
     fn from(_: mpsc::error::SendError<Cmd>) -> Self {
@@ -115,7 +83,7 @@ pub struct DriverInner<E: UnsealedExecutor> {
 }
 
 impl Driver {
-    pub fn spawn<E: UnsealedExecutor + 'static + std::marker::Sync>(inner: DriverInner<E>) -> Self {
+    pub fn spawn<E: UnsealedExecutor + 'static + Sync>(inner: DriverInner<E>) -> Self {
         let (tx, mut rx) = mpsc::channel::<Cmd>(256);
 
         tokio::spawn(async move {
@@ -403,32 +371,4 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             .map(|ub| ub.temp_header());
         HeaderView { enabled: true, header }
     }
-}
-
-
-#[derive(Debug, Error)]
-pub enum ValidateSealError {
-    #[error("block hash mismatch, expected {expected:?}, got {got:?}")]
-    BlockHashMismatch { expected: B256, got: B256 },
-
-    #[error("parent hash mismatch, expected {expected:?}, got {got:?}")]
-    ParentHashMismatch { expected: B256, got: B256 },
-
-    #[error("state root mismatch, expected {expected:?}, got {got:?}")]
-    StateRootMismatch { expected: B256, got: B256 },
-
-    #[error("transactions root mismatch, expected {expected:?}, got {got:?}")]
-    TransactionsRootMismatch { expected: B256, got: B256 },
-
-    #[error("receipts root mismatch, expected {expected:?}, got {got:?}")]
-    ReceiptsRootMismatch { expected: B256, got: B256 },
-
-    #[error("gas used mismatch, expected {expected}, got {got}")]
-    GasUsedMismatch { expected: u64, got: u64 },
-
-    #[error("gas limit mismatch, expected {expected}, got {got}")]
-    GasLimitMismatch { expected: u64, got: u64 },
-
-    #[error("total frags mismatch, expected {expected}, got {got}")]
-    TotalFragsMismatch { expected: u64, got: u64 },
 }

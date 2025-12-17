@@ -3,21 +3,9 @@ use std::future::Future;
 use alloy_primitives::{BlockNumber, B256};
 use alloy_rpc_types::{Block, Log, TransactionReceipt};
 use bop_common::p2p::{EnvV0, FragV0};
-use thiserror::Error;
 
+use crate::error::ExecError;
 use crate::unsealed_block::UnsealedBlock;
-
-#[derive(Debug, Error)]
-pub enum ExecError {
-    #[error("executor not initialized")]
-    NotInitialized,
-
-    #[error("execution failed: {0}")]
-    Failed(String),
-
-    #[error("seal failed: {0}")]
-    SealFailed(String),
-}
 
 #[derive(Debug, Clone)]
 pub struct ExecOutput {
@@ -34,7 +22,7 @@ pub trait UnsealedExecutor: Send {
 
     /// Execute all txs in `frag` on top of current overlay state.
     ///
-    /// MUST be cumulative: txs execute after all previous frags' txs.
+    /// MUST be cumulative: txs execute after all previous frags's txs.
     fn execute_frag<'a>(
         &'a mut self,
         ub: &'a UnsealedBlock,

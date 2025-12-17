@@ -1,31 +1,9 @@
 use alloy_consensus::{Header, TxEnvelope};
-use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
-use alloy_primitives::{B256, Bytes, FixedBytes};
+use alloy_eips::eip2718::{Decodable2718};
+use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::{Log, TransactionReceipt};
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum UnsealedBlockError {
-    #[error("failed to decode EIP-2718 tx at index {index}")]
-    TxDecode {
-        index: usize,
-        #[source]
-        source: Eip2718Error,
-    },
-
-    #[error("stale frag (older block): frag.block={frag_block} < env.number={env_number}")]
-    StaleFrag { frag_block: u64, env_number: u64 },
-
-    #[error("frag is not applicable to current unsealed env: frag.block={frag_block} env.number={env_number}")]
-    WrongBlock { frag_block: u64, env_number: u64 },
-
-    #[error("frag sequencing violation: expected next seq, got {got}, last={last:?}")]
-    SeqMismatch { got: u64, last: Option<u64> },
-
-    #[error("received frag after last frag already accepted")]
-    AlreadyEnded,
-}
+use crate::error::UnsealedBlockError;
 
 pub struct UnsealedBlock {
     /// Block environment.
