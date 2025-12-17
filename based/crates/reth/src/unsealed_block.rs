@@ -6,6 +6,7 @@ use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
 
 use crate::error::UnsealedBlockError;
 
+#[derive(Debug, Clone)]
 pub struct UnsealedBlock {
     /// Block environment.
     pub env: EnvV0,

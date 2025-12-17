@@ -77,6 +77,7 @@ pub struct HeaderView {
 
 /// Single-threaded state owned by the driver task (unsealed block + executor + counters).
 /// Essentialy should be implemented using based-op-reth
+#[derive(Debug)]
 pub struct DriverInner<E: UnsealedExecutor> {
     pub enabled_unsealed_as_latest: bool,
     pub current_unsealed_block: Option<UnsealedBlock>,
