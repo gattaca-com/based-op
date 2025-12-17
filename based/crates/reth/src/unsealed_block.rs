@@ -13,6 +13,18 @@ pub enum UnsealedBlockError {
         #[source]
         source: Eip2718Error,
     },
+
+    #[error("stale frag (older block): frag.block={frag_block} < env.number={env_number}")]
+    StaleFrag { frag_block: u64, env_number: u64 },
+
+    #[error("frag is not applicable to current unsealed env: frag.block={frag_block} env.number={env_number}")]
+    WrongBlock { frag_block: u64, env_number: u64 },
+
+    #[error("frag sequencing violation: expected next seq, got {got}, last={last:?}")]
+    SeqMismatch { got: u64, last: Option<u64> },
+
+    #[error("received frag after last frag already accepted")]
+    AlreadyEnded,
 }
 
 pub struct UnsealedBlock {
@@ -105,6 +117,49 @@ impl UnsealedBlock {
             .collect()
     }
 
+    // Return the last frag on the list.
+    pub fn last_frag(&self) -> Option<&FragV0> {
+        self.frags.last()
+    }
+
+    /// Apply the accepted frag into in-memory bookkeeping (NOT executing txs).
+    ///
+    /// Execution results (receipts/logs/gas) should be appended separately.
+    pub fn accept_frag(&mut self, f: FragV0) {
+        self.last_sequence_number = Some(f.seq);
+        self.cumulative_blob_gas_used = self.cumulative_blob_gas_used.saturating_add(f.blob_gas_used);
+        self.frags.push(f);
+    }
+
+    /// Validate frag against current state (equivalent to your ValidateNewFragV0 + sequencing gate).
+    pub fn validate_new_frag(&self, f: &FragV0) -> Result<(), UnsealedBlockError> {
+        if f.block_number < self.env.number {
+            return Err(UnsealedBlockError::StaleFrag {
+                frag_block: f.block_number,
+                env_number: self.env.number,
+            });
+        }
+
+        // must target current block
+        if f.block_number > self.env.number {
+            return Err(UnsealedBlockError::WrongBlock {
+                frag_block: f.block_number,
+                env_number: self.env.number,
+            });
+        }
+
+        // sequencing
+        if !self.is_next_frag(f) {
+            let last = self.last_sequence_number;
+            if self.frags.last().is_some_and(|x| x.is_last) {
+                return Err(UnsealedBlockError::AlreadyEnded);
+            }
+            return Err(UnsealedBlockError::SeqMismatch { got: f.seq, last });
+        }
+
+        Ok(())
+    }
+
     /// A temporary header derived from env.
     pub fn temp_header(&self) -> Header {
         Header {
@@ -132,5 +187,10 @@ impl UnsealedBlock {
             excess_blob_gas: None,
             requests_hash: None,
         }
+    }
+
+    /// Reset to a fresh env (drop frags/results/counters).
+    pub fn reset_to_env(&mut self, env: EnvV0) {
+        *self = Self::new(env);
     }
 }
