@@ -140,6 +140,13 @@ impl SimulatedOrder {
             SimulatedOrder::Bundle(bundle) => bundle.estimated_da(),
         }
     }
+
+    pub fn included_telemetry(&self, frag: Uuid, id_in_frag: usize) -> Telemetry {
+        match self {
+            SimulatedOrder::Tx(tx) => tx.to_included_telemetry(frag, id_in_frag),
+            SimulatedOrder::Bundle(bundle) => todo!(),
+        }
+    }
 }
 
 /// An order that is ready to be executed in the next block.

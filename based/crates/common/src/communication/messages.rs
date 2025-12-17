@@ -22,7 +22,7 @@ use tokio::sync::oneshot::{self};
 
 use crate::{
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
-    db::{DBFrag, DBSorting},
+    db::{DBFrag, DBSorting, sorting::StateId},
     order::{SimulatedBundle, ValidatedBundle, bundle::BundleValidationError},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
@@ -365,15 +365,15 @@ pub enum SequencerToSimulator<Db> {
     /// Simulate a bundle Top of frag
     SimulateBundleTof(Arc<ValidatedBundle>, DBFrag<Db>),
 }
+
 impl<Db> SequencerToSimulator<Db> {
     /// Returns simulation info.
-    /// TODO(mempirate): return type for bundle?
-    pub fn sim_info(&self) -> (Address, u64, u64) {
+    pub fn sim_info(&self) -> (StateId, Vec<(Address, u64)>) {
         match self {
-            SequencerToSimulator::SimulateTx(t, db) => (t.sender(), t.nonce(), db.state_id()),
-            SequencerToSimulator::SimulateTxTof(t, db) => (t.sender(), t.nonce(), db.state_id()),
-            SequencerToSimulator::SimulateBundle(b, db) => todo!("What to return here?"),
-            SequencerToSimulator::SimulateBundleTof(b, db) => todo!("What to return here?"),
+            SequencerToSimulator::SimulateTx(t, db) => (db.state_id(), vec![(t.sender(), t.nonce())]),
+            SequencerToSimulator::SimulateTxTof(t, db) => (db.state_id(), vec![(t.sender(), t.nonce())]),
+            SequencerToSimulator::SimulateBundle(b, db) => (db.state_id(), b.sender_nonces().collect()),
+            SequencerToSimulator::SimulateBundleTof(b, db) => (db.state_id(), b.sender_nonces().collect()),
         }
     }
 }
@@ -381,23 +381,24 @@ impl<Db> SequencerToSimulator<Db> {
 #[derive(Debug)]
 pub struct SimulatorToSequencer {
     /// Sender address and nonce
-    pub sender_info: (Address, u64),
+    pub sender_nonces: Vec<(Address, u64)>,
     pub state_id: u64,
     pub simtime: Duration,
     pub msg: SimulatorToSequencerMsg,
 }
 
 impl SimulatorToSequencer {
-    pub fn new(sender_info: (Address, u64), state_id: u64, simtime: Duration, msg: SimulatorToSequencerMsg) -> Self {
-        Self { sender_info, state_id, simtime, msg }
+    pub fn new(
+        sender_nonces: Vec<(Address, u64)>,
+        state_id: u64,
+        simtime: Duration,
+        msg: SimulatorToSequencerMsg,
+    ) -> Self {
+        Self { sender_nonces, state_id, simtime, msg }
     }
 
-    pub fn sender(&self) -> &Address {
-        &self.sender_info.0
-    }
-
-    pub fn nonce(&self) -> u64 {
-        self.sender_info.1
+    pub fn sender_nonces(&self) -> &[(Address, u64)] {
+        &self.sender_nonces
     }
 }
 

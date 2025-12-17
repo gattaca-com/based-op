@@ -164,6 +164,11 @@ impl ValidatedBundle {
         // SAFETY: At this point, the bundle hash is guaranteed to be initialized.
         *self.bundle_hash.get().expect("bundle hash is not initialized")
     }
+
+    /// Returns an iterator over the senders and nonces of the transactions in the bundle.
+    pub fn sender_nonces(&self) -> impl Iterator<Item = (Address, u64)> {
+        self.transactions.iter().map(|tx| (tx.sender(), tx.nonce()))
+    }
 }
 
 /// A simulated bundle.

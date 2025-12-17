@@ -508,10 +508,11 @@ where
     /// Processes transaction simulation results from the simulator actor.
     ///
     /// Handles both block transaction simulations during sorting and
-    /// transaction pool simulations for future inclusion.
+    /// order pool simulations for future inclusion.
     fn handle_sim_result(mut self, result: SimulatorToSequencer, data: &mut SequencerContext<Db>) -> Self {
-        let (sender, nonce) = result.sender_info;
         let state_id = result.state_id;
+        let sender_nonces = result.sender_nonces;
+
         let simtime = result.simtime;
         // TODO(mempirate): Handle bundle simulations.
         match result.msg {
@@ -526,10 +527,12 @@ where
                 }
 
                 data.timers.handle_sim.start();
-                sort_data.handle_sim(simulated_tx.map(SimulatedOrder::Tx), sender, data.base_fee(), simtime);
+                sort_data.handle_sim(simulated_tx.map(SimulatedOrder::Tx), sender_nonces, data.base_fee(), simtime);
                 data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::TxPoolTopOfFrag(simulated_tx) => {
+                let (sender, nonce) = sender_nonces.first().expect("no sender nonces");
+
                 match simulated_tx {
                     Ok(res) if data.shared_state.as_ref().is_valid(state_id) => {
                         data.tx_pool.handle_simulated(SimulatedOrder::Tx(res))
@@ -539,7 +542,7 @@ where
                         // We would have already re-sent the tx for sim on the correct fragment.
                     }
                     Err(_e) => {
-                        data.tx_pool.remove(&sender, nonce, &mut data.telemetry);
+                        data.tx_pool.remove(sender, *nonce, &mut data.telemetry);
                     }
                 }
             }
@@ -554,7 +557,12 @@ where
                 }
 
                 data.timers.handle_sim.start();
-                sort_data.handle_sim(simulated_bundle.map(SimulatedOrder::Bundle), sender, data.base_fee(), simtime);
+                sort_data.handle_sim(
+                    simulated_bundle.map(SimulatedOrder::Bundle),
+                    sender_nonces,
+                    data.base_fee(),
+                    simtime,
+                );
                 data.timers.handle_sim.stop();
             }
             SimulatorToSequencerMsg::BundleTopOfFrag(simulated_bundle) => match simulated_bundle {
@@ -566,7 +574,9 @@ where
                     // We would have already re-sent the bundle for sim on the correct fragment.
                 }
                 Err(_e) => {
-                    data.tx_pool.remove(&sender, nonce, &mut data.telemetry);
+                    for (sender, nonce) in sender_nonces {
+                        data.tx_pool.remove(&sender, nonce, &mut data.telemetry);
+                    }
                 }
             },
         }

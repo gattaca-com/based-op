@@ -167,6 +167,7 @@ where
 
     // Get initial coinbase balance BEFORE any transactions
     let start_balance = balance_from_db(evm.db_mut(), coinbase);
+    let mut intermediate_balance = start_balance;
 
     // The post-state of the bundle.
     let mut post_state = ResultVecAndState::<ExecutionResult<OpHaltReason>, EvmState>::new(
@@ -187,6 +188,14 @@ where
             return Err(SimulationError::RevertWithDisallowedRevert);
         }
 
+        // Update intermediate balance and payment.
+        // NOTE: If a transaction does not touch the coinbase, this falls back to the intermediate balance (instead of
+        // 0, which would be incorrect)
+        let end_balance =
+            result_and_state.state.get(&coinbase).map(|a| a.info.balance).unwrap_or_else(|| intermediate_balance);
+        let payment = end_balance.saturating_sub(intermediate_balance);
+        intermediate_balance = end_balance;
+
         // Commit to State's in-memory cache (not the underlying db)
         // so subsequent transactions see these state changes
         // TODO(mempirate): validate that this is actually the case and we're not committing to underlying db
@@ -198,7 +207,7 @@ where
         simulated.push(SimulatedTx::new(
             tx.clone().into(),
             result_and_state,
-            U256::ZERO, // Per-tx payment not meaningful for bundles
+            payment,
             deposit_nonce,
             sim_start.elapsed(),
         ));
@@ -248,7 +257,7 @@ where
         });
 
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
-            let (sender, nonce, state_id) = msg.sim_info();
+            let (state_id, sender_nonces) = msg.sim_info();
             let curt = Instant::now();
             let msg = match msg {
                 SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(Self::simulate_transaction(
@@ -291,7 +300,7 @@ where
                 }
             };
             let _ = senders.send_timeout(
-                SimulatorToSequencer::new((sender, nonce), state_id, curt.elapsed(), msg),
+                SimulatorToSequencer::new(sender_nonces, state_id, curt.elapsed(), msg),
                 Duration::from_millis(10),
             );
         });

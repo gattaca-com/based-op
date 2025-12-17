@@ -207,18 +207,18 @@ impl<Db> SortingData<Db> {
     pub fn handle_sim(
         &mut self,
         simulated_order: SimulationResult<SimulatedOrder>,
-        sender: Address,
+        sender_nonces: Vec<(Address, u64)>,
         base_fee: u64,
         simtime: Duration,
     ) {
         self.in_flight_sims -= 1;
         self.telemetry.tot_sim_time += simtime;
 
-        tracing::trace!(%sender, "handling simulation result");
+        tracing::trace!(?sender_nonces, "handling simulation result");
 
         // handle errored sim
         let Ok(order) = simulated_order.inspect_err(|e| {
-            tracing::trace!(%sender, error = ?e, "error handling simulation result");
+            tracing::trace!(?sender_nonces, error = ?e, "error handling simulation result");
             // Send metric for simulation error
             MetricsUpdate::send(
                 self.uuid,
@@ -226,13 +226,18 @@ impl<Db> SortingData<Db> {
                 &mut self.metrics_producer,
             );
         }) else {
-            self.tof_snapshot.remove_from_sender(sender, base_fee);
+            for (sender, _) in &sender_nonces {
+                self.tof_snapshot.remove_from_sender(*sender, base_fee);
+            }
+
             self.telemetry.n_sims_errored += 1;
             return;
         };
 
         if self.gas_remaining < order.gas_used() {
-            self.tof_snapshot.remove_from_sender(sender, base_fee);
+            for (sender, _) in &sender_nonces {
+                self.tof_snapshot.remove_from_sender(*sender, base_fee);
+            }
             return;
         }
         self.telemetry.n_sims_succesful += 1;
@@ -439,7 +444,7 @@ impl<Db: DatabaseRef> SortingData<Db> {
         self.db.commit_ref(result_and_state.state());
         TelemetryUpdate::send(
             order.uuid(),
-            tx.to_included_telemetry(self.uuid, self.transactions.len()),
+            order.to_included_telemetry(self.uuid, self.transactions.len()),
             &mut self.telemetry_producer,
         );
 
