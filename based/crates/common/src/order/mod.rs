@@ -48,7 +48,6 @@ impl From<ValidatedBundle> for Order {
     }
 }
 
-// TODO(mempirate): Implement common methods for all orders.
 impl Order {
     pub fn tx(&self) -> Option<&Arc<Transaction>> {
         match self {

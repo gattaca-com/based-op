@@ -104,7 +104,6 @@ where
             }
         });
 
-        // TODO(mempirate): Should bundles fall under the tx pool? This only proceeds if the tx pool is enabled.
         let use_tx_pool = self.data.payload_attributes.no_tx_pool.is_none_or(|no_tx_pool| !no_tx_pool);
         if use_tx_pool {
             // handle new transaction
@@ -514,7 +513,6 @@ where
         let sender_nonces = result.sender_nonces;
 
         let simtime = result.simtime;
-        // TODO(mempirate): Handle bundle simulations.
         match result.msg {
             SimulatorToSequencerMsg::Tx(simulated_tx) => {
                 let SequencerState::Sorting(_, sort_data) = &mut self else {

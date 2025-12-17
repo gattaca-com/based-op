@@ -203,7 +203,6 @@ impl<Db> SortingData<Db> {
     }
 
     /// Handles the result of a simulation. `simulated_tx` simulated_at_id should be pre-verified.
-    /// TODO(mempirate): Somehow generalize this to handle both tx and bundle simulations
     pub fn handle_sim(
         &mut self,
         simulated_order: SimulationResult<SimulatedOrder>,

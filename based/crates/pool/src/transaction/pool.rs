@@ -18,7 +18,6 @@ use reth_primitives_traits::InMemorySize;
 
 use crate::transaction::pending::PendingOrders;
 
-// TODO(mempirate): We need a way to understand if a bundle can be executed or not, and then
 #[derive(Clone, Debug, Default)]
 pub struct TxPool {
     /// maps an eoa to all pending txs
@@ -191,8 +190,7 @@ impl TxPool {
         true
     }
 
-    /// Validates simualted tx. If valid, fetch its TxList and save the new [SimulatedTxList] to `active_txs`.
-    /// TODO(mempirate): Handle `SimulatedOrder` here
+    /// Validates a simulated order. If valid, adds it to the pending orders.
     pub fn handle_simulated(&mut self, order: SimulatedOrder) {
         match order {
             SimulatedOrder::Tx(simulated_tx) => {
