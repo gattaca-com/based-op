@@ -1,0 +1,18 @@
+[package]
+name = "reth"
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+alloy-network.workspace = true
+alloy-primitives.workspace = true
+alloy-rpc-types.workspace = true
+tracing.workspace = true
+bop-common.workspace = true
+op-alloy-rpc-types.workspace = true
+alloy-consensus.workspace = true
+alloy-eips = "1.1.3"
+thiserror = "2.0.12"
+
