@@ -242,7 +242,7 @@ impl GatewayManager {
                     gateway.registry_index.store(index as u64, Ordering::Relaxed);
                 }
                 None => {
-                    let gateway = Gateway::new(url.clone(), address, index, self.metrics.clone());
+                    let gateway = Gateway::new(url.clone(), address, index, self.metrics);
                     gateways.insert(url, Arc::new(gateway));
                 }
             }

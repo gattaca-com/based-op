@@ -26,7 +26,7 @@ use jsonrpsee::{
 };
 use thiserror::Error;
 use tower::{Layer, Service};
-use tracing::{error, info};
+use tracing::info;
 
 #[derive(Clone, Debug)]
 pub struct AuthConfig {
@@ -78,7 +78,7 @@ impl AuthManager {
         let secret = JwtSecret::random();
         let expiry = issued_at + self.cfg.token_validity;
 
-        let entry = Arc::new(AuthEntry { secret: secret.clone(), expires_at: expiry.clone() });
+        let entry = Arc::new(AuthEntry { secret, expires_at: expiry });
 
         self.entries.insert(entry.id(), entry.clone());
         info!(%challenger, "issued JWT secret");
@@ -264,7 +264,7 @@ where
         let auth = request.extensions().get::<Authentication>();
 
         // bypass auth for the given method if the method is excluded
-        let bypass_auth = self.excluded_methods.iter().find(|method| *method == request.method_name()).is_some();
+        let bypass_auth = self.excluded_methods.iter().any(|method| method == request.method_name());
 
         let authentication_result = match auth {
             _ if bypass_auth => AuthenticationResult::Allowed,

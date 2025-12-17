@@ -69,7 +69,7 @@ impl PortalServer {
             geth_client: fallback_eth_client,
             geth_engine_client: fallback_client,
             op_node_client,
-            gateway_manager: Arc::new(GatewayManager::new_from_args(&args, signer, metrics.clone())),
+            gateway_manager: Arc::new(GatewayManager::new_from_args(&args, signer, metrics)),
             new_payload_block_number: Arc::new(AtomicU64::new(0)),
             new_payload_block_hash: Arc::new(RwLock::new(B256::ZERO)),
             current_block_number: Arc::new(AtomicU64::new(0)),
