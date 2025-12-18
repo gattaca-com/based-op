@@ -19,15 +19,16 @@ pub fn telemetry_queue() -> Queue<TelemetryUpdate> {
         .expect("Can't create or open telemetry queue")
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Telemetry {
     Tx(order::Tx),
+    Bundle(order::Bundle),
     Frag(frag::Frag),
     System(system::SystemNotification),
 }
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TelemetryUpdate {
     pub identifier: Uuid,
     pub t: Nanos,

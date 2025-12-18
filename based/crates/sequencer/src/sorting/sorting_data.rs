@@ -144,7 +144,7 @@ impl<Db: DatabaseRead + Database> SortingData<Db> {
         let db = DBSorting::new(data.shared_state.as_ref().clone());
         let _ = ensure_create2_deployer(data.chain_spec().clone(), data.timestamp(), &mut db.db.write());
         let uuid = Uuid::new_v4();
-        let mut telemetry_producer = data.telemetry;
+        let mut telemetry_producer = data.telemetry.clone();
         TelemetryUpdate::send(
             uuid,
             Telemetry::Frag(bop_common::telemetry::Frag::SorterStart {

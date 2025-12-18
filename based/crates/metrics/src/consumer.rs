@@ -6,7 +6,7 @@ use std::sync::{
 use bop_common::{
     communication::Consumer,
     metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
-    telemetry::{Frag, Telemetry, TelemetryUpdate, Tx, system::SystemNotification, telemetry_queue},
+    telemetry::{Frag, Telemetry, TelemetryUpdate, Tx, order::Bundle, system::SystemNotification, telemetry_queue},
     time::{Duration, Instant, Repeater},
 };
 use metrics::{counter, gauge, histogram};
@@ -76,6 +76,14 @@ impl MetricsConsumer {
                 Tx::RemovedFromPool => counter!("bop_gateway_tx_removed_from_pool_total").increment(1),
                 Tx::Included(_) => counter!("bop_gateway_tx_included_total").increment(1),
                 Tx::Ingested(_) => counter!("bop_gateway_tx_ingested_total").increment(1),
+            },
+            Telemetry::Bundle(bundle) => match bundle {
+                Bundle::AddedToPool => counter!("bop_gateway_bundle_added_to_pool_total").increment(1),
+                Bundle::RemovedFromPool => counter!("bop_gateway_bundle_removed_from_pool_total").increment(1),
+                Bundle::Included(_) => counter!("bop_gateway_bundle_included_total").increment(1),
+                Bundle::Ingested { .. } => {
+                    counter!("bop_gateway_bundle_ingested_total").increment(1);
+                }
             },
             Telemetry::System(system) => match system {
                 SystemNotification::StateChanged(state) => gauge!("bop_sequencer_state").set(state as u8),

@@ -8,7 +8,7 @@ use bop_common::{
     metrics::{Counter, Histogram, Metric, MetricsUpdate},
     telemetry::{
         self, TelemetryUpdate,
-        order::{IncludedInFrag, Ingested},
+        order::{Ingested, TransactionInclusion},
     },
     time::BlockSyncTimers,
 };
@@ -223,7 +223,7 @@ impl BlockSync {
 
                 TelemetryUpdate::send(
                     uuid,
-                    telemetry::Telemetry::Tx(telemetry::Tx::Included(IncludedInFrag {
+                    telemetry::Telemetry::Tx(telemetry::Tx::Included(TransactionInclusion {
                         frag,
                         id_in_frag: id as u16,
                         ..Default::default()

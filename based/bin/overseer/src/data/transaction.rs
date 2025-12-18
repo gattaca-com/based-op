@@ -1,6 +1,6 @@
 use alloy_primitives::{Address, B256};
 use bop_common::{
-    telemetry::order::{IncludedInFrag, Ingested, Tx},
+    telemetry::order::{Ingested, TransactionInclusion, Tx},
     time::{Duration, Nanos, Repeater},
 };
 use ratatui::{
@@ -35,7 +35,7 @@ impl TransactionData {
         })
     }
 
-    pub fn included_in_frags(&self) -> impl Iterator<Item = (&Nanos, &IncludedInFrag)> {
+    pub fn included_in_frags(&self) -> impl Iterator<Item = (&Nanos, &TransactionInclusion)> {
         self.updates.iter().filter_map(|(t, u)| match u {
             Tx::Included(included) => Some((t, included)),
             _ => None,

@@ -140,13 +140,13 @@ impl SimulatedOrder {
 
     pub fn included_telemetry(&self, frag: Uuid, id_in_frag: usize) -> Vec<Telemetry> {
         match self {
-            SimulatedOrder::Tx(tx) => vec![tx.to_included_telemetry(frag, id_in_frag)],
+            SimulatedOrder::Tx(tx) => vec![tx.to_included_telemetry(frag, id_in_frag, None)],
             SimulatedOrder::Bundle(bundle) => bundle
                 .transactions()
                 .iter()
                 .enumerate()
                 // Make sure to increment the id_in_frag for each transaction in the bundle.
-                .map(|(i, tx)| tx.to_included_telemetry(frag, id_in_frag + i))
+                .map(|(i, tx)| tx.to_included_telemetry(frag, id_in_frag + i, Some(bundle.id())))
                 .collect(),
         }
     }
