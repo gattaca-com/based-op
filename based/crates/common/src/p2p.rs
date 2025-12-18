@@ -150,6 +150,12 @@ impl From<EnvV0> for VersionedMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Signed<T: TreeHash> {
+    pub message: T,
+    pub signature: Bytes,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignedVersionedMessage {
     pub message: VersionedMessage,
     pub signature: Bytes,

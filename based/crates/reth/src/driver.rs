@@ -1,14 +1,22 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
+use alloy_consensus::Header;
 use alloy_primitives::B256;
 use alloy_rpc_types::Block;
-use bop_common::p2p::{EnvV0, FragV0, SealV0};
+use arc_swap::ArcSwapOption;
+use bop_common::{
+    p2p::{EnvV0, FragV0, SealV0},
+    typedefs::OpBlock,
+};
+use reth_chainspec::{ChainSpecProvider, EthChainSpec};
+use reth_optimism_chainspec::OpHardforks;
+use reth_storage_api::{BlockReaderIdExt, StateProviderFactory};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
 use crate::{
     error::{DriverError, ValidateSealError},
-    exec::UnsealedExecutor,
+    exec::{StateExecutor, UnsealedExecutor},
     unsealed_block::UnsealedBlock,
 };
 
@@ -65,27 +73,46 @@ enum Cmd {
     EnvV0 { env: EnvV0, resp: Resp<()> },
     NewFragV0 { frag: FragV0, resp: Resp<FragStatus> },
     SealFragV0 { seal: SealV0, resp: Resp<()> },
-    ForkchoiceUpdated { new_block_number: u64, resp: Resp<()> },
+    ForkchoiceUpdated { block: OpBlock, resp: Resp<()> },
     GetHeaderView { resp: Resp<HeaderView> },
 }
 
 #[derive(Debug, Clone)]
 pub struct HeaderView {
     pub enabled: bool,
-    pub header: Option<alloy_consensus::Header>,
+    pub header: Option<Header>,
 }
 
 /// Single-threaded state owned by the driver task (unsealed block + executor + counters).
-/// Essentialy should be implemented using based-op-reth
+/// Essentially should be implemented using based-op-reth
 #[derive(Debug)]
 pub struct DriverInner<E: UnsealedExecutor> {
     pub enabled_unsealed_as_latest: bool,
-    pub current_unsealed_block: Option<UnsealedBlock>,
+    pub current_unsealed_block: Arc<ArcSwapOption<UnsealedBlock>>,
     pub exec: E,
     pub fcu_count_since_unseal_reset: usize,
 }
 
 impl Driver {
+    pub fn new<Client>(unsealed_as_latest: bool, client: Client) -> Self
+    where
+        Client: StateProviderFactory
+            + ChainSpecProvider<ChainSpec: EthChainSpec<Header = Header> + OpHardforks>
+            + BlockReaderIdExt<Header = Header>
+            + Clone
+            + 'static,
+    {
+        let executor = StateExecutor::new(client);
+        let current_unsealed_block = executor.shared_unsealed_block();
+
+        Self::spawn(DriverInner {
+            enabled_unsealed_as_latest: unsealed_as_latest,
+            current_unsealed_block,
+            exec: executor,
+            fcu_count_since_unseal_reset: 0,
+        })
+    }
+
     /// Spawns the driver actor task and returns a handle used to send commands to it.
     pub fn spawn<E: UnsealedExecutor + 'static>(inner: DriverInner<E>) -> Self {
         let (tx, mut rx) = mpsc::channel::<Cmd>(256);
@@ -104,8 +131,8 @@ impl Driver {
                     Cmd::SealFragV0 { seal, resp } => {
                         respond(resp, inner.handle_seal_frag_v0(seal).await);
                     }
-                    Cmd::ForkchoiceUpdated { new_block_number, resp } => {
-                        respond(resp, inner.handle_forkchoice_updated(new_block_number).await);
+                    Cmd::ForkchoiceUpdated { block, resp } => {
+                        respond(resp, inner.handle_forkchoice_updated(block).await);
                     }
                     Cmd::GetHeaderView { resp } => {
                         let _ = resp.send(Reply::Ok(inner.get_header_view()));
@@ -139,9 +166,9 @@ impl Driver {
     }
 
     /// Notifies the driver about a forkchoice update and resets state on mismatch.
-    pub async fn forkchoice_updated(&self, new_block_number: u64) -> Result<(), DriverError> {
+    pub async fn forkchoice_updated(&self, block: OpBlock) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx.send(Cmd::ForkchoiceUpdated { new_block_number, resp: resp_tx }).await?;
+        self.tx.send(Cmd::ForkchoiceUpdated { block, resp: resp_tx }).await?;
         resp_rx.await?.into_result()
     }
 
@@ -162,7 +189,6 @@ impl Driver {
 
 impl<E: UnsealedExecutor> DriverInner<E> {
     fn reset_current_unsealed_block(&mut self) {
-        self.current_unsealed_block = None;
         self.exec.reset();
         self.fcu_count_since_unseal_reset = 0;
     }
@@ -170,7 +196,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
     async fn handle_env_v0(&mut self, env: EnvV0) -> Result<(), DriverError> {
         info!(block = env.number, "envV0 received");
 
-        if let Some(current) = self.current_unsealed_block.as_ref() {
+        if let Some(current) = self.current_unsealed_block.load_full().as_ref() {
             let current_num = current.env.number;
 
             if current_num >= env.number {
@@ -181,19 +207,21 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             self.reset_current_unsealed_block();
         }
 
-        self.exec.ensure_env(&env).await?;
-        self.current_unsealed_block = Some(UnsealedBlock::new(env));
+        self.exec.ensure_env(&env).await?; // ths should update current_unsealed_block too
         self.fcu_count_since_unseal_reset = 0;
         Ok(())
     }
 
-    async fn handle_forkchoice_updated(&mut self, new_block_number: u64) -> Result<(), DriverError> {
+    async fn handle_forkchoice_updated(&mut self, block: OpBlock) -> Result<(), DriverError> {
         self.fcu_count_since_unseal_reset += 1;
 
-        let Some(ub) = self.current_unsealed_block.as_ref() else {
+        let Some(ub) = self.current_unsealed_block.load_full() else {
             return Ok(());
         };
 
+        let new_block_number = block.header.number;
+
+        // TODO: Check hash etc. Commit state if needed
         if ub.env.number != new_block_number {
             info!(old = ub.env.number, new = new_block_number, "forkchoiceUpdated block mismatch: resetting unsealed");
             self.reset_current_unsealed_block();
@@ -205,7 +233,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
     async fn handle_new_frag_v0(&mut self, frag: FragV0) -> Result<FragStatus, DriverError> {
         let start = Instant::now();
 
-        let Some(ub) = self.current_unsealed_block.as_mut() else {
+        let Some(ub) = self.current_unsealed_block.load_full() else {
             return Err(DriverError::NotInitialized);
         };
 
@@ -235,7 +263,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
         if ub.last_frag().is_some_and(|f| f.is_last) {
             info!("last frag received, pre-sealing block");
-            if let Err(e) = self.exec.seal(ub).await {
+            if let Err(e) = self.exec.seal().await {
                 error!(error = %e, "seal failed, discarding unsealed block");
                 self.reset_current_unsealed_block();
                 return Err(DriverError::from(e));
@@ -247,7 +275,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
     async fn handle_seal_frag_v0(&mut self, seal: SealV0) -> Result<(), DriverError> {
         let start = Instant::now();
-        let Some(ub) = self.current_unsealed_block.as_ref() else {
+        let Some(ub) = self.current_unsealed_block.load_full() else {
             return Err(DriverError::NotInitialized);
         };
 
@@ -266,7 +294,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             }
         };
 
-        self.validate_seal_frag_v0(&presealed_block, ub, &seal)?;
+        self.validate_seal_frag_v0(&presealed_block, ub.as_ref(), &seal)?;
 
         self.exec.set_canonical(&presealed_block).await?;
 
@@ -335,8 +363,10 @@ impl<E: UnsealedExecutor> DriverInner<E> {
         if !self.enabled_unsealed_as_latest {
             return HeaderView { enabled: false, header: None };
         }
-
-        let header = self.current_unsealed_block.as_ref().map(|ub| ub.temp_header());
+        let header = match self.current_unsealed_block.load_full() {
+            Some(ub) => Some(ub.get_header()),
+            None => None,
+        };
         HeaderView { enabled: true, header }
     }
 }

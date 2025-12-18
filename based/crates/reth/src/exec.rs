@@ -38,7 +38,7 @@ pub trait UnsealedExecutor: Send {
     /// MUST be cumulative: txs execute after all previous frags's txs.
     fn execute_frag(&mut self, frag: &FragV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
 
-    fn seal(&mut self, ub: &UnsealedBlock) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
+    fn seal(&mut self) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
 
     fn set_canonical(&mut self, b: &Block) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
 
@@ -51,6 +51,16 @@ pub trait UnsealedExecutor: Send {
 pub struct StateExecutor<Client> {
     client: Client,
     current_unsealed_block: Arc<ArcSwapOption<UnsealedBlock>>,
+}
+
+impl<Client> StateExecutor<Client> {
+    pub fn new(client: Client) -> Self {
+        Self { client, current_unsealed_block: Arc::new(ArcSwapOption::new(None)) }
+    }
+
+    pub fn shared_unsealed_block(&self) -> Arc<ArcSwapOption<UnsealedBlock>> {
+        Arc::clone(&self.current_unsealed_block)
+    }
 }
 
 impl<Client> UnsealedExecutor for StateExecutor<Client>
@@ -199,7 +209,7 @@ where
         }
     }
 
-    fn seal(&mut self, _ub: &UnsealedBlock) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
+    fn seal(&mut self) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
         async move { Ok(()) }
     }
 
@@ -263,11 +273,7 @@ fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<
         requests_hash: None,
     };
 
-    let body = BlockBody {
-        transactions: tx_list,
-        ommers: vec![],
-        withdrawals: None,
-    };
+    let body = BlockBody { transactions: tx_list, ommers: vec![], withdrawals: None };
 
     Ok(OpBlock::new(header, body))
 }
