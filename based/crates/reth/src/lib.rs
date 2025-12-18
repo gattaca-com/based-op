@@ -1,3 +1,4 @@
+mod api;
 mod cli;
 pub mod driver;
 mod error;

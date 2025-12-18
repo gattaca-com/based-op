@@ -6780,6 +6780,7 @@ dependencies = [
  "futures",
  "op-alloy-rpc-types",
  "reth-exex 1.9.3",
+ "reth-node-builder 1.9.3",
  "reth-optimism-chainspec 1.9.3",
  "reth-optimism-cli 1.9.3",
  "reth-optimism-node 1.9.3",

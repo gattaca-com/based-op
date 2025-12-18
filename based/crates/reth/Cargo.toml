@@ -22,6 +22,7 @@ tokio.workspace = true
 tracing.workspace = true
 
 reth-exex = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-node-builder = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-optimism-chainspec = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }

@@ -2,7 +2,10 @@ use std::time::Instant;
 
 use alloy_primitives::B256;
 use alloy_rpc_types::Block;
-use bop_common::p2p::{EnvV0, FragV0, SealV0};
+use bop_common::{
+    p2p::{EnvV0, FragV0, SealV0},
+    typedefs::OpBlock,
+};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
@@ -65,7 +68,7 @@ enum Cmd {
     EnvV0 { env: EnvV0, resp: Resp<()> },
     NewFragV0 { frag: FragV0, resp: Resp<FragStatus> },
     SealFragV0 { seal: SealV0, resp: Resp<()> },
-    ForkchoiceUpdated { new_block_number: u64, resp: Resp<()> },
+    ForkchoiceUpdated { block: OpBlock, resp: Resp<()> },
     GetHeaderView { resp: Resp<HeaderView> },
 }
 
@@ -104,8 +107,8 @@ impl Driver {
                     Cmd::SealFragV0 { seal, resp } => {
                         respond(resp, inner.handle_seal_frag_v0(seal).await);
                     }
-                    Cmd::ForkchoiceUpdated { new_block_number, resp } => {
-                        respond(resp, inner.handle_forkchoice_updated(new_block_number).await);
+                    Cmd::ForkchoiceUpdated { block, resp } => {
+                        respond(resp, inner.handle_forkchoice_updated(block).await);
                     }
                     Cmd::GetHeaderView { resp } => {
                         let _ = resp.send(Reply::Ok(inner.get_header_view()));
@@ -139,9 +142,9 @@ impl Driver {
     }
 
     /// Notifies the driver about a forkchoice update and resets state on mismatch.
-    pub async fn forkchoice_updated(&self, new_block_number: u64) -> Result<(), DriverError> {
+    pub async fn forkchoice_updated(&self, block: OpBlock) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx.send(Cmd::ForkchoiceUpdated { new_block_number, resp: resp_tx }).await?;
+        self.tx.send(Cmd::ForkchoiceUpdated { block, resp: resp_tx }).await?;
         resp_rx.await?.into_result()
     }
 
@@ -187,13 +190,16 @@ impl<E: UnsealedExecutor> DriverInner<E> {
         Ok(())
     }
 
-    async fn handle_forkchoice_updated(&mut self, new_block_number: u64) -> Result<(), DriverError> {
+    async fn handle_forkchoice_updated(&mut self, block: OpBlock) -> Result<(), DriverError> {
         self.fcu_count_since_unseal_reset += 1;
 
         let Some(ub) = self.current_unsealed_block.as_ref() else {
             return Ok(());
         };
 
+        let new_block_number = block.header.number;
+
+        // TODO: Check hash etc. Commit state if needed
         if ub.env.number != new_block_number {
             info!(old = ub.env.number, new = new_block_number, "forkchoiceUpdated block mismatch: resetting unsealed");
             self.reset_current_unsealed_block();
