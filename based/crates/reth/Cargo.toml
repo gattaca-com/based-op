@@ -17,56 +17,21 @@ alloy-eips.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 anyhow = "1.0.98"
-
-
-reth-chain-state = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-chain-state" }
 reth-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-chainspec" }
-reth-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-cli" }
-reth-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-consensus" }
-reth-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-db" }
-reth-db-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-db-api" }
-reth-db-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-db-common" }
 reth-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-evm" }
-reth-execution-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-execution-errors" }
-reth-engine-tree = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-engine-tree" }
-reth-node-ethereum = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-node-ethereum", features = ["test-utils"] }
-reth-node-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-node-types" }
 reth-optimism-chainspec = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-chainspec" }
-reth-optimism-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-cli" }
-reth-optimism-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-consensus" }
 reth-optimism-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-evm" }
 reth-optimism-rpc = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-rpc" }
 reth-rpc-convert = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-rpc-convert" }
-reth-optimism-forks = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-forks" }
-reth-optimism-node = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-node" }
-reth-optimism-payload-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-payload-builder" }
-reth-optimism-txpool = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-txpool" }
 reth-optimism-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-primitives" }
-reth-primitives = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-primitives" }
-reth-primitives-traits = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-primitives-traits" }
-reth-provider = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-provider", features = ["test-utils"] }
 reth-revm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-revm" }
-reth-rpc-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-rpc-builder" }
-reth-rpc-layer = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-rpc-layer" }
-reth-stages-types = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-stages-types" }
 reth-storage-api = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-storage-api" }
 reth-storage-errors = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-storage-errors" }
-reth-trie = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie" }
-reth-trie-common = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-common", features = ["test-utils"] }
-reth-trie-db = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-db" }
-reth-trie-parallel = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-trie-parallel" }
 
 revm = { version = "31.0.1", features = [
     "optional_balance_check",
     "secp256k1",
     "std",
 ], default-features = false }
-revm-handler = "12.0.0"
-revm-inspector = "12.0.1"
-revm-interpreter = "29.0.1"
-revm-primitives = { version = "21.0.2", features = [
-    "std",
-], default-features = false }
 arc-swap = "1.7.1"
-log = "0.4.27"
 op-alloy-consensus = "0.22.1"
