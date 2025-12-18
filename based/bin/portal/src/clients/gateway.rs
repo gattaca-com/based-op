@@ -47,7 +47,8 @@ pub struct GatewayClientAuthLayer {
 }
 impl GatewayClientAuthLayer {
     pub fn new(token: &str) -> Result<Self, InvalidHeaderValue> {
-        let value = HeaderValue::from_str(token)?;
+        let header = if token.starts_with("Bearer ") { token.to_owned() } else { format!("Bearer {token}") };
+        let value = HeaderValue::from_str(&header)?;
         Ok(Self { token: Arc::new(value) })
     }
 }
@@ -81,6 +82,46 @@ where
     fn call(&mut self, mut req: HttpRequest<B>) -> Self::Future {
         req.headers_mut().insert(AUTHORIZATION, Arc::unwrap_or_clone(self.jwt.clone()));
         self.inner.call(req)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::Infallible;
+
+    use jsonrpsee::http_client::HttpRequest;
+    use reqwest::header::AUTHORIZATION;
+    use tower::{Layer, ServiceExt, service_fn};
+
+    use super::GatewayClientAuthLayer;
+
+    #[tokio::test]
+    async fn gateway_client_auth_layer_prefixes_bearer() {
+        let layer = GatewayClientAuthLayer::new("token").expect("header should be valid");
+        assert_eq!(layer.token.to_str().unwrap(), "Bearer token");
+
+        let layer = GatewayClientAuthLayer::new("Bearer token").expect("header should be valid");
+        assert_eq!(layer.token.to_str().unwrap(), "Bearer token");
+    }
+
+    #[tokio::test]
+    async fn gateway_client_auth_layer_inserts_authorization_header() {
+        let layer = GatewayClientAuthLayer::new("token").expect("header should be valid");
+
+        // Simple service to retrieve the authorization header (which should have been added by the layer).
+        let svc = service_fn(|req: HttpRequest<()>| async move {
+            let auth = req.headers().get(AUTHORIZATION).cloned();
+            Ok::<_, Infallible>(auth)
+        });
+
+        let svc = layer.layer(svc);
+        let auth = svc
+            .oneshot(HttpRequest::new(()))
+            .await
+            .expect("service call ok")
+            .expect("authorization header should have been extracted");
+
+        assert_eq!(auth.to_str().unwrap(), "Bearer token");
     }
 }
 

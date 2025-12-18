@@ -344,3 +344,192 @@ impl BasedAuthApiServer for AuthRpc {
         Ok(self.manager.issue(challenger, valid_from))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{net::SocketAddr, sync::Arc, time::SystemTime};
+
+    use bop_common::{
+        api::{BasedAuthApiServer, ControlApiServer},
+        auth::gateway_auth_message,
+        communication::messages::RpcResult,
+        signing::ECDSASigner,
+    };
+    use jsonrpsee::server::{ServerBuilder, ServerHandle, middleware::rpc::RpcServiceBuilder};
+    use serde_json::{Value, json};
+
+    use super::{AuthConfig, AuthManager, AuthRpc};
+
+    #[derive(Clone)]
+    struct TestControlRpc;
+
+    #[jsonrpsee::core::async_trait]
+    impl ControlApiServer for TestControlRpc {
+        async fn heartbeat(&self) -> RpcResult<()> {
+            Ok(())
+        }
+    }
+
+    async fn post_jsonrpc(url: &str, body: Value, auth_header: Option<&str>) -> (reqwest::StatusCode, String) {
+        // We do the JSON-RPC request manually (instead of using jsonrpsee) to check the HTTP status code returned.
+        let client = reqwest::Client::new();
+        let mut req = client.post(url).json(&body);
+        if let Some(value) = auth_header {
+            req = req.header(reqwest::header::AUTHORIZATION, value);
+        }
+        let resp = req.send().await.expect("request should succeed");
+        let status = resp.status();
+        let text = resp.text().await.expect("response body should be readable");
+        (status, text)
+    }
+
+    struct StartedServer {
+        url: String,
+        handle: ServerHandle,
+        gateway_address: alloy_primitives::Address,
+    }
+
+    async fn start_server() -> StartedServer {
+        let gateway_address = alloy_primitives::Address::from([0x11u8; 20]);
+        let auth_manager = Arc::new(AuthManager::new(AuthConfig {
+            gateway_address,
+            token_validity: std::time::Duration::from_secs(60),
+        }));
+
+        let auth_rpc = AuthRpc::new(auth_manager.clone());
+
+        let http_middleware = tower::ServiceBuilder::new().layer(auth_rpc.http_layer());
+        let rpc_middleware = RpcServiceBuilder::new().layer(auth_rpc.rpc_layer());
+
+        let server = ServerBuilder::default()
+            .set_http_middleware(http_middleware)
+            .set_rpc_middleware(rpc_middleware)
+            .build(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .expect("server should build");
+
+        let addr = server.local_addr().expect("server should have local addr");
+        let url = format!("http://{addr}");
+
+        let mut module = ControlApiServer::into_rpc(TestControlRpc);
+        module
+            .merge(BasedAuthApiServer::into_rpc(auth_rpc))
+            .expect("failed to merge based auth rpc");
+
+        let handle = server.start(module);
+
+        StartedServer { url, handle, gateway_address }
+    }
+
+    fn get_jsonrpc_success(body: &str) -> Option<Value> {
+        let value: Value = serde_json::from_str(body).ok()?;
+        if value.get("error").is_some() {
+            return None;
+        }
+        value.get("result").cloned()
+    }
+
+    #[tokio::test]
+    async fn rejects_unauthenticated_requests_for_non_excluded_methods() {
+        let StartedServer { url, handle, .. } = start_server().await;
+
+        // Without a token, non-excluded methods are rejected at the HTTP layer.
+        let (status, body) = post_jsonrpc(
+            &url,
+            json!({"jsonrpc":"2.0","id":1,"method":"control_heartbeat","params":[]}),
+            None,
+        )
+        .await;
+        assert_eq!(status, reqwest::StatusCode::UNAUTHORIZED);
+        assert!(body.contains("Method requires authentication"), "unexpected body: {body}");
+
+        // With a fake token, non-excluded methods are still rejected.
+        let (status, body) = post_jsonrpc(
+            &url,
+            json!({"jsonrpc":"2.0","id":2,"method":"control_heartbeat","params":[]}),
+            Some("Bearer totally-fake"),
+        )
+        .await;
+        assert_eq!(status, reqwest::StatusCode::UNAUTHORIZED);
+        assert!(body.contains("Method requires authentication"), "unexpected body: {body}");
+
+        handle.stop().expect("server stop should succeed");
+        handle.stopped().await;
+    }
+
+    #[tokio::test]
+    async fn allows_excluded_based_auth_methods_without_token() {
+        let StartedServer { url, handle, gateway_address } = start_server().await;
+
+        // Auth methods are excluded from enforcement (allowlist).
+        let valid_from = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time ok")
+            .as_secs();
+        let (status, body) = post_jsonrpc(
+            &url,
+            json!({"jsonrpc":"2.0","id":3,"method":"based_authenticationChallenge","params":[valid_from]}),
+            None,
+        )
+        .await;
+        assert_eq!(status, reqwest::StatusCode::OK);
+        let challenge_value = get_jsonrpc_success(&body).expect("expected jsonrpc success");
+        let challenge: alloy_primitives::B256 = serde_json::from_value(challenge_value).expect("challenge should be B256");
+        assert_eq!(challenge, gateway_auth_message(gateway_address, valid_from));
+
+        handle.stop().expect("server stop should succeed");
+        handle.stopped().await;
+    }
+
+    #[tokio::test]
+    async fn token_from_authenticate_proposer_allows_followup_requests_with_bearer_prefix() {
+        let StartedServer { url, handle, gateway_address } = start_server().await;
+
+        let valid_from = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time ok")
+            .as_secs();
+
+        // Obtain a real token via based_authenticateProposer.
+        let signer = ECDSASigner::random();
+        let signature = signer
+            .sign_message(gateway_auth_message(gateway_address, valid_from))
+            .expect("signature should succeed");
+
+        let (status, body) = post_jsonrpc(
+            &url,
+            json!({"jsonrpc":"2.0","id":4,"method":"based_authenticateProposer","params":[valid_from, signature]}),
+            None,
+        )
+        .await;
+        assert_eq!(status, reqwest::StatusCode::OK);
+        let auth_value = get_jsonrpc_success(&body).expect("expected jsonrpc success");
+        let token = auth_value
+            .get("token")
+            .and_then(|v| v.as_str())
+            .expect("token should be string")
+            .to_owned();
+
+        // Token without "Bearer " prefix is not interpreted as a bearer token.
+        let (status, body) = post_jsonrpc(
+            &url,
+            json!({"jsonrpc":"2.0","id":5,"method":"control_heartbeat","params":[]}),
+            Some(&token),
+        )
+        .await;
+        assert_eq!(status, reqwest::StatusCode::UNAUTHORIZED);
+        assert!(body.contains("Method requires authentication"), "unexpected body: {body}");
+
+        // Token with "Bearer " prefix allows access to the rest of the gateway RPC methods.
+        let (status, body) = post_jsonrpc(
+            &url,
+            json!({"jsonrpc":"2.0","id":6,"method":"control_heartbeat","params":[]}),
+            Some(&format!("Bearer {token}")),
+        )
+        .await;
+        assert_eq!(status, reqwest::StatusCode::OK);
+        get_jsonrpc_success(&body).expect("expected jsonrpc success");
+        handle.stop().expect("server stop should succeed");
+        handle.stopped().await;
+    }
+}
