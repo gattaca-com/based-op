@@ -263,7 +263,7 @@ impl EngineApiServer for PortalServer {
         });
 
         let Some(gateway) = self.gateway_manager.current_gateway().await else { return Ok(fallback_fut.await??) };
-        let Some(gateway_client) = gateway.client().await else { return Ok(fallback_fut.await??) };
+        let Some(gateway_client) = gateway.client() else { return Ok(fallback_fut.await??) };
         let gateway_for_task = gateway.clone();
         let gateway_for_log = gateway.clone();
 

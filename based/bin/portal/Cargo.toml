@@ -8,6 +8,7 @@ version.workspace = true
 alloy-eips.workspace = true
 alloy-primitives.workspace = true
 alloy-rpc-types.workspace = true
+arc-cell.workspace = true
 bop-common.workspace = true
 bop-metrics.workspace = true
 clap.workspace = true

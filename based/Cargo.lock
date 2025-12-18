@@ -1007,6 +1007,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-cell"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fec9da9adf9420d86def101bd5b4a227b0512d456b6a128b0d677fdf68e5f7b8"
+
+[[package]]
 name = "ark-bls12-381"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1570,6 +1576,7 @@ dependencies = [
  "alloy-eips",
  "alloy-primitives",
  "alloy-rpc-types",
+ "arc-cell",
  "bop-common",
  "bop-metrics",
  "clap",

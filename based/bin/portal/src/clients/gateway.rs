@@ -10,6 +10,7 @@ use std::{
 use alloy_eips::eip7685::RequestsOrHash;
 use alloy_primitives::{Address, B256, Signature, U64};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState};
+use arc_cell::{ArcCell, OptionalArcCell};
 use bop_common::{
     api::{BasedAuthApiClient, ControlApiClient, EngineApiClient, OpMinerExtApiClient, RegistryApiClient},
     auth::gateway_auth_message,
@@ -87,8 +88,8 @@ where
 pub struct Gateway {
     pub url: Url,
     pub address: Arc<Address>,
-    pub client: Arc<RwLock<Option<GatewayClient>>>,
-    pub ping: Arc<RwLock<Duration>>,
+    pub client: OptionalArcCell<GatewayClient>,
+    pub ping: ArcCell<Duration>,
     pub active: Arc<AtomicBool>,
     pub registry_index: Arc<AtomicU64>,
     pub metrics: Producer<MetricsUpdate>,
@@ -96,15 +97,16 @@ pub struct Gateway {
 
 impl Gateway {
     pub async fn health_check(&self) {
-        let Some(client) = self.client.read().await.clone() else {
+        let Some(client) = self.client.get() else {
             self.active.store(false, Ordering::Relaxed);
             return;
         };
+
         let ping_start = Instant::now();
-        match ControlApiClient::heartbeat(&client).await {
+        match ControlApiClient::heartbeat(&*client).await {
             Ok(_) => {
                 let ping_duration = ping_start.elapsed();
-                *self.ping.write().await = ping_duration;
+                self.ping.set(ping_duration.into());
                 self.active.store(true, Ordering::Relaxed);
                 info!("successfully pinged gateway={} ping={:>9}", self.url, ping_duration.to_string());
                 MetricsUpdate::send_ref(
@@ -132,11 +134,11 @@ impl Gateway {
         signature: Signature,
         timeout: Duration,
     ) -> eyre::Result<()> {
-        let mut client = self.client.write().await;
+        let client = self.client.take();
 
         // Invalidate the old client and request a new token.
         // Attempt to reuse the client if one exists
-        let response = match client.take() {
+        let response = match client {
             None => {
                 let temp_client = create_client(self.url.clone(), timeout)?;
                 temp_client.authenticate_proposer(timestamp, signature).await
@@ -155,15 +157,15 @@ impl Gateway {
             .request_timeout(timeout.into())
             .build(self.url.clone())?;
 
-        client.replace(new_client);
+        self.client.set(Some(new_client.into()));
 
         info!(url = %self.url, "authenticated gateway");
 
         Ok(())
     }
 
-    pub async fn client(&self) -> Option<GatewayClient> {
-        self.client.read().await.clone()
+    pub fn client(&self) -> Option<Arc<GatewayClient>> {
+        self.client.get()
     }
 }
 
@@ -178,8 +180,8 @@ impl Gateway {
         Self {
             url,
             address: Arc::new(address),
-            client: Arc::new(RwLock::new(None)),
-            ping: Arc::new(RwLock::new(Duration::from_millis(0))),
+            client: Default::default(),
+            ping: Default::default(),
             active: Arc::new(AtomicBool::new(false)),
             registry_index: Arc::new(AtomicU64::new(registry_index as u64)),
             metrics,
@@ -326,7 +328,7 @@ impl GatewayManager {
 
     /// Attempts to authenticate with the gateway if it's unauthenticated
     async fn prepare_gateway(signer: &ECDSASigner, timeout: Duration, gateway: &GatewayInstance) -> eyre::Result<()> {
-        if gateway.client().await.is_some() {
+        if gateway.client().is_some() {
             return Ok(());
         }
 
@@ -362,7 +364,7 @@ impl GatewayManager {
         payload_attributes: Option<OpPayloadAttributes>,
         gateway: GatewayInstance,
     ) {
-        let Some(client) = gateway.client().await else {
+        let Some(client) = gateway.client() else {
             warn!(url = %gateway.url, "cannot send fork choice update to unauthenticated gateway");
             return;
         };
@@ -410,7 +412,7 @@ impl GatewayManager {
             let versioned_hashes = versioned_hashes.clone();
             tokio::spawn(
                 async move {
-                    let Some(client) = gateway.client().await else {
+                    let Some(client) = gateway.client() else {
                         warn!(url = %gateway.url, "skipping newPayloadV3 broadcast to unauthenticated gateway");
                         return;
                     };
@@ -445,7 +447,7 @@ impl GatewayManager {
             let versioned_hashes = versioned_hashes.clone();
             tokio::spawn(
                 async move {
-                    let Some(client) = gateway.client().await else {
+                    let Some(client) = gateway.client() else {
                         warn!(url = %gateway.url, "skipping newPayloadV4 broadcast to unauthenticated gateway");
                         return;
                     };
@@ -471,7 +473,7 @@ impl GatewayManager {
             let gateway = gateway.clone();
             tokio::spawn(
                 async move {
-                    let Some(client) = gateway.client().await else {
+                    let Some(client) = gateway.client() else {
                         warn!(url = %gateway.url, "skipping miner_setMaxDASize for unauthenticated gateway");
                         return;
                     };
