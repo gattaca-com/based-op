@@ -1,7 +1,7 @@
 use std::{future::Future, sync::Arc};
 
 use alloy_consensus::{
-    BlockBody, Header, Receipt, TxEnvelope, TxReceipt,
+    BlockBody, Header, Receipt, TxReceipt,
     transaction::{Recovered, SignerRecoverable, TransactionMeta},
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
@@ -9,7 +9,7 @@ use alloy_primitives::{B256, BlockNumber, Bytes, Sealable};
 use alloy_rpc_types::{Block, Log, TransactionReceipt, state::StateOverride};
 use arc_swap::ArcSwapOption;
 use bop_common::p2p::{EnvV0, FragV0};
-use op_alloy_consensus::OpReceiptEnvelope;
+use op_alloy_consensus::{OpReceiptEnvelope, OpTxEnvelope};
 use reth_chainspec::{ChainSpecProvider, EthChainSpec};
 use reth_evm::{ConfigureEvm, Evm, op_revm::OpHaltReason};
 use reth_optimism_chainspec::OpHardforks;
@@ -173,11 +173,10 @@ where
                             timestamp: block.timestamp,
                         };
 
-                        let op_cgu = op_receipt.cumulative_gas_used();
                         let input: ConvertReceiptInput<'_, OpPrimitives> = ConvertReceiptInput {
                             receipt: op_receipt,
                             tx: Recovered::new_unchecked(transaction, sender),
-                            gas_used: op_cgu,
+                            gas_used: tx_gas_used,
                             next_log_index,
                             meta,
                         };
@@ -235,16 +234,8 @@ fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<
         .iter()
         .enumerate()
         .map(|(_, tx_bytes)| {
-            let mut slice = tx_bytes.as_ref();
-
-            let eth_env = TxEnvelope::decode_2718_exact(&mut slice)
-                .map_err(|e| ExecError::Failed(format!("decode tx failed: {e}")))?;
-
-            let op_env = OpTransactionSigned::try_from_eth_envelope(eth_env).map_err(|unsupported| {
-                ExecError::Failed(format!("tx variant not supported on OP (likely EIP-4844): {unsupported:?}"))
-            })?;
-
-            Ok(op_env)
+            Ok(OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref())
+                .map_err(|e| ExecError::Failed(format!("decode tx failed: {e}")))?)
         })
         .collect::<Result<Vec<_>, ExecError>>()?;
 
