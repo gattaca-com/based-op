@@ -257,10 +257,6 @@ impl UnsealedBlock {
 
     /// Return a decoded header snapshot derived from the current env + local counters.
     pub fn get_header(&self) -> Header {
-        let last_frag_number = match self.frags.last() {
-            Some(frag) => frag.block_number,
-            None => 0,
-        };
         Header {
             parent_hash: self.env.parent_hash,
             ommers_hash: Default::default(),
@@ -270,7 +266,7 @@ impl UnsealedBlock {
             receipts_root: B256::ZERO,
             logs_bloom: Default::default(),
             difficulty: self.env.difficulty,
-            number: last_frag_number,
+            number: self.env.number,
             gas_limit: self.env.gas_limit,
             gas_used: self.cumulative_gas_used,
             timestamp: self.env.timestamp,
