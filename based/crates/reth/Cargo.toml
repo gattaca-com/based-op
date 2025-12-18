@@ -16,6 +16,7 @@ bop-common.workspace = true
 clap.workspace = true
 eyre.workspace = true
 futures.workspace = true
+jsonrpsee.workspace = true
 op-alloy-rpc-types.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
@@ -26,3 +27,4 @@ reth-node-builder = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3
 reth-optimism-chainspec = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-rpc = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
