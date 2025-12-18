@@ -169,12 +169,7 @@ impl Gateway {
     }
 
     /// Try to reauthenticate with the given gateway
-    pub async fn attempt_authentication(
-        &self,
-        timestamp: u64,
-        signature: Signature,
-        timeout: Duration,
-    ) -> eyre::Result<()> {
+    pub async fn authenticate(&self, timestamp: u64, signature: Signature, timeout: Duration) -> eyre::Result<()> {
         let client = self.client.take();
 
         // Invalidate the old client and request a new token.
@@ -362,7 +357,7 @@ impl GatewayManager {
         let signature =
             signer.sign_message(message).map_err(|err| eyre!("failed to sign gateway auth payload: {err}"))?;
 
-        gateway.attempt_authentication(timestamp, signature, timeout).await?;
+        gateway.authenticate(timestamp, signature, timeout).await?;
 
         Ok(())
     }
