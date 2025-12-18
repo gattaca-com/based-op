@@ -1,20 +1,27 @@
 [package]
-name = "reth"
 edition.workspace = true
+name = "reth"
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+alloy-consensus.workspace = true
+alloy-eips.workspace = true
 alloy-network.workspace = true
 alloy-primitives.workspace = true
 alloy-rpc-types.workspace = true
-tracing.workspace = true
+anyhow = "1.0.98"
 bop-common.workspace = true
+clap.workspace = true
+eyre.workspace = true
+futures.workspace = true
 op-alloy-rpc-types.workspace = true
-alloy-consensus.workspace = true
-alloy-eips.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-anyhow = "1.0.98"
+tracing.workspace = true
 
+reth-exex = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-optimism-chainspec = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
