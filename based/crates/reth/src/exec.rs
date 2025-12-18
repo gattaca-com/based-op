@@ -163,11 +163,10 @@ where
                             timestamp: block.timestamp,
                         };
 
-                        let op_cgu = op_receipt.cumulative_gas_used();
                         let input: ConvertReceiptInput<'_, OpPrimitives> = ConvertReceiptInput {
                             receipt: op_receipt,
                             tx: Recovered::new_unchecked(transaction, sender),
-                            gas_used: op_cgu,
+                            gas_used: tx_gas_used,
                             next_log_index,
                             meta,
                         };
