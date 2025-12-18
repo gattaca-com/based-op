@@ -207,7 +207,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             self.reset_current_unsealed_block();
         }
 
-        self.exec.ensure_env(&env).await?; // ths should update current_unsealed_block too
+        self.exec.ensure_env(&env)?; // this should update current_unsealed_block too because shared arc
         self.fcu_count_since_unseal_reset = 0;
         Ok(())
     }

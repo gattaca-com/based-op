@@ -93,6 +93,9 @@ pub enum ExecError {
     #[error("executor not initialized")]
     NotInitialized,
 
+    #[error("cannot open a new unsealed block while there's one already in progress")]
+    Inprogress,
+
     #[error("execution failed: {0}")]
     Failed(String),
 

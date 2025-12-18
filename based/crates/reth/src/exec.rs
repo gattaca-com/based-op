@@ -1,16 +1,17 @@
 use std::{future::Future, sync::Arc};
 
 use alloy_consensus::{
-    BlockBody, Header, Receipt, Transaction, TxReceipt,
+    BlockBody, Header, Receipt, Transaction,
     transaction::{Recovered, SignerRecoverable, TransactionMeta},
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
 use alloy_primitives::{B256, BlockNumber, Bytes, Sealable};
-use alloy_rpc_types::{Block, Log, TransactionReceipt, state::StateOverride};
+use alloy_rpc_types::{Block, Log, TransactionReceipt};
 use arc_swap::ArcSwapOption;
 use bop_common::p2p::{EnvV0, FragV0};
 use op_alloy_consensus::{OpReceiptEnvelope, OpTxEnvelope};
 use op_alloy_rpc_types::Transaction as RPCTransaction;
+use reth::api::Block as RethBlock;
 use reth_chainspec::{ChainSpecProvider, EthChainSpec};
 use reth_evm::{ConfigureEvm, Evm, op_revm::OpHaltReason};
 use reth_optimism_chainspec::OpHardforks;
@@ -24,7 +25,7 @@ use reth_revm::{
 };
 use reth_rpc_convert::transaction::ConvertReceiptInput;
 use reth_storage_api::{BlockReaderIdExt, StateProviderFactory};
-use revm::database::CacheDB;
+use revm::{database::CacheDB};
 
 use crate::{error::ExecError, unsealed_block::UnsealedBlock};
 
@@ -32,7 +33,7 @@ use crate::{error::ExecError, unsealed_block::UnsealedBlock};
 /// Everything else is just state-machine + bookkeeping.
 pub trait UnsealedExecutor: Send {
     /// Ensure the executor context is ready for this env (initialize overlay state, block env, etc.)
-    fn ensure_env(&mut self, env: &EnvV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
+    fn ensure_env(&mut self, env: &EnvV0) -> Result<(), ExecError>;
 
     /// Execute all txs in `frag` on top of current overlay state.
     ///
@@ -72,8 +73,37 @@ where
         + Clone
         + 'static,
 {
-    fn ensure_env(&mut self, _env: &EnvV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
-        async move { Ok(()) }
+    fn ensure_env(&mut self, env: &EnvV0) -> Result<(), ExecError> {
+        let Some(parent) = self.client.block_by_hash(env.parent_hash)? else {
+            return Err(ExecError::Failed(format!("parent block {} not found", env.parent_hash)))
+        };
+
+        let parent_header = parent.header();
+        let None = self.current_unsealed_block.load_full() else { return Err(ExecError::Inprogress) };
+
+        let expected_block_number = parent_header.number.saturating_sub(1);
+        if env.number != expected_block_number {
+            return Err(ExecError::Failed(format!(
+                "env block number doesn't match expected block number, expected {}, received {}",
+                expected_block_number, env.number
+            )))
+        }
+
+        if env.timestamp < parent_header.timestamp {
+            return Err(ExecError::Failed(format!(
+                "env timestamp is lower than parent block timestamp, parent timestamp {}, env timestamp {}",
+                parent_header.timestamp, env.timestamp
+            )))
+        }
+
+        let state_provider =
+            self.client.state_by_block_number_or_tag(BlockNumberOrTag::Number(parent_header.number))?;
+        let state_provider_db = StateProviderDatabase::new(state_provider);
+        let state = State::builder().with_database(state_provider_db).with_bundle_update().build();
+        let ub = UnsealedBlock::new(env.clone()).with_db_cache(CacheDB::new(state).cache);
+        self.current_unsealed_block.store(Some(Arc::new(ub)));
+
+        Ok(())
     }
 
     fn execute_frag(&mut self, frag: &FragV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
@@ -256,7 +286,9 @@ where
         async move { Ok(Block::default()) }
     }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        self.current_unsealed_block.store(None);
+    }
 }
 
 fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<OpBlock, ExecError> {
