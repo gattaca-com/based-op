@@ -34,12 +34,12 @@ The following steps have been tested on Sepolia, with a previously deployed L2 c
 7b. `make logs-main-node` to output logs of all the main services
 
 #### Run a based-gateway
-1. run `make start-gateway PORTAL=<portal rpc url> GATEWAY_SEQUENCING_KEY=<private key used to sequence with>`
+1. run `make start-gateway PORTAL=<portal rpc url> REGISTRY=<registry rpc url> GATEWAY_SEQUENCING_KEY=<private key used to sequence with>`
 2. to stop the based gateway run `make stop-gateway`
 3. for logs `make logs-gateway`
 
 #### Add/Update based-gateways to Registry
-When a based-gateway is started with `make start-gateway`, it will register itself to the Registry behind the `PORTAL`. For now, the Registry is kept in a simple json file in `.local_main_node/config/registry.json`. You can add/update/remove gateways there, the Registry and Portal will pick up on the changes every minute.
+When a based-gateway is started with `make start-gateway`, it will register itself directly to the Registry (via `REGISTRY`). For now, the Registry is kept in a simple json file in `.local_main_node/config/registry.json`. You can add/update/remove gateways there, and the Registry/Portal will pick up on the changes every minute.
 
 If you have started both the main sequencing node and the gateway on the same machine, you might need to change the ip to `0.0.0.0`, by default `curl ifconfig.me` is used to populate
 your url.

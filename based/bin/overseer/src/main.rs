@@ -50,6 +50,9 @@ pub struct OverseerArgs {
     /// The url of the portal that is connected to the main sequencer node
     #[arg(short, long)]
     pub portal_url: Url,
+    /// The url of the registry for gateway `registration/listing`
+    #[arg(long)]
+    pub registry_url: Url,
     /// The url of the based-op-node running next to the based-gateway
     #[arg(long, default_value = "http://127.0.0.1:8547")]
     pub based_op_node_url: Url,
@@ -114,6 +117,7 @@ struct OverseerConnections {
     walkie_talkie: WalkieTalkie,
     runtime: tokio::runtime::Runtime,
     client_portal: HttpClient,
+    client_registry: HttpClient,
     client_based_op_node: HttpClient,
     client_based_op_geth: HttpClient,
     rollup_config: RollupConfig,
@@ -127,6 +131,8 @@ impl OverseerConnections {
             .expect("Couldn't initialize tokio runtime");
         let client_portal =
             HttpClient::builder().build(args.portal_url.clone()).expect("Couldn't initialize portal rpc client");
+        let client_registry =
+            HttpClient::builder().build(args.registry_url.clone()).expect("Couldn't initialize registry rpc client");
         let client_based_op_node = HttpClient::builder()
             .build(args.based_op_node_url.clone())
             .expect("Couldn't initialize based-op-node rpc client");
@@ -142,6 +148,7 @@ impl OverseerConnections {
             telemetry: telemetry_queue().into(),
             runtime,
             client_portal,
+            client_registry,
             client_based_op_node,
             client_based_op_geth,
             rollup_config,
@@ -162,7 +169,7 @@ impl OverseerConnections {
     }
 
     pub fn current_gateway(&self) -> Result<(Url, Address), ClientError> {
-        self.runtime.block_on(self.client_portal.current_gateway()).map(|(_, url, address)| (url, address))
+        self.runtime.block_on(self.client_registry.current_gateway()).map(|(_, url, address)| (url, address))
     }
 
     pub fn peers_based_op_node(&self) -> Result<Vec<OpPeerInfo>, ClientError> {

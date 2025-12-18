@@ -96,7 +96,7 @@ services:
       - --safedb.path=/data/op-node/op-node-beacon-data
       - --p2p.static=$MAIN_OP_NODE_GOSSIP_STATIC
       - --rpc.enable-based 
-      - --registry=$PORTAL
+      - --registry=$REGISTRY
       - --p2p.bootnodes=$MAIN_OP_NODE_ENR
       - --syncmode=execution-layer
     volumes:
