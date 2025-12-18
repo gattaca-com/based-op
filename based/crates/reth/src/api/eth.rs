@@ -437,17 +437,14 @@ where
     Eth: FullEthApi<NetworkTypes = Optimism> + Send + Sync + 'static,
 {
     async fn wait_for_frag_receipt(&self, tx_hash: TxHash) -> Option<RpcReceipt<Optimism>> {
-        // TODO: Subscribe to frags
-        // let mut receiver = self.flashblocks_state.subscribe_to_flashblocks();
-
         if let Some(unsealed_block) = self.unsealed_block.load_full() {
             let mut receiver = unsealed_block.subscribe_new_blocks();
 
             loop {
                 match receiver.recv().await {
-                    Ok(_) => {
+                    Ok(block) => {
                         if let Some(receipt) = unsealed_block.get_transaction_receipt(&tx_hash) {
-                            tracing::debug!(%tx_hash, "Receipt found");
+                            tracing::debug!(%tx_hash, block_number = block.number(), block_hash = %block.hash(), "Receipt found");
                             todo!("Type conversion")
                         }
 
