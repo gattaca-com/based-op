@@ -1,12 +1,12 @@
 use std::{future::Future, sync::Arc};
 
 use alloy_consensus::{
-    BlockBody, Header, Receipt, Transaction, TxReceipt,
+    BlockBody, Header, Receipt, Transaction,
     transaction::{Recovered, SignerRecoverable, TransactionMeta},
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
 use alloy_primitives::{B256, BlockNumber, Bytes, Sealable};
-use alloy_rpc_types::{Block, Log, TransactionReceipt, state::StateOverride};
+use alloy_rpc_types::{Block, Log, TransactionReceipt};
 use arc_swap::ArcSwapOption;
 use bop_common::p2p::{EnvV0, FragV0};
 use op_alloy_consensus::{OpReceiptEnvelope, OpTxEnvelope};
