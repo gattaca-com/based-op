@@ -36,7 +36,7 @@ pub struct UnsealedBlock {
     pub cumulative_blob_gas_used: u64,
 
     transaction_count: HashMap<Address, U256>,
-    transaction: Vec<Transaction>,
+    transactions: Vec<Transaction>,
     transaction_receipts: HashMap<B256, TransactionReceipt<OpReceiptEnvelope<Log>>>,
     state_overrides: Option<StateOverride>,
 
@@ -44,6 +44,7 @@ pub struct UnsealedBlock {
 }
 
 impl UnsealedBlock {
+    /// Create a fresh unsealed block state for `env` with empty frags/results/caches.
     pub fn new(env: EnvV0) -> Self {
         Self {
             env,
@@ -55,7 +56,7 @@ impl UnsealedBlock {
             cumulative_gas_used: 0,
             cumulative_blob_gas_used: 0,
             transaction_count: Default::default(),
-            transaction: vec![],
+            transactions: vec![],
             transaction_receipts: Default::default(),
             state_overrides: None,
             db_cache: Default::default(),
@@ -80,12 +81,12 @@ impl UnsealedBlock {
         }
     }
 
-    /// Raw tx bytes iterator (flattening frags)
+    /// Raw tx bytes iterator (flattening frags).
     pub fn transactions_iter_bytes(&self) -> impl Iterator<Item = &TxBytes> + '_ {
         self.frags.iter().flat_map(|frag| frag.txs.iter())
     }
 
-    /// Decoded txs iterator (lazy decode)
+    /// Decoded txs iterator (lazy decode).
     pub fn transactions_iter_decoded(&self) -> impl Iterator<Item = Result<TxEnvelope, UnsealedBlockError>> + '_ {
         self.transactions_iter_bytes().enumerate().map(|(index, tx)| {
             // allocate a Vec<u8> to decode from
@@ -94,17 +95,17 @@ impl UnsealedBlock {
         })
     }
 
-    /// Decoded txs (allocates Vec), like Go `Transactions()` but decoded
+    /// Decoded txs (allocates Vec), like Go `Transactions()` but decoded.
     pub fn transactions(&self) -> Result<Vec<TxEnvelope>, UnsealedBlockError> {
         self.transactions_iter_decoded().collect()
     }
 
-    /// Raw tx bytes (allocates Vec<Vec<u8>>), like Go `ByteTransactions()`
+    /// Raw tx bytes (allocates Vec<Vec<u8>>), like Go `ByteTransactions()`.
     pub fn byte_transactions(&self) -> Vec<Vec<u8>> {
         self.transactions_iter_bytes().map(|tx| tx.iter().copied().collect::<Vec<u8>>()).collect()
     }
 
-    // Return the last frag on the list.
+    /// Return the last fragment in the list (if any).
     pub fn last_frag(&self) -> Option<&FragV0> {
         self.frags.last()
     }
@@ -184,11 +185,13 @@ impl UnsealedBlock {
         *self = Self::new(env);
     }
 
+    /// Attach/replace the DB cache to carry execution overlay state forward.
     pub fn with_db_cache(mut self, cache: Cache) -> Self {
         self.db_cache = cache;
         self
     }
 
+    /// Attach/replace the state overrides that represent the current overlay diff.
     pub fn with_state_overrides(mut self, state_overrides: Option<StateOverride>) -> Self {
         self.state_overrides = state_overrides;
         self
@@ -199,6 +202,7 @@ impl UnsealedBlock {
         self.db_cache.clone()
     }
 
+    /// Clone this unsealed block into a mutable working copy for in-place updates.
     pub fn clone_for_update(&self) -> Self {
         Self {
             env: self.env.clone(),
@@ -210,7 +214,7 @@ impl UnsealedBlock {
             cumulative_gas_used: self.cumulative_gas_used,
             cumulative_blob_gas_used: self.cumulative_blob_gas_used,
             transaction_count: Default::default(),
-            transaction: vec![],
+            transactions: vec![],
             db_cache: self.db_cache.clone(),
             state_overrides: self.state_overrides.clone(),
             transaction_receipts: Default::default(),
@@ -251,6 +255,7 @@ impl UnsealedBlock {
         Some(account.info.balance)
     }
 
+    /// Return a decoded header snapshot derived from the current env + local counters.
     pub fn get_header(&self) -> Header {
         let last_frag_number = match self.frags.last() {
             Some(frag) => frag.block_number,
@@ -281,11 +286,36 @@ impl UnsealedBlock {
         }
     }
 
-    /// Convert current unsealed block into RpcBlock
+    /// Append a fully materialized transaction to the RPC `transactions` list.
+    pub(crate) fn with_transaction(&mut self, transaction: Transaction) -> &Self {
+        self.transactions.push(transaction);
+        self
+    }
+
+    /// Insert/replace the receipt for `tx_hash` in the per-tx receipt map.
+    pub(crate) fn with_transaction_receipt(
+        &mut self,
+        tx_hash: B256,
+        receipt: TransactionReceipt<OpReceiptEnvelope<Log>>,
+    ) -> &Self {
+        self.transaction_receipts.insert(tx_hash, receipt);
+        self
+    }
+
+    /// Increment the locally tracked nonce for `sender` after accepting a tx.
+    pub(crate) fn increment_nonce(&mut self, sender: Address) -> &Self {
+        let zero = U256::from(0);
+        let current_count = self.transaction_count.get(&sender).unwrap_or(&zero);
+
+        _ = self.transaction_count.insert(sender, *current_count + U256::from(1));
+        self
+    }
+
+    /// Convert current unsealed block into RpcBlock.
     pub fn to_block(&self, full: bool) -> RpcBlock<Optimism> {
         let header = self.get_header();
         let header = header.clone().seal_slow();
-        let block_transactions = self.transaction.clone();
+        let block_transactions = self.transactions.clone();
 
         let transactions = if full {
             BlockTransactions::Full(block_transactions)
