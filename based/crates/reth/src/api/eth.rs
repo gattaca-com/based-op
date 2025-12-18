@@ -94,6 +94,13 @@ pub struct EthApi<Eth: EthApiTypes> {
     pub canonical: Eth,
     pub eth_filter: EthFilter<Eth>,
     pub unsealed_state: (),
+    pub unsealed_as_latest: bool,
+}
+
+impl<Eth: EthApiTypes> EthApi<Eth> {
+    fn use_unsealed_state(&self, number: &impl Tag) -> bool {
+        (self.unsealed_as_latest && number.is_latest()) || number.is_pending()
+    }
 }
 
 #[async_trait]
@@ -108,7 +115,7 @@ where
             block_number = ?number
         );
 
-        if number.is_pending() {
+        if self.use_unsealed_state(&number) {
             // TODO: Implement pending blocks
 
             EthBlocks::rpc_block(&self.canonical, BlockNumberOrTag::Latest.into(), full).await.map_err(Into::into)
@@ -139,7 +146,7 @@ where
             address = %address
         );
         let block_id = block_number.unwrap_or_default();
-        if block_id.is_pending() {
+        if self.use_unsealed_state(&block_id) {
             // TODO: Pending balance
         }
 
@@ -153,7 +160,7 @@ where
         );
 
         let block_id = block_number.unwrap_or_default();
-        if block_id.is_pending() {
+        if self.use_unsealed_state(&block_id) {
             todo!();
             // let pending_blocks = self.flashblocks_state.get_pending_blocks();
             // let canon_block = pending_blocks.get_canonical_block_number();
@@ -276,7 +283,7 @@ where
         let mut block_id = block_number.unwrap_or_default();
         let mut pending_overrides = EvmOverrides::default();
         // If the call is to pending block use cached override (if they exist)
-        if block_id.is_pending() {
+        if self.use_unsealed_state(&block_id) {
             // TODO:
             // let pending_blocks = self.flashblocks_state.get_pending_blocks();
             // block_id = pending_blocks.get_canonical_block_number().into();
@@ -315,7 +322,7 @@ where
         let mut block_id = block_number.unwrap_or_default();
         let mut pending_overrides = EvmOverrides::default();
         // If the call is to pending block use cached override (if they exist)
-        if block_id.is_pending() {
+        if self.use_unsealed_state(&block_id) {
             // TODO:
             // let pending_blocks = self.flashblocks_state.get_pending_blocks();
             // block_id = pending_blocks.get_canonical_block_number().into();
@@ -345,7 +352,7 @@ where
         let mut pending_overrides = EvmOverrides::default();
 
         // If the call is to pending block use cached override (if they exist)
-        if block_id.is_pending() {
+        if self.use_unsealed_state(&block_id) {
             // TODO:
             // let pending_blocks = self.flashblocks_state.get_pending_blocks();
             // block_id = pending_blocks.get_canonical_block_number().into();
@@ -385,7 +392,7 @@ where
         };
 
         // If toBlock is not pending, delegate to eth API
-        if !matches!(to_block, Some(BlockNumberOrTag::Pending)) {
+        if to_block.is_some_and(|block| !self.use_unsealed_state(&block)) {
             return self.eth_filter.logs(filter).await;
         }
 
@@ -473,5 +480,31 @@ where
             }
         }
         None
+    }
+}
+
+/// Helper trait for checking if a block number or id is latest or pending.
+trait Tag {
+    fn is_latest(&self) -> bool;
+    fn is_pending(&self) -> bool;
+}
+
+impl Tag for BlockNumberOrTag {
+    fn is_latest(&self) -> bool {
+        self.is_latest()
+    }
+
+    fn is_pending(&self) -> bool {
+        self.is_pending()
+    }
+}
+
+impl Tag for BlockId {
+    fn is_latest(&self) -> bool {
+        self.is_latest()
+    }
+
+    fn is_pending(&self) -> bool {
+        self.is_pending()
     }
 }

@@ -115,6 +115,7 @@ fn run_with_cli(cli: Cli<OpChainSpecParser, BasedOpRethArgs>) -> eyre::Result<()
                     canonical: ctx.registry.eth_api().clone(),
                     eth_filter: ctx.registry.eth_handlers().filter.clone(),
                     unsealed_state: (),
+                    unsealed_as_latest: args.based_op.unsealed_as_latest,
                 };
 
                 ctx.modules.replace_configured(eth.into_rpc())?;
