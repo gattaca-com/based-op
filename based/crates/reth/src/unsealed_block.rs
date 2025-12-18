@@ -1,10 +1,10 @@
 use alloy_consensus::{Header, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{B256, Bytes};
-use alloy_rpc_types::{Log, TransactionReceipt};
-use alloy_rpc_types::state::StateOverride;
-use reth_revm::db::Cache;
+use alloy_rpc_types::{Log, TransactionReceipt, state::StateOverride};
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
+use op_alloy_consensus::OpReceiptEnvelope;
+use reth_revm::db::Cache;
 
 use crate::error::UnsealedBlockError;
 
@@ -23,7 +23,7 @@ pub struct UnsealedBlock {
     pub hash: B256,
 
     /// Transaction receipts for executed transactions.
-    pub receipts: Vec<TransactionReceipt>,
+    pub receipts: Vec<TransactionReceipt<OpReceiptEnvelope<Log>>>,
     /// Flattened logs emitted during execution.
     pub logs: Vec<Log>,
     /// Cumulative execution gas used across all transactions in the block.
@@ -101,10 +101,19 @@ impl UnsealedBlock {
     /// Apply the accepted frag into in-memory bookkeeping (NOT executing txs).
     ///
     /// Execution results (receipts/logs/gas) should be appended separately.
-    pub fn accept_frag(&mut self, f: FragV0) {
+    pub fn accept_frag_execution(
+        &mut self,
+        f: FragV0,
+        logs: Vec<Log>,
+        receipts: Vec<TransactionReceipt<OpReceiptEnvelope<Log>>>,
+        cummulative_gas_used: u64,
+    ) {
         self.last_sequence_number = Some(f.seq);
         self.cumulative_blob_gas_used = self.cumulative_blob_gas_used.saturating_add(f.blob_gas_used);
-        self.frags.push(f);
+        self.frags.push(f.clone());
+        self.logs.extend_from_slice(logs.as_slice());
+        self.receipts.extend_from_slice(receipts.as_slice());
+        self.cumulative_gas_used = cummulative_gas_used;
     }
 
     /// Validate frag against current state (equivalent to your ValidateNewFragV0 + sequencing gate).
@@ -164,19 +173,19 @@ impl UnsealedBlock {
         *self = Self::new(env);
     }
 
-    pub(crate) fn with_db_cache(&mut self, cache: Cache) -> &Self {
+    pub fn with_db_cache(mut self, cache: Cache) -> Self {
         self.db_cache = cache;
+        self
+    }
+
+    pub fn with_state_overrides(mut self, state_overrides: Option<StateOverride>) -> Self {
+        self.state_overrides = state_overrides;
         self
     }
 
     /// Returns the database cache.
     pub fn get_db_cache(&self) -> Cache {
         self.db_cache.clone()
-    }
-
-    pub(crate) fn with_state_overrides(&mut self, state_overrides: StateOverride) -> &Self {
-        self.state_overrides = Some(state_overrides);
-        self
     }
 
     /// Returns the state overrides for the pending state.

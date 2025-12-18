@@ -35,6 +35,8 @@ reth-optimism-chainspec = { git = "https://github.com/gattaca-com/based-op-reth"
 reth-optimism-cli = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-cli" }
 reth-optimism-consensus = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-consensus" }
 reth-optimism-evm = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-evm" }
+reth-optimism-rpc = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-rpc" }
+reth-rpc-convert = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-rpc-convert" }
 reth-optimism-forks = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-forks" }
 reth-optimism-node = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-node" }
 reth-optimism-payload-builder = { git = "https://github.com/gattaca-com/based-op-reth", rev = "b053849462eb48e61b24d965cfee59cead7f8a3b", package = "reth-optimism-payload-builder" }

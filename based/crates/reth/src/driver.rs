@@ -8,7 +8,7 @@ use tracing::{error, info};
 
 use crate::{
     error::{DriverError, ValidateSealError},
-    exec::{UnsealedExecutor, apply_exec_output},
+    exec::UnsealedExecutor,
     unsealed_block::UnsealedBlock,
 };
 
@@ -222,17 +222,14 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             return Err(DriverError::from(e));
         }
 
-        let out = match self.exec.execute_frag(ub, &frag).await {
-            Ok(out) => out,
+        match self.exec.execute_frag(&frag).await {
+            Ok(()) => (),
             Err(e) => {
                 error!(error = %e, "execution failed, discarding unsealed block");
                 self.reset_current_unsealed_block();
                 return Err(DriverError::from(e));
             }
         };
-
-        apply_exec_output(ub, out);
-        ub.accept_frag(frag);
 
         info!(elapsed_ms = start.elapsed().as_millis(), "frag inserted + executed");
 
