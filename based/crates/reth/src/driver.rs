@@ -11,7 +11,7 @@ use tracing::{error, info};
 
 use crate::{
     error::{DriverError, ValidateSealError},
-    exec::{UnsealedExecutor, apply_exec_output},
+    exec::{NoopExecutor, UnsealedExecutor, apply_exec_output},
     unsealed_block::UnsealedBlock,
 };
 
@@ -89,6 +89,15 @@ pub struct DriverInner<E: UnsealedExecutor> {
 }
 
 impl Driver {
+    pub fn new(unsealed_as_latest: bool) -> Self {
+        Self::spawn(DriverInner {
+            enabled_unsealed_as_latest: unsealed_as_latest,
+            current_unsealed_block: None,
+            exec: NoopExecutor,
+            fcu_count_since_unseal_reset: 0,
+        })
+    }
+
     /// Spawns the driver actor task and returns a handle used to send commands to it.
     pub fn spawn<E: UnsealedExecutor + 'static>(inner: DriverInner<E>) -> Self {
         let (tx, mut rx) = mpsc::channel::<Cmd>(256);

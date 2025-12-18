@@ -8,7 +8,6 @@ use reth_optimism_node::{OpNode, args::RollupArgs};
 use crate::{
     api::engine::{BasedEngineApi, BasedEngineApiServer as _},
     driver::Driver,
-    exec::NoopExecutor,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -20,11 +19,15 @@ pub struct BasedOpRethArgs {
 }
 
 #[derive(Parser, Debug, Clone)]
-pub struct BasedOpArgs {}
+pub struct BasedOpArgs {
+    /// Whether to use the unsealed block as the "latest" state in RPC calls.
+    #[arg(long)]
+    unsealed_as_latest: bool,
+}
 
 pub fn run() -> eyre::Result<()> {
     Cli::<OpChainSpecParser, BasedOpRethArgs>::parse().run(|builder, args| async move {
-        let driver = Driver::spawn::<NoopExecutor>(todo!("Initialize driver"));
+        let driver = Driver::new(args.based_op.unsealed_as_latest);
 
         let op_node = OpNode::new(args.rollup.clone());
 
