@@ -1,8 +1,14 @@
 use alloy_consensus::{Header, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
-use alloy_primitives::{B256, Bytes};
-use alloy_rpc_types::{Log, TransactionReceipt};
+use alloy_primitives::{Address, B256, Bytes, Sealable, TxHash, U256, map::foldhash::HashMap};
+use alloy_rpc_types::{BlockTransactions, Log, TransactionReceipt, state::StateOverride};
+use alloy_rpc_types_eth::Header as RPCHeader;
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
+use op_alloy_consensus::OpReceiptEnvelope;
+use op_alloy_network::{Optimism, TransactionResponse};
+use op_alloy_rpc_types::Transaction;
+use reth::revm::db::Cache;
+use reth_rpc_eth_api::RpcBlock;
 
 use crate::error::UnsealedBlockError;
 
@@ -28,6 +34,13 @@ pub struct UnsealedBlock {
     pub cumulative_gas_used: u64,
     /// Cumulative blob gas used across all blob-carrying transactions in the block.
     pub cumulative_blob_gas_used: u64,
+
+    transaction_count: HashMap<Address, U256>,
+    transaction: Vec<Transaction>,
+    transaction_receipts: HashMap<B256, TransactionReceipt<OpReceiptEnvelope<Log>>>,
+    state_overrides: Option<StateOverride>,
+
+    db_cache: Cache,
 }
 
 impl UnsealedBlock {
@@ -41,6 +54,11 @@ impl UnsealedBlock {
             logs: Vec::new(),
             cumulative_gas_used: 0,
             cumulative_blob_gas_used: 0,
+            transaction_count: Default::default(),
+            transaction: vec![],
+            transaction_receipts: Default::default(),
+            state_overrides: None,
+            db_cache: Default::default(),
         }
     }
 
@@ -155,5 +173,86 @@ impl UnsealedBlock {
     /// Reset to a fresh env (drop frags/results/counters).
     pub fn reset_to_env(&mut self, env: EnvV0) {
         *self = Self::new(env);
+    }
+
+    /// Returns a cloned list of unsealed logs collected so far.
+    pub fn get_unsealed_logs(self) -> Vec<Log> {
+        self.logs.clone()
+    }
+
+    /// Returns a cloned list of fragments accepted into this unsealed block.
+    pub fn get_unsealed_frags(self) -> Vec<FragV0> {
+        self.frags.clone()
+    }
+
+    /// Looks up and returns a cloned transaction receipt by transaction hash, if present.
+    pub fn get_transaction_receipt(self, tx_hash: B256) -> Option<TransactionReceipt<OpReceiptEnvelope<Log>>> {
+        self.transaction_receipts.get(&tx_hash).cloned()
+    }
+
+    /// Returns a cloned copy of the current state overrides, if any are set.
+    pub fn get_state_overrides(self) -> Option<StateOverride> {
+        self.state_overrides.clone()
+    }
+
+    /// Returns the locally tracked transaction count (nonce) for `address`, or zero if unknown.
+    pub fn get_transaction_count(self, address: Address) -> U256 {
+        self.transaction_count.get(&address).cloned().unwrap_or(U256::from(0))
+    }
+
+    /// Returns the cached balance for `address` from the DB cache, if the account is present.
+    pub fn get_balance(self, address: Address) -> Option<U256> {
+        let Some(account) = self.db_cache.accounts.get(&address) else {
+            return None;
+        };
+
+        Some(account.info.balance)
+    }
+
+    /// Convert current unsealed block into RpcBlock
+    pub fn to_block(&self, full: bool) -> RpcBlock<Optimism> {
+        let last_frag_number = match self.frags.last() {
+            Some(frag) => (frag.block_number),
+            None => 0,
+        };
+        let header = Header {
+            parent_hash: self.env.parent_hash,
+            ommers_hash: Default::default(),
+            beneficiary: self.env.beneficiary,
+            state_root: B256::ZERO,
+            transactions_root: B256::ZERO,
+            receipts_root: B256::ZERO,
+            logs_bloom: Default::default(),
+            difficulty: self.env.difficulty,
+            number: last_frag_number,
+            gas_limit: self.env.gas_limit,
+            gas_used: self.cumulative_gas_used,
+            timestamp: self.env.timestamp,
+            extra_data: Default::default(),
+            mix_hash: self.env.prevrandao,
+            nonce: Default::default(),
+            base_fee_per_gas: Some(self.env.basefee),
+            withdrawals_root: None,
+            blob_gas_used: Some(self.cumulative_blob_gas_used),
+            excess_blob_gas: Some(0),
+            parent_beacon_block_root: Some(self.env.parent_beacon_block_root),
+            requests_hash: None,
+        };
+        let header = header.clone().seal_slow();
+        let block_transactions = self.transaction.clone();
+
+        let transactions = if full {
+            BlockTransactions::Full(block_transactions)
+        } else {
+            let tx_hashes: Vec<TxHash> = block_transactions.iter().map(|tx| tx.tx_hash()).collect();
+            BlockTransactions::Hashes(tx_hashes)
+        };
+
+        RpcBlock::<Optimism> {
+            header: RPCHeader::from_consensus(header, None, None),
+            transactions,
+            uncles: Vec::new(),
+            withdrawals: None,
+        }
     }
 }

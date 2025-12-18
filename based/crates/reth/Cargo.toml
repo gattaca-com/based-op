@@ -33,3 +33,5 @@ reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3
 reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-rpc = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-rpc-eth-api = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+op-alloy-consensus = "0.22.1"
+alloy-rpc-types-eth = "1.1.3"
