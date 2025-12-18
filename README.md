@@ -59,7 +59,7 @@ A couple of commands tend to come in handy (from the top `based-op` directory):
 
 ### Add/Update based-gateways to Registry
 
-When a based-gateway is started with `just follower-node start`, it will register itself to the Registry behind the `PORTAL`. For now, the Registry is kept in a simple json file in `.local_main_node/config/registry.json`. You can add/update/remove gateways there, the Registry and Portal will pick up on the changes every minute.
+When a based-gateway is started with `just follower-node start`, it will register itself directly to the Registry (via `REGISTRY`, default `http://localhost:8082`). For now, the Registry is kept in a simple json file in `.local_main_node/config/registry.json`. You can add/update/remove gateways there, and the Registry/Portal will pick up on the changes every minute.
 
 If you have started both the main sequencing node and the gateway on the same machine, you might need to change the ip to `0.0.0.0`, by default `curl ifconfig.me` is used to populate
 your url.

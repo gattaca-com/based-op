@@ -29,6 +29,7 @@ L2_CHAIN_ID?=$(shell \
 )
 L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
 PORTAL?=http://0.0.0.0:8080
+REGISTRY?=http://0.0.0.0:8082
 TXPROXY?=http://0.0.0.0:8090
 L1_RPC_URL?=https://ethereum-sepolia-rpc.publicnode.com
 L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
@@ -129,6 +130,7 @@ start-based-gateway: create-network
 	  echo "Gateway Sequencing Wallet:      $(GATEWAY_SEQUENCING_ADDRESS)"; \
 	  { \
 	    echo "PORTAL=$(PORTAL)"; \
+	    echo "REGISTRY=$(REGISTRY)"; \
 	    echo "OP_NODE_GOSSIP_IP=$(PUBLIC_IP)"; \
 	    echo "GATEWAY_SEQUENCING_KEY=$(GATEWAY_SEQUENCING_KEY)"; \
 	    echo "MAIN_OP_NODE_GOSSIP_STATIC=$$(curl -s -X POST -H 'Content-Type: application/json' \
@@ -193,13 +195,12 @@ start-based-gateway: create-network
       echo "Calling registerGateway method via JSON-RPC:"; \
       GATEWAY_URL=http://$(PUBLIC_IP):$$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' .local_gateway_and_follower/.env | cut -d= -f2); \
       GATEWAY_ADDRESS=$$wallet; \
-      JWT=$$(cat .local_gateway_and_follower/config/jwt); \
-      curl -X POST "$(PORTAL)" \
+      curl -X POST "$(REGISTRY)" \
         -H "Content-Type: application/json" \
         -d "{\"jsonrpc\":\"2.0\", \
              \"method\":\"registry_registerGateway\", \
              \"params\":[ \
-               [\"$$GATEWAY_URL\", \"$(GATEWAY_SEQUENCING_ADDRESS)\", \"$$JWT\"] \
+               [\"$$GATEWAY_URL\", \"$(GATEWAY_SEQUENCING_ADDRESS)\"] \
              ], \
              \"id\":1}"; \
       echo; echo
@@ -209,7 +210,7 @@ start-based-gateway: create-network
 	$(MAKE) start-overseer
 
 start-overseer: 
-	docker exec -it based-gateway overseer --portal-url $(PORTAL) --rich-wallet-key $(DUMMY_RICH_WALLET_PRIVATE_KEY)
+	docker exec -it based-gateway overseer --portal-url $(PORTAL) --registry-url $(REGISTRY) --rich-wallet-key $(DUMMY_RICH_WALLET_PRIVATE_KEY)
 
 # start spamoor as a foreground process
 start-spamoor:

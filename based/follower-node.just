@@ -18,6 +18,7 @@ export FOLLOWER_NODE_DIR := join(justfile_directory(), "..", "follower_node")
 
 # External environment configuration
 export PORTAL := shell("echo ${PORTAL:-$(" + portal + " address)}")
+export REGISTRY := shell("echo ${REGISTRY:-$(" + registry + " address)}")
 
 # Force config creation
 export FORCE := env("FORCE", "")
@@ -32,6 +33,7 @@ PORTAL_TIMEOUT := env("PORTAL_TIMEOUT", "30")
 self := "just -f " + justfile()
 parent := "just -f " + join(justfile_directory(), "..", "Justfile")
 portal := "just -f " + join(justfile_directory(), "portal.just")
+registry := "just -f " + join(justfile_directory(), "registry.just")
 wallet := "just -f " + join(justfile_directory(), "scripts", "wallet.just")
 link := "just -f " + join(justfile_directory(), "scripts", "link.just")
 
@@ -45,6 +47,7 @@ _generate-dotenv gossip enr enode $dotenv=join(FOLLOWER_NODE_DATA, ".env"):
     l2_chain_id=$({{portal}} l2_chain_id)
 
     echo "PORTAL=$PORTAL" >> $dotenv
+    echo "REGISTRY=$REGISTRY" >> $dotenv
     echo "OP_NODE_GOSSIP_IP=$PUBLIC_IP" >> $dotenv
     echo "GATEWAY_SEQUENCING_KEY=$GATEWAY_SEQUENCING_KEY" >> $dotenv
     echo "MAIN_OP_NODE_GOSSIP_STATIC={{gossip}}" >> $dotenv
@@ -188,10 +191,8 @@ start-dev $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (doc
     port=$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' $dotenv | cut -d= -f2)
 
     address=$({{wallet}} address {{WALLET_NAME}})
-    jwt=$(cat $FOLLOWER_NODE_DATA/config/jwt) 
-
     echo "Registering gateway"
-    {{portal}} register-gateway "http://$ip:$port" "$address" "$jwt"
+    {{registry}} register-gateway "http://$ip:$port" "$address"
 
     # Start services
     echo "Starting gateway and monitoring services..."

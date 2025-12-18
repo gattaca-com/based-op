@@ -26,11 +26,6 @@ l2_chain_id: (_rpc "portal_l2ChainId")
 rollup: (_rpc "portal_fileRollup")
 genesis: (_rpc "portal_fileGenesis")
 
-@register-gateway url address: 
-    # The portal returns null on success so we remove the -e flag
-    JQ_ARGS="" {{self}} _rpc "registry_registerGateway" \
-      "[[\"{{url}}\", \"{{address}}\"]]"
-
 # Start the portal service and view logs (for main sequencing node)
 start:
     #!/usr/bin/env bash

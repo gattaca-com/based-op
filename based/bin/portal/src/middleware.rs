@@ -24,7 +24,6 @@ use crate::clients::{AuthRpcClient, RpcClient};
 pub struct EngineApiProxy<S> {
     pub inner: S,
     pub geth_client: AuthRpcClient,
-    pub registry_client: RpcClient,
     pub op_node_client: RpcClient,
     pub metrics: Producer<MetricsUpdate>,
 }
@@ -42,7 +41,6 @@ where
         let inner = self.inner.clone();
         let method = req.method_name().to_string();
         let fallback_client = self.geth_client.clone();
-        let registry_client = self.registry_client.clone();
         let op_node_client = self.op_node_client.clone();
 
         let uuid = uuid();
@@ -66,11 +64,6 @@ where
                     let res = external_call(fallback_client.clone(), &req).await;
                     inner.call(req).await;
                     res
-                }
-                Some(("registry", _)) => {
-                    debug!(method = %method, "Received request in RegistryApiProxy");
-                    MetricsUpdate::send_ref(uuid, Metric::IncrementCounter(Counter::RegistryApiRequests, 1), &metrics);
-                    external_call(registry_client.clone(), &req).await
                 }
                 Some(("optimism", _)) | Some(("opp2p", _)) => {
                     debug!(method = %method, "Received request for OP node");
