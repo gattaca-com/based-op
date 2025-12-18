@@ -219,13 +219,13 @@ where
 }
 
 fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<OpBlock, ExecError> {
-    // Decode EIP-2718 tx bytes -> OpTxEnvelope
+    // Decode EIP-2718 tx bytes -> OpTransactionSigned
     let tx_list: Vec<OpTransactionSigned> = frag
         .txs
         .iter()
         .enumerate()
         .map(|(_, tx_bytes)| {
-            let mut slice = tx_bytes.as_ref(); // &[u8]
+            let mut slice = tx_bytes.as_ref();
 
             let eth_env = TxEnvelope::decode_2718_exact(&mut slice)
                 .map_err(|e| ExecError::Failed(format!("decode tx failed: {e}")))?;
@@ -238,63 +238,35 @@ fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<
         })
         .collect::<Result<Vec<_>, ExecError>>()?;
 
-    // Convert EnvV0.extra_data (VariableList<u8, _>) -> Bytes for the header.
     let extra_data: Bytes = Bytes::copy_from_slice(ub.env.extra_data.as_ref());
-
-    // Like your Go code, these roots/bloom are left "empty"/default because this is
-    // a synthetic block used for execution context + bookkeeping.
     let header = Header {
         parent_hash: ub.env.parent_hash,
-
-        // Go: UncleHash = EmptyUncleHash (we'll keep defaults unless you have constants)
         ommers_hash: Default::default(),
-
         beneficiary: ub.env.beneficiary,
-
-        // Go: Root/TxHash/ReceiptHash/Bloom are empty in InsertNewFrag
         state_root: B256::ZERO,
         transactions_root: B256::ZERO,
         receipts_root: B256::ZERO,
         logs_bloom: Default::default(),
-
         difficulty: ub.env.difficulty,
         number: frag.block_number,
         gas_limit: ub.env.gas_limit,
-
-        // Go: GasUsed = currentUnsealedBlock.CumulativeGasUsed
         gas_used: ub.cumulative_gas_used,
-
         timestamp: ub.env.timestamp,
         extra_data,
-
-        // Go: MixDigest = Prevrandao
         mix_hash: ub.env.prevrandao,
-
         nonce: Default::default(),
-
-        // Go: BaseFee = currentUnsealedBlock.Env.Basefee
         base_fee_per_gas: Some(ub.env.basefee),
-
-        // If you want to mirror Go’s “empty withdrawals list”, set `withdrawals: Some(vec![])`
-        // and set withdrawals_root accordingly (if you have the empty-withdrawals root constant).
         withdrawals_root: None,
-
-        // Go: BlobGasUsed = &currentUnsealedBlock.CumulativeBlobGasUsed
         blob_gas_used: Some(ub.cumulative_blob_gas_used),
-
-        // Go: ExcessBlobGas = new(uint64) (i.e. 0)
         excess_blob_gas: Some(0),
-
         parent_beacon_block_root: Some(ub.env.parent_beacon_block_root),
-
-        // post-requests fields
         requests_hash: None,
     };
 
     let body = BlockBody {
         transactions: tx_list,
         ommers: vec![],
-        withdrawals: None, // or Some(vec![]) if you want an explicit empty list
+        withdrawals: None,
     };
 
     Ok(OpBlock::new(header, body))
