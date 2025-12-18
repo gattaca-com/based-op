@@ -2,6 +2,8 @@ use alloy_consensus::{Header, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types::{Log, TransactionReceipt};
+use alloy_rpc_types::state::StateOverride;
+use reth_revm::db::Cache;
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
 
 use crate::error::UnsealedBlockError;
@@ -28,6 +30,9 @@ pub struct UnsealedBlock {
     pub cumulative_gas_used: u64,
     /// Cumulative blob gas used across all blob-carrying transactions in the block.
     pub cumulative_blob_gas_used: u64,
+
+    db_cache: Cache,
+    state_overrides: Option<StateOverride>,
 }
 
 impl UnsealedBlock {
@@ -41,6 +46,8 @@ impl UnsealedBlock {
             logs: Vec::new(),
             cumulative_gas_used: 0,
             cumulative_blob_gas_used: 0,
+            db_cache: Cache::default(),
+            state_overrides: None,
         }
     }
 
@@ -155,5 +162,25 @@ impl UnsealedBlock {
     /// Reset to a fresh env (drop frags/results/counters).
     pub fn reset_to_env(&mut self, env: EnvV0) {
         *self = Self::new(env);
+    }
+
+    pub(crate) fn with_db_cache(&mut self, cache: Cache) -> &Self {
+        self.db_cache = cache;
+        self
+    }
+
+    /// Returns the database cache.
+    pub fn get_db_cache(&self) -> Cache {
+        self.db_cache.clone()
+    }
+
+    pub(crate) fn with_state_overrides(&mut self, state_overrides: StateOverride) -> &Self {
+        self.state_overrides = Some(state_overrides);
+        self
+    }
+
+    /// Returns the state overrides for the pending state.
+    pub fn get_state_overrides(&self) -> Option<StateOverride> {
+        self.state_overrides.clone()
     }
 }

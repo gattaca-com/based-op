@@ -1,5 +1,9 @@
+use alloy_consensus::crypto::RecoveryError;
 use alloy_eips::eip2718::Eip2718Error;
 use alloy_primitives::B256;
+use reth_optimism_evm::OpBlockExecutionError;
+use reth_storage_errors::ProviderError;
+use op_alloy_consensus::EIP1559ParamError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -93,4 +97,20 @@ pub enum ExecError {
 
     #[error("seal failed: {0}")]
     SealFailed(String),
+
+
+    #[error(transparent)]
+    StorageProvider(#[from] ProviderError),
+
+
+    #[error(transparent)]
+    OpBlockExecution(#[from] OpBlockExecutionError),
+
+
+    #[error(transparent)]
+    Recovery(#[from] RecoveryError),
+
+
+    #[error(transparent)]
+    Eip1559Param(#[from] EIP1559ParamError),
 }
