@@ -1,7 +1,7 @@
 use std::{future::Future, sync::Arc};
 
 use alloy_consensus::{
-    BlockBody, Header, Receipt, TxReceipt,
+    BlockBody, Header, Receipt,
     transaction::{Recovered, SignerRecoverable, TransactionMeta},
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};

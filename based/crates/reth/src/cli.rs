@@ -1,6 +1,8 @@
+use std::sync::{Arc, OnceLock};
+
 use clap::Parser;
 use futures::TryStreamExt as _;
-use reth::providers::CanonStateSubscriptions as _;
+use reth::providers::{CanonStateSubscriptions as _, providers::BlockchainProvider};
 use reth_exex::ExExEvent;
 use reth_node_builder::Node;
 use reth_optimism_cli::{Cli, chainspec::OpChainSpecParser};
@@ -54,20 +56,21 @@ where
 /// Internal helper that runs the node with a parsed CLI instance.
 fn run_with_cli(cli: Cli<OpChainSpecParser, BasedOpRethArgs>) -> eyre::Result<()> {
     cli.run(|builder, args| async move {
-        let driver = Driver::new(args.based_op.unsealed_as_latest);
+        let driver = Arc::new(OnceLock::<Driver>::new());
 
         let op_node = OpNode::new(args.rollup.clone());
 
         let node_handle = builder
-            .with_types::<OpNode>()
+            .with_types_and_provider::<OpNode, BlockchainProvider<_>>()
             .with_components(op_node.components())
             .with_add_ons(op_node.add_ons())
             // Install the execution extension to handle canonical chain updates
             .install_exex("based-op", {
                 // Get a clone of the driver handle.
-                let driver = driver.clone();
+                let driver = Arc::clone(&driver);
                 move |mut ctx| async move {
                     Ok(async move {
+                        let driver = driver.get_or_init(|| Driver::new(ctx.provider().clone()));
                         while let Some(note) = ctx.notifications.try_next().await? {
                             // TODO: Handle reorged and reverted chains?
                             if let Some(committed) = note.committed_chain() {
@@ -84,45 +87,48 @@ fn run_with_cli(cli: Cli<OpChainSpecParser, BasedOpRethArgs>) -> eyre::Result<()
                     })
                 }
             })
-            .extend_rpc_modules(move |ctx| {
-                let provider = ctx.provider().clone();
+            .extend_rpc_modules({
+                let driver = driver.clone();
+                move |ctx| {
+                    let provider = ctx.provider().clone();
 
-                let mut canon_stream = provider.subscribe_to_canonical_state();
+                    let mut canon_stream = provider.subscribe_to_canonical_state();
 
-                // NOTE: Not entirely sure why this is needed
-                // Ref: <https://github.com/base/node-reth/blob/7b97937fa6361f7a62f7bdb6d0cf6889c8fae87a/crates/test-utils/src/node.rs#L167-L172>
-                tokio::spawn(async move {
-                    while let Ok(notif) = canon_stream.recv().await {
-                        provider.canonical_in_memory_state().notify_canon_state(notif);
-                    }
-                });
+                    // NOTE: Not entirely sure why this is needed
+                    // Ref: <https://github.com/base/node-reth/blob/7b97937fa6361f7a62f7bdb6d0cf6889c8fae87a/crates/test-utils/src/node.rs#L167-L172>
+                    tokio::spawn(async move {
+                        while let Ok(notif) = canon_stream.recv().await {
+                            provider.canonical_in_memory_state().notify_canon_state(notif);
+                        }
+                    });
 
-                // Add based engine API modules to the existing auth module.
-                ctx.auth_module.merge_auth_methods(BasedEngineApi::new(driver).into_rpc())?;
+                    let driver = driver.get_or_init(|| Driver::new(ctx.provider().clone()));
 
-                // Print supported engine_ methods
-                let methods = ctx
-                    .auth_module
-                    .module_mut()
-                    .method_names()
-                    .filter(|m| m.starts_with("engine_"))
-                    .collect::<Vec<_>>();
+                    // Add based engine API modules to the existing auth module.
+                    ctx.auth_module.merge_auth_methods(BasedEngineApi::new(driver.clone()).into_rpc())?;
 
-                tracing::info!(supported_methods = ?methods, "Configured based engine API");
+                    // Print supported engine_ methods
+                    let methods = ctx
+                        .auth_module
+                        .module_mut()
+                        .method_names()
+                        .filter(|m| m.starts_with("engine_"))
+                        .collect::<Vec<_>>();
 
-                // Configure extended Eth API
-                let eth = EthApi {
-                    canonical: ctx.registry.eth_api().clone(),
-                    eth_filter: ctx.registry.eth_handlers().filter.clone(),
-                    unsealed_state: (),
-                    unsealed_as_latest: args.based_op.unsealed_as_latest,
-                };
+                    tracing::info!(supported_methods = ?methods, "Configured based engine API");
 
-                ctx.modules.replace_configured(eth.into_rpc())?;
+                    // Configure extended Eth API
+                    let eth = EthApi {
+                        canonical: ctx.registry.eth_api().clone(),
+                        eth_filter: ctx.registry.eth_handlers().filter.clone(),
+                        unsealed_state: (),
+                        unsealed_as_latest: args.based_op.unsealed_as_latest,
+                    };
 
-                // TODO:
-                // - Replace eth API
-                Ok(())
+                    ctx.modules.replace_configured(eth.into_rpc())?;
+
+                    Ok(())
+                }
             })
             .launch()
             .await?;

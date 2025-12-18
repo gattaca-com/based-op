@@ -253,7 +253,7 @@ impl UnsealedBlock {
 
     pub fn get_header(&self) -> Header {
         let last_frag_number = match self.frags.last() {
-            Some(frag) => (frag.block_number),
+            Some(frag) => frag.block_number,
             None => 0,
         };
         Header {
