@@ -22,11 +22,34 @@ pub struct BasedOpRethArgs {
 pub struct BasedOpArgs {
     /// Whether to use the unsealed block as the "latest" state in RPC calls.
     #[arg(long)]
-    unsealed_as_latest: bool,
+    pub unsealed_as_latest: bool,
 }
 
+impl BasedOpRethArgs {
+    pub fn test() -> Self {
+        Self { rollup: RollupArgs::default(), based_op: BasedOpArgs { unsealed_as_latest: true } }
+    }
+}
+
+/// Run the based-op-reth node to completion, parsing args from the command line.
 pub fn run() -> eyre::Result<()> {
-    Cli::<OpChainSpecParser, BasedOpRethArgs>::parse().run(|builder, args| async move {
+    run_with_cli(Cli::<OpChainSpecParser, BasedOpRethArgs>::parse())
+}
+
+/// Run the based-op-reth node with args parsed from the provided iterator.
+///
+/// This is useful for testing where you want to provide args programmatically.
+pub fn run_from_args<I, T>(args: I) -> eyre::Result<()>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    run_with_cli(Cli::<OpChainSpecParser, BasedOpRethArgs>::try_parse_from(args)?)
+}
+
+/// Internal helper that runs the node with a parsed CLI instance.
+fn run_with_cli(cli: Cli<OpChainSpecParser, BasedOpRethArgs>) -> eyre::Result<()> {
+    cli.run(|builder, args| async move {
         let driver = Driver::new(args.based_op.unsealed_as_latest);
 
         let op_node = OpNode::new(args.rollup.clone());
@@ -60,8 +83,6 @@ pub fn run() -> eyre::Result<()> {
                 ctx.auth_module
                     .merge_auth_methods(BasedEngineApi::new(driver).into_rpc())
                     .expect("failed to merge modules");
-                // TODO:
-                // - Replace / extend the engine API
                 // - Replace eth API
                 Ok(())
             })
