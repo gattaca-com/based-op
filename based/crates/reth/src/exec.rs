@@ -1,16 +1,12 @@
 use std::{future::Future, sync::Arc};
 
 use alloy_consensus::{
-    BlockBody, Header, Receipt, Transaction, TxEnvelope, TxReceipt,
+    BlockBody, Header, Receipt, TxEnvelope, TxReceipt,
     transaction::{Recovered, SignerRecoverable, TransactionMeta},
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
-use alloy_primitives::{B256, BlockNumber, Bytes, Sealable, utils::ParseUnits::U256};
-use alloy_rpc_types::{
-    Block, Log, TransactionReceipt,
-    engine::{ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3},
-    state::StateOverride,
-};
+use alloy_primitives::{B256, BlockNumber, Bytes, Sealable};
+use alloy_rpc_types::{Block, Log, TransactionReceipt, state::StateOverride};
 use arc_swap::ArcSwapOption;
 use bop_common::p2p::{EnvV0, FragV0};
 use op_alloy_consensus::OpReceiptEnvelope;
@@ -18,9 +14,7 @@ use reth_chainspec::{ChainSpecProvider, EthChainSpec};
 use reth_evm::{ConfigureEvm, Evm, op_revm::OpHaltReason};
 use reth_optimism_chainspec::OpHardforks;
 use reth_optimism_evm::{OpEvmConfig, OpNextBlockEnvAttributes};
-use reth_optimism_primitives::{
-    OpBlock, OpPrimitives, OpReceipt, OpTransactionSigned, serde_bincode_compat::transaction::OpTxEnvelope,
-};
+use reth_optimism_primitives::{OpBlock, OpPrimitives, OpReceipt, OpTransactionSigned};
 use reth_optimism_rpc::OpReceiptBuilder;
 use reth_revm::{
     DatabaseCommit, State,
@@ -196,9 +190,10 @@ where
             }
 
             db = evm.into_db();
-            let mut new_unsealed =
-                UnsealedBlock::new(ub.env.clone()).with_db_cache(db.cache).with_state_overrides(Some(state_overrides));
-            new_unsealed.accept_frag_execution(frag, logs, receipts, gas_used);
+            let mut next = ub.clone_for_update().with_db_cache(db.cache).with_state_overrides(Some(state_overrides));
+            next.accept_frag_execution(frag, logs, receipts, gas_used);
+
+            self.current_unsealed_block.store(Some(Arc::new(next)));
 
             Ok(())
         }
@@ -229,7 +224,7 @@ fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<
         .txs
         .iter()
         .enumerate()
-        .map(|(i, tx_bytes)| {
+        .map(|(_, tx_bytes)| {
             let mut slice = tx_bytes.as_ref(); // &[u8]
 
             let eth_env = TxEnvelope::decode_2718_exact(&mut slice)
@@ -315,7 +310,7 @@ fn split_execution_result(result: &ExecutionResult<OpHaltReason>) -> (bool, u64,
 
 fn wrap_op_receipt(
     tx_type: u8,
-    receipt: alloy_consensus::Receipt<alloy_primitives::Log>,
+    receipt: Receipt<alloy_primitives::Log>,
     deposit_nonce: Option<u64>,
     deposit_receipt_version: Option<u64>,
 ) -> Result<OpReceipt, ExecError> {

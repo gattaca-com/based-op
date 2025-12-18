@@ -192,4 +192,19 @@ impl UnsealedBlock {
     pub fn get_state_overrides(&self) -> Option<StateOverride> {
         self.state_overrides.clone()
     }
+
+    pub fn clone_for_update(&self) -> Self {
+        Self {
+            env: self.env.clone(),
+            frags: self.frags.clone(),
+            last_sequence_number: self.last_sequence_number,
+            hash: self.hash,
+            receipts: self.receipts.clone(),
+            logs: self.logs.clone(),
+            cumulative_gas_used: self.cumulative_gas_used,
+            cumulative_blob_gas_used: self.cumulative_blob_gas_used,
+            db_cache: self.db_cache.clone(),
+            state_overrides: self.state_overrides.clone(),
+        }
+    }
 }
