@@ -7,7 +7,7 @@ use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
 use op_alloy_consensus::{OpBlock, OpTxEnvelope};
 use op_alloy_network::{Optimism, TransactionResponse};
 use op_alloy_rpc_types::{OpTransactionReceipt, Transaction};
-use reth::revm::db::Cache;
+use reth::revm::db::{BundleState, Cache};
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_rpc_eth_api::RpcBlock;
 use tokio::sync::broadcast;
@@ -46,6 +46,7 @@ pub struct UnsealedBlock {
     new_block_sender: broadcast::Sender<RpcBlock<Optimism>>,
 
     db_cache: Cache,
+    bundle_state: BundleState,
 }
 
 impl UnsealedBlock {
@@ -69,6 +70,7 @@ impl UnsealedBlock {
             state_overrides: None,
             new_block_sender,
             db_cache: Default::default(),
+            bundle_state: Default::default(),
         }
     }
 
@@ -212,6 +214,12 @@ impl UnsealedBlock {
         self
     }
 
+    /// Attach/replace the bundle state to carry execution overlay state forward.
+    pub fn with_bundle_state(mut self, bundle_state: BundleState) -> Self {
+        self.bundle_state = bundle_state;
+        self
+    }
+
     /// Attach/replace the state overrides that represent the current overlay diff.
     pub fn with_state_overrides(mut self, state_overrides: Option<StateOverride>) -> Self {
         self.state_overrides = state_overrides;
@@ -221,6 +229,11 @@ impl UnsealedBlock {
     /// Returns the database cache.
     pub fn get_db_cache(&self) -> Cache {
         self.db_cache.clone()
+    }
+
+    /// Returns the bundle state.
+    pub fn get_bundle_state(&self) -> BundleState {
+        self.bundle_state.clone()
     }
 
     /// Clone this unsealed block into a mutable working copy for in-place updates.
@@ -235,12 +248,13 @@ impl UnsealedBlock {
             cumulative_gas_used: self.cumulative_gas_used,
             cumulative_blob_gas_used: self.cumulative_blob_gas_used,
             is_prague: self.is_prague,
-            transaction_count: Default::default(),
-            transactions: vec![],
+            transaction_count: self.transaction_count.clone(),
+            transactions: self.transactions.clone(),
             db_cache: self.db_cache.clone(),
             state_overrides: self.state_overrides.clone(),
             new_block_sender: self.new_block_sender.clone(),
-            transaction_receipts: Default::default(),
+            transaction_receipts: self.transaction_receipts.clone(),
+            bundle_state: self.bundle_state.clone(),
         }
     }
 

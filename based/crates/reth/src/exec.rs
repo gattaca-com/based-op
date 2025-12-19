@@ -22,10 +22,9 @@ use reth::{
 use reth_chainspec::{ChainSpecProvider, EthChainSpec, EthereumHardforks as _};
 use reth_evm::{ConfigureEvm, Evm, op_revm::OpHaltReason};
 use reth_optimism_chainspec::OpHardforks;
+use reth_optimism_consensus::isthmus;
 use reth_optimism_evm::{OpEvmConfig, OpNextBlockEnvAttributes};
-use reth_optimism_primitives::{
-    ADDRESS_L2_TO_L1_MESSAGE_PASSER, OpBlock, OpPrimitives, OpReceipt, OpTransactionSigned,
-};
+use reth_optimism_primitives::{OpBlock, OpPrimitives, OpReceipt, OpTransactionSigned};
 use reth_optimism_rpc::OpReceiptBuilder;
 use reth_revm::{
     DatabaseCommit, State,
@@ -92,7 +91,7 @@ where
         + DatabaseProviderFactory
         + Clone
         + 'static,
-    <Client as DatabaseProviderFactory>::ProviderRW: BlockWriter<Block = reth_optimism_primitives::OpBlock>,
+    <Client as DatabaseProviderFactory>::ProviderRW: BlockWriter<Block = OpBlock>,
 {
     fn ensure_env(&mut self, env: &EnvV0) -> Result<(), ExecError> {
         let Some(parent) = self.client.block_by_hash(env.parent_hash)? else {
@@ -295,7 +294,10 @@ where
         }
 
         db = evm.into_db();
-        ub = ub.with_db_cache(db.cache).with_state_overrides(Some(state_overrides));
+        ub = ub
+            .with_db_cache(db.cache)
+            .with_state_overrides(Some(state_overrides))
+            .with_bundle_state(db.db.bundle_state);
 
         ub.accept_frag_execution(frag, logs, receipts, gas_used);
 
@@ -307,8 +309,14 @@ where
     fn seal(&mut self) -> Result<(), ExecError> {
         let ub = self.current_unsealed_block.load_full().ok_or(ExecError::NotInitialized)?;
         let withdrawals_hash = if ub.is_prague {
-            let state = self.client.pending()?;
-            Some(state.storage_root(ADDRESS_L2_TO_L1_MESSAGE_PASSER, Default::default())?)
+            let canonical_block = ub.env.number.saturating_sub(1);
+
+            let state_provider =
+                self.client.state_by_block_number_or_tag(BlockNumberOrTag::Number(canonical_block)).map_err(|e| {
+                    ExecError::Failed(format!("state_by_block_number_or_tag({canonical_block}) failed: {e}"))
+                })?;
+            let bundle_state = ub.get_bundle_state();
+            Some(isthmus::withdrawals_root(&bundle_state, state_provider)?)
         } else {
             None
         };
