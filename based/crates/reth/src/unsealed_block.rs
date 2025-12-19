@@ -348,7 +348,7 @@ impl UnsealedBlock {
         }
     }
 
-    pub fn to_op_block(&self) -> Result<OpBlock, UnsealedBlockError> {
+    pub fn to_op_block(&self, withdrawals_hash: Option<B256>) -> Result<OpBlock, UnsealedBlockError> {
         // Decode EIP-2718 tx bytes -> OpTransactionSigned
         let tx_list: Vec<OpTransactionSigned> = self
             .frags
@@ -383,7 +383,7 @@ impl UnsealedBlock {
             mix_hash: self.env.prevrandao,
             nonce: Default::default(),
             base_fee_per_gas: Some(self.env.basefee),
-            withdrawals_root: None,
+            withdrawals_root: withdrawals_hash,
             blob_gas_used: Some(self.cumulative_blob_gas_used),
             excess_blob_gas: Some(0),
             parent_beacon_block_root: Some(self.env.parent_beacon_block_root),

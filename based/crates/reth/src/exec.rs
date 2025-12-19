@@ -20,7 +20,9 @@ use reth_chainspec::{ChainSpecProvider, EthChainSpec, EthereumHardforks as _};
 use reth_evm::{ConfigureEvm, Evm, op_revm::OpHaltReason};
 use reth_optimism_chainspec::OpHardforks;
 use reth_optimism_evm::{OpEvmConfig, OpNextBlockEnvAttributes};
-use reth_optimism_primitives::{OpBlock, OpPrimitives, OpReceipt, OpTransactionSigned};
+use reth_optimism_primitives::{
+    ADDRESS_L2_TO_L1_MESSAGE_PASSER, OpBlock, OpPrimitives, OpReceipt, OpTransactionSigned,
+};
 use reth_optimism_rpc::OpReceiptBuilder;
 use reth_revm::{
     DatabaseCommit, State,
@@ -285,7 +287,14 @@ where
 
     fn seal(&mut self) -> Result<(), ExecError> {
         let ub = self.current_unsealed_block.load_full().ok_or(ExecError::NotInitialized)?;
-        let block = ub.to_op_block()?;
+        let withdrawals_hash = if ub.is_prague {
+            let state = self.client.pending()?;
+            Some(state.storage_root(ADDRESS_L2_TO_L1_MESSAGE_PASSER, Default::default())?)
+        } else {
+            None
+        };
+
+        let block = ub.to_op_block(withdrawals_hash)?;
         let sealed = SealedBlock::seal_slow(block);
         let recovered = sealed.try_recover().map_err(|e| ExecError::Failed(format!("recover senders: {e}")))?;
 
