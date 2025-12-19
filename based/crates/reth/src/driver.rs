@@ -28,9 +28,10 @@ pub enum FragStatus {
 }
 
 /// Actor handle for sending unsealed-block commands to the driver task.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Driver {
     tx: mpsc::Sender<Cmd>,
+    unsealed_block: Arc<ArcSwapOption<UnsealedBlock>>,
 }
 
 impl From<mpsc::error::SendError<Cmd>> for DriverError {
@@ -69,6 +70,7 @@ fn respond<T>(resp: Resp<T>, res: Result<T, DriverError>) {
     });
 }
 
+#[derive(Debug)]
 enum Cmd {
     EnvV0 { env: EnvV0, resp: Resp<()> },
     NewFragV0 { frag: FragV0, resp: Resp<FragStatus> },
@@ -87,14 +89,13 @@ pub struct HeaderView {
 /// Essentially should be implemented using based-op-reth
 #[derive(Debug)]
 pub struct DriverInner<E: UnsealedExecutor> {
-    pub enabled_unsealed_as_latest: bool,
     pub current_unsealed_block: Arc<ArcSwapOption<UnsealedBlock>>,
     pub exec: E,
     pub fcu_count_since_unseal_reset: usize,
 }
 
 impl Driver {
-    pub fn new<Client>(unsealed_as_latest: bool, client: Client) -> Self
+    pub fn new<Client>(client: Client) -> Self
     where
         Client: StateProviderFactory
             + ChainSpecProvider<ChainSpec: EthChainSpec<Header = Header> + OpHardforks>
@@ -105,17 +106,14 @@ impl Driver {
         let executor = StateExecutor::new(client);
         let current_unsealed_block = executor.shared_unsealed_block();
 
-        Self::spawn(DriverInner {
-            enabled_unsealed_as_latest: unsealed_as_latest,
-            current_unsealed_block,
-            exec: executor,
-            fcu_count_since_unseal_reset: 0,
-        })
+        Self::spawn(DriverInner { current_unsealed_block, exec: executor, fcu_count_since_unseal_reset: 0 })
     }
 
     /// Spawns the driver actor task and returns a handle used to send commands to it.
     pub fn spawn<E: UnsealedExecutor + 'static>(inner: DriverInner<E>) -> Self {
+        info!(target: "based-op", "Spawning frag driver");
         let (tx, mut rx) = mpsc::channel::<Cmd>(256);
+        let unsealed_block = inner.current_unsealed_block.clone();
 
         tokio::spawn(async move {
             let mut inner = inner;
@@ -141,7 +139,12 @@ impl Driver {
             }
         });
 
-        Self { tx }
+        Self { tx, unsealed_block }
+    }
+
+    /// Returns a clone of the current unsealed block.
+    pub fn unsealed_block(&self) -> Arc<ArcSwapOption<UnsealedBlock>> {
+        Arc::clone(&self.unsealed_block)
     }
 
     /// Starts a new unsealed block execution context for the given environment.
@@ -250,7 +253,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             return Err(DriverError::from(e));
         }
 
-        match self.exec.execute_frag(&frag).await {
+        match self.exec.execute_frag(&frag) {
             Ok(()) => (),
             Err(e) => {
                 error!(error = %e, "execution failed, discarding unsealed block");
@@ -360,9 +363,6 @@ impl<E: UnsealedExecutor> DriverInner<E> {
     }
 
     fn get_header_view(&self) -> HeaderView {
-        if !self.enabled_unsealed_as_latest {
-            return HeaderView { enabled: false, header: None };
-        }
         let header = match self.current_unsealed_block.load_full() {
             Some(ub) => Some(ub.get_header()),
             None => None,

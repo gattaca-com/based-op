@@ -1,14 +1,14 @@
 use alloy_consensus::{Header, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, B256, Bytes, Sealable, TxHash, U256, map::foldhash::HashMap};
-use alloy_rpc_types::{BlockTransactions, Log, TransactionReceipt, state::StateOverride};
+use alloy_rpc_types::{BlockTransactions, Filter, Log, state::StateOverride};
 use alloy_rpc_types_eth::Header as RPCHeader;
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
-use op_alloy_consensus::OpReceiptEnvelope;
 use op_alloy_network::{Optimism, TransactionResponse};
-use op_alloy_rpc_types::Transaction;
+use op_alloy_rpc_types::{OpTransactionReceipt, Transaction};
 use reth::revm::db::Cache;
 use reth_rpc_eth_api::RpcBlock;
+use tokio::sync::broadcast;
 
 use crate::error::UnsealedBlockError;
 
@@ -27,7 +27,7 @@ pub struct UnsealedBlock {
     pub hash: B256,
 
     /// Transaction receipts for executed transactions.
-    pub receipts: Vec<TransactionReceipt<OpReceiptEnvelope<Log>>>,
+    pub receipts: Vec<OpTransactionReceipt>,
     /// Flattened logs emitted during execution.
     pub logs: Vec<Log>,
     /// Cumulative execution gas used across all transactions in the block.
@@ -37,8 +37,10 @@ pub struct UnsealedBlock {
 
     transaction_count: HashMap<Address, U256>,
     transactions: Vec<Transaction>,
-    transaction_receipts: HashMap<B256, TransactionReceipt<OpReceiptEnvelope<Log>>>,
+    transaction_receipts: HashMap<TxHash, OpTransactionReceipt>,
     state_overrides: Option<StateOverride>,
+
+    new_block_sender: broadcast::Sender<RpcBlock<Optimism>>,
 
     db_cache: Cache,
 }
@@ -46,6 +48,8 @@ pub struct UnsealedBlock {
 impl UnsealedBlock {
     /// Create a fresh unsealed block state for `env` with empty frags/results/caches.
     pub fn new(env: EnvV0) -> Self {
+        let (new_block_sender, _) = broadcast::channel(16);
+
         Self {
             env,
             frags: Vec::new(),
@@ -59,8 +63,19 @@ impl UnsealedBlock {
             transactions: vec![],
             transaction_receipts: Default::default(),
             state_overrides: None,
+            new_block_sender,
             db_cache: Default::default(),
         }
+    }
+
+    /// Returns the canonical block number.
+    pub fn canonical_block_number(&self) -> u64 {
+        // TODO: Is this correct?
+        self.env.number.saturating_sub(1)
+    }
+
+    pub fn subscribe_new_blocks(&self) -> broadcast::Receiver<RpcBlock<Optimism>> {
+        self.new_block_sender.subscribe()
     }
 
     /// Returns `true` if no fragments have been added yet.
@@ -117,7 +132,7 @@ impl UnsealedBlock {
         &mut self,
         f: FragV0,
         logs: Vec<Log>,
-        receipts: Vec<TransactionReceipt<OpReceiptEnvelope<Log>>>,
+        receipts: Vec<OpTransactionReceipt>,
         cummulative_gas_used: u64,
     ) {
         self.last_sequence_number = Some(f.seq);
@@ -126,6 +141,9 @@ impl UnsealedBlock {
         self.logs.extend_from_slice(logs.as_slice());
         self.receipts.extend_from_slice(receipts.as_slice());
         self.cumulative_gas_used = cummulative_gas_used;
+
+        // TODO: Is this correct? Is everything applied here?
+        let _ = self.new_block_sender.send(self.to_block(false));
     }
 
     /// Validate frag against current state (equivalent to your ValidateNewFragV0 + sequencing gate).
@@ -217,23 +235,29 @@ impl UnsealedBlock {
             transactions: vec![],
             db_cache: self.db_cache.clone(),
             state_overrides: self.state_overrides.clone(),
+            new_block_sender: self.new_block_sender.clone(),
             transaction_receipts: Default::default(),
         }
     }
 
     /// Returns a cloned list of unsealed logs collected so far.
-    pub fn get_unsealed_logs(self) -> Vec<Log> {
-        self.logs.clone()
+    pub fn get_unsealed_logs(&self, filter: &Filter) -> Vec<Log> {
+        self.logs.clone().into_iter().filter(|log| filter.matches(&alloy_primitives::Log::from(log.clone()))).collect()
     }
 
     /// Returns a cloned list of fragments accepted into this unsealed block.
-    pub fn get_unsealed_frags(self) -> Vec<FragV0> {
+    pub fn get_unsealed_frags(&self) -> Vec<FragV0> {
         self.frags.clone()
     }
 
     /// Looks up and returns a cloned transaction receipt by transaction hash, if present.
-    pub fn get_transaction_receipt(self, tx_hash: B256) -> Option<TransactionReceipt<OpReceiptEnvelope<Log>>> {
-        self.transaction_receipts.get(&tx_hash).cloned()
+    pub fn get_transaction_receipt(&self, tx_hash: &TxHash) -> Option<OpTransactionReceipt> {
+        self.transaction_receipts.get(tx_hash).cloned()
+    }
+
+    /// Looks up and returns a cloned transaction by transaction hash, if present.
+    pub fn get_transaction(&self, tx_hash: &TxHash) -> Option<Transaction> {
+        self.transactions.iter().find(|tx| tx.tx_hash() == *tx_hash).cloned()
     }
 
     /// Returns a cloned copy of the current state overrides, if any are set.
@@ -242,12 +266,12 @@ impl UnsealedBlock {
     }
 
     /// Returns the locally tracked transaction count (nonce) for `address`, or zero if unknown.
-    pub fn get_transaction_count(self, address: Address) -> U256 {
+    pub fn get_transaction_count(&self, address: Address) -> U256 {
         self.transaction_count.get(&address).cloned().unwrap_or(U256::from(0))
     }
 
     /// Returns the cached balance for `address` from the DB cache, if the account is present.
-    pub fn get_balance(self, address: Address) -> Option<U256> {
+    pub fn get_balance(&self, address: Address) -> Option<U256> {
         let Some(account) = self.db_cache.accounts.get(&address) else {
             return None;
         };
@@ -257,10 +281,6 @@ impl UnsealedBlock {
 
     /// Return a decoded header snapshot derived from the current env + local counters.
     pub fn get_header(&self) -> Header {
-        let last_frag_number = match self.frags.last() {
-            Some(frag) => frag.block_number,
-            None => 0,
-        };
         Header {
             parent_hash: self.env.parent_hash,
             ommers_hash: Default::default(),
@@ -270,7 +290,7 @@ impl UnsealedBlock {
             receipts_root: B256::ZERO,
             logs_bloom: Default::default(),
             difficulty: self.env.difficulty,
-            number: last_frag_number,
+            number: self.env.number,
             gas_limit: self.env.gas_limit,
             gas_used: self.cumulative_gas_used,
             timestamp: self.env.timestamp,
@@ -293,11 +313,7 @@ impl UnsealedBlock {
     }
 
     /// Insert/replace the receipt for `tx_hash` in the per-tx receipt map.
-    pub(crate) fn with_transaction_receipt(
-        &mut self,
-        tx_hash: B256,
-        receipt: TransactionReceipt<OpReceiptEnvelope<Log>>,
-    ) -> &Self {
+    pub(crate) fn with_transaction_receipt(&mut self, tx_hash: B256, receipt: OpTransactionReceipt) -> &Self {
         self.transaction_receipts.insert(tx_hash, receipt);
         self
     }
