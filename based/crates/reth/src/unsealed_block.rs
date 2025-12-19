@@ -363,7 +363,7 @@ impl UnsealedBlock {
             })
             .collect::<Result<Vec<_>, UnsealedBlockError>>()?;
 
-        let requests_hash = self.is_prague.then(|| EMPTY_REQUESTS_HASH);
+        let requests_hash = self.is_prague.then_some(EMPTY_REQUESTS_HASH);
 
         let extra_data: Bytes = Bytes::copy_from_slice(self.env.extra_data.as_ref());
         let header = Header {
