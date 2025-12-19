@@ -316,7 +316,7 @@ where
                     ExecError::Failed(format!("state_by_block_number_or_tag({canonical_block}) failed: {e}"))
                 })?;
             let bundle_state = ub.get_bundle_state();
-            Some(isthmus::withdrawals_root(&bundle_state, state_provider)?)
+            Some(isthmus::withdrawals_root(bundle_state, state_provider)?)
         } else {
             None
         };

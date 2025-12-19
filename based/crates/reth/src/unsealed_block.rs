@@ -232,8 +232,8 @@ impl UnsealedBlock {
     }
 
     /// Returns the bundle state.
-    pub fn get_bundle_state(&self) -> BundleState {
-        self.bundle_state.clone()
+    pub fn get_bundle_state(&self) -> &BundleState {
+        &self.bundle_state
     }
 
     /// Clone this unsealed block into a mutable working copy for in-place updates.
