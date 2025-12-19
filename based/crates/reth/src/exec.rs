@@ -185,6 +185,7 @@ where
         let mut next_log_index = 0usize;
         let mut receipts: Vec<OpTransactionReceipt> = Vec::new();
 
+        // Simulate the transactions added by the frag
         for (idx, transaction) in block.body.transactions.iter().enumerate() {
             let tx_hash = transaction.tx_hash();
             let sender = transaction.recover_signer()?;
