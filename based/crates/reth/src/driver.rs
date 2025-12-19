@@ -246,7 +246,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             return Err(DriverError::from(e));
         }
 
-        match self.exec.execute_frag(&frag).await {
+        match self.exec.execute_frag(&frag) {
             Ok(()) => (),
             Err(e) => {
                 error!(error = %e, "execution failed, discarding unsealed block");
