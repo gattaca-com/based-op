@@ -1,5 +1,10 @@
+use alloy_consensus::crypto::RecoveryError;
 use alloy_eips::eip2718::Eip2718Error;
 use alloy_primitives::B256;
+use op_alloy_consensus::EIP1559ParamError;
+use reth_optimism_evm::OpBlockExecutionError;
+use reth_optimism_rpc::OpEthApiError;
+use reth_storage_errors::ProviderError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -37,28 +42,28 @@ pub enum DriverError {
 #[derive(Debug, Error)]
 pub enum ValidateSealError {
     #[error("block hash mismatch, expected {expected:?}, got {got:?}")]
-    BlockHashMismatch { expected: B256, got: B256 },
+    BlockHash { expected: B256, got: B256 },
 
     #[error("parent hash mismatch, expected {expected:?}, got {got:?}")]
-    ParentHashMismatch { expected: B256, got: B256 },
+    ParentHash { expected: B256, got: B256 },
 
     #[error("state root mismatch, expected {expected:?}, got {got:?}")]
-    StateRootMismatch { expected: B256, got: B256 },
+    StateRoot { expected: B256, got: B256 },
 
     #[error("transactions root mismatch, expected {expected:?}, got {got:?}")]
-    TransactionsRootMismatch { expected: B256, got: B256 },
+    TransactionsRoot { expected: B256, got: B256 },
 
     #[error("receipts root mismatch, expected {expected:?}, got {got:?}")]
-    ReceiptsRootMismatch { expected: B256, got: B256 },
+    ReceiptsRoot { expected: B256, got: B256 },
 
     #[error("gas used mismatch, expected {expected}, got {got}")]
-    GasUsedMismatch { expected: u64, got: u64 },
+    GasUsed { expected: u64, got: u64 },
 
     #[error("gas limit mismatch, expected {expected}, got {got}")]
-    GasLimitMismatch { expected: u64, got: u64 },
+    GasLimit { expected: u64, got: u64 },
 
     #[error("total frags mismatch, expected {expected}, got {got}")]
-    TotalFragsMismatch { expected: u64, got: u64 },
+    TotalFrags { expected: u64, got: u64 },
 }
 
 #[derive(Debug, Error)]
@@ -81,6 +86,9 @@ pub enum UnsealedBlockError {
 
     #[error("received frag after last frag already accepted")]
     AlreadyEnded,
+
+    #[error("operation failed: {0}")]
+    Failed(String),
 }
 
 #[derive(Debug, Error)]
@@ -93,4 +101,22 @@ pub enum ExecError {
 
     #[error("seal failed: {0}")]
     SealFailed(String),
+
+    #[error(transparent)]
+    StorageProvider(#[from] ProviderError),
+
+    #[error(transparent)]
+    OpBlockExecution(#[from] OpBlockExecutionError),
+
+    #[error(transparent)]
+    Recovery(#[from] RecoveryError),
+
+    #[error(transparent)]
+    Eip1559Param(#[from] EIP1559ParamError),
+
+    #[error(transparent)]
+    OpEthApi(#[from] OpEthApiError),
+
+    #[error(transparent)]
+    UnsealedBlock(#[from] UnsealedBlockError),
 }

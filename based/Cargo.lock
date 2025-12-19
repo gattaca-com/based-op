@@ -1021,6 +1021,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
+
+[[package]]
 name = "ark-bls12-381"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1576,6 +1582,53 @@ name = "base64ct"
 version = "1.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89e25b6adfb930f02d1981565a6e5d9c547ac15a96606256d3b59040e5cd4ca3"
+
+[[package]]
+name = "based-op-reth"
+version = "0.1.0"
+dependencies = [
+ "alloy-consensus",
+ "alloy-eips",
+ "alloy-network",
+ "alloy-primitives",
+ "alloy-rpc-types",
+ "alloy-rpc-types-eth",
+ "anyhow",
+ "arc-swap",
+ "bop-common",
+ "clap",
+ "eyre",
+ "futures",
+ "jsonrpsee",
+ "op-alloy-consensus",
+ "op-alloy-network",
+ "op-alloy-rpc-types",
+ "reth",
+ "reth-chainspec 1.9.3",
+ "reth-db 1.9.3",
+ "reth-engine-tree 1.9.3",
+ "reth-evm 1.9.3",
+ "reth-exex 1.9.3",
+ "reth-node-builder 1.9.3",
+ "reth-optimism-chainspec 1.9.3",
+ "reth-optimism-cli 1.9.3",
+ "reth-optimism-consensus 1.9.3",
+ "reth-optimism-evm 1.9.3",
+ "reth-optimism-node 1.9.3",
+ "reth-optimism-primitives 1.9.3",
+ "reth-optimism-rpc 1.9.3",
+ "reth-revm 1.9.3",
+ "reth-rpc 1.9.3",
+ "reth-rpc-convert 1.9.3",
+ "reth-rpc-eth-api 1.9.3",
+ "reth-storage-api 1.9.3",
+ "reth-storage-errors 1.9.3",
+ "revm",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
 
 [[package]]
 name = "based-portal"
@@ -3047,7 +3100,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.111",
 ]
 
 [[package]]
@@ -7093,40 +7146,6 @@ name = "resolv-conf"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95325155c684b1c89f7765e30bc1c42e4a6da51ca513615660cb8a62ef9a88e3"
-
-[[package]]
-name = "reth"
-version = "0.1.0"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-network",
- "alloy-primitives",
- "alloy-rpc-types",
- "alloy-rpc-types-eth",
- "anyhow",
- "bop-common",
- "clap",
- "eyre",
- "futures",
- "jsonrpsee",
- "op-alloy-consensus",
- "op-alloy-network",
- "op-alloy-rpc-types",
- "reth 1.9.3",
- "reth-db 1.9.3",
- "reth-exex 1.9.3",
- "reth-node-builder 1.9.3",
- "reth-optimism-chainspec 1.9.3",
- "reth-optimism-cli 1.9.3",
- "reth-optimism-node 1.9.3",
- "reth-rpc 1.9.3",
- "reth-rpc-eth-api 1.9.3",
- "thiserror 2.0.17",
- "tokio",
- "tokio-stream",
- "tracing",
-]
 
 [[package]]
 name = "reth"
