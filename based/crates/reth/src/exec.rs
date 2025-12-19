@@ -1,4 +1,7 @@
-use std::{future::Future, sync::Arc};
+use std::{
+    future::Future,
+    sync::{Arc, Mutex},
+};
 
 use alloy_consensus::{
     BlockBody, Header, Receipt, Transaction,
@@ -6,11 +9,15 @@ use alloy_consensus::{
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
 use alloy_primitives::{B256, BlockNumber, Bytes, Sealable};
-use alloy_rpc_types::{Block, Log, TransactionReceipt};
+use alloy_rpc_types::{Log, TransactionReceipt};
 use arc_swap::ArcSwapOption;
 use bop_common::p2p::{EnvV0, FragV0};
 use op_alloy_consensus::{OpReceiptEnvelope, OpTxEnvelope};
 use op_alloy_rpc_types::Transaction as RPCTransaction;
+use reth::{
+    network::cache::LruMap,
+    primitives::{SealedBlock, SealedHeader},
+};
 use reth_chainspec::{ChainSpecProvider, EthChainSpec};
 use reth_evm::{ConfigureEvm, Evm, op_revm::OpHaltReason};
 use reth_optimism_chainspec::OpHardforks;
@@ -23,10 +30,12 @@ use reth_revm::{
     database::StateProviderDatabase,
 };
 use reth_rpc_convert::transaction::ConvertReceiptInput;
-use reth_storage_api::{BlockReaderIdExt, StateProviderFactory};
+use reth_storage_api::{BlockReaderIdExt, BlockWriter, CanonChainTracker, StateProviderFactory};
 use revm::database::CacheDB;
 
 use crate::{error::ExecError, unsealed_block::UnsealedBlock};
+
+const BLOCK_CACHE_LIMIT: u32 = 256;
 
 /// This trait is the ONLY place that needs to know about Reth internals.
 /// Everything else is just state-machine + bookkeeping.
@@ -39,11 +48,11 @@ pub trait UnsealedExecutor: Send {
     /// MUST be cumulative: txs execute after all previous frags's txs.
     fn execute_frag(&mut self, frag: &FragV0) -> Result<(), ExecError>;
 
-    fn seal(&mut self) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
+    fn seal(&mut self) -> Result<(), ExecError>;
 
-    fn set_canonical(&mut self, b: &Block) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
+    fn set_canonical(&mut self, b: &OpBlock) -> Result<(), ExecError>;
 
-    fn get_block(&self, hash: B256, number: BlockNumber) -> impl Future<Output = Result<Block, ExecError>> + Send + '_;
+    fn get_block(&self, hash: B256, number: BlockNumber) -> Result<(OpBlock), ExecError>;
 
     /// Reset overlay state completely.
     fn reset(&mut self);
@@ -52,11 +61,16 @@ pub trait UnsealedExecutor: Send {
 pub struct StateExecutor<Client> {
     client: Client,
     current_unsealed_block: Arc<ArcSwapOption<UnsealedBlock>>,
+    block_cache: Mutex<LruMap<B256, OpBlock>>,
 }
 
 impl<Client> StateExecutor<Client> {
     pub fn new(client: Client) -> Self {
-        Self { client, current_unsealed_block: Arc::new(ArcSwapOption::new(None)) }
+        Self {
+            client,
+            current_unsealed_block: Arc::new(ArcSwapOption::new(None)),
+            block_cache: Mutex::new(LruMap::new(BLOCK_CACHE_LIMIT)),
+        }
     }
 
     pub fn shared_unsealed_block(&self) -> Arc<ArcSwapOption<UnsealedBlock>> {
@@ -68,7 +82,9 @@ impl<Client> UnsealedExecutor for StateExecutor<Client>
 where
     Client: StateProviderFactory
         + ChainSpecProvider<ChainSpec: EthChainSpec<Header = Header> + OpHardforks>
-        + BlockReaderIdExt<Header = Header>
+        + BlockReaderIdExt<Header = Header, Block = OpBlock>
+        + CanonChainTracker<Header = Header>
+        + BlockWriter<Block = OpBlock>
         + Clone
         + 'static,
 {
@@ -90,17 +106,18 @@ where
         let ub_cache = ub.get_db_cache();
         let canonical_block = ub.env.number.saturating_sub(1);
 
-        let last_block_header = self.client
+        let last_block_header = self
+            .client
             .header_by_number(canonical_block)
             .map_err(|e| ExecError::Failed(format!("header_by_number({canonical_block}) failed: {e}")))?
             .ok_or_else(|| ExecError::Failed(format!("missing parent header at {canonical_block}")))?;
 
         let evm_config = OpEvmConfig::optimism(self.client.chain_spec());
 
-        let state_provider =
-            self.client.state_by_block_number_or_tag(BlockNumberOrTag::Number(canonical_block)).map_err(|e| {
-                ExecError::Failed(format!("state_by_block_number_or_tag({canonical_block}) failed: {e}"))
-            })?;
+        let state_provider = self
+            .client
+            .state_by_block_number_or_tag(BlockNumberOrTag::Number(canonical_block))
+            .map_err(|e| ExecError::Failed(format!("state_by_block_number_or_tag({canonical_block}) failed: {e}")))?;
 
         let state_provider_db = StateProviderDatabase::new(state_provider);
         let state = State::builder().with_database(state_provider_db).with_bundle_update().build();
@@ -143,9 +160,7 @@ where
             } else {
                 block
                     .base_fee_per_gas
-                    .map(|base_fee| {
-                        transaction.effective_tip_per_gas(base_fee).unwrap_or_default() + base_fee as u128
-                    })
+                    .map(|base_fee| transaction.effective_tip_per_gas(base_fee).unwrap_or_default() + base_fee as u128)
                     .unwrap_or_else(|| transaction.max_fee_per_gas())
             };
 
@@ -172,10 +187,8 @@ where
                         existing_override.code = acc.info.code.clone().map(|code| code.bytes());
 
                         let existing = existing_override.state_diff.get_or_insert(Default::default());
-                        let changed_slots = acc
-                            .storage
-                            .iter()
-                            .map(|(&key, slot)| (B256::from(key), B256::from(slot.present_value)));
+                        let changed_slots =
+                            acc.storage.iter().map(|(&key, slot)| (B256::from(key), B256::from(slot.present_value)));
 
                         existing.extend(changed_slots);
                     }
@@ -187,8 +200,7 @@ where
 
                     logs.extend(tx_logs.iter().map(|inner| Log { inner: inner.clone(), ..Default::default() }));
 
-                    let base_receipt =
-                        Receipt { status: success.into(), cumulative_gas_used: gas_used, logs: tx_logs };
+                    let base_receipt = Receipt { status: success.into(), cumulative_gas_used: gas_used, logs: tx_logs };
 
                     let ty = transaction.ty();
                     let op_receipt = wrap_op_receipt(ty, base_receipt, None, None)?;
@@ -210,8 +222,7 @@ where
                         meta,
                     };
 
-                    let receipt =
-                        OpReceiptBuilder::new(chain_spec.as_ref(), input, &mut l1_block_info)?.core_receipt;
+                    let receipt = OpReceiptBuilder::new(chain_spec.as_ref(), input, &mut l1_block_info)?.core_receipt;
 
                     next_log_index += receipt.logs().len();
                     ub.with_transaction_receipt(tx_hash, receipt.clone());
@@ -236,20 +247,46 @@ where
         Ok(())
     }
 
-    fn seal(&mut self) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
-        async move { Ok(()) }
+    fn seal(&mut self) -> Result<(), ExecError> {
+        let ub = self.current_unsealed_block.load_full().ok_or(ExecError::NotInitialized)?;
+        let block = build_op_block_from_ub(ub.as_ref())?;
+        let sealed = SealedBlock::seal_slow(block);
+        let recovered = sealed.try_recover().map_err(|e| ExecError::Failed(format!("recover senders: {e}")))?;
+
+        self.client.insert_block(recovered)?;
+        Ok(())
     }
 
-    fn set_canonical(&mut self, _b: &Block) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
-        async move { Ok(()) }
+    fn set_canonical(&mut self, b: &OpBlock) -> Result<(), ExecError> {
+        let sealed = SealedHeader::seal_slow(b.header.clone());
+        self.client.set_canonical_head(sealed);
+        Ok(())
     }
 
-    fn get_block(
-        &self,
-        _hash: B256,
-        _number: BlockNumber,
-    ) -> impl Future<Output = Result<Block, ExecError>> + Send + '_ {
-        async move { Ok(Block::default()) }
+    fn get_block(&self, hash: B256, number: BlockNumber) -> Result<(OpBlock), ExecError> {
+        if let Some(block) = self
+            .block_cache
+            .lock()
+            .map_err(|_| ExecError::Failed("block_cache mutex poisoned".into()))?
+            .get(&hash)
+            .cloned()
+        {
+            return Ok(block);
+        }
+
+        // fetch
+        let block = self
+            .client
+            .block_by_hash(hash)
+            .map_err(|e| ExecError::Failed(format!("block_by_hash failed: {e}")))?
+            .ok_or_else(|| ExecError::Failed("pre-sealed block not found".into()))?;
+
+        self.block_cache
+            .lock()
+            .map_err(|_| ExecError::Failed("block_cache mutex poisoned".into()))?
+            .insert(hash, block.clone());
+
+        Ok(block)
     }
 
     fn reset(&mut self) {}
@@ -278,6 +315,50 @@ fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<
         logs_bloom: Default::default(),
         difficulty: ub.env.difficulty,
         number: frag.block_number,
+        gas_limit: ub.env.gas_limit,
+        gas_used: ub.cumulative_gas_used,
+        timestamp: ub.env.timestamp,
+        extra_data,
+        mix_hash: ub.env.prevrandao,
+        nonce: Default::default(),
+        base_fee_per_gas: Some(ub.env.basefee),
+        withdrawals_root: None,
+        blob_gas_used: Some(ub.cumulative_blob_gas_used),
+        excess_blob_gas: Some(0),
+        parent_beacon_block_root: Some(ub.env.parent_beacon_block_root),
+        requests_hash: None,
+    };
+
+    let body = BlockBody { transactions: tx_list, ommers: vec![], withdrawals: None };
+
+    Ok(OpBlock::new(header, body))
+}
+
+fn build_op_block_from_ub(ub: &UnsealedBlock) -> Result<OpBlock, ExecError> {
+    // Decode EIP-2718 tx bytes -> OpTransactionSigned
+    let tx_list: Vec<OpTransactionSigned> = ub
+        .frags
+        .iter()
+        .enumerate()
+        .flat_map(|(frag_idx, frag)| {
+            frag.txs.iter().enumerate().map(move |(tx_idx, tx_bytes)| {
+                OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref())
+                    .map_err(|e| ExecError::Failed(format!("decode tx failed (frag={frag_idx} tx={tx_idx}): {e}")))
+            })
+        })
+        .collect::<Result<Vec<_>, ExecError>>()?;
+
+    let extra_data: Bytes = Bytes::copy_from_slice(ub.env.extra_data.as_ref());
+    let header = Header {
+        parent_hash: ub.env.parent_hash,
+        ommers_hash: Default::default(),
+        beneficiary: ub.env.beneficiary,
+        state_root: B256::ZERO,
+        transactions_root: B256::ZERO,
+        receipts_root: B256::ZERO,
+        logs_bloom: Default::default(),
+        difficulty: ub.env.difficulty,
+        number: ub.env.number,
         gas_limit: ub.env.gas_limit,
         gas_used: ub.cumulative_gas_used,
         timestamp: ub.env.timestamp,

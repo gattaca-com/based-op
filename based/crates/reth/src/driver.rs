@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::{hash::Hash, sync::Arc, time::Instant};
 
 use alloy_consensus::Header;
 use alloy_primitives::B256;
@@ -10,7 +10,7 @@ use bop_common::{
 };
 use reth_chainspec::{ChainSpecProvider, EthChainSpec};
 use reth_optimism_chainspec::OpHardforks;
-use reth_storage_api::{BlockReaderIdExt, StateProviderFactory};
+use reth_storage_api::{BlockReaderIdExt, BlockWriter, CanonChainTracker, StateProviderFactory};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
@@ -99,7 +99,9 @@ impl Driver {
     where
         Client: StateProviderFactory
             + ChainSpecProvider<ChainSpec: EthChainSpec<Header = Header> + OpHardforks>
-            + BlockReaderIdExt<Header = Header>
+            + BlockReaderIdExt<Header = Header, Block = reth_optimism_primitives::OpBlock>
+            + CanonChainTracker<Header = Header>
+            + BlockWriter<Block = reth_optimism_primitives::OpBlock>
             + Clone
             + 'static,
     {
@@ -266,7 +268,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
         if ub.last_frag().is_some_and(|f| f.is_last) {
             info!("last frag received, pre-sealing block");
-            if let Err(e) = self.exec.seal().await {
+            if let Err(e) = self.exec.seal() {
                 error!(error = %e, "seal failed, discarding unsealed block");
                 self.reset_current_unsealed_block();
                 return Err(DriverError::from(e));
@@ -287,9 +289,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             return Ok(());
         }
 
-        let presealed_block = self.exec.get_block(seal.block_hash, seal.block_number).await;
-
-        let presealed_block = match presealed_block {
+        let presealed_block = match self.exec.get_block(seal.block_hash, seal.block_number) {
             Ok(b) => b,
             Err(e) => {
                 self.reset_current_unsealed_block();
@@ -299,7 +299,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
         self.validate_seal_frag_v0(&presealed_block, ub.as_ref(), &seal)?;
 
-        self.exec.set_canonical(&presealed_block).await?;
+        self.exec.set_canonical(&presealed_block)?;
 
         self.reset_current_unsealed_block();
 
@@ -309,11 +309,11 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
     fn validate_seal_frag_v0(
         &self,
-        presealed_block: &Block,
+        presealed_block: &OpBlock,
         ub: &UnsealedBlock,
         seal: &SealV0,
     ) -> Result<(), ValidateSealError> {
-        let expected_block_hash: B256 = presealed_block.header.hash.into();
+        let expected_block_hash: B256 = presealed_block.header.hash_slow();
         if expected_block_hash != seal.block_hash {
             return Err(ValidateSealError::BlockHashMismatch { expected: expected_block_hash, got: seal.block_hash });
         }

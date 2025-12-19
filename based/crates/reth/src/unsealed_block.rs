@@ -111,9 +111,9 @@ impl UnsealedBlock {
         })
     }
 
-    /// Decoded txs (allocates Vec), like Go `Transactions()` but decoded.
-    pub fn transactions(&self) -> Result<Vec<TxEnvelope>, UnsealedBlockError> {
-        self.transactions_iter_decoded().collect()
+    /// Return list of transaction
+    pub fn transactions(&self) -> Vec<Transaction> {
+        self.transactions.clone()
     }
 
     /// Raw tx bytes (allocates Vec<Vec<u8>>), like Go `ByteTransactions()`.
