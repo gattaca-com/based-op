@@ -1,5 +1,5 @@
 use alloy_consensus::{BlockBody, Header, TxEnvelope};
-use alloy_eips::eip2718::Decodable2718;
+use alloy_eips::{eip2718::Decodable2718, eip7685::EMPTY_REQUESTS_HASH};
 use alloy_primitives::{Address, B256, Bytes, Sealable, TxHash, U256, map::foldhash::HashMap};
 use alloy_rpc_types::{BlockTransactions, Filter, Log, state::StateOverride};
 use alloy_rpc_types_eth::Header as RPCHeader;
@@ -36,6 +36,7 @@ pub struct UnsealedBlock {
     pub cumulative_gas_used: u64,
     /// Cumulative blob gas used across all blob-carrying transactions in the block.
     pub cumulative_blob_gas_used: u64,
+    pub is_prague: bool,
 
     transaction_count: HashMap<Address, U256>,
     transactions: Vec<Transaction>,
@@ -49,7 +50,7 @@ pub struct UnsealedBlock {
 
 impl UnsealedBlock {
     /// Create a fresh unsealed block state for `env` with empty frags/results/caches.
-    pub fn new(env: EnvV0) -> Self {
+    pub fn new(env: EnvV0, is_prague: bool) -> Self {
         let (new_block_sender, _) = broadcast::channel(16);
 
         Self {
@@ -61,6 +62,7 @@ impl UnsealedBlock {
             logs: Vec::new(),
             cumulative_gas_used: 0,
             cumulative_blob_gas_used: 0,
+            is_prague,
             transaction_count: Default::default(),
             transactions: vec![],
             transaction_receipts: Default::default(),
@@ -201,7 +203,7 @@ impl UnsealedBlock {
 
     /// Reset to a fresh env (drop frags/results/counters).
     pub fn reset_to_env(&mut self, env: EnvV0) {
-        *self = Self::new(env);
+        *self = Self::new(env, self.is_prague);
     }
 
     /// Attach/replace the DB cache to carry execution overlay state forward.
@@ -232,6 +234,7 @@ impl UnsealedBlock {
             logs: self.logs.clone(),
             cumulative_gas_used: self.cumulative_gas_used,
             cumulative_blob_gas_used: self.cumulative_blob_gas_used,
+            is_prague: self.is_prague,
             transaction_count: Default::default(),
             transactions: vec![],
             db_cache: self.db_cache.clone(),
@@ -360,6 +363,8 @@ impl UnsealedBlock {
             })
             .collect::<Result<Vec<_>, UnsealedBlockError>>()?;
 
+        let requests_hash = self.is_prague.then(|| EMPTY_REQUESTS_HASH);
+
         let extra_data: Bytes = Bytes::copy_from_slice(self.env.extra_data.as_ref());
         let header = Header {
             parent_hash: self.env.parent_hash,
@@ -382,7 +387,7 @@ impl UnsealedBlock {
             blob_gas_used: Some(self.cumulative_blob_gas_used),
             excess_blob_gas: Some(0),
             parent_beacon_block_root: Some(self.env.parent_beacon_block_root),
-            requests_hash: None,
+            requests_hash,
         };
 
         let body = BlockBody { transactions: tx_list, ommers: vec![], withdrawals: None };

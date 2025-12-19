@@ -1,6 +1,4 @@
-use std::{
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use alloy_consensus::{
     BlockBody, Header, Receipt, Transaction,
@@ -18,7 +16,7 @@ use reth::{
     network::cache::LruMap,
     primitives::{SealedBlock, SealedHeader},
 };
-use reth_chainspec::{ChainSpecProvider, EthChainSpec};
+use reth_chainspec::{ChainSpecProvider, EthChainSpec, EthereumHardforks as _};
 use reth_evm::{ConfigureEvm, Evm, op_revm::OpHaltReason};
 use reth_optimism_chainspec::OpHardforks;
 use reth_optimism_evm::{OpEvmConfig, OpNextBlockEnvAttributes};
@@ -118,7 +116,11 @@ where
             self.client.state_by_block_number_or_tag(BlockNumberOrTag::Number(parent_header.number))?;
         let state_provider_db = StateProviderDatabase::new(state_provider);
         let state = State::builder().with_database(state_provider_db).with_bundle_update().build();
-        let ub = UnsealedBlock::new(env.clone()).with_db_cache(CacheDB::new(state).cache);
+
+        // Check if the current block is a prague block
+        let is_prague = self.client.chain_spec().is_prague_active_at_timestamp(env.timestamp);
+
+        let ub = UnsealedBlock::new(env.clone(), is_prague).with_db_cache(CacheDB::new(state).cache);
         self.current_unsealed_block.store(Some(Arc::new(ub)));
 
         Ok(())
