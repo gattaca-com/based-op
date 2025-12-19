@@ -9,7 +9,9 @@ use bop_common::{
 };
 use reth_chainspec::{ChainSpecProvider, EthChainSpec};
 use reth_optimism_chainspec::OpHardforks;
-use reth_storage_api::{BlockReaderIdExt, BlockWriter, CanonChainTracker, StateProviderFactory};
+use reth_storage_api::{
+    BlockReaderIdExt, BlockWriter, CanonChainTracker, DatabaseProviderFactory, StateProviderFactory,
+};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
@@ -101,9 +103,10 @@ impl Driver {
             + ChainSpecProvider<ChainSpec: EthChainSpec<Header = Header> + OpHardforks>
             + BlockReaderIdExt<Header = Header, Block = reth_optimism_primitives::OpBlock>
             + CanonChainTracker<Header = Header>
-            + BlockWriter<Block = reth_optimism_primitives::OpBlock>
+            + DatabaseProviderFactory
             + Clone
             + 'static,
+        <Client as DatabaseProviderFactory>::ProviderRW: BlockWriter<Block = reth_optimism_primitives::OpBlock>,
     {
         let executor = StateExecutor::new(client);
         let current_unsealed_block = executor.shared_unsealed_block();

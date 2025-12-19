@@ -30,7 +30,7 @@ use reth_revm::{
     database::StateProviderDatabase,
 };
 use reth_rpc_convert::transaction::ConvertReceiptInput;
-use reth_storage_api::{BlockReaderIdExt, BlockWriter, CanonChainTracker, StateProviderFactory};
+use reth_storage_api::{BlockReaderIdExt, BlockWriter, CanonChainTracker, DBProvider, DatabaseProviderFactory, StateProviderFactory};
 use revm::database::CacheDB;
 
 use crate::{error::ExecError, unsealed_block::UnsealedBlock};
@@ -84,9 +84,10 @@ where
         + ChainSpecProvider<ChainSpec: EthChainSpec<Header = Header> + OpHardforks>
         + BlockReaderIdExt<Header = Header, Block = OpBlock>
         + CanonChainTracker<Header = Header>
-        + BlockWriter<Block = OpBlock>
+        + DatabaseProviderFactory
         + Clone
         + 'static,
+    <Client as DatabaseProviderFactory>::ProviderRW: BlockWriter<Block = reth_optimism_primitives::OpBlock>,
 {
     fn ensure_env(&mut self, _env: &EnvV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
         async move { Ok(()) }
@@ -255,7 +256,9 @@ where
         let sealed = SealedBlock::seal_slow(block);
         let recovered = sealed.try_recover().map_err(|e| ExecError::Failed(format!("recover senders: {e}")))?;
 
-        self.client.insert_block(recovered)?;
+        let provider_rw = self.client.database_provider_rw()?;
+        provider_rw.insert_block(recovered)?;
+        provider_rw.commit()?;
         Ok(())
     }
 
