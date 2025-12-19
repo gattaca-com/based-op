@@ -121,7 +121,7 @@ fn run_with_cli(cli: Cli<OpChainSpecParser, BasedOpRethArgs>) -> eyre::Result<()
                     let eth = EthApi {
                         canonical: ctx.registry.eth_api().clone(),
                         eth_filter: ctx.registry.eth_handlers().filter.clone(),
-                        unsealed_state: (),
+                        unsealed_block: driver.unsealed_block(),
                         unsealed_as_latest: args.based_op.unsealed_as_latest,
                     };
 

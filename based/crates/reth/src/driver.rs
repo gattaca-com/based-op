@@ -31,6 +31,7 @@ pub enum FragStatus {
 #[derive(Clone, Debug)]
 pub struct Driver {
     tx: mpsc::Sender<Cmd>,
+    unsealed_block: Arc<ArcSwapOption<UnsealedBlock>>,
 }
 
 impl From<mpsc::error::SendError<Cmd>> for DriverError {
@@ -112,6 +113,7 @@ impl Driver {
     pub fn spawn<E: UnsealedExecutor + 'static>(inner: DriverInner<E>) -> Self {
         info!(target: "based-op", "Spawning frag driver");
         let (tx, mut rx) = mpsc::channel::<Cmd>(256);
+        let unsealed_block = inner.current_unsealed_block.clone();
 
         tokio::spawn(async move {
             let mut inner = inner;
@@ -137,7 +139,12 @@ impl Driver {
             }
         });
 
-        Self { tx }
+        Self { tx, unsealed_block }
+    }
+
+    /// Returns a clone of the current unsealed block.
+    pub fn unsealed_block(&self) -> Arc<ArcSwapOption<UnsealedBlock>> {
+        Arc::clone(&self.unsealed_block)
     }
 
     /// Starts a new unsealed block execution context for the given environment.
