@@ -42,28 +42,28 @@ pub enum DriverError {
 #[derive(Debug, Error)]
 pub enum ValidateSealError {
     #[error("block hash mismatch, expected {expected:?}, got {got:?}")]
-    BlockHashMismatch { expected: B256, got: B256 },
+    BlockHash { expected: B256, got: B256 },
 
     #[error("parent hash mismatch, expected {expected:?}, got {got:?}")]
-    ParentHashMismatch { expected: B256, got: B256 },
+    ParentHash { expected: B256, got: B256 },
 
     #[error("state root mismatch, expected {expected:?}, got {got:?}")]
-    StateRootMismatch { expected: B256, got: B256 },
+    StateRoot { expected: B256, got: B256 },
 
     #[error("transactions root mismatch, expected {expected:?}, got {got:?}")]
-    TransactionsRootMismatch { expected: B256, got: B256 },
+    TransactionsRoot { expected: B256, got: B256 },
 
     #[error("receipts root mismatch, expected {expected:?}, got {got:?}")]
-    ReceiptsRootMismatch { expected: B256, got: B256 },
+    ReceiptsRoot { expected: B256, got: B256 },
 
     #[error("gas used mismatch, expected {expected}, got {got}")]
-    GasUsedMismatch { expected: u64, got: u64 },
+    GasUsed { expected: u64, got: u64 },
 
     #[error("gas limit mismatch, expected {expected}, got {got}")]
-    GasLimitMismatch { expected: u64, got: u64 },
+    GasLimit { expected: u64, got: u64 },
 
     #[error("total frags mismatch, expected {expected}, got {got}")]
-    TotalFragsMismatch { expected: u64, got: u64 },
+    TotalFrags { expected: u64, got: u64 },
 }
 
 #[derive(Debug, Error)]
@@ -92,9 +92,6 @@ pub enum UnsealedBlockError {
 pub enum ExecError {
     #[error("executor not initialized")]
     NotInitialized,
-
-    #[error("cannot open a new unsealed block while there's one already in progress")]
-    Inprogress,
 
     #[error("execution failed: {0}")]
     Failed(String),

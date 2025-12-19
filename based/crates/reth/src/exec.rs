@@ -79,7 +79,7 @@ where
         };
 
         let parent_header = parent.header();
-        let None = self.current_unsealed_block.load_full() else { return Err(ExecError::Inprogress) };
+        let None = self.current_unsealed_block.load_full() else { return Err(ExecError::NotInitialized) };
 
         let expected_block_number = parent_header.number.saturating_sub(1);
         if env.number != expected_block_number {
@@ -289,10 +289,9 @@ fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<
     let tx_list: Vec<OpTransactionSigned> = frag
         .txs
         .iter()
-        .enumerate()
-        .map(|(_, tx_bytes)| {
-            Ok(OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref())
-                .map_err(|e| ExecError::Failed(format!("decode tx failed: {e}")))?)
+        .map(|tx_bytes| {
+            OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref())
+                .map_err(|e| ExecError::Failed(format!("decode tx failed: {e}")))
         })
         .collect::<Result<Vec<_>, ExecError>>()?;
 
