@@ -1,12 +1,14 @@
-use alloy_consensus::{Header, TxEnvelope};
-use alloy_eips::eip2718::Decodable2718;
+use alloy_consensus::{BlockBody, Header, TxEnvelope};
+use alloy_eips::{eip2718::Decodable2718, eip7685::EMPTY_REQUESTS_HASH};
 use alloy_primitives::{Address, B256, Bytes, Sealable, TxHash, U256, map::foldhash::HashMap};
 use alloy_rpc_types::{BlockTransactions, Filter, Log, state::StateOverride};
 use alloy_rpc_types_eth::Header as RPCHeader;
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
+use op_alloy_consensus::{OpBlock, OpTxEnvelope};
 use op_alloy_network::{Optimism, TransactionResponse};
 use op_alloy_rpc_types::{OpTransactionReceipt, Transaction};
-use reth::revm::db::Cache;
+use reth::revm::db::{BundleState, Cache};
+use reth_optimism_primitives::OpTransactionSigned;
 use reth_rpc_eth_api::RpcBlock;
 use tokio::sync::broadcast;
 
@@ -34,6 +36,7 @@ pub struct UnsealedBlock {
     pub cumulative_gas_used: u64,
     /// Cumulative blob gas used across all blob-carrying transactions in the block.
     pub cumulative_blob_gas_used: u64,
+    pub is_prague: bool,
 
     transaction_count: HashMap<Address, U256>,
     transactions: Vec<Transaction>,
@@ -43,11 +46,12 @@ pub struct UnsealedBlock {
     new_block_sender: broadcast::Sender<RpcBlock<Optimism>>,
 
     db_cache: Cache,
+    bundle_state: BundleState,
 }
 
 impl UnsealedBlock {
     /// Create a fresh unsealed block state for `env` with empty frags/results/caches.
-    pub fn new(env: EnvV0) -> Self {
+    pub fn new(env: EnvV0, is_prague: bool) -> Self {
         let (new_block_sender, _) = broadcast::channel(16);
 
         Self {
@@ -59,12 +63,14 @@ impl UnsealedBlock {
             logs: Vec::new(),
             cumulative_gas_used: 0,
             cumulative_blob_gas_used: 0,
+            is_prague,
             transaction_count: Default::default(),
             transactions: vec![],
             transaction_receipts: Default::default(),
             state_overrides: None,
             new_block_sender,
             db_cache: Default::default(),
+            bundle_state: Default::default(),
         }
     }
 
@@ -110,9 +116,9 @@ impl UnsealedBlock {
         })
     }
 
-    /// Decoded txs (allocates Vec), like Go `Transactions()` but decoded.
-    pub fn transactions(&self) -> Result<Vec<TxEnvelope>, UnsealedBlockError> {
-        self.transactions_iter_decoded().collect()
+    /// Return list of transaction
+    pub fn transactions(&self) -> Vec<Transaction> {
+        self.transactions.clone()
     }
 
     /// Raw tx bytes (allocates Vec<Vec<u8>>), like Go `ByteTransactions()`.
@@ -142,8 +148,7 @@ impl UnsealedBlock {
         self.receipts.extend_from_slice(receipts.as_slice());
         self.cumulative_gas_used = cummulative_gas_used;
 
-        // TODO: Is this correct? Is everything applied here?
-        let _ = self.new_block_sender.send(self.to_block(false));
+        let _ = self.new_block_sender.send(self.to_rpc_block(false));
     }
 
     /// Validate frag against current state (equivalent to your ValidateNewFragV0 + sequencing gate).
@@ -200,12 +205,18 @@ impl UnsealedBlock {
 
     /// Reset to a fresh env (drop frags/results/counters).
     pub fn reset_to_env(&mut self, env: EnvV0) {
-        *self = Self::new(env);
+        *self = Self::new(env, self.is_prague);
     }
 
     /// Attach/replace the DB cache to carry execution overlay state forward.
     pub fn with_db_cache(mut self, cache: Cache) -> Self {
         self.db_cache = cache;
+        self
+    }
+
+    /// Attach/replace the bundle state to carry execution overlay state forward.
+    pub fn with_bundle_state(mut self, bundle_state: BundleState) -> Self {
+        self.bundle_state = bundle_state;
         self
     }
 
@@ -220,6 +231,11 @@ impl UnsealedBlock {
         self.db_cache.clone()
     }
 
+    /// Returns the bundle state.
+    pub fn get_bundle_state(&self) -> &BundleState {
+        &self.bundle_state
+    }
+
     /// Clone this unsealed block into a mutable working copy for in-place updates.
     pub fn clone_for_update(&self) -> Self {
         Self {
@@ -231,12 +247,14 @@ impl UnsealedBlock {
             logs: self.logs.clone(),
             cumulative_gas_used: self.cumulative_gas_used,
             cumulative_blob_gas_used: self.cumulative_blob_gas_used,
-            transaction_count: Default::default(),
-            transactions: vec![],
+            is_prague: self.is_prague,
+            transaction_count: self.transaction_count.clone(),
+            transactions: self.transactions.clone(),
             db_cache: self.db_cache.clone(),
             state_overrides: self.state_overrides.clone(),
             new_block_sender: self.new_block_sender.clone(),
-            transaction_receipts: Default::default(),
+            transaction_receipts: self.transaction_receipts.clone(),
+            bundle_state: self.bundle_state.clone(),
         }
     }
 
@@ -324,7 +342,7 @@ impl UnsealedBlock {
     }
 
     /// Convert current unsealed block into RpcBlock.
-    pub fn to_block(&self, full: bool) -> RpcBlock<Optimism> {
+    pub fn to_rpc_block(&self, full: bool) -> RpcBlock<Optimism> {
         let header = self.get_header();
         let header = header.clone().seal_slow();
         let block_transactions = self.transactions.clone();
@@ -342,5 +360,52 @@ impl UnsealedBlock {
             uncles: Vec::new(),
             withdrawals: None,
         }
+    }
+
+    pub fn to_op_block(&self, withdrawals_hash: Option<B256>) -> Result<OpBlock, UnsealedBlockError> {
+        // Decode EIP-2718 tx bytes -> OpTransactionSigned
+        let tx_list: Vec<OpTransactionSigned> = self
+            .frags
+            .iter()
+            .enumerate()
+            .flat_map(|(frag_idx, frag)| {
+                frag.txs.iter().enumerate().map(move |(tx_idx, tx_bytes)| {
+                    OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref()).map_err(|e| {
+                        UnsealedBlockError::Failed(format!("decode tx failed (frag={frag_idx} tx={tx_idx}): {e}"))
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, UnsealedBlockError>>()?;
+
+        let requests_hash = self.is_prague.then_some(EMPTY_REQUESTS_HASH);
+
+        let extra_data: Bytes = Bytes::copy_from_slice(self.env.extra_data.as_ref());
+        let header = Header {
+            parent_hash: self.env.parent_hash,
+            ommers_hash: Default::default(),
+            beneficiary: self.env.beneficiary,
+            state_root: B256::ZERO,
+            transactions_root: B256::ZERO,
+            receipts_root: B256::ZERO,
+            logs_bloom: Default::default(),
+            difficulty: self.env.difficulty,
+            number: self.env.number,
+            gas_limit: self.env.gas_limit,
+            gas_used: self.cumulative_gas_used,
+            timestamp: self.env.timestamp,
+            extra_data,
+            mix_hash: self.env.prevrandao,
+            nonce: Default::default(),
+            base_fee_per_gas: Some(self.env.basefee),
+            withdrawals_root: withdrawals_hash,
+            blob_gas_used: Some(self.cumulative_blob_gas_used),
+            excess_blob_gas: Some(0),
+            parent_beacon_block_root: Some(self.env.parent_beacon_block_root),
+            requests_hash,
+        };
+
+        let body = BlockBody { transactions: tx_list, ommers: vec![], withdrawals: None };
+
+        Ok(reth_optimism_primitives::OpBlock::new(header, body))
     }
 }

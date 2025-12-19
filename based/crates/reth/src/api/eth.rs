@@ -123,7 +123,7 @@ where
         if self.use_unsealed_state(&number) &&
             let Some(unsealed_block) = self.unsealed_block.load_full()
         {
-            Ok(Some(unsealed_block.to_block(full)))
+            Ok(Some(unsealed_block.to_rpc_block(full)))
         } else {
             EthBlocks::rpc_block(&self.canonical, number.into(), full).await.map_err(Into::into)
         }

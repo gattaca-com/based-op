@@ -1612,6 +1612,7 @@ dependencies = [
  "reth-node-builder 1.9.3",
  "reth-optimism-chainspec 1.9.3",
  "reth-optimism-cli 1.9.3",
+ "reth-optimism-consensus 1.9.3",
  "reth-optimism-evm 1.9.3",
  "reth-optimism-node 1.9.3",
  "reth-optimism-primitives 1.9.3",

@@ -46,3 +46,4 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 tracing.workspace = true
+reth_optimism_consensus = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3", package = "reth-optimism-consensus" }
