@@ -318,22 +318,22 @@ impl<E: UnsealedExecutor> DriverInner<E> {
     ) -> Result<(), ValidateSealError> {
         let expected_block_hash: B256 = presealed_block.header.hash_slow();
         if expected_block_hash != seal.block_hash {
-            return Err(ValidateSealError::BlockHashMismatch { expected: expected_block_hash, got: seal.block_hash });
+            return Err(ValidateSealError::BlockHash { expected: expected_block_hash, got: seal.block_hash });
         }
 
         let expected_parent_hash = presealed_block.header.parent_hash;
         if expected_parent_hash != seal.parent_hash {
-            return Err(ValidateSealError::ParentHashMismatch { expected: expected_parent_hash, got: seal.parent_hash });
+            return Err(ValidateSealError::ParentHash { expected: expected_parent_hash, got: seal.parent_hash });
         }
 
         let expected_state_root = presealed_block.header.state_root;
         if expected_state_root != seal.state_root {
-            return Err(ValidateSealError::StateRootMismatch { expected: expected_state_root, got: seal.state_root });
+            return Err(ValidateSealError::StateRoot { expected: expected_state_root, got: seal.state_root });
         }
 
         let expected_tx_root = presealed_block.header.transactions_root;
         if expected_tx_root != seal.transactions_root {
-            return Err(ValidateSealError::TransactionsRootMismatch {
+            return Err(ValidateSealError::TransactionsRoot {
                 expected: expected_tx_root,
                 got: seal.transactions_root,
             });
@@ -341,7 +341,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
         let expected_receipts_root = presealed_block.header.receipts_root;
         if expected_receipts_root != seal.receipts_root {
-            return Err(ValidateSealError::ReceiptsRootMismatch {
+            return Err(ValidateSealError::ReceiptsRoot {
                 expected: expected_receipts_root,
                 got: seal.receipts_root,
             });
@@ -349,27 +349,24 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
         let expected_gas_used = presealed_block.header.gas_used;
         if expected_gas_used != seal.gas_used {
-            return Err(ValidateSealError::GasUsedMismatch { expected: expected_gas_used, got: seal.gas_used });
+            return Err(ValidateSealError::GasUsed { expected: expected_gas_used, got: seal.gas_used });
         }
 
         let expected_gas_limit = presealed_block.header.gas_limit;
         if expected_gas_limit != seal.gas_limit {
-            return Err(ValidateSealError::GasLimitMismatch { expected: expected_gas_limit, got: seal.gas_limit });
+            return Err(ValidateSealError::GasLimit { expected: expected_gas_limit, got: seal.gas_limit });
         }
 
         let expected_total_frags = ub.frags.len() as u64;
         if expected_total_frags != seal.total_frags {
-            return Err(ValidateSealError::TotalFragsMismatch { expected: expected_total_frags, got: seal.total_frags });
+            return Err(ValidateSealError::TotalFrags { expected: expected_total_frags, got: seal.total_frags });
         }
 
         Ok(())
     }
 
     fn get_header_view(&self) -> HeaderView {
-        let header = match self.current_unsealed_block.load_full() {
-            Some(ub) => Some(ub.get_header()),
-            None => None,
-        };
+        let header = self.current_unsealed_block.load_full().map(|ub| ub.get_header());
         HeaderView { enabled: true, header }
     }
 }

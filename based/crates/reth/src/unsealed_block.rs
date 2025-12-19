@@ -273,9 +273,7 @@ impl UnsealedBlock {
 
     /// Returns the cached balance for `address` from the DB cache, if the account is present.
     pub fn get_balance(&self, address: Address) -> Option<U256> {
-        let Some(account) = self.db_cache.accounts.get(&address) else {
-            return None;
-        };
+        let account = self.db_cache.accounts.get(&address)?;
 
         Some(account.info.balance)
     }

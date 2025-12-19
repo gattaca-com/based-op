@@ -30,7 +30,9 @@ use reth_revm::{
     database::StateProviderDatabase,
 };
 use reth_rpc_convert::transaction::ConvertReceiptInput;
-use reth_storage_api::{BlockReaderIdExt, BlockWriter, CanonChainTracker, DBProvider, DatabaseProviderFactory, StateProviderFactory};
+use reth_storage_api::{
+    BlockReaderIdExt, BlockWriter, CanonChainTracker, DBProvider, DatabaseProviderFactory, StateProviderFactory,
+};
 use revm::database::CacheDB;
 
 use crate::{error::ExecError, unsealed_block::UnsealedBlock};
@@ -302,10 +304,9 @@ fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<
     let tx_list: Vec<OpTransactionSigned> = frag
         .txs
         .iter()
-        .enumerate()
-        .map(|(_, tx_bytes)| {
-            Ok(OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref())
-                .map_err(|e| ExecError::Failed(format!("decode tx failed: {e}")))?)
+        .map(|tx_bytes| {
+            OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref())
+                .map_err(|e| ExecError::Failed(format!("decode tx failed: {e}")))
         })
         .collect::<Result<Vec<_>, ExecError>>()?;
 
