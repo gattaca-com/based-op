@@ -8,7 +8,10 @@ use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
 use alloy_primitives::{B256, Bytes, Sealable};
 use alloy_rpc_types::Log;
 use arc_swap::ArcSwapOption;
-use bop_common::p2p::{EnvV0, FragV0};
+use bop_common::{
+    p2p::{EnvV0, FragV0},
+    typedefs::Database,
+};
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::{OpTransactionReceipt, Transaction as RPCTransaction};
 use reth::{
@@ -190,8 +193,9 @@ where
 
             let recovered_transaction = Recovered::new_unchecked(transaction.clone(), sender);
             let envelope = recovered_transaction.clone().convert::<OpTxEnvelope>();
+            let is_deposit = transaction.is_deposit();
 
-            let effective_gas_price = if transaction.is_deposit() {
+            let effective_gas_price = if is_deposit {
                 0
             } else {
                 block
@@ -199,6 +203,21 @@ where
                     .map(|base_fee| transaction.effective_tip_per_gas(base_fee).unwrap_or_default() + base_fee as u128)
                     .unwrap_or_else(|| transaction.max_fee_per_gas())
             };
+
+            let deposit_nonce = if is_deposit && chain_spec.is_regolith_active_at_timestamp(ub.env.timestamp) {
+                // depositor nonce (use signer account)
+                let acc = evm
+                    .db_mut()
+                    .basic(sender)
+                    .map_err(|e| ExecError::Failed(format!("get acc nonce basic() failed: {e}")))?
+                    .unwrap_or_default();
+                Some(acc.nonce) // pre-tx nonce
+            } else {
+                None
+            };
+
+            let deposit_receipt_version =
+                if is_deposit && chain_spec.is_canyon_active_at_timestamp(ub.env.timestamp) { Some(1) } else { None };
 
             let rpc_txn = RPCTransaction {
                 inner: alloy_rpc_types_eth::Transaction {
@@ -208,8 +227,8 @@ where
                     transaction_index: Some(idx as u64),
                     effective_gas_price: Some(effective_gas_price),
                 },
-                deposit_nonce: None,
-                deposit_receipt_version: None,
+                deposit_nonce,
+                deposit_receipt_version,
             };
 
             ub.with_transaction(rpc_txn);
@@ -239,7 +258,7 @@ where
                     let base_receipt = Receipt { status: success.into(), cumulative_gas_used: gas_used, logs: tx_logs };
 
                     let ty = transaction.ty();
-                    let op_receipt = wrap_op_receipt(ty, base_receipt, None, None)?;
+                    let op_receipt = wrap_op_receipt(ty, base_receipt, deposit_nonce, deposit_receipt_version)?;
 
                     let meta = TransactionMeta {
                         tx_hash,
