@@ -1,10 +1,9 @@
 use alloy_consensus::{Header, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, B256, Bytes, Sealable, TxHash, U256, map::foldhash::HashMap};
-use alloy_rpc_types::{BlockTransactions, Filter, Log, TransactionReceipt, state::StateOverride};
+use alloy_rpc_types::{BlockTransactions, Filter, Log, state::StateOverride};
 use alloy_rpc_types_eth::Header as RPCHeader;
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
-use op_alloy_consensus::OpReceiptEnvelope;
 use op_alloy_network::{Optimism, TransactionResponse};
 use op_alloy_rpc_types::{OpTransactionReceipt, Transaction};
 use reth::revm::db::Cache;

@@ -8,17 +8,12 @@ pub mod eth;
 pub(crate) trait ToRpc {
     type RpcVariant;
 
-    fn as_rpc(&self) -> Self::RpcVariant;
-
+    /// Convert the type into its RPC variant.
     fn into_rpc(self) -> Self::RpcVariant;
 }
 
 impl ToRpc for OpTransactionReceipt {
     type RpcVariant = RpcReceipt<Optimism>;
-
-    fn as_rpc(&self) -> Self::RpcVariant {
-        RpcReceipt::<Optimism>::from(self.clone())
-    }
 
     fn into_rpc(self) -> Self::RpcVariant {
         RpcReceipt::<Optimism>::from(self)
