@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, TxHash, U256};
@@ -25,7 +25,7 @@ use reth_rpc_eth_api::{
 use tokio::sync::broadcast::error::RecvError;
 use tokio_stream::{StreamExt, wrappers::BroadcastStream};
 
-use crate::unsealed_block::UnsealedBlock;
+use crate::{api::ToRpc as _, unsealed_block::UnsealedBlock};
 
 /// Max configured timeout for `eth_sendRawTransactionSync`.
 const SEND_RAW_TX_SYNC_TIMEOUT: Duration = Duration::from_millis(6_000);
@@ -120,10 +120,10 @@ where
             block_number = ?number
         );
 
-        if self.use_unsealed_state(&number) {
-            // TODO: Implement pending blocks
-
-            EthBlocks::rpc_block(&self.canonical, BlockNumberOrTag::Latest.into(), full).await.map_err(Into::into)
+        if self.use_unsealed_state(&number) &&
+            let Some(unsealed_block) = self.unsealed_block.load_full()
+        {
+            Ok(Some(unsealed_block.to_block(full)))
         } else {
             EthBlocks::rpc_block(&self.canonical, number.into(), full).await.map_err(Into::into)
         }
@@ -140,10 +140,9 @@ where
             return Ok(Some(canonical_receipt));
         }
 
-        // TODO: Implement pending transaction receipts
         if let Some(unsealed_block) = self.unsealed_block.load_full() {
             if let Some(receipt) = unsealed_block.get_transaction_receipt(&tx_hash) {
-                todo!("Type conversion")
+                return Ok(Some(receipt.into_rpc()));
             }
         }
 
@@ -422,9 +421,6 @@ where
             all_logs.extend(historical_logs);
         }
 
-        // Always get pending logs when toBlock is pending
-
-        // TODO:
         // Dedup any logs from the pending state that may already have been covered in the historical logs
         all_logs.dedup();
 
@@ -445,7 +441,7 @@ where
                     Ok(block) => {
                         if let Some(receipt) = unsealed_block.get_transaction_receipt(&tx_hash) {
                             tracing::debug!(%tx_hash, block_number = block.number(), block_hash = %block.hash(), "Receipt found");
-                            todo!("Type conversion")
+                            return Some(receipt.into_rpc());
                         }
 
                         continue;

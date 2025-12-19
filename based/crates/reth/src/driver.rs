@@ -1,8 +1,7 @@
-use std::{hash::Hash, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 
 use alloy_consensus::Header;
 use alloy_primitives::B256;
-use alloy_rpc_types::Block;
 use arc_swap::ArcSwapOption;
 use bop_common::{
     p2p::{EnvV0, FragV0, SealV0},
@@ -290,7 +289,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             return Ok(());
         }
 
-        let presealed_block = match self.exec.get_block(seal.block_hash, seal.block_number) {
+        let presealed_block = match self.exec.get_block(seal.block_hash) {
             Ok(b) => b,
             Err(e) => {
                 self.reset_current_unsealed_block();

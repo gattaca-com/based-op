@@ -1,12 +1,11 @@
 use alloy_consensus::{Header, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, B256, Bytes, Sealable, TxHash, U256, map::foldhash::HashMap};
-use alloy_rpc_types::{BlockTransactions, Filter, Log, TransactionReceipt, state::StateOverride};
+use alloy_rpc_types::{BlockTransactions, Filter, Log, state::StateOverride};
 use alloy_rpc_types_eth::Header as RPCHeader;
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
-use op_alloy_consensus::OpReceiptEnvelope;
 use op_alloy_network::{Optimism, TransactionResponse};
-use op_alloy_rpc_types::Transaction;
+use op_alloy_rpc_types::{OpTransactionReceipt, Transaction};
 use reth::revm::db::Cache;
 use reth_rpc_eth_api::RpcBlock;
 use tokio::sync::broadcast;
@@ -28,7 +27,7 @@ pub struct UnsealedBlock {
     pub hash: B256,
 
     /// Transaction receipts for executed transactions.
-    pub receipts: Vec<TransactionReceipt<OpReceiptEnvelope<Log>>>,
+    pub receipts: Vec<OpTransactionReceipt>,
     /// Flattened logs emitted during execution.
     pub logs: Vec<Log>,
     /// Cumulative execution gas used across all transactions in the block.
@@ -38,7 +37,7 @@ pub struct UnsealedBlock {
 
     transaction_count: HashMap<Address, U256>,
     transactions: Vec<Transaction>,
-    transaction_receipts: HashMap<B256, TransactionReceipt<OpReceiptEnvelope<Log>>>,
+    transaction_receipts: HashMap<TxHash, OpTransactionReceipt>,
     state_overrides: Option<StateOverride>,
 
     new_block_sender: broadcast::Sender<RpcBlock<Optimism>>,
@@ -133,7 +132,7 @@ impl UnsealedBlock {
         &mut self,
         f: FragV0,
         logs: Vec<Log>,
-        receipts: Vec<TransactionReceipt<OpReceiptEnvelope<Log>>>,
+        receipts: Vec<OpTransactionReceipt>,
         cummulative_gas_used: u64,
     ) {
         self.last_sequence_number = Some(f.seq);
@@ -252,7 +251,7 @@ impl UnsealedBlock {
     }
 
     /// Looks up and returns a cloned transaction receipt by transaction hash, if present.
-    pub fn get_transaction_receipt(&self, tx_hash: &TxHash) -> Option<TransactionReceipt<OpReceiptEnvelope<Log>>> {
+    pub fn get_transaction_receipt(&self, tx_hash: &TxHash) -> Option<OpTransactionReceipt> {
         self.transaction_receipts.get(tx_hash).cloned()
     }
 
@@ -314,11 +313,7 @@ impl UnsealedBlock {
     }
 
     /// Insert/replace the receipt for `tx_hash` in the per-tx receipt map.
-    pub(crate) fn with_transaction_receipt(
-        &mut self,
-        tx_hash: B256,
-        receipt: TransactionReceipt<OpReceiptEnvelope<Log>>,
-    ) -> &Self {
+    pub(crate) fn with_transaction_receipt(&mut self, tx_hash: B256, receipt: OpTransactionReceipt) -> &Self {
         self.transaction_receipts.insert(tx_hash, receipt);
         self
     }

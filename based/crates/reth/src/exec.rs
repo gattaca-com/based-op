@@ -8,12 +8,12 @@ use alloy_consensus::{
     transaction::{Recovered, SignerRecoverable, TransactionMeta},
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
-use alloy_primitives::{B256, BlockNumber, Bytes, Sealable};
-use alloy_rpc_types::{Log, TransactionReceipt};
+use alloy_primitives::{B256, Bytes, Sealable};
+use alloy_rpc_types::{Log};
 use arc_swap::ArcSwapOption;
 use bop_common::p2p::{EnvV0, FragV0};
-use op_alloy_consensus::{OpReceiptEnvelope, OpTxEnvelope};
-use op_alloy_rpc_types::Transaction as RPCTransaction;
+use op_alloy_consensus::OpTxEnvelope;
+use op_alloy_rpc_types::{OpTransactionReceipt, Transaction as RPCTransaction};
 use reth::{
     network::cache::LruMap,
     primitives::{SealedBlock, SealedHeader},
@@ -52,7 +52,7 @@ pub trait UnsealedExecutor: Send {
 
     fn set_canonical(&mut self, b: &OpBlock) -> Result<(), ExecError>;
 
-    fn get_block(&self, hash: B256, number: BlockNumber) -> Result<(OpBlock), ExecError>;
+    fn get_block(&self, hash: B256) -> Result<OpBlock, ExecError>;
 
     /// Reset overlay state completely.
     fn reset(&mut self);
@@ -145,7 +145,7 @@ where
         let mut gas_used: u64 = ub.cumulative_blob_gas_used;
         let mut logs: Vec<Log> = Vec::new();
         let mut next_log_index = 0usize;
-        let mut receipts: Vec<TransactionReceipt<OpReceiptEnvelope<Log>>> = Vec::new();
+        let mut receipts: Vec<OpTransactionReceipt> = Vec::new();
 
         for (idx, transaction) in block.body.transactions.iter().enumerate() {
             let tx_hash = transaction.tx_hash();
@@ -214,6 +214,7 @@ where
                         excess_blob_gas: block.excess_blob_gas,
                         timestamp: block.timestamp,
                     };
+
                     let input: ConvertReceiptInput<'_, OpPrimitives> = ConvertReceiptInput {
                         receipt: op_receipt,
                         tx: Recovered::new_unchecked(transaction, sender),
@@ -222,9 +223,10 @@ where
                         meta,
                     };
 
-                    let receipt = OpReceiptBuilder::new(chain_spec.as_ref(), input, &mut l1_block_info)?.core_receipt;
+                    let receipt = OpReceiptBuilder::new(chain_spec.as_ref(), input, &mut l1_block_info)?.build();
 
-                    next_log_index += receipt.logs().len();
+                    // TODO: Is this correct?q
+                    next_log_index += receipt.inner.logs().len();
                     ub.with_transaction_receipt(tx_hash, receipt.clone());
                     receipts.push(receipt);
                 }
@@ -263,7 +265,7 @@ where
         Ok(())
     }
 
-    fn get_block(&self, hash: B256, number: BlockNumber) -> Result<(OpBlock), ExecError> {
+    fn get_block(&self, hash: B256) -> Result<OpBlock, ExecError> {
         if let Some(block) = self
             .block_cache
             .lock()
