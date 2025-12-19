@@ -23,6 +23,7 @@ use crate::{
 /// Result of submitting a frag to the driver.
 #[derive(Debug, Clone, Copy)]
 pub enum FragStatus {
+    Ignored,
     Valid,
     Invalid,
 }
@@ -246,7 +247,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
         if frag.block_number < ub.env.number {
             info!(frag_block = frag.block_number, env_number = ub.env.number, "stale frag (older block), ignoring");
-            return Ok(FragStatus::Valid);
+            return Ok(FragStatus::Ignored);
         }
 
         if let Err(e) = ub.validate_new_frag(&frag) {
