@@ -6,11 +6,11 @@ use alloy_consensus::{
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
 use alloy_primitives::{B256, BlockNumber, Bytes, Sealable};
-use alloy_rpc_types::{Block, Log, TransactionReceipt};
+use alloy_rpc_types::{Block, Log};
 use arc_swap::ArcSwapOption;
 use bop_common::p2p::{EnvV0, FragV0};
-use op_alloy_consensus::{OpReceiptEnvelope, OpTxEnvelope};
-use op_alloy_rpc_types::Transaction as RPCTransaction;
+use op_alloy_consensus::OpTxEnvelope;
+use op_alloy_rpc_types::{OpTransactionReceipt, Transaction as RPCTransaction};
 use reth_chainspec::{ChainSpecProvider, EthChainSpec};
 use reth_evm::{ConfigureEvm, Evm, op_revm::OpHaltReason};
 use reth_optimism_chainspec::OpHardforks;
@@ -90,17 +90,18 @@ where
         let ub_cache = ub.get_db_cache();
         let canonical_block = ub.env.number.saturating_sub(1);
 
-        let last_block_header = self.client
+        let last_block_header = self
+            .client
             .header_by_number(canonical_block)
             .map_err(|e| ExecError::Failed(format!("header_by_number({canonical_block}) failed: {e}")))?
             .ok_or_else(|| ExecError::Failed(format!("missing parent header at {canonical_block}")))?;
 
         let evm_config = OpEvmConfig::optimism(self.client.chain_spec());
 
-        let state_provider =
-            self.client.state_by_block_number_or_tag(BlockNumberOrTag::Number(canonical_block)).map_err(|e| {
-                ExecError::Failed(format!("state_by_block_number_or_tag({canonical_block}) failed: {e}"))
-            })?;
+        let state_provider = self
+            .client
+            .state_by_block_number_or_tag(BlockNumberOrTag::Number(canonical_block))
+            .map_err(|e| ExecError::Failed(format!("state_by_block_number_or_tag({canonical_block}) failed: {e}")))?;
 
         let state_provider_db = StateProviderDatabase::new(state_provider);
         let state = State::builder().with_database(state_provider_db).with_bundle_update().build();
@@ -128,7 +129,7 @@ where
         let mut gas_used: u64 = ub.cumulative_blob_gas_used;
         let mut logs: Vec<Log> = Vec::new();
         let mut next_log_index = 0usize;
-        let mut receipts: Vec<TransactionReceipt<OpReceiptEnvelope<Log>>> = Vec::new();
+        let mut receipts: Vec<OpTransactionReceipt> = Vec::new();
 
         for (idx, transaction) in block.body.transactions.iter().enumerate() {
             let tx_hash = transaction.tx_hash();
@@ -143,9 +144,7 @@ where
             } else {
                 block
                     .base_fee_per_gas
-                    .map(|base_fee| {
-                        transaction.effective_tip_per_gas(base_fee).unwrap_or_default() + base_fee as u128
-                    })
+                    .map(|base_fee| transaction.effective_tip_per_gas(base_fee).unwrap_or_default() + base_fee as u128)
                     .unwrap_or_else(|| transaction.max_fee_per_gas())
             };
 
@@ -172,10 +171,8 @@ where
                         existing_override.code = acc.info.code.clone().map(|code| code.bytes());
 
                         let existing = existing_override.state_diff.get_or_insert(Default::default());
-                        let changed_slots = acc
-                            .storage
-                            .iter()
-                            .map(|(&key, slot)| (B256::from(key), B256::from(slot.present_value)));
+                        let changed_slots =
+                            acc.storage.iter().map(|(&key, slot)| (B256::from(key), B256::from(slot.present_value)));
 
                         existing.extend(changed_slots);
                     }
@@ -187,8 +184,7 @@ where
 
                     logs.extend(tx_logs.iter().map(|inner| Log { inner: inner.clone(), ..Default::default() }));
 
-                    let base_receipt =
-                        Receipt { status: success.into(), cumulative_gas_used: gas_used, logs: tx_logs };
+                    let base_receipt = Receipt { status: success.into(), cumulative_gas_used: gas_used, logs: tx_logs };
 
                     let ty = transaction.ty();
                     let op_receipt = wrap_op_receipt(ty, base_receipt, None, None)?;
@@ -202,6 +198,7 @@ where
                         excess_blob_gas: block.excess_blob_gas,
                         timestamp: block.timestamp,
                     };
+
                     let input: ConvertReceiptInput<'_, OpPrimitives> = ConvertReceiptInput {
                         receipt: op_receipt,
                         tx: Recovered::new_unchecked(transaction, sender),
@@ -210,10 +207,10 @@ where
                         meta,
                     };
 
-                    let receipt =
-                        OpReceiptBuilder::new(chain_spec.as_ref(), input, &mut l1_block_info)?.core_receipt;
+                    let receipt = OpReceiptBuilder::new(chain_spec.as_ref(), input, &mut l1_block_info)?.build();
 
-                    next_log_index += receipt.logs().len();
+                    // TODO: Is this correct?q
+                    next_log_index += receipt.inner.logs().len();
                     ub.with_transaction_receipt(tx_hash, receipt.clone());
                     receipts.push(receipt);
                 }
