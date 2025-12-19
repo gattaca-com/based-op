@@ -1,12 +1,14 @@
-use alloy_consensus::{Header, TxEnvelope};
+use alloy_consensus::{BlockBody, Header, TxEnvelope};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{Address, B256, Bytes, Sealable, TxHash, U256, map::foldhash::HashMap};
 use alloy_rpc_types::{BlockTransactions, Filter, Log, state::StateOverride};
 use alloy_rpc_types_eth::Header as RPCHeader;
 use bop_common::p2p::{EnvV0, FragV0, Transaction as TxBytes};
+use op_alloy_consensus::{OpBlock, OpTxEnvelope};
 use op_alloy_network::{Optimism, TransactionResponse};
 use op_alloy_rpc_types::{OpTransactionReceipt, Transaction};
 use reth::revm::db::Cache;
+use reth_optimism_primitives::OpTransactionSigned;
 use reth_rpc_eth_api::RpcBlock;
 use tokio::sync::broadcast;
 
@@ -142,8 +144,7 @@ impl UnsealedBlock {
         self.receipts.extend_from_slice(receipts.as_slice());
         self.cumulative_gas_used = cummulative_gas_used;
 
-        // TODO: Is this correct? Is everything applied here?
-        let _ = self.new_block_sender.send(self.to_block(false));
+        let _ = self.new_block_sender.send(self.to_rpc_block(false));
     }
 
     /// Validate frag against current state (equivalent to your ValidateNewFragV0 + sequencing gate).
@@ -328,7 +329,7 @@ impl UnsealedBlock {
     }
 
     /// Convert current unsealed block into RpcBlock.
-    pub fn to_block(&self, full: bool) -> RpcBlock<Optimism> {
+    pub fn to_rpc_block(&self, full: bool) -> RpcBlock<Optimism> {
         let header = self.get_header();
         let header = header.clone().seal_slow();
         let block_transactions = self.transactions.clone();
@@ -346,5 +347,50 @@ impl UnsealedBlock {
             uncles: Vec::new(),
             withdrawals: None,
         }
+    }
+
+    pub fn to_op_block(&self) -> Result<OpBlock, UnsealedBlockError> {
+        // Decode EIP-2718 tx bytes -> OpTransactionSigned
+        let tx_list: Vec<OpTransactionSigned> = self
+            .frags
+            .iter()
+            .enumerate()
+            .flat_map(|(frag_idx, frag)| {
+                frag.txs.iter().enumerate().map(move |(tx_idx, tx_bytes)| {
+                    OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref()).map_err(|e| {
+                        UnsealedBlockError::Failed(format!("decode tx failed (frag={frag_idx} tx={tx_idx}): {e}"))
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, UnsealedBlockError>>()?;
+
+        let extra_data: Bytes = Bytes::copy_from_slice(self.env.extra_data.as_ref());
+        let header = Header {
+            parent_hash: self.env.parent_hash,
+            ommers_hash: Default::default(),
+            beneficiary: self.env.beneficiary,
+            state_root: B256::ZERO,
+            transactions_root: B256::ZERO,
+            receipts_root: B256::ZERO,
+            logs_bloom: Default::default(),
+            difficulty: self.env.difficulty,
+            number: self.env.number,
+            gas_limit: self.env.gas_limit,
+            gas_used: self.cumulative_gas_used,
+            timestamp: self.env.timestamp,
+            extra_data,
+            mix_hash: self.env.prevrandao,
+            nonce: Default::default(),
+            base_fee_per_gas: Some(self.env.basefee),
+            withdrawals_root: None,
+            blob_gas_used: Some(self.cumulative_blob_gas_used),
+            excess_blob_gas: Some(0),
+            parent_beacon_block_root: Some(self.env.parent_beacon_block_root),
+            requests_hash: None,
+        };
+
+        let body = BlockBody { transactions: tx_list, ommers: vec![], withdrawals: None };
+
+        Ok(reth_optimism_primitives::OpBlock::new(header, body))
     }
 }

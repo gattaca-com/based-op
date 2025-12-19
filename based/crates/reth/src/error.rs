@@ -86,6 +86,9 @@ pub enum UnsealedBlockError {
 
     #[error("received frag after last frag already accepted")]
     AlreadyEnded,
+
+    #[error("operation failed: {0}")]
+    Failed(String),
 }
 
 #[derive(Debug, Error)]
@@ -113,4 +116,7 @@ pub enum ExecError {
 
     #[error(transparent)]
     OpEthApi(#[from] OpEthApiError),
+
+    #[error(transparent)]
+    UnsealedBlock(#[from] UnsealedBlockError),
 }

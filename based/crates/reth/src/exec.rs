@@ -9,7 +9,7 @@ use alloy_consensus::{
 };
 use alloy_eips::{BlockNumberOrTag, Typed2718, eip2718::Decodable2718};
 use alloy_primitives::{B256, Bytes, Sealable};
-use alloy_rpc_types::{Log};
+use alloy_rpc_types::Log;
 use arc_swap::ArcSwapOption;
 use bop_common::p2p::{EnvV0, FragV0};
 use op_alloy_consensus::OpTxEnvelope;
@@ -251,7 +251,7 @@ where
 
     fn seal(&mut self) -> Result<(), ExecError> {
         let ub = self.current_unsealed_block.load_full().ok_or(ExecError::NotInitialized)?;
-        let block = build_op_block_from_ub(ub.as_ref())?;
+        let block = ub.to_op_block()?;
         let sealed = SealedBlock::seal_slow(block);
         let recovered = sealed.try_recover().map_err(|e| ExecError::Failed(format!("recover senders: {e}")))?;
 
@@ -317,50 +317,6 @@ fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<
         logs_bloom: Default::default(),
         difficulty: ub.env.difficulty,
         number: frag.block_number,
-        gas_limit: ub.env.gas_limit,
-        gas_used: ub.cumulative_gas_used,
-        timestamp: ub.env.timestamp,
-        extra_data,
-        mix_hash: ub.env.prevrandao,
-        nonce: Default::default(),
-        base_fee_per_gas: Some(ub.env.basefee),
-        withdrawals_root: None,
-        blob_gas_used: Some(ub.cumulative_blob_gas_used),
-        excess_blob_gas: Some(0),
-        parent_beacon_block_root: Some(ub.env.parent_beacon_block_root),
-        requests_hash: None,
-    };
-
-    let body = BlockBody { transactions: tx_list, ommers: vec![], withdrawals: None };
-
-    Ok(OpBlock::new(header, body))
-}
-
-fn build_op_block_from_ub(ub: &UnsealedBlock) -> Result<OpBlock, ExecError> {
-    // Decode EIP-2718 tx bytes -> OpTransactionSigned
-    let tx_list: Vec<OpTransactionSigned> = ub
-        .frags
-        .iter()
-        .enumerate()
-        .flat_map(|(frag_idx, frag)| {
-            frag.txs.iter().enumerate().map(move |(tx_idx, tx_bytes)| {
-                OpTxEnvelope::decode_2718(&mut tx_bytes.as_ref())
-                    .map_err(|e| ExecError::Failed(format!("decode tx failed (frag={frag_idx} tx={tx_idx}): {e}")))
-            })
-        })
-        .collect::<Result<Vec<_>, ExecError>>()?;
-
-    let extra_data: Bytes = Bytes::copy_from_slice(ub.env.extra_data.as_ref());
-    let header = Header {
-        parent_hash: ub.env.parent_hash,
-        ommers_hash: Default::default(),
-        beneficiary: ub.env.beneficiary,
-        state_root: B256::ZERO,
-        transactions_root: B256::ZERO,
-        receipts_root: B256::ZERO,
-        logs_bloom: Default::default(),
-        difficulty: ub.env.difficulty,
-        number: ub.env.number,
         gas_limit: ub.env.gas_limit,
         gas_used: ub.cumulative_gas_used,
         timestamp: ub.env.timestamp,
