@@ -77,7 +77,7 @@ enum Cmd {
     EnvV0 { env: EnvV0, resp: Resp<()> },
     NewFragV0 { frag: FragV0, resp: Resp<FragStatus> },
     SealFragV0 { seal: SealV0, resp: Resp<()> },
-    ForkchoiceUpdated { block: OpBlock, resp: Resp<()> },
+    ForkchoiceUpdated { block: Box<OpBlock>, resp: Resp<()> },
     GetHeaderView { resp: Resp<HeaderView> },
 }
 
@@ -135,7 +135,7 @@ impl Driver {
                         respond(resp, inner.handle_seal_frag_v0(seal).await);
                     }
                     Cmd::ForkchoiceUpdated { block, resp } => {
-                        respond(resp, inner.handle_forkchoice_updated(block).await);
+                        respond(resp, inner.handle_forkchoice_updated(*block).await);
                     }
                     Cmd::GetHeaderView { resp } => {
                         let _ = resp.send(Reply::Ok(inner.get_header_view()));
@@ -176,7 +176,7 @@ impl Driver {
     /// Notifies the driver about a forkchoice update and resets state on mismatch.
     pub async fn forkchoice_updated(&self, block: OpBlock) -> Result<(), DriverError> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx.send(Cmd::ForkchoiceUpdated { block, resp: resp_tx }).await?;
+        self.tx.send(Cmd::ForkchoiceUpdated { block: Box::new(block), resp: resp_tx }).await?;
         resp_rx.await?.into_result()
     }
 
@@ -215,7 +215,7 @@ impl<E: UnsealedExecutor> DriverInner<E> {
             self.reset_current_unsealed_block();
         }
 
-        self.exec.ensure_env(&env).await?; // ths should update current_unsealed_block too
+        self.exec.ensure_env(&env)?; // this should update current_unsealed_block too because shared arc
         self.fcu_count_since_unseal_reset = 0;
         Ok(())
     }
@@ -333,18 +333,12 @@ impl<E: UnsealedExecutor> DriverInner<E> {
 
         let expected_tx_root = presealed_block.header.transactions_root;
         if expected_tx_root != seal.transactions_root {
-            return Err(ValidateSealError::TransactionsRoot {
-                expected: expected_tx_root,
-                got: seal.transactions_root,
-            });
+            return Err(ValidateSealError::TransactionsRoot { expected: expected_tx_root, got: seal.transactions_root });
         }
 
         let expected_receipts_root = presealed_block.header.receipts_root;
         if expected_receipts_root != seal.receipts_root {
-            return Err(ValidateSealError::ReceiptsRoot {
-                expected: expected_receipts_root,
-                got: seal.receipts_root,
-            });
+            return Err(ValidateSealError::ReceiptsRoot { expected: expected_receipts_root, got: seal.receipts_root });
         }
 
         let expected_gas_used = presealed_block.header.gas_used;

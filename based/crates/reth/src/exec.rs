@@ -1,5 +1,4 @@
 use std::{
-    future::Future,
     sync::{Arc, Mutex},
 };
 
@@ -15,6 +14,7 @@ use bop_common::p2p::{EnvV0, FragV0};
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_rpc_types::{OpTransactionReceipt, Transaction as RPCTransaction};
 use reth::{
+    api::Block as RethBlock,
     network::cache::LruMap,
     primitives::{SealedBlock, SealedHeader},
 };
@@ -43,7 +43,7 @@ const BLOCK_CACHE_LIMIT: u32 = 256;
 /// Everything else is just state-machine + bookkeeping.
 pub trait UnsealedExecutor: Send {
     /// Ensure the executor context is ready for this env (initialize overlay state, block env, etc.)
-    fn ensure_env(&mut self, env: &EnvV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_;
+    fn ensure_env(&mut self, env: &EnvV0) -> Result<(), ExecError>;
 
     /// Execute all txs in `frag` on top of current overlay state.
     ///
@@ -91,8 +91,37 @@ where
         + 'static,
     <Client as DatabaseProviderFactory>::ProviderRW: BlockWriter<Block = reth_optimism_primitives::OpBlock>,
 {
-    fn ensure_env(&mut self, _env: &EnvV0) -> impl Future<Output = Result<(), ExecError>> + Send + '_ {
-        async move { Ok(()) }
+    fn ensure_env(&mut self, env: &EnvV0) -> Result<(), ExecError> {
+        let Some(parent) = self.client.block_by_hash(env.parent_hash)? else {
+            return Err(ExecError::Failed(format!("parent block {} not found", env.parent_hash)))
+        };
+
+        let parent_header = parent.header();
+        let None = self.current_unsealed_block.load_full() else { return Err(ExecError::NotInitialized) };
+
+        let expected_block_number = parent_header.number.saturating_sub(1);
+        if env.number != expected_block_number {
+            return Err(ExecError::Failed(format!(
+                "env block number doesn't match expected block number, expected {}, received {}",
+                expected_block_number, env.number
+            )))
+        }
+
+        if env.timestamp < parent_header.timestamp {
+            return Err(ExecError::Failed(format!(
+                "env timestamp is lower than parent block timestamp, parent timestamp {}, env timestamp {}",
+                parent_header.timestamp, env.timestamp
+            )))
+        }
+
+        let state_provider =
+            self.client.state_by_block_number_or_tag(BlockNumberOrTag::Number(parent_header.number))?;
+        let state_provider_db = StateProviderDatabase::new(state_provider);
+        let state = State::builder().with_database(state_provider_db).with_bundle_update().build();
+        let ub = UnsealedBlock::new(env.clone()).with_db_cache(CacheDB::new(state).cache);
+        self.current_unsealed_block.store(Some(Arc::new(ub)));
+
+        Ok(())
     }
 
     fn execute_frag(&mut self, frag: &FragV0) -> Result<(), ExecError> {
@@ -296,7 +325,9 @@ where
         Ok(block)
     }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        self.current_unsealed_block.store(None);
+    }
 }
 
 fn build_op_block_from_ub_and_frag(ub: &UnsealedBlock, frag: &FragV0) -> Result<OpBlock, ExecError> {
