@@ -1,0 +1,110 @@
+name: Project integration tests
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: "git sha to checkout"
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASED_ENV: dev
+  PORTAL_TIMEOUT: 180
+  STARTUP_DELAY: 15
+  GITHUB_REPOSITORY: ${{ github.repository }}
+
+jobs:
+  # Build images and publish as artifacts
+  build:
+    name: Build images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: taiki-e/install-action@just
+
+      - name: Build Docker images
+        run: |
+          just ci build
+        
+      - name: Save Docker images to tarballs
+        run: |
+          mkdir -p artifacts
+          just ci export-images $(realpath ./artifacts)
+
+      - name: Upload images artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: based-op-images
+          path: artifacts
+
+  # Use published artifacts and run nodes
+  test:
+    name: Configure nodes & run tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+      
+      - name: Install Just
+        uses: taiki-e/install-action@just
+
+      - name: Install Foundry 
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Download images artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: based-op-images
+          path: /tmp/artifacts/images
+
+      - name: Load Docker images
+        run: |
+          find /tmp/artifacts/images -type f -exec docker load -i {} \;
+
+      - name: Prepare configuration
+        run: |
+          cp .env.example .env
+          just ci prepare
+
+      # - name: Publish configuration artifact
+      #   uses: actions/upload-artifact@v4
+      #   if: always()
+      #   with:
+      #     name: config
+      #     include-hidden-files: true
+      #     path: |
+      #       .local
+      #       !.local/**/data
+
+      - name: Start services and run tests
+        run: |
+          just ci run
+          sleep {{ env.STARTUP_DELAY }}
+          just ci test
+
+      - name: Teardown
+        if: always()
+        run: |
+          just ci stop

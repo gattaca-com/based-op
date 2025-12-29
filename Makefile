@@ -30,9 +30,9 @@ L2_CHAIN_ID?=$(shell \
 L2_CHAIN_ID_HEX:=$(shell printf "0x%064x" $(L2_CHAIN_ID))
 PORTAL?=http://0.0.0.0:8080
 TXPROXY?=http://0.0.0.0:8090
-L1_RPC_URL?=http://3.84.162.42:8545
-L1_BEACON_RPC_URL?=http://3.84.162.42:5051
-PUBLIC_IP?=$(shell curl ifconfig.me)
+L1_RPC_URL?=https://ethereum-sepolia-rpc.publicnode.com
+L1_BEACON_RPC_URL?=https://ethereum-sepolia-beacon-api.publicnode.com
+PUBLIC_IP?=$(shell curl -4 ifconfig.me)
 # if GATEWAY_SEQUENCING_KEY is set, use that one, otherwise key_to_address will generate a new one
 GATEWAY_SEQUENCING_KEY ?= $(shell                                    \
   [ -f .local_gateway_and_follower/.env ] &&                        \
@@ -365,7 +365,7 @@ start-main-node: create-network
 	  $(MAKE) fix-compose; \
 	  echo "Initializing all components of a main sequencing node in ./.local_main_node ..."; \
 	  { \
-	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i --rm imega/jq -r '.opChainDeployments[0].disputeGameFactoryProxyAddress' /config/state.json)"; \
+	    echo "DISPUTE_GAME_FACTORY_ADDRESS=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i --rm imega/jq -r '.opChainDeployments[0].DisputeGameFactoryProxy' /config/state.json)"; \
 	    echo "NETWORK_ID=$$(docker run -v $$(pwd)/.local_main_node/config:/config -i --rm imega/jq -r '.l2_chain_id' /config/rollup.json)"; \
 	    echo "L1_RPC_URL=$(L1_RPC_URL)"; \
 	    echo "L1_BEACON_RPC_URL=$(L1_BEACON_RPC_URL)"; \

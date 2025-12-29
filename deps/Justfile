@@ -1,0 +1,20 @@
+set dotenv-load
+set quiet
+
+geth := "just -f " + join(justfile_directory(), "geth.just")
+optimism := "just -f " + join(justfile_directory(), "optimism.just")
+
+_fetch dep:
+    just -f {{join(justfile_directory(), dep + ".just")}} fetch
+
+[parallel]
+fetch: (_fetch "geth") (_fetch "optimism")
+
+_build dep: (_fetch dep)
+    just -f {{join(justfile_directory(), dep + ".just")}} build
+
+[parallel]
+build: (_build "geth") (_build "optimism")
+
+hash dep:
+    git -C {{join(justfile_directory(), dep)}} rev-parse --verify --short HEAD

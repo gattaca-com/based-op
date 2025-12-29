@@ -1,7 +1,6 @@
 services:
   based-op-geth:
-    image: ghcr.io/gattaca-com/based-op-geth/based-op-geth:latest
-    pull_policy: always
+    image: local_based_op_geth:latest
     container_name: based-op-geth
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -55,8 +54,7 @@ services:
     network_mode: "host"
 
   based-op-node:
-    image: ghcr.io/gattaca-com/based-optimism/based-op-node:latest
-    pull_policy: always
+    image: local_based_op_node:latest
     container_name: based-op-node
     network_mode: "host"
     command:
@@ -97,11 +95,11 @@ services:
       - service=based-op-node
 
   based-gateway:
-    image: ghcr.io/gattaca-com/based-op/based-gateway:latest
-    pull_policy: always
+    image: local_based_gateway:latest
     container_name: based-gateway
     command:
       - --rpc.port=$GATEWAY_PORT
+      - --rpc.port_no_auth=$GATEWAY_PORT_NO_AUTH
       - --rpc.host=0.0.0.0
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway

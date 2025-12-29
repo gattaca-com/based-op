@@ -1,5 +1,6 @@
 import requests
 from itertools import combinations
+import re
 
 class NodePeering:
     def __init__(self, node_urls, geth_urls):
@@ -37,19 +38,22 @@ class NodePeering:
         for url in self.node_urls:
             self_info = self.node_opp2p_self(url)
             node_addresses = self_info.get('addresses', [])
-            multi_addresses[url] = node_addresses
+            node_local = [re.sub(r'\/ip4\/[0-9\.]*\/', '/ip4/127.0.0.1/', addr) for addr in node_addresses]
+            multi_addresses[url] = node_local
             print(f"Node at {url} has addresses: {node_addresses}")
 
         for (url1, addrs1), (url2, addrs2) in combinations(multi_addresses.items(), 2):
             if addrs1:
-                print(f"Connecting Node at {url2} to Node at {url1} ({addrs1[0]})")
-                self.node_opp2p_connect_peer(url2, addrs1[0])
+                for addr in addrs1:
+                    print(f"Connecting Node at {url2} to Node at {url1} ({addr})")
+                    self.node_opp2p_connect_peer(url2, addr)
             else:
                 print(f"Could not get multiaddress for Node at {url1}.")
 
             if addrs2:
-                print(f"Connecting Node at {url1} to Node at {url2} ({addrs2[0]})")
-                self.node_opp2p_connect_peer(url1, addrs2[0])
+                for addr in addrs2:
+                    print(f"Connecting Node at {url1} to Node at {url2} ({addr})")
+                    self.node_opp2p_connect_peer(url1, addr)
             else:
                 print(f"Could not get multiaddress for Node at {url2}.")
 
@@ -58,8 +62,9 @@ class NodePeering:
         for url in self.geth_urls:
             node_info = self.geth_node_info(url)
             enode = node_info.get('enode')
-            enodes[url] = enode
-            print(f"Geth Node at {url} has enode: {enode}")
+            enode_local = re.sub(r'@.+:', '@127.0.0.1:', enode)
+            enodes[url] = enode_local
+            print(f"Geth Node at {url} has enode: {enode_local}")
 
         for (url1, enode1), (url2, enode2) in combinations(enodes.items(), 2):
             if enode1:
