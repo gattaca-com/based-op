@@ -13,9 +13,9 @@ export MAIN_NODE_DIR := join(justfile_directory(), "..", "..", "main_node")
 export L1_CHAIN_ID := env("L1_CHAIN_ID", "11155111") # Default to Sepolia
 export L2_CHAIN_ID := env("L2_CHAIN_ID", shell(gen-l2-chain-id))
 
-export OP_PROPOSER_KEY := env("OP_PROPOSER_KEY", shell(wallet + " key proposer"))
-export OP_BATCHER_KEY := env("OP_BATCHER_KEY", shell(wallet + " key batcher"))
-export OP_SEQUENCER_KEY := env("OP_SEQUENCER_KEY", shell(wallet + " key sequencer"))
+export OP_PROPOSER_KEY := shell("echo ${OP_PROPOSER_KEY:-$(" + wallet + " key proposer)} |  grep . || exit 1")
+export OP_BATCHER_KEY := shell("echo ${OP_BATCHER_KEY:-$(" + wallet + " key batcher)} | grep . || exit 1")
+export OP_SEQUENCER_KEY := shell("echo ${OP_SEQUENCER_KEY:-$(" + wallet + " key sequencer)} | grep . || exit 1")
 #
 # Force config creation
 export FORCE := env("FORCE", "")
