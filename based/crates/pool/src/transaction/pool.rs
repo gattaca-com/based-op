@@ -15,6 +15,7 @@ use bop_common::{
 };
 use reth_optimism_primitives::transaction::OpTransaction;
 use reth_primitives_traits::InMemorySize;
+use rustc_hash::FxHashMap;
 
 use crate::transaction::pending::PendingOrders;
 
@@ -67,14 +68,20 @@ impl TxPool {
             return false;
         }
 
+        let mut nonce_diffs = FxHashMap::default();
+
         // Simple transaction validation closure
-        let validate_tx = |tx: &Transaction| {
-            let state_nonce = db.get_nonce(tx.sender()).expect("failed to get nonce");
+        let validate_tx = |tx: &Transaction, diffs: &mut FxHashMap<Address, u64>| {
+            let mut expected_nonce = db.get_nonce(tx.sender()).expect("failed to get nonce");
+            // Add the nonce diff from txs already validated in this bundle
+            if let Some(diff) = diffs.get(tx.sender_ref()) {
+                expected_nonce += diff;
+            }
+
             let nonce = tx.nonce();
 
             // Only accept transactions with the correct nonce
-            // TODO: We might want a bundle queueing mechanism.
-            if nonce != state_nonce || !tx.valid_for_block(base_fee) {
+            if nonce != expected_nonce || !tx.valid_for_block(base_fee) {
                 return false;
             }
 
@@ -85,11 +92,13 @@ impl TxPool {
                 return false;
             }
 
+            diffs.entry(tx.sender()).and_modify(|diff| *diff += 1).or_insert(1);
+
             true
         };
 
         // Validate all transactions in the bundle
-        if !bundle.transactions.iter().all(validate_tx) {
+        if !bundle.transactions.iter().all(|tx| validate_tx(tx, &mut nonce_diffs)) {
             return false;
         }
 
