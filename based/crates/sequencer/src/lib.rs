@@ -495,6 +495,7 @@ where
 
     /// Sends a new order to the order pool.
     fn handle_new_order(&mut self, order: Order, ctx: &mut SequencerContext<Db>, senders: &SendersSpine<Db>) {
+        tracing::trace!(type = order.ty(), "Received new order");
         // Add the (unsimulated) order to the TOF snapshot.
         // TODO(mempirate): This might cause issues because it hasn't been simulated, where do we add sim info?
         if let SequencerState::Sorting(_, sorting_data) = self {

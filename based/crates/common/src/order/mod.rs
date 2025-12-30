@@ -77,6 +77,13 @@ impl Order {
             Order::Bundle(bundle) => bundle.transactions.iter().map(|tx| tx.to_added_to_pool_telemetry()).collect(),
         }
     }
+
+    pub fn ty(&self) -> &'static str {
+        match self {
+            Order::Tx(_) => "tx",
+            Order::Bundle(_) => "bundle",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
