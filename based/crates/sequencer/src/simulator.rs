@@ -10,16 +10,20 @@ use bop_common::{
         messages::{SequencerToSimulator, SimulationError, SimulatorToSequencer, SimulatorToSequencerMsg},
     },
     db::{DBFrag, DBSorting, DatabaseRead, State},
+    order::bundle::{SimulatedBundle, ValidatedBundle},
     time::{Duration, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
     typedefs::*,
     utils::last_part_of_typename,
 };
-use op_revm::OpSpecId;
+use op_revm::{OpHaltReason, OpSpecId};
 use reth_evm::{ConfigureEvm, Evm, EvmEnv, execute::ProviderError};
 use reth_optimism_evm::{OpEvm, OpEvmConfig};
 use reth_optimism_forks::OpHardfork;
-use revm::context::{Block, DBErrorMarker};
+use revm::context::{
+    Block, DBErrorMarker,
+    result::{ExecutionResult, ResultVecAndState},
+};
 use revm_inspector::NoOpInspector;
 use revm_primitives::{Address, U256};
 
@@ -84,6 +88,19 @@ impl<
         simulate_tx_inner(tx, evm, regolith_active, allow_zero_payment, allow_revert)
     }
 
+    /// Simulates a bundle at the state of the `db` parameter.
+    pub fn simulate_bundle<SimulateTxDb: SimulationDatabase + Debug>(
+        bundle: Arc<ValidatedBundle>,
+        db: SimulateTxDb,
+        evm: &mut OpEvm<State<SimulateTxDb>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
+        regolith_active: bool,
+        allow_zero_payment: bool,
+        allow_revert: bool,
+    ) -> Result<SimulatedBundle, SimulationError> {
+        let _ = std::mem::replace(evm.db_mut(), State::new(db));
+        simulate_bundle_inner(bundle, evm, regolith_active, allow_zero_payment, allow_revert)
+    }
+
     /// Updates internal EVM environments with new configuration
     #[inline]
     pub fn update_evm_environments(&mut self, evm_block_params: EvmEnv<OpSpecId>) {
@@ -131,6 +148,85 @@ pub fn simulate_tx_inner<Db: SimulationDatabase + Debug>(
     Ok(SimulatedTx::new(tx, result_and_state, payment, deposit_nonce, sim_start.elapsed()))
 }
 
+/// Simulates a bundle atomically, committing state changes between transactions
+/// so each subsequent transaction sees the effects of previous ones.
+///
+/// The EVM's database must be a `State<Db>` wrapper. Commits go to State's
+/// in-memory cache, NOT to the underlying database.
+pub fn simulate_bundle_inner<Db: DatabaseRef + Debug>(
+    bundle: Arc<ValidatedBundle>,
+    evm: &mut OpEvm<State<Db>, NoOpInspector, reth_evm::precompiles::PrecompilesMap>,
+    regolith_active: bool,
+    allow_zero_payment: bool,
+    allow_revert: bool,
+) -> Result<SimulatedBundle, SimulationError>
+where
+    Db::Error: Send + Sync + 'static + DBErrorMarker + std::error::Error + Into<ProviderError> + Debug + Display,
+{
+    let coinbase = evm.block().beneficiary;
+
+    // Get initial coinbase balance BEFORE any transactions
+    let start_balance = balance_from_db(evm.db_mut(), coinbase);
+    let mut intermediate_balance = start_balance;
+
+    // The post-state of the bundle.
+    let mut post_state = ResultVecAndState::<ExecutionResult<OpHaltReason>, EvmState>::new(
+        Vec::with_capacity(bundle.transactions.len()),
+        EvmState::default(),
+    );
+
+    let mut simulated = Vec::with_capacity(bundle.transactions.len());
+
+    for tx in bundle.transactions.iter() {
+        let sim_start = Nanos::now();
+        let deposit_nonce = (tx.is_deposit() && regolith_active).then(|| nonce_from_db(evm.db_mut(), tx.sender()));
+
+        let result_and_state =
+            evm.transact_raw(tx.to_op_tx_env()).map_err(|e| SimulationError::EvmError(format!("{e:?}")))?;
+
+        if !allow_revert && !result_and_state.result.is_success() {
+            return Err(SimulationError::RevertWithDisallowedRevert);
+        }
+
+        // Update intermediate balance and payment.
+        // NOTE: If a transaction does not touch the coinbase, this falls back to the intermediate balance (instead of
+        // 0, which would be incorrect)
+        let end_balance =
+            result_and_state.state.get(&coinbase).map(|a| a.info.balance).unwrap_or_else(|| intermediate_balance);
+        let payment = end_balance.saturating_sub(intermediate_balance);
+        intermediate_balance = end_balance;
+
+        // Commit to State's in-memory cache (not the underlying db)
+        // so subsequent transactions see these state changes
+        // TODO(mempirate): validate that this is actually the case and we're not committing to underlying db
+        evm.db_mut().commit_ref(&result_and_state.state);
+
+        post_state.result.push(result_and_state.result.clone());
+        post_state.state.extend(result_and_state.state.clone());
+
+        simulated.push(SimulatedTx::new(
+            tx.clone().into(),
+            result_and_state,
+            payment,
+            deposit_nonce,
+            sim_start.elapsed(),
+        ));
+    }
+
+    // Calculate total payment AFTER all transactions
+    let end_balance = balance_from_db(evm.db_mut(), coinbase);
+    let total_payment = end_balance.saturating_sub(start_balance);
+
+    if !allow_zero_payment && total_payment == U256::ZERO {
+        return Err(SimulationError::ZeroPayment);
+    }
+
+    let mut simulated_bundle = SimulatedBundle::new(bundle);
+    simulated_bundle.set_simulation_results(simulated, total_payment, post_state);
+
+    Ok(simulated_bundle)
+}
+
 #[inline]
 fn nonce_from_db(db: &mut impl Database, address: Address) -> u64 {
     db.basic(address).ok().flatten().map(|a| a.nonce).unwrap_or_default()
@@ -161,7 +257,7 @@ where
         });
 
         connections.receive(|msg: SequencerToSimulator<Db>, senders| {
-            let (sender, nonce, state_id) = msg.sim_info();
+            let (state_id, sender_nonces) = msg.sim_info();
             let curt = Instant::now();
             let msg = match msg {
                 SequencerToSimulator::SimulateTx(tx, db) => SimulatorToSequencerMsg::Tx(Self::simulate_transaction(
@@ -182,9 +278,29 @@ where
                         self.allow_reverts,
                     ))
                 }
+                SequencerToSimulator::SimulateBundle(bundle, dbsorting) => {
+                    SimulatorToSequencerMsg::Bundle(Self::simulate_bundle(
+                        bundle,
+                        dbsorting,
+                        &mut self.evm_sorting,
+                        self.regolith_active,
+                        true,
+                        self.allow_reverts,
+                    ))
+                }
+                SequencerToSimulator::SimulateBundleTof(bundle, dbfrag) => {
+                    SimulatorToSequencerMsg::BundleTopOfFrag(Self::simulate_bundle(
+                        bundle,
+                        dbfrag,
+                        &mut self.evm_tof,
+                        self.regolith_active,
+                        true,
+                        self.allow_reverts,
+                    ))
+                }
             };
             let _ = senders.send_timeout(
-                SimulatorToSequencer::new((sender, nonce), state_id, curt.elapsed(), msg),
+                SimulatorToSequencer::new(sender_nonces, state_id, curt.elapsed(), msg),
                 Duration::from_millis(10),
             );
         });

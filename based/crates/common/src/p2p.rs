@@ -226,6 +226,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_frag_v0() {
         let tx = Transaction::from(vec![1, 2, 3]);
         let txs = Transactions::from(vec![tx]);

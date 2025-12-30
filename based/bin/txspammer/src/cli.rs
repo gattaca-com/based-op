@@ -23,6 +23,9 @@ pub struct TxSpammerArgs {
     /// Print account addresses.
     #[arg(long = "print_accounts", action = clap::ArgAction::SetTrue)]
     pub print_accounts: bool,
+    /// Send bundles
+    #[arg(long = "send_bundles", action = clap::ArgAction::SetTrue)]
+    pub send_bundles: bool,
 
     // --- Transaction Parameters ---
     /// Target transaction throughput in transactions per second (TPS).

@@ -19,15 +19,16 @@ pub fn telemetry_queue() -> Queue<TelemetryUpdate> {
         .expect("Can't create or open telemetry queue")
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Telemetry {
     Tx(order::Tx),
+    Bundle(order::Bundle),
     Frag(frag::Frag),
     System(system::SystemNotification),
 }
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TelemetryUpdate {
     pub identifier: Uuid,
     pub t: Nanos,
@@ -38,6 +39,13 @@ impl TelemetryUpdate {
     pub fn send(identifier: Uuid, update: Telemetry, producer: &mut Producer<Self>) {
         let msg = Self { identifier, t: Nanos::now(), update };
         producer.produce(&msg);
+    }
+
+    pub fn send_batch(identifier: Uuid, updates: Vec<Telemetry>, producer: &mut Producer<Self>) {
+        for update in updates {
+            let msg = Self { identifier, t: Nanos::now(), update };
+            producer.produce(&msg);
+        }
     }
 
     pub fn send_ref(identifier: Uuid, update: Telemetry, producer: &Producer<Self>) {

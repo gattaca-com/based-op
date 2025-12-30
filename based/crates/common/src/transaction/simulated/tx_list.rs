@@ -119,8 +119,9 @@ impl SimulatedTxList {
         U256::ZERO
     }
 
-    pub fn payment(&self) -> alloy_primitives::Uint<256, 4> {
-        self.current.as_ref().map(|c| c.payment).unwrap_or_default()
+    /// Returns the simulated payment of the current transaction, if available.
+    pub fn payment(&self) -> Option<U256> {
+        self.current.as_ref().map(|c| c.payment)
     }
 
     pub fn gas_limit(&self) -> Option<u64> {

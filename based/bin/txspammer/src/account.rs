@@ -63,12 +63,11 @@ impl Account {
         &mut self,
         to: &mut Account,
         spec: &TxSpec,
-        provider: &RootProvider,
-        sequencer: &Option<RootProvider>,
-    ) -> eyre::Result<B256> {
+        nonce: u64,
+    ) -> eyre::Result<(TxEnvelope, Vec<u8>)> {
         let tx = TxEip1559 {
             chain_id: spec.chain_id,
-            nonce: self.nonce,
+            nonce,
             gas_limit: spec.gas_limit,
             max_fee_per_gas: spec.max_fee_per_gas,
             max_priority_fee_per_gas: spec.max_priority_fee_per_gas,
@@ -81,6 +80,17 @@ impl Account {
         let sig = self.signer.sign_hash_sync(&tx.signature_hash()).unwrap();
         let tx: TxEnvelope = tx.into_signed(sig).into();
         let encoded = tx.encoded_2718();
+        Ok((tx, encoded))
+    }
+
+    pub async fn do_transfer(
+        &mut self,
+        to: &mut Account,
+        spec: &TxSpec,
+        provider: &RootProvider,
+        sequencer: &Option<RootProvider>,
+    ) -> eyre::Result<B256> {
+        let (tx, encoded) = self.transfer(to, spec, self.nonce).await?;
         let provider_to_use = sequencer.as_ref().unwrap_or(provider);
         let _pending_tx = provider_to_use.send_raw_transaction(&encoded).await.unwrap();
         self.nonce += 1;

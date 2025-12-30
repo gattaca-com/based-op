@@ -1,6 +1,9 @@
 use bop_common::{
     eth::MicroEth,
-    telemetry::{Frag, order::IncludedInFrag},
+    telemetry::{
+        Frag,
+        order::{BundleInclusion, TransactionInclusion},
+    },
     time::Nanos,
 };
 use ratatui::text::Text;
@@ -14,6 +17,7 @@ pub struct FragData {
     pub uuid: Uuid,
     pub updates: Vec<(Nanos, Frag)>,
     pub txs: Vec<Uuid>,
+    pub bundles: Vec<Uuid>,
     pub payment: MicroEth,
     pub gas_used: u64,
     pub sim_time: Nanos,
@@ -28,11 +32,19 @@ impl FragData {
         self.updates.push((t, update))
     }
 
-    pub fn add_tx(&mut self, uuid: Uuid, included: IncludedInFrag) {
+    pub fn add_tx(&mut self, uuid: Uuid, included: TransactionInclusion) {
         self.txs.push(uuid);
         self.payment += included.payment;
         self.gas_used += included.gas_used;
         self.sim_time += included.sim_time;
+    }
+
+    pub fn add_bundle(&mut self, uuid: Uuid, included: BundleInclusion) {
+        self.bundles.push(uuid);
+        self.txs.extend(included.txs.iter().map(|tx| tx.0));
+        self.payment += included.payment();
+        self.gas_used += included.gas_used();
+        self.sim_time += included.sim_time();
     }
 
     pub fn block_table_header() -> impl ExactSizeIterator<Item = Text<'static>> {

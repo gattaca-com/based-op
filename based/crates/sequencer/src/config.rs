@@ -33,7 +33,6 @@ pub struct SequencerConfig {
     pub simulate_tof_in_pools: bool,
     /// If true will commit locally sequenced blocks to the db before getting payload from the engine api.
     pub commit_sealed_frags_to_db: bool,
-    pub supervisor: Option<SuperVisorConfig>,
     pub da_config: OpDAConfig,
 }
 
@@ -47,7 +46,6 @@ impl From<&GatewayArgs> for SequencerConfig {
             simulate_tof_in_pools: false,
             evm_config: OpEvmConfig::new(args.chain.clone(), Default::default()),
             commit_sealed_frags_to_db: args.commit_sealed_frags_to_db,
-            supervisor: args.supervisor_url.as_ref().map(|_| SuperVisorConfig::from(args)),
             da_config: args.da_config.clone(),
         }
     }

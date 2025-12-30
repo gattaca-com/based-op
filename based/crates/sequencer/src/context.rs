@@ -10,6 +10,7 @@ use bop_common::{
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
     debug_panic,
     metrics::{Gauge, Metric, MetricsUpdate, metrics_queue},
+    order::Order,
     p2p::{FragV0, SealV0, StateUpdate},
     shared::SharedState,
     telemetry::{TelemetryUpdate, telemetry_queue},
@@ -252,31 +253,31 @@ impl<Db: DatabaseRef + Clone + DatabaseRead + Database> SequencerContext<Db> {
         sorting_data.send_finished_telemetry();
         info!(
             frag_id = frag_seq.next_seq,
-            txs = sorting_data.txs.len(),
+            txs = sorting_data.transactions.len(),
             frag_time =% sorting_data.start_t.elapsed(),
             "sealing frag",
         );
-        self.shared_state.as_mut().commit_txs(sorting_data.txs.iter_mut());
-        self.tx_pool.remove_mined_txs(sorting_data.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
+        self.shared_state.as_mut().commit_txs(sorting_data.transactions.iter_mut());
+        self.tx_pool
+            .remove_mined_txs(sorting_data.transactions.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
         let (frag, maybe_state) = frag_seq.apply_sorted_frag(sorting_data, self);
         (frag, maybe_state, SortingData::new(frag_seq, self))
     }
 }
 
 impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + StorageRootProvider> SequencerContext<Db> {
-    pub fn handle_tx(&mut self, tx: Arc<Transaction>, senders: &SendersSpine<Db>) {
-        if tx.is_deposit() {
-            self.deposits.push_back(tx);
-            return;
-        }
-        if self.tx_pool.handle_new_tx(
-            tx.clone(),
+    pub fn handle_order(&mut self, order: Order, senders: &SendersSpine<Db>) {
+        let uuid = order.uuid();
+        let telemetry = order.pool_telemetry();
+
+        if self.tx_pool.handle_order(
+            order,
             self.shared_state.as_ref(),
             self.base_fee(),
             false,
             self.config.simulate_tof_in_pools.then_some(senders),
         ) {
-            TelemetryUpdate::send(tx.uuid, tx.to_added_to_pool_telemetry(), &mut self.telemetry);
+            TelemetryUpdate::send_batch(uuid, telemetry, &mut self.telemetry);
         }
     }
 
@@ -320,7 +321,7 @@ impl<Db: DatabaseRead + Database<Error: Into<ProviderError> + Display> + Storage
 
         // Apply must include
         sorting.apply_block_start_to_state(self, simulator_evm_block_params).expect("shouldn't fail");
-        self.tx_pool.remove_mined_txs(sorting.txs.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
+        self.tx_pool.remove_mined_txs(sorting.transactions.iter().map(|t| (t.sender_ref(), t)), &mut self.telemetry);
 
         (seq, sorting)
     }
@@ -505,7 +506,7 @@ impl<Db: DatabaseWrite + DatabaseRead> SequencerContext<Db> {
         );
 
         // Completely wipe active txs as they may contain valid nonces with out of date sim results.
-        self.tx_pool.active_txs.clear();
+        self.tx_pool.pending_orders.clear();
         self.tx_pool.remove_mined_txs(block.transactions_with_sender(), &mut self.telemetry);
 
         if let Some(base_fee) = block.base_fee_per_gas {

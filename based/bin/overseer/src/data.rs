@@ -9,7 +9,12 @@ use bop_common::{
         walkie_talkie::{self, RpcResponse},
     },
     signing::ECDSASigner,
-    telemetry::{Telemetry, frag::Frag, order::Tx, system::SystemNotification},
+    telemetry::{
+        Telemetry,
+        frag::Frag,
+        order::{Bundle, Tx},
+        system::SystemNotification,
+    },
     time::{Duration, TimingMessage},
     typedefs::HashMap,
 };
@@ -803,6 +808,13 @@ impl Data {
                         }
                     }
                     self.insert_transaction(key, t, tx_update);
+                }
+                Telemetry::Bundle(bundle_update) => {
+                    if let Bundle::Included(included) = &bundle_update {
+                        if let Some(frag) = self.frags.get_mut(&included.frag) {
+                            frag.add_bundle(key, included.clone());
+                        }
+                    }
                 }
                 Telemetry::Frag(update) => {
                     self.insert_frag(t, key, update);

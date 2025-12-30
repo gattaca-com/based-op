@@ -6,8 +6,8 @@ rust-version.workspace = true
 version.workspace = true
 
 [features]
-shmem = ["bop-common/shmem"]
 default = []
+shmem = ["bop-common/shmem"]
 
 [dependencies]
 alloy-consensus.workspace = true

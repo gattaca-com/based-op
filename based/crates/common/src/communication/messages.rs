@@ -12,6 +12,7 @@ use alloy_rpc_types::engine::{
 use jsonrpsee::types::{ErrorCode, ErrorObject as RpcErrorObject};
 use op_alloy_rpc_types_engine::{OpExecutionPayloadV4, OpPayloadAttributes};
 use reth_evm::{NextBlockEnvAttributes, execute::BlockExecutionError};
+use reth_optimism_node::txpool::supervisor::InteropTxValidatorError;
 use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm_primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
@@ -21,7 +22,8 @@ use tokio::sync::oneshot::{self};
 
 use crate::{
     custom_v4::OpExecutionPayloadEnvelopeV4Patch,
-    db::{DBFrag, DBSorting},
+    db::{DBFrag, DBSorting, sorting::StateId},
+    order::{SimulatedBundle, ValidatedBundle, bundle::BundleValidationError},
     time::{Duration, IngestionTime, Instant, Nanos},
     transaction::{SimulatedTx, Transaction},
     typedefs::*,
@@ -268,6 +270,12 @@ pub enum RpcError {
     #[error("invalid transaction bytes")]
     InvalidTransaction(#[from] alloy_rlp::Error),
 
+    #[error("invalid cross-chain transaction")]
+    InvalidCrossChainTransaction(#[from] InteropTxValidatorError),
+
+    #[error("invalid bundle: {0}")]
+    InvalidBundle(#[from] BundleValidationError),
+
     #[error("jsonrpsee error {0}")]
     Jsonrpsee(#[from] jsonrpsee::core::ClientError),
 
@@ -313,6 +321,18 @@ impl From<RpcError> for RpcErrorObject<'static> {
                 Some(error.to_string()),
             ),
 
+            RpcError::InvalidCrossChainTransaction(error) => RpcErrorObject::owned(
+                ErrorCode::InvalidParams.code(),
+                ErrorCode::InvalidParams.message(),
+                Some(error.to_string()),
+            ),
+
+            RpcError::InvalidBundle(error) => RpcErrorObject::owned(
+                ErrorCode::InvalidParams.code(),
+                ErrorCode::InvalidParams.message(),
+                Some(error.to_string()),
+            ),
+
             RpcError::NoCommitmentForRequest(slot) => RpcErrorObject::owned(
                 ErrorCode::InvalidParams.code(),
                 ErrorCode::InvalidParams.message(),
@@ -340,12 +360,20 @@ pub enum SequencerToSimulator<Db> {
     /// Simulate Tx Top of frag
     //TODO: Db could be set on frag commit once we broadcast msgs to sims
     SimulateTxTof(Arc<Transaction>, DBFrag<Db>),
+    /// Simulate a bundle.
+    SimulateBundle(Arc<ValidatedBundle>, DBSorting<Db>),
+    /// Simulate a bundle Top of frag
+    SimulateBundleTof(Arc<ValidatedBundle>, DBFrag<Db>),
 }
+
 impl<Db> SequencerToSimulator<Db> {
-    pub fn sim_info(&self) -> (Address, u64, u64) {
+    /// Returns simulation info.
+    pub fn sim_info(&self) -> (StateId, Vec<(Address, u64)>) {
         match self {
-            SequencerToSimulator::SimulateTx(t, db) => (t.sender(), t.nonce(), db.state_id()),
-            SequencerToSimulator::SimulateTxTof(t, db) => (t.sender(), t.nonce(), db.state_id()),
+            SequencerToSimulator::SimulateTx(t, db) => (db.state_id(), vec![(t.sender(), t.nonce())]),
+            SequencerToSimulator::SimulateTxTof(t, db) => (db.state_id(), vec![(t.sender(), t.nonce())]),
+            SequencerToSimulator::SimulateBundle(b, db) => (db.state_id(), b.sender_nonces().collect()),
+            SequencerToSimulator::SimulateBundleTof(b, db) => (db.state_id(), b.sender_nonces().collect()),
         }
     }
 }
@@ -353,35 +381,41 @@ impl<Db> SequencerToSimulator<Db> {
 #[derive(Debug)]
 pub struct SimulatorToSequencer {
     /// Sender address and nonce
-    pub sender_info: (Address, u64),
+    pub sender_nonces: Vec<(Address, u64)>,
     pub state_id: u64,
     pub simtime: Duration,
     pub msg: SimulatorToSequencerMsg,
 }
 
 impl SimulatorToSequencer {
-    pub fn new(sender_info: (Address, u64), state_id: u64, simtime: Duration, msg: SimulatorToSequencerMsg) -> Self {
-        Self { sender_info, state_id, simtime, msg }
+    pub fn new(
+        sender_nonces: Vec<(Address, u64)>,
+        state_id: u64,
+        simtime: Duration,
+        msg: SimulatorToSequencerMsg,
+    ) -> Self {
+        Self { sender_nonces, state_id, simtime, msg }
     }
 
-    pub fn sender(&self) -> &Address {
-        &self.sender_info.0
-    }
-
-    pub fn nonce(&self) -> u64 {
-        self.sender_info.1
+    pub fn sender_nonces(&self) -> &[(Address, u64)] {
+        &self.sender_nonces
     }
 }
 
 pub type SimulationResult<T> = Result<T, SimulationError>;
 
+/// TODO(mempirate): Simplify? Just use orders here?
 #[derive(Debug, AsRefStr)]
 #[repr(u8)]
 pub enum SimulatorToSequencerMsg {
     /// Simulation on top of any state.
     Tx(SimulationResult<SimulatedTx>),
-    /// Simulation on top of a fragment. Used by the transaction pool.
+    /// Simulation on top of a fragment. Used by the order pool.
     TxPoolTopOfFrag(SimulationResult<SimulatedTx>),
+    /// Simulation on top of a bundle.
+    Bundle(SimulationResult<SimulatedBundle>),
+    /// Simulation on top of a bundle. Used by the order pool.
+    BundleTopOfFrag(SimulationResult<SimulatedBundle>),
 }
 
 #[derive(Clone, Debug, Error, AsRefStr)]

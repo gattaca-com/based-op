@@ -12,6 +12,7 @@ use bop_common::{
     },
     config::MockMode,
     db::{DBFrag, DatabaseRead},
+    order::Order,
     signing::ECDSASigner,
     time::{Duration, Instant, utils::vsync_busy},
     transaction::Transaction,
@@ -193,7 +194,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
         let tx = OpTxEnvelope::Eip1559(signed_tx);
         let hash = tx.tx_hash();
         let envelope = tx.encoded_2718().into();
-        let tx = Arc::new(Transaction::new(tx, from.address, envelope));
+        let tx = Order::from(Transaction::new(tx, from.address, envelope));
         connections.send(tx);
         hash
     }
@@ -244,7 +245,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
                 .unwrap_or_default();
             connections.send(fcu);
             for t in txs_for_pool {
-                connections.send(t);
+                connections.send(Order::from(t));
                 Duration::from_millis(10).sleep();
             }
 
@@ -325,13 +326,13 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
         let curt = Instant::now();
         connections.send(fcu);
         for t in txs.iter().take(txs.len() / 10) {
-            connections.send(t.clone());
+            connections.send(Order::from(t.clone()));
         }
 
         if txs.len() < *max_txs {
             // if we're going to be fetching more, let's send all the rest
             for t in txs.iter().skip(txs.len() / 10) {
-                connections.send(t.clone());
+                connections.send(Order::from(t.clone()));
                 // Duration::from_millis(20).sleep();
             }
             let blocks: Vec<BlockSyncMessage> = self.executor.block_on(async {
@@ -349,7 +350,7 @@ impl<Db: DatabaseRead> MockFetcher<Db> {
             let t_per_tx = *send_duration / txs.len() * 10usize / 9usize;
             for t in txs.iter().skip(txs.len() / 10) {
                 vsync_busy(Some(t_per_tx), || {
-                    connections.send(t.clone());
+                    connections.send(Order::from(t.clone()));
                 })
             }
         }

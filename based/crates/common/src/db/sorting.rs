@@ -5,12 +5,14 @@ use parking_lot::RwLock;
 use super::{DBFrag, State};
 use crate::typedefs::*;
 
+pub type StateId = u64;
+
 /// DB That is used when sorting a new frag
 /// Thread safe
 #[derive(Clone, Debug)]
 pub struct DBSorting<Db> {
     pub db: Arc<RwLock<State<DBFrag<Db>>>>,
-    state_id: u64,
+    state_id: StateId,
 }
 
 impl<Db> DBSorting<Db> {
@@ -18,7 +20,7 @@ impl<Db> DBSorting<Db> {
         Self { db: Arc::new(RwLock::new(State::new(frag_db))), state_id: rand::random() }
     }
 
-    pub fn state_id(&self) -> u64 {
+    pub fn state_id(&self) -> StateId {
         self.state_id
     }
 }

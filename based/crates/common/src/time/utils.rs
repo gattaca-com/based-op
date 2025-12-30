@@ -1,4 +1,7 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::time::{Duration, Instant};
 
@@ -88,4 +91,9 @@ pub fn timeit<O>(msg: &str, f: impl FnOnce() -> O) -> O {
     let o = f();
     println!("Timing result: {msg} took {}", curt.elapsed());
     o
+}
+
+#[inline]
+pub fn unix_millis() -> u128 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
 }

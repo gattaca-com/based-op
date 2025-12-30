@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use bop_common::transaction::{SimulatedTx, SimulatedTxList};
+use bop_common::order::{PendingOrder, SimulatedOrder};
 use revm_primitives::{Address, U256};
 use tracing::debug;
 
@@ -14,11 +14,11 @@ pub(crate) use frag_sequence::FragSequence;
 
 #[derive(Clone, Debug, Default)]
 pub struct ActiveOrders {
-    orders: VecDeque<SimulatedTxList>,
+    orders: VecDeque<PendingOrder>,
 }
 
 impl ActiveOrders {
-    pub fn new(mut orders: Vec<SimulatedTxList>, fifo_ordering: bool) -> Self {
+    pub fn new(mut orders: Vec<PendingOrder>, fifo_ordering: bool) -> Self {
         if fifo_ordering {
             // NOTE: This function is used to populate the `tof_snaphost`, where a new transaction
             // is pushed front on a `VecDeque`. Instead, a new active transaction in the tx pool
@@ -42,8 +42,9 @@ impl ActiveOrders {
         self.orders.len()
     }
 
+    /// Returns the total available value of the orders, i.e. the sum of the simulated payments of the orders.
     pub fn available_value(&self) -> U256 {
-        self.orders.iter().map(|t| t.current.as_ref().map(|tx| tx.payment).unwrap_or_default()).sum()
+        self.orders.iter().map(|t| t.payment().unwrap_or_default()).sum()
     }
 
     /// Removes all pending txs for a sender list.
@@ -52,38 +53,74 @@ impl ActiveOrders {
         if self.is_empty() {
             return;
         }
-        for i in (0..self.len()).rev() {
-            let order = &mut self.orders[i];
-            debug_assert_ne!(order.sender(), Address::default(), "should never have an order with default sender");
 
-            if order.sender() == sender {
-                if order.pop(base_fee) {
-                    self.orders.swap_remove_back(i).unwrap();
+        let len = self.orders.len();
+        let mut to_remove = Vec::new();
+
+        for (i, order) in self.orders.iter_mut().rev().enumerate() {
+            // Get the actual index of the order in the deque.
+            let index = len - i - 1;
+
+            match order {
+                PendingOrder::Tx(list) => {
+                    if list.sender() == sender && list.pop(base_fee) {
+                        to_remove.push(index);
+                    }
                 }
-                return;
+                PendingOrder::Bundle(bundle) => {
+                    if bundle.has_sender(sender) {
+                        // TODO: Needs any additional checks?
+                        to_remove.push(index);
+                    }
+                }
             }
         }
-        unreachable!("this should never happen");
+
+        for index in to_remove {
+            self.orders.swap_remove_back(index).unwrap();
+        }
     }
 
-    pub fn put(&mut self, tx: SimulatedTx, fifo_ordering: bool) {
+    pub fn put(&mut self, order: SimulatedOrder, fifo_ordering: bool) {
         let mut id = self.orders.len();
 
         if !fifo_ordering {
-            let payment = tx.payment;
-            let sender = tx.sender();
-            for (i, order) in self.orders.iter_mut().enumerate().rev() {
-                if order.sender() == sender {
-                    order.put(tx);
-                    return;
+            let payment = order.payment();
+
+            match order {
+                SimulatedOrder::Tx(ref tx) => {
+                    let sender = tx.sender();
+                    for (i, order) in self.orders.iter_mut().enumerate().rev() {
+                        let Some(order) = order.as_tx_list_mut() else {
+                            return;
+                        };
+
+                        if order.sender() == sender {
+                            order.put(tx.clone());
+                            return;
+                        }
+
+                        if payment < order.payment() {
+                            id = i;
+                        }
+                    }
                 }
-                if payment < order.payment() {
-                    id = i;
+                SimulatedOrder::Bundle(_) => {
+                    for (i, order) in self.orders.iter_mut().enumerate().rev() {
+                        let Some(order) = order.as_bundle() else {
+                            return;
+                        };
+
+                        if payment < order.payment() {
+                            id = i;
+                        }
+                    }
                 }
             }
         }
+
         // not found so we insert it at the id corresponding to the payment
-        self.orders.insert(id, SimulatedTxList::from(tx))
+        self.orders.insert(id, PendingOrder::from(order))
     }
 
     /// Checks whether we have enough gas remaining for order at id.
@@ -149,7 +186,7 @@ impl ActiveOrders {
 }
 
 impl Deref for ActiveOrders {
-    type Target = VecDeque<SimulatedTxList>;
+    type Target = VecDeque<PendingOrder>;
 
     fn deref(&self) -> &Self::Target {
         &self.orders

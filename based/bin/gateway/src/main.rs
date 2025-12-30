@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use bop_common::{
     actor::{Actor, ActorConfig},
     communication::Spine,
@@ -88,12 +86,11 @@ fn run(mut args: GatewayArgs) -> eyre::Result<()> {
     let gossip_signer_private_key = args.gossip_signer_private_key().map(|key| ECDSASigner::new(key).unwrap());
 
     std::thread::scope(|s| {
-        let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
+        let rt: Runtime = tokio::runtime::Builder::new_current_thread()
             .worker_threads(10)
             .enable_all()
             .build()
-            .expect("failed to create runtime")
-            .into();
+            .expect("failed to create runtime");
 
         if args.enable_metrics {
             s.spawn(move || {
@@ -105,7 +102,6 @@ fn run(mut args: GatewayArgs) -> eyre::Result<()> {
         }
 
         s.spawn({
-            let rt = rt.clone();
             start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone(), args.da_config.clone());
             move || rt.block_on(wait_for_signal())
         });

@@ -6,10 +6,11 @@ use std::{
 };
 
 use alloy_primitives::{
-    TxHash, U256,
+    TxHash, U256, hex,
     utils::{format_ether, parse_ether},
 };
 use alloy_provider::{Provider, RootProvider, WsConnect};
+use alloy_rpc_types::mev::EthBundleHash;
 use alloy_signer_local::PrivateKeySigner;
 use bop_common::{p2p::SignedVersionedMessage, utils::init_tracing};
 use clap::Parser;
@@ -18,6 +19,7 @@ use futures_util::stream::StreamExt;
 use http::Uri;
 use rand::{Rng, SeedableRng};
 use reqwest::Url;
+use serde_json::json;
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
     time::{interval, sleep},
@@ -145,7 +147,7 @@ impl TxSpammer {
                 continue;
             }
             self.root_account
-                .transfer(
+                .do_transfer(
                     account,
                     &TxSpec {
                         chain_id: self.tx_spec.chain_id,
@@ -289,7 +291,7 @@ impl TxSpammer {
                     let to = &mut accounts_clone[rag2.random_range(0..n)];
                     let start_sending_at = Instant::now();
                     let tx_hash = account
-                        .transfer(to, &tx_spec, &full_provider, &sequencer_provider)
+                        .do_transfer(to, &tx_spec, &full_provider, &sequencer_provider)
                         .await
                         .expect("failed to send tx");
                     request_tx.send((tx_hash, start_sending_at)).await.expect("failed to send tx hash to logger");
@@ -301,6 +303,42 @@ impl TxSpammer {
                 }
             });
         }
+    }
+
+    pub fn spawn_bundle_spammer(&self) {
+        let mut root_account = self.root_account.clone();
+        let tx_spec = self.tx_spec.clone();
+        let full_provider = self.full_provider.clone();
+        let sequencer_provider = self.sequencer.clone().expect("sequencer provider not specified");
+        let mut accounts_clone = self.target_accounts.clone();
+        let request_tx = self.request_tx.clone();
+        tokio::spawn(async move {
+            sleep(Duration::from_secs(3)).await;
+            root_account.refresh_nonce(&full_provider).await.expect("failed to refresh root account nonce");
+            let mut nonce = root_account.nonce;
+            let client = sequencer_provider.client();
+            let mut interval = interval(Duration::from_secs_f64(0.55));
+            loop {
+                interval.tick().await;
+                let mut txs = Vec::new();
+                for account in accounts_clone.iter_mut() {
+                    let (tx, encoded) =
+                        root_account.transfer(account, &tx_spec, nonce).await.expect("failed to send tx");
+                    txs.push(hex::encode(encoded));
+                    request_tx.send((*tx.tx_hash(), Instant::now())).await.expect("failed to send tx hash to logger");
+                    nonce += 1;
+                }
+
+                let payload = json!({
+                    "txs": txs,
+                    "blockNumber": 0,
+                });
+
+                let respond: EthBundleHash =
+                    client.request("eth_sendBundle", (payload,)).await.expect("failed to send bundle");
+                info!("Response: {:?}", respond);
+            }
+        });
     }
 }
 
@@ -336,6 +374,10 @@ async fn main() -> eyre::Result<()> {
 
     spammer.spawn_stats_logger();
     spammer.spawn_spammer();
+
+    if spammer.args.send_bundles {
+        spammer.spawn_bundle_spammer();
+    }
 
     tokio::signal::ctrl_c().await.expect("failed to listen for ctrl-c");
     info!("Received Ctrl-C, shutting down...");

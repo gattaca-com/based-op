@@ -1,10 +1,11 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use alloy_eips::Decodable2718;
 use alloy_primitives::B256;
 use bop_common::{
     communication::messages::{RpcError, RpcResult},
     fabric::{Commitment, CommitmentRequest, FabricGatewayApiServer, FeeInfo, SignedCommitment, SlotInfoResponse},
+    order::Order,
     p2p::VersionedMessage,
     telemetry::TelemetryUpdate,
     transaction::Transaction,
@@ -24,14 +25,15 @@ impl FabricGatewayApiServer for RpcServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::TRACE))]
     async fn post_commitment(&self, commitment: CommitmentRequest) -> RpcResult<SignedCommitment> {
         let request_hash = commitment.tree_hash_root();
-        let tx = Arc::new(Transaction::decode(commitment.payload.to_vec().into())?);
+        let tx = Transaction::decode(commitment.payload.to_vec().into())?;
         let tx_hash = tx.tx_hash();
 
         let mut receiver = self.frag_receiver_spawner.subscribe();
 
         // Send the transaction to the sequencer
         TelemetryUpdate::send_ref(tx.uuid, tx.to_ingested_telemetry(), &self.telemetry_producer);
-        let _ = self.new_order_tx.send(tx.into());
+        let order = Order::from(tx);
+        let _ = self.new_order_tx.send(order.into());
 
         // Wait for the transaction to be committed
         let commitment_future = async {

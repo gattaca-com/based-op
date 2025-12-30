@@ -14,7 +14,7 @@ use revm_primitives::{B256, Bytes, TxKind};
 use uuid::Uuid;
 
 use crate::{
-    telemetry::{Telemetry, Tx, order::IncludedInFrag},
+    telemetry::{Telemetry, Tx, order::TransactionInclusion},
     time::Nanos,
     transaction::Transaction,
 };
@@ -150,13 +150,18 @@ impl SimulatedTx {
         self.result_and_state.result.gas_used()
     }
 
-    pub fn to_included_telemetry(&self, frag: Uuid, id_in_frag: usize) -> Telemetry {
-        Telemetry::Tx(Tx::Included(IncludedInFrag {
+    pub fn estimated_da(&self) -> u64 {
+        self.tx.estimated_tx_compressed_size()
+    }
+
+    pub fn to_included_telemetry(&self, frag: Uuid, id_in_frag: usize, bundle_id: Option<Uuid>) -> Telemetry {
+        Telemetry::Tx(Tx::Included(TransactionInclusion {
             frag,
             id_in_frag: id_in_frag as u16,
             payment: self.payment.into(),
             sim_time: self.sim_time,
             gas_used: self.gas_used(),
+            bundle_id,
         }))
     }
 }
