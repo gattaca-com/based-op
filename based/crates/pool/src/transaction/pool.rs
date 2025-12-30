@@ -16,6 +16,7 @@ use bop_common::{
 use reth_optimism_primitives::transaction::OpTransaction;
 use reth_primitives_traits::InMemorySize;
 use rustc_hash::FxHashMap;
+use uuid::Uuid;
 
 use crate::transaction::pending::PendingOrders;
 
@@ -23,6 +24,8 @@ use crate::transaction::pending::PendingOrders;
 pub struct TxPool {
     /// maps an eoa to all pending txs
     pool_data: HashMap<Address, TxList>,
+    /// Persistent storage for bundles (bundles aren't stored in pool_data like regular txs)
+    bundle_data: HashMap<Uuid, Arc<ValidatedBundle>>,
     /// Current list of all simulated mineable txs in the pool
     pub pending_orders: PendingOrders,
     /// Current memory size of the pool in bytes
@@ -33,6 +36,7 @@ impl TxPool {
     pub fn new(capacity: usize) -> Self {
         Self {
             pool_data: HashMap::with_capacity(capacity),
+            bundle_data: HashMap::with_capacity(capacity),
             pending_orders: PendingOrders::with_capacity(capacity),
             mem_size: 0,
         }
@@ -55,6 +59,7 @@ impl TxPool {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn handle_bundle<Db: DatabaseRead>(
         &mut self,
         bundle: Arc<ValidatedBundle>,
@@ -72,27 +77,32 @@ impl TxPool {
 
         // Simple transaction validation closure
         let validate_tx = |tx: &Transaction, diffs: &mut FxHashMap<Address, u64>| {
-            let mut expected_nonce = db.get_nonce(tx.sender()).expect("failed to get nonce");
+            let sender = tx.sender();
+            let nonce = tx.nonce();
+
+            // Check if there's already a pending nonce for this sender.
+            // If so, we need to continue from where the pending orders left off,
+            // not from the DB nonce (which may not reflect pending bundles yet).
+            let pending_nonce = self.pending_orders.next_nonce(sender);
+            let mut expected_nonce = if let Some(pending) = pending_nonce {
+                // There are pending orders for this sender, new bundle should continue from there
+                pending + 1
+            } else {
+                db.get_nonce(sender).expect("failed to get nonce")
+            };
+
             // Add the nonce diff from txs already validated in this bundle
-            if let Some(diff) = diffs.get(tx.sender_ref()) {
+            if let Some(diff) = diffs.get(&sender) {
                 expected_nonce += diff;
             }
 
-            let nonce = tx.nonce();
-
             // Only accept transactions with the correct nonce
             if nonce != expected_nonce || !tx.valid_for_block(base_fee) {
+                tracing::debug!(%sender, hash = %tx.hash(), nonce, expected_nonce, ?pending_nonce, base_fee, "Transaction validation failed");
                 return false;
             }
 
-            // Check the next nonce for this sender in the pending orders.
-            // TODO(mempirate): This should compare effective gas prices, and swap if more profitable.
-            let pending_nonce = self.pending_orders.next_nonce(tx.sender());
-            if pending_nonce.is_some_and(|pending| pending == nonce) {
-                return false;
-            }
-
-            diffs.entry(tx.sender()).and_modify(|diff| *diff += 1).or_insert(1);
+            diffs.entry(sender).and_modify(|diff| *diff += 1).or_insert(1);
 
             true
         };
@@ -104,6 +114,9 @@ impl TxPool {
 
         self.mem_size = self.mem_size.saturating_add(bundle.size());
         self.pending_orders.put_bundle(SimulatedBundle::new(bundle.clone()));
+
+        // Store bundle persistently so it survives handle_new_frag clearing pending_orders
+        self.bundle_data.insert(bundle.id(), bundle.clone());
 
         // Request top-of-frag simulation for the bundle.
         TxPool::send_sim_requests_for_bundle(&bundle, db, sim_sender);
@@ -292,6 +305,33 @@ impl TxPool {
                     self.mem_size = self.mem_size.saturating_add(tx_list.mem_size());
                 }
             }
+
+            // Re-add bundles from bundle_data that are still valid (nonces not yet consumed).
+            // Remove bundles whose transactions have already been mined.
+            let mut to_remove = Vec::new();
+            for (id, bundle) in self.bundle_data.iter() {
+                // Check if all transactions in the bundle still have valid nonces
+                let all_valid = bundle.transactions.iter().all(|tx| {
+                    let db_nonce = db.get_nonce(tx.sender()).unwrap();
+                    tx.nonce() >= db_nonce && tx.valid_for_block(base_fee)
+                });
+
+                if all_valid {
+                    // Re-add to pending_orders
+                    self.pending_orders.put_bundle(SimulatedBundle::new(bundle.clone()));
+                    TxPool::send_sim_requests_for_bundle(bundle, db, sim_sender);
+                } else {
+                    // Bundle is no longer valid, mark for removal
+                    to_remove.push(*id);
+                }
+            }
+
+            // Remove invalid bundles from persistent storage
+            for id in to_remove {
+                if let Some(bundle) = self.bundle_data.remove(&id) {
+                    self.mem_size = self.mem_size.saturating_sub(bundle.size());
+                }
+            }
         }
     }
 
@@ -336,6 +376,7 @@ impl TxPool {
     pub fn clear(&mut self) {
         self.pending_orders.clear();
         self.pool_data.clear();
+        self.bundle_data.clear();
         self.mem_size = 0;
     }
 }

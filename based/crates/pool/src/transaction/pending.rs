@@ -79,7 +79,10 @@ impl PendingOrders {
                 .or_insert_with(|| SenderState { nonce: tx.nonce(), entries: Vec::new() });
 
             entry.entries.push(key.clone());
-            entry.nonce = tx.nonce();
+
+            if tx.nonce() > entry.nonce {
+                entry.nonce = tx.nonce();
+            }
         }
 
         self.orders.insert(key, PendingOrder::Bundle(bundle));

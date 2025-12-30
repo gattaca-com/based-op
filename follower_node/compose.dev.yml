@@ -11,7 +11,7 @@ services:
           geth init \
             --state.scheme=hash \
             --datadir=/data/geth \
-            /config/genesis.json 
+            /config/genesis.json
         fi
         # 2) then exec the real geth with all your flags
         exec geth \
@@ -114,5 +114,7 @@ services:
       - /tmp:/tmp
       - /dev/shm:/dev/shm
       - /var/log/containers/based-op/based-gateway:/var/log/app
+    environment:
+      - RUST_LOG=debug
     network_mode: "host"
     restart: unless-stopped
