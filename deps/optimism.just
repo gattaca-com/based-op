@@ -1,5 +1,5 @@
 repo_default := "https://github.com/gattaca-com/based-optimism"
-ref_default := "based/develop"
+ref_default := "feat/portal-auth"
 
 repo := env("BASED_OP_GETH_REPO", repo_default)
 ref := env("BASED_OP_GETH_REF", ref_default)

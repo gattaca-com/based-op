@@ -1,6 +1,5 @@
 use std::{net::Ipv4Addr, ops::RangeInclusive, path::PathBuf, str::FromStr, sync::Arc};
 
-use alloy_rpc_types::engine::JwtSecret;
 use clap::Parser;
 use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
@@ -38,8 +37,6 @@ pub struct GatewayArgs {
     pub rpc_port_no_auth: u16,
     #[arg(long = "rpc.port_ws", default_value_t = 9999)]
     pub rpc_port_ws: u16,
-    #[arg(long = "rpc.jwt")]
-    pub rpc_jwt: String,
     /// Url to an L2 eth api rpc
     #[arg(long = "eth_client.url", default_value = "http://localhost:8545")]
     pub eth_client_url: Url,
@@ -127,15 +124,13 @@ pub struct GatewayArgs {
     /// Port for prometheus server
     #[arg(long = "metrics.port", default_value_t = 9464)]
     pub metrics_port: u16,
+
+    /// Duration (in minutes) of the authentication token that portals may request.
+    #[arg(long = "auth.token_duration", default_value_t = 720)]
+    pub auth_duration: u64,
 }
 
 impl GatewayArgs {
-    pub fn sequencer_jwt(&self) -> JwtSecret {
-        JwtSecret::from_hex(&self.rpc_jwt)
-            .or_else(|_| JwtSecret::from_file(std::path::Path::new(&self.rpc_jwt)))
-            .expect("Couldn't parse sequencer_jwt")
-    }
-
     pub fn gossip_signer_private_key(&self) -> Option<B256> {
         self.gossip_signer_private_key.as_ref().and_then(|key_str| {
             // Try to parse as hex first

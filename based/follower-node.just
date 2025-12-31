@@ -188,10 +188,9 @@ start-dev $dotenv=join(FOLLOWER_NODE_DATA, ".env") network="based_op_node": (doc
     port=$(grep -m1 '^GATEWAY_PORT[[:space:]]*=' $dotenv | cut -d= -f2)
 
     address=$({{wallet}} address {{WALLET_NAME}})
-    jwt=$(cat $FOLLOWER_NODE_DATA/config/jwt) 
 
     echo "Registering gateway"
-    {{portal}} register-gateway "http://$ip:$port" "$address" "$jwt"
+    {{portal}} register-gateway "http://$ip:$port" "$address"
 
     # Start services
     echo "Starting gateway and monitoring services..."

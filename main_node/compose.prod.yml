@@ -157,6 +157,7 @@ services:
       - --op_node.url=http://0.0.0.0:${OP_NODE_RPC_PORT}
       - --registry.url=http://0.0.0.0:${REGISTRY_PORT}
       - --gateway.timeout_ms=200
+      - --gateway.signing-key=${OP_PROPOSER_PRIVATE_KEY}
       - --log.dir=/var/log/app
       - --port=${PORTAL_PORT}
     volumes:
@@ -259,4 +260,3 @@ services:
 #       SSG_ENABLED:    "false"
 #       PORT: "${BLOCKSCOUT_PORT}"
 #     # no ports: host-mode means Blockscout binds to 4000 on the host automatically
-

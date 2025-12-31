@@ -162,7 +162,7 @@ impl OverseerConnections {
     }
 
     pub fn current_gateway(&self) -> Result<(Url, Address), ClientError> {
-        self.runtime.block_on(self.client_portal.current_gateway()).map(|(_, url, address, _)| (url, address))
+        self.runtime.block_on(self.client_portal.current_gateway()).map(|(_, url, address)| (url, address))
     }
 
     pub fn peers_based_op_node(&self) -> Result<Vec<OpPeerInfo>, ClientError> {

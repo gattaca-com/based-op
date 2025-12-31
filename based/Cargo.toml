@@ -22,9 +22,10 @@ alloy-signer = "1.0.41"
 alloy-signer-local = "1.0.41"
 alloy-transport = "1.0.41"
 alloy-transport-http = "1.0.41"
+
+arc-cell = "0.3.3"
 auto_impl = "1.3.0"
 axum = { version = "0.8.1", features = ["macros", "ws"] }
-
 backtrace = "0.3.73"
 bitflags = "2.6.0"
 bop-common = { path = "crates/common" }
@@ -45,6 +46,7 @@ hickory-resolver = "=0.25.0-alpha.5" # Use the exact version reth expects
 http = "1.3.1"
 hyper = "1.5.2"
 jsonrpsee = { version = "0.26", features = ["http-client", "macros", "server", "jsonrpsee-client-transport"] }
+jsonwebtoken = { version = "9.3" }
 metrics = "0.24.1"
 metrics-exporter-prometheus = "0.16.2"
 mio = { features = ["net", "os-poll"], version = "1.0.4" }

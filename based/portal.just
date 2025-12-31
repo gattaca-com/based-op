@@ -26,10 +26,10 @@ l2_chain_id: (_rpc "portal_l2ChainId")
 rollup: (_rpc "portal_fileRollup")
 genesis: (_rpc "portal_fileGenesis")
 
-@register-gateway url address jwt: 
+@register-gateway url address: 
     # The portal returns null on success so we remove the -e flag
     JQ_ARGS="" {{self}} _rpc "registry_registerGateway" \
-      "[[\"{{url}}\", \"{{address}}\", \"{{jwt}}\"]]"
+      "[[\"{{url}}\", \"{{address}}\"]]"
 
 # Start the portal service and view logs (for main sequencing node)
 start:
@@ -55,4 +55,3 @@ stop:
     data=$(dirname $({{main_node}} _is-configured))
 
     docker compose -f $data/compose.yml down {{service-name}} 
-

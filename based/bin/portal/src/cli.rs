@@ -1,6 +1,9 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
-use bop_common::config::{LoggingConfig, LoggingFlags};
+use bop_common::{
+    config::{LoggingConfig, LoggingFlags},
+    signing::ECDSASigner,
+};
 use clap::Parser;
 use reqwest::Url;
 use reth_rpc_layer::JwtSecret;
@@ -40,6 +43,9 @@ pub struct PortalArgs {
     /// Timeout for gateway requests in milliseconds
     #[arg(long = "gateway.timeout_ms", default_value_t = 100)]
     pub gateway_timeout_ms: u64,
+    /// Signing key used to authenticate with gateways (hex string or path to file containing hex)
+    #[arg(long = "gateway.signing-key")]
+    pub gateway_signing_key: String,
 
     /// Enable debug logging
     #[arg(long)]
@@ -88,6 +94,10 @@ impl PortalArgs {
             .or_else(|_| JwtSecret::from_file(std::path::Path::new(&self.config_dir.join("jwt"))))
             .expect("Please set the --fallback.jwt flag manually, or generate and place a jwt file in the config dir")
     }
+
+    pub fn gateway_signer(&self) -> eyre::Result<ECDSASigner> {
+        parse_signing_key(&self.gateway_signing_key)
+    }
 }
 
 impl From<&PortalArgs> for LoggingConfig {
@@ -103,6 +113,19 @@ impl From<&PortalArgs> for LoggingConfig {
             max_files: args.log_max_files,
             path: args.log_dir.clone(),
             filters: None,
+        }
+    }
+}
+
+fn parse_signing_key(input: &str) -> eyre::Result<ECDSASigner> {
+    let trimmed = input.trim();
+    let normalized = trimmed.trim_start_matches("0x");
+    match ECDSASigner::try_from_hex(normalized) {
+        Ok(signer) => Ok(signer),
+        Err(_) => {
+            let contents = fs::read_to_string(trimmed)?;
+            let key = contents.trim().trim_start_matches("0x");
+            ECDSASigner::try_from_hex(key).map_err(|err| eyre::eyre!("failed to parse gateway signing key: {err}"))
         }
     }
 }

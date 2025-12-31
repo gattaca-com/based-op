@@ -20,15 +20,13 @@ pub struct Gossiper {
 impl Gossiper {
     pub fn new(
         target_rpc: Url,
-        signer: Option<ECDSASigner>,
+        signer: ECDSASigner,
         frag_broadcast: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
     ) -> Self {
         let client = ClientBuilder::new()
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .expect("couldn't build http client");
-
-        let signer = signer.unwrap_or_else(ECDSASigner::random);
 
         Self { target_rpc, client, signer, frag_broadcast }
     }

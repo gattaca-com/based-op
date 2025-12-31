@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{Address, U256};
 use alloy_provider::{Provider, RootProvider};
 use bop_common::{
     api::RegistryApiServer,
@@ -108,19 +108,19 @@ enum RegistryError {
 }
 type Result<T> = std::result::Result<T, RegistryError>;
 
-fn refresh_gateway_clients(path: impl AsRef<Path>) -> Result<Vec<(Url, Address, B256)>> {
+fn refresh_gateway_clients(path: impl AsRef<Path>) -> Result<Vec<(Url, Address)>> {
     Ok(serde_json::from_reader(std::fs::File::open(path.as_ref())?)?)
 }
 
-fn write_gateway_clients(path: Arc<PathBuf>, clients: &[(Url, Address, B256)]) {
+fn write_gateway_clients(path: Arc<PathBuf>, clients: &[(Url, Address)]) {
     let _ = std::fs::write(Arc::unwrap_or_clone(path), serde_json::to_string(clients).unwrap());
 }
 
 #[derive(Clone)]
 pub struct RegistryServer {
     eth_client: RootProvider,
-    // url, address, jwt secret
-    gateway_clients: Arc<RwLock<Vec<(Url, Address, B256)>>>,
+    // url, address
+    gateway_clients: Arc<RwLock<Vec<(Url, Address)>>>,
     gateway_update_blocks: u64,
     registry_path: Arc<PathBuf>,
 
@@ -190,7 +190,7 @@ impl RegistryServer {
 #[async_trait]
 impl RegistryApiServer for RegistryServer {
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
-    async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address, B256)> {
+    async fn get_future_gateway(&self, n_blocks_into_the_future: u64) -> RpcResult<(u64, Url, Address)> {
         // let curblock = self.eth_client.block_number().await?;
         let curblock = if !self.use_mock_blocknumber {
             self.eth_client
@@ -210,25 +210,30 @@ impl RegistryApiServer for RegistryServer {
             n_blocks_into_the_future;
 
         let id = (target_block / self.gateway_update_blocks) as usize;
-        let (url, address, jwt_in_b256) = gateways[id % n_gateways].clone();
+        let (url, address) = gateways[id % n_gateways].clone();
         tracing::debug!("serving future gateway for block {target_block}: url={url}, address={address}",);
-        Ok((target_block, url, address, jwt_in_b256))
+        Ok((target_block, url, address))
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
-    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>> {
+    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address)>> {
         Ok(self.gateway_clients.read().clone())
     }
 
     #[tracing::instrument(skip_all, err, ret(level = Level::DEBUG))]
-    async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()> {
+    async fn register_gateway(&self, gateway: (Url, Address)) -> RpcResult<()> {
         let mut gateways = self.gateway_clients.read().clone();
-        if !gateways.iter().any(|g| g.0.host() == gateway.0.host() || g.2 == gateway.2) {
+        if !gateways.iter().any(|g| g.0.host() == gateway.0.host() || g.1 == gateway.1) {
             gateways.push(gateway);
             write_gateway_clients(self.registry_path.clone(), &gateways);
             *self.gateway_clients.write() = gateways;
         }
         Ok(())
+    }
+
+    #[tracing::instrument(skip_all, ret(level = Level::DEBUG))]
+    async fn gateway_update_blocks(&self) -> RpcResult<u64> {
+        Ok(self.gateway_update_blocks)
     }
 }
 

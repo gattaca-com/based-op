@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use alloy_eips::eip7685::RequestsOrHash;
-use alloy_primitives::{Address, B256, Bytes, U64};
+use alloy_primitives::{Address, B256, Bytes, Signature, U64};
 use alloy_rpc_types::engine::{ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, PayloadId, PayloadStatus};
 use jsonrpsee::proc_macros::rpc;
 use op_alloy_consensus::OpTxEnvelope;
@@ -83,25 +83,47 @@ pub trait MinimalEthApi {
     async fn send_raw_transaction(&self, bytes: Bytes) -> RpcResult<B256>;
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GatewayAuthentication {
+    pub token: String,
+    pub challenger: Address,
+}
+
+#[rpc(client, server, namespace = "based")]
+pub trait BasedAuthApi {
+    /// Returns an authentication challenge with the given parameters, ready for signing.
+    #[method(name = "authenticationChallenge")]
+    async fn authentication_challenge(&self, valid_from: u64) -> RpcResult<B256>;
+
+    /// Authenticate the Proposer who signed the authentication challenge.
+    ///
+    /// The JWT will be valid from the specified `valid_from` timestamp, expressed in seconds since UNIX_EPOCH.
+    #[method(name = "authenticateProposer")]
+    async fn authenticate_proposer(&self, valid_from: u64, signature: Signature) -> RpcResult<GatewayAuthentication>;
+}
+
 #[rpc(client, server, namespace = "registry")]
 pub trait RegistryApi {
     /// Returns the future blocknumber and corresponding gateway url and address
     #[method(name = "futureGateway")]
-    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address, B256)>;
+    async fn get_future_gateway(&self, n_blocks_into_future: u64) -> RpcResult<(u64, Url, Address)>;
 
     /// Returns the current blocknumber and corresponding gateway url and address
     #[method(name = "currentGateway")]
-    async fn current_gateway(&self) -> RpcResult<(u64, Url, Address, B256)> {
+    async fn current_gateway(&self) -> RpcResult<(u64, Url, Address)> {
         self.get_future_gateway(0).await
     }
 
     /// Returns the current blocknumber and corresponding gateway url and address
     #[method(name = "registeredGateways")]
-    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address, B256)>>;
+    async fn registered_gateways(&self) -> RpcResult<Vec<(Url, Address)>>;
 
     /// Returns the current blocknumber and corresponding gateway url and address
     #[method(name = "registerGateway")]
-    async fn register_gateway(&self, gateway: (Url, Address, B256)) -> RpcResult<()>;
+    async fn register_gateway(&self, gateway: (Url, Address)) -> RpcResult<()>;
+
+    #[method(name = "gatewayUpdateBlocks")]
+    async fn gateway_update_blocks(&self) -> RpcResult<u64>;
 }
 
 #[rpc(client, server, namespace = "portal")]
