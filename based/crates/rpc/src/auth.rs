@@ -6,12 +6,11 @@ use std::{
 };
 
 use alloy_primitives::{Address, B256, Signature};
-use alloy_rpc_types::engine::{Claims, JwtSecret};
+use alloy_rpc_types::engine::JwtSecret;
 use bop_common::{
     api::{BasedAuthApiServer, GatewayAuthentication},
     auth::gateway_auth_message,
     communication::messages::{RpcError, RpcResult},
-    config::GatewayArgs,
 };
 use dashmap::DashMap;
 use http::{HeaderMap, StatusCode};
@@ -24,12 +23,11 @@ use jsonrpsee::{
     http_client::{HttpBody, HttpRequest, HttpResponse},
     types::{ErrorObject, error::INVALID_PARAMS_CODE},
 };
-use jsonwebtoken::{EncodingKey, errors::ErrorKind};
+use jsonwebtoken::errors::ErrorKind;
 use reth_rpc_layer::JwtError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
-use tracing::info;
 
 #[derive(Clone, Debug)]
 pub struct AuthConfig {

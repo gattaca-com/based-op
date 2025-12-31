@@ -157,9 +157,14 @@ impl Gateway {
                 );
             }
             Err(err) => {
-                // TODO: specifically handle authentication error by removing client?
-                // To also trigger re-authentication
-                error!(%err, ?self, "failed to ping gateway");
+                let err_str = err.to_string();
+                // TODO: improve unauthorized check
+                if err_str.contains("401") {
+                    // remove client to trigger reauthentication
+                    self.client.take();
+                }
+
+                error!(err = %err_str, ?self, "failed to ping gateway");
                 self.active.store(false, Ordering::Relaxed);
             }
         }
@@ -366,13 +371,19 @@ impl GatewayManager {
     /// Attempts to authenticate with the gateway if it's unauthenticated
     async fn prepare_gateway(signer: &ECDSASigner, timeout: Duration, gateway: &GatewayInstance) -> eyre::Result<()> {
         if gateway.client().is_some() {
+            // TODO: more robust auth check
             return Ok(());
         }
+
+        tracing::debug!(?gateway, "authenticating with gateway");
 
         if let Err(err) = Self::authenticate_gateway(signer, timeout, gateway.clone(), SystemTime::now()).await {
             error!(%err, url = %gateway.url, "failed to authenticate gateway");
             return Err(err);
         }
+
+        // Trigger health check right after authentication to mark gateway as active
+        gateway.health_check().await;
 
         Ok(())
     }
@@ -387,13 +398,28 @@ impl GatewayManager {
             tokio::spawn(async move {
                 gateway.health_check().await;
                 // TODO: only if health check fails due to auth
+                // Currently health_check will remove the client if it detects a 401, so this will trigger
+                // reauthentication
                 _ = Self::prepare_gateway(&signer, timeout, &gateway).await;
             });
         }
     }
 
     pub async fn current_gateway(&self) -> Option<GatewayInstance> {
-        self.current_gateway.read().await.as_ref().cloned()
+        let current = self.current_gateway.read().await.as_ref().cloned();
+
+        // ensure gateway is authenticated
+        if let Some(current) = &current {
+            // trigger health check to remove client if unauthenticated
+            current.health_check().await;
+
+            // trigger authentication if client was removed
+            let Ok(_) = Self::prepare_gateway(&self.authentication_signer, self.gateway_timeout, current).await else {
+                return None;
+            };
+        }
+
+        current
     }
 
     async fn _send_fcu(

@@ -1,6 +1,5 @@
 use std::{net::Ipv4Addr, ops::RangeInclusive, path::PathBuf, str::FromStr, sync::Arc};
 
-use alloy_primitives::Address;
 use clap::Parser;
 use reqwest::Url;
 use reth_cli::chainspec::ChainSpecParser;
