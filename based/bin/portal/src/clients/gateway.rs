@@ -158,6 +158,7 @@ impl Gateway {
             }
             Err(err) => {
                 // TODO: specifically handle authentication error by removing client?
+                // To also trigger re-authentication
                 error!(%err, ?self, "failed to ping gateway");
                 self.active.store(false, Ordering::Relaxed);
             }

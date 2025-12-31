@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use alloy_primitives::{B256, Bytes, U64};
+use alloy_primitives::{Address, B256, Bytes, U64};
 use axum::{Router, routing::get};
 use bop_common::{
     api::{BasedAuthApiServer, ControlApiServer, EngineApiServer, MinimalEthApiServer, OpMinerExtApiServer},
@@ -43,11 +43,12 @@ pub fn start_rpc<Db: DatabaseRead>(
     rt: &Runtime,
     rx_spawner: tokio::sync::broadcast::Sender<SignedVersionedMessage>,
     da_config: OpDAConfig,
+    gateway_address: Address,
 ) {
     let addr_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port);
     let addr_no_auth = SocketAddr::new(config.rpc_host.into(), config.rpc_port_no_auth);
     let addr_ws = SocketAddr::new(config.rpc_host.into(), config.rpc_port_ws);
-    let auth_manager = Arc::new(AuthManager::new(AuthConfig::from(config)));
+    let auth_manager = Arc::new(AuthManager::new(AuthConfig::new(gateway_address, config.auth_duration * 60)));
     let server = RpcServer::new(spine, auth_manager, rx_spawner, da_config);
     rt.spawn(server.run(addr_auth, addr_no_auth, addr_ws));
 }

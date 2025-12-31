@@ -38,9 +38,6 @@ pub struct GatewayArgs {
     pub rpc_port_no_auth: u16,
     #[arg(long = "rpc.port_ws", default_value_t = 9999)]
     pub rpc_port_ws: u16,
-    /// Address that identifies this gateway inside the registry.
-    #[arg(long = "gateway.address")]
-    pub gateway_address: Address,
     /// Url to an L2 eth api rpc
     #[arg(long = "eth_client.url", default_value = "http://localhost:8545")]
     pub eth_client_url: Url,

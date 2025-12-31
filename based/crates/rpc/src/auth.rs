@@ -24,6 +24,9 @@ use jsonrpsee::{
     http_client::{HttpBody, HttpRequest, HttpResponse},
     types::{ErrorObject, error::INVALID_PARAMS_CODE},
 };
+use jsonwebtoken::{EncodingKey, errors::ErrorKind};
+use reth_rpc_layer::JwtError;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tower::{Layer, Service};
 use tracing::info;
@@ -36,22 +39,79 @@ pub struct AuthConfig {
     pub token_validity: Duration,
 }
 
-impl From<&GatewayArgs> for AuthConfig {
-    fn from(args: &GatewayArgs) -> Self {
-        Self { gateway_address: args.gateway_address, token_validity: Duration::from_secs(args.auth_duration * 60) }
+impl AuthConfig {
+    pub fn new(address: Address, token_duration_secs: u64) -> Self {
+        Self { gateway_address: address, token_validity: Duration::from_secs(token_duration_secs) }
     }
 }
 
 #[derive(Debug)]
 pub struct AuthEntry {
-    pub secret: JwtSecret,
+    pub secret: Vec<u8>,
     pub expires_at: SystemTime,
 }
 
 impl AuthEntry {
     // TODO: better id that doesn't leak secret data
     fn id(&self) -> B256 {
-        B256::from_slice(self.secret.as_bytes())
+        B256::from_slice(&self.secret)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TokenClaims {
+    /// Issued at UNIX timestamp
+    issued_at: u64,
+    /// The expiration UNIX timestamp
+    expiry: u64,
+}
+
+impl TokenClaims {
+    pub fn from_systemtime(iat: SystemTime, exp: SystemTime) -> Self {
+        debug_assert!(iat < exp, "issuance should always be before expiry");
+
+        let issued_at = iat.duration_since(std::time::UNIX_EPOCH).expect("Time went backwards").as_secs();
+        let expiry = exp.duration_since(std::time::UNIX_EPOCH).expect("Time went backwards").as_secs();
+
+        Self { issued_at, expiry }
+    }
+
+    const fn signature_algo() -> jsonwebtoken::Algorithm {
+        jsonwebtoken::Algorithm::HS256
+    }
+
+    fn is_within_time_window(&self) -> bool {
+        let now = jsonwebtoken::get_current_timestamp();
+        self.issued_at <= now && self.expiry >= now
+    }
+
+    pub fn encode(&self, secret: &[u8]) -> Result<String, jsonwebtoken::errors::Error> {
+        let secret = jsonwebtoken::EncodingKey::from_secret(secret);
+        let algo = jsonwebtoken::Header::new(Self::signature_algo());
+        jsonwebtoken::encode(&algo, self, &secret)
+    }
+
+    pub fn validate(token: &str, secret: &[u8]) -> Result<(), JwtError> {
+        let mut validation = jsonwebtoken::Validation::new(Self::signature_algo());
+        validation.set_required_spec_claims(&["iat"]);
+
+        match jsonwebtoken::decode::<Self>(token, &jsonwebtoken::DecodingKey::from_secret(secret), &validation) {
+            Ok(token) => {
+                if !token.claims.is_within_time_window() {
+                    Err(JwtError::InvalidIssuanceTimestamp)?
+                }
+
+                Ok(())
+            }
+            Err(err) => match *err.kind() {
+                ErrorKind::InvalidSignature => Err(JwtError::InvalidSignature)?,
+                ErrorKind::InvalidAlgorithm => Err(JwtError::UnsupportedSignatureAlgorithm)?,
+                _ => {
+                    let detail = format!("{err}");
+                    Err(JwtError::JwtDecodingError(detail))?
+                }
+            },
+        }
     }
 }
 
@@ -76,19 +136,18 @@ impl AuthManager {
 
     pub fn issue(&self, challenger: Address, issued_at: SystemTime) -> GatewayAuthentication {
         let secret = JwtSecret::random();
+        let secret = secret.as_bytes().to_vec();
+
         let expiry = issued_at + self.cfg.token_validity;
 
-        let entry = Arc::new(AuthEntry { secret, expires_at: expiry });
+        let entry = Arc::new(AuthEntry { secret: secret.clone(), expires_at: expiry });
 
         self.entries.insert(entry.id(), entry.clone());
-        info!(%challenger, "issued JWT secret");
+        tracing::debug!(%challenger, "issued JWT secret");
 
-        let expiry = expiry.duration_since(std::time::UNIX_EPOCH).expect("Time went backwards").as_secs();
-        let issued_at = issued_at.duration_since(std::time::UNIX_EPOCH).expect("Time went backwards").as_secs();
+        let claims = TokenClaims::from_systemtime(issued_at, expiry);
 
-        let claims = Claims { exp: Some(expiry), iat: issued_at };
-
-        GatewayAuthentication { token: secret.encode(&claims).expect("able to encode JWT claims"), challenger }
+        GatewayAuthentication { token: claims.encode(&secret).expect("able to encode JWT claims"), challenger }
     }
 
     pub fn validate(&self, token: &str) -> Result<Arc<AuthEntry>, AuthError> {
@@ -96,7 +155,7 @@ impl AuthManager {
         self.purge(now);
 
         for entry in self.entries.iter() {
-            if entry.secret.validate(token).is_ok() {
+            if TokenClaims::validate(token, &entry.secret).is_ok() {
                 return Ok(entry.clone());
             }
         }

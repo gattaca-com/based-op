@@ -85,7 +85,9 @@ fn run(mut args: GatewayArgs) -> eyre::Result<()> {
     let simulator_vsync_window = Duration::from_micros(args.vsync_window_us as u64);
 
     let root_peer_url = args.gossip_root_peer_url.clone();
-    let gossip_signer_private_key = args.gossip_signer_private_key().map(|key| ECDSASigner::new(key).unwrap());
+    let gossip_signer_private_key =
+        args.gossip_signer_private_key().map(|key| ECDSASigner::new(key).unwrap()).unwrap_or_else(ECDSASigner::random);
+    let gateway_address = gossip_signer_private_key.address;
 
     std::thread::scope(|s| {
         let rt: Arc<Runtime> = tokio::runtime::Builder::new_current_thread()
@@ -106,7 +108,7 @@ fn run(mut args: GatewayArgs) -> eyre::Result<()> {
 
         s.spawn({
             let rt = rt.clone();
-            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone(), args.da_config.clone());
+            start_rpc(&args, &spine, &rt, frag_broadcast_tx.clone(), args.da_config.clone(), gateway_address);
             move || rt.block_on(wait_for_signal())
         });
 

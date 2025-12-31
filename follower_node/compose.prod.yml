@@ -107,7 +107,6 @@ services:
       - --chain=/config/genesis.json
       - --db.datadir=/data/gateway
       - --eth_client.url=$PORTAL
-      - --rpc.jwt=/config/jwt
       - --gossip.signer_private_key=$GATEWAY_SEQUENCING_KEY
       - --gossip.root_peer_url=http://0.0.0.0:8547
       - --log.dir=/var/log/app

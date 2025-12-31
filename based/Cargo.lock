@@ -2006,6 +2006,7 @@ dependencies = [
  "http",
  "http-body-util",
  "jsonrpsee",
+ "jsonwebtoken",
  "op-alloy-consensus",
  "op-alloy-rpc-types",
  "op-alloy-rpc-types-engine",
