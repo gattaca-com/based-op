@@ -61,7 +61,7 @@ pub trait EthApi {
         timeout_ms: Option<u64>,
     ) -> RpcResult<RpcReceipt<Optimism>>;
 
-    /// Executes a call with flashblock state support.
+    /// Executes a call with unsealed state support.
     #[method(name = "call")]
     async fn call(
         &self,
@@ -71,7 +71,7 @@ pub trait EthApi {
         block_overrides: Option<Box<BlockOverrides>>,
     ) -> RpcResult<alloy_primitives::Bytes>;
 
-    /// Estimates gas with flashblock state support.
+    /// Estimates gas with unsealed state support.
     #[method(name = "estimateGas")]
     async fn estimate_gas(
         &self,
@@ -80,7 +80,7 @@ pub trait EthApi {
         overrides: Option<StateOverride>,
     ) -> RpcResult<U256>;
 
-    /// Simulates transactions with flashblock state support.
+    /// Simulates transactions with unsealed state support.
     #[method(name = "simulateV1")]
     async fn simulate_v1(
         &self,
@@ -88,7 +88,7 @@ pub trait EthApi {
         block_number: Option<BlockId>,
     ) -> RpcResult<Vec<SimulatedBlock<RpcBlock<Optimism>>>>;
 
-    /// Returns logs matching the filter, including pending flashblock logs.
+    /// Returns logs matching the filter, including unsealed logs.
     #[method(name = "getLogs")]
     async fn get_logs(&self, filter: Filter) -> RpcResult<Vec<Log>>;
 }
@@ -187,7 +187,7 @@ where
             tx_hash = %tx_hash
         );
 
-        // Check canonical chain first to avoid race condition where flashblocks
+        // Check canonical chain first to avoid race condition where unsealed
         // state hasn't been cleared yet after canonical block commit
         if let Some(canonical_tx) = EthTransactions::transaction_by_hash(&self.canonical, tx_hash)
             .await?
@@ -357,7 +357,7 @@ where
             pending_overrides.state = unsealed_block.get_state_overrides();
         }
 
-        // Prepend flashblocks pending overrides to the block state calls
+        // Prepend unsealed overrides to the block state calls
         let mut block_state_calls: Vec<SimBlock<OpTransactionRequest>> = Vec::new();
         for sim_block in opts.block_state_calls {
             let mut state_overrides_builder =
