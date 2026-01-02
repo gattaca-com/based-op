@@ -5,6 +5,10 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[[bin]]
+name = "reth-node"
+path = "src/bin/reth-node.rs"
+
 [dependencies]
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
