@@ -165,7 +165,10 @@ where
         let mut state_overrides = ub.get_state_overrides().unwrap_or_default();
 
         let block: OpBlock = build_op_block_from_ub_and_frag(&ub, &frag)?;
-        let mut l1_block_info = reth_optimism_evm::extract_l1_info(&block.body)?;
+
+        let mut l1_block_info =
+            ub.l1_block_info.clone().map(Ok).unwrap_or_else(|| reth_optimism_evm::extract_l1_info(&block.body))?;
+
         let header = block.header.clone().seal_slow();
 
         let block_env_attributes = OpNextBlockEnvAttributes {
@@ -280,7 +283,6 @@ where
 
                     let receipt = OpReceiptBuilder::new(chain_spec.as_ref(), input, &mut l1_block_info)?.build();
 
-                    // TODO: Is this correct?q
                     next_log_index += receipt.inner.logs().len();
                     ub.with_transaction_receipt(tx_hash, receipt.clone());
                     receipts.push(receipt);
@@ -298,7 +300,8 @@ where
         ub = ub
             .with_db_cache(db.cache)
             .with_state_overrides(Some(state_overrides))
-            .with_bundle_state(db.db.bundle_state);
+            .with_bundle_state(db.db.bundle_state)
+            .with_l1_block_info(l1_block_info);
 
         ub.accept_frag_execution(frag, logs, receipts, gas_used);
 

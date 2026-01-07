@@ -8,6 +8,7 @@ use op_alloy_consensus::{OpBlock, OpTxEnvelope};
 use op_alloy_network::{Optimism, TransactionResponse};
 use op_alloy_rpc_types::{OpTransactionReceipt, Transaction};
 use reth::revm::db::{BundleState, Cache};
+use reth_evm::op_revm::L1BlockInfo;
 use reth_optimism_primitives::OpTransactionSigned;
 use reth_rpc_eth_api::RpcBlock;
 use tokio::sync::broadcast;
@@ -37,6 +38,8 @@ pub struct UnsealedBlock {
     /// Cumulative blob gas used across all blob-carrying transactions in the block.
     pub cumulative_blob_gas_used: u64,
     pub is_prague: bool,
+    // Current unsealed block l1 block info
+    pub l1_block_info: Option<L1BlockInfo>,
 
     transaction_count: HashMap<Address, U256>,
     transactions: Vec<Transaction>,
@@ -71,6 +74,7 @@ impl UnsealedBlock {
             new_block_sender,
             db_cache: Default::default(),
             bundle_state: Default::default(),
+            l1_block_info: None,
         }
     }
 
@@ -226,6 +230,12 @@ impl UnsealedBlock {
         self
     }
 
+    /// Attach/replace the l1 block info.
+    pub fn with_l1_block_info(mut self, l1_block_info: L1BlockInfo) -> Self {
+        self.l1_block_info = Some(l1_block_info);
+        self
+    }
+
     /// Returns the database cache.
     pub fn get_db_cache(&self) -> Cache {
         self.db_cache.clone()
@@ -255,6 +265,7 @@ impl UnsealedBlock {
             new_block_sender: self.new_block_sender.clone(),
             transaction_receipts: self.transaction_receipts.clone(),
             bundle_state: self.bundle_state.clone(),
+            l1_block_info: self.l1_block_info.clone(),
         }
     }
 
