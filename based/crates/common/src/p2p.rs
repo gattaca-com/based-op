@@ -17,17 +17,17 @@ pub type ExtraData = VariableList<u8, MaxExtraDataSize>;
 #[derive(Debug, Clone, PartialEq, Eq, TreeHash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvV0 {
-    number: u64,
-    parent_hash: B256,
-    beneficiary: Address,
-    timestamp: u64,
-    gas_limit: u64,
-    basefee: u64,
-    difficulty: U256,
-    prevrandao: B256,
+    pub number: u64,
+    pub parent_hash: B256,
+    pub beneficiary: Address,
+    pub timestamp: u64,
+    pub gas_limit: u64,
+    pub basefee: u64,
+    pub difficulty: U256,
+    pub prevrandao: B256,
     #[serde(with = "ssz_types::serde_utils::hex_var_list")]
-    extra_data: ExtraData,
-    parent_beacon_block_root: B256,
+    pub extra_data: ExtraData,
+    pub parent_beacon_block_root: B256,
 }
 
 impl EnvV0 {
@@ -80,6 +80,10 @@ impl FragV0 {
     ) -> Self {
         let txs = builder_txs.map(|tx| tx.encode().to_vec()).map(Transaction::from).collect::<Vec<_>>();
         Self { block_number, seq, txs: Transactions::from(txs), is_last, blob_gas_used }
+    }
+
+    pub fn is_first(&self) -> bool {
+        self.seq == 0
     }
 }
 
@@ -143,6 +147,12 @@ impl From<EnvV0> for VersionedMessage {
     fn from(value: EnvV0) -> Self {
         Self::EnvV0(value)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Signed<T: TreeHash> {
+    pub message: T,
+    pub signature: Bytes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
