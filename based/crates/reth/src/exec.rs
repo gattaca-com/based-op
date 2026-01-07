@@ -101,7 +101,7 @@ where
         let parent_header = parent.header();
         let None = self.current_unsealed_block.load_full() else { return Err(ExecError::NotInitialized) };
 
-        let expected_block_number = parent_header.number.saturating_sub(1);
+        let expected_block_number = parent_header.number.saturating_add(1);
         if env.number != expected_block_number {
             return Err(ExecError::Failed(format!(
                 "env block number doesn't match expected block number, expected {}, received {}",
